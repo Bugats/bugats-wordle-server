@@ -47,7 +47,7 @@ try {
   WORD_LIST = txt
     .split(/\r?\n/)
     .map(line => normalizeWord(line))
-    .filter(w => w.length === 5); // pašlaik 5-burtu Wordle
+    .filter(w => w.length === 5); // tikai 5-burtu vārdi
 
   console.log("Loaded words from words.txt:", WORD_LIST.length);
 
@@ -114,7 +114,6 @@ io.on("connection", (socket) => {
   });
 
   socket.on("newRound", () => {
-    // ja gribi visiem vienu vārdu ilgi – šeit var komentēt ārā
     currentWord = getRandomWord();
     console.log("New round word:", currentWord);
 
@@ -190,6 +189,7 @@ io.on("connection", (socket) => {
 
       io.emit("leaderboard", formatLeaderboard());
 
+      // serverī uzreiz sagatavojam nākamo vārdu
       currentWord = getRandomWord();
       console.log("Word solved by", socket.data.nick, "-> new word:", currentWord);
     } else if (remainingAttempts <= 0) {
