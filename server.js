@@ -1,385 +1,337 @@
-// server.js — VĀRDU ZONA (Bugats Wordle) serveris
-// Node + Socket.IO, izmanto words.txt
+// server.js — VĀRDU ZONA serveris (Node + Socket.IO) ar XP, rankiem, streakiem, avataru un online skaitītāju
 
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
-const fs = require("fs");
-const path = require("path");
+import express from "express";
+import { createServer } from "http";
+import { Server } from "socket.io";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
-});
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// ======= KONST =======
+// ===== Konstantes =====
 const PORT = process.env.PORT || 10080;
 const MAX_ATTEMPTS = 6;
 
-// ======= PALĪGFUNKCIJAS =======
+// ===== Ranku definīcijas (XP threshold) =====
+const RANKS = [
+  { name: "Jauniņais I", xp: 0 },
+  { name: "Jauniņais II", xp: 100 },
+  { name: "Meklētājs I", xp: 250 },
+  { name: "Meklētājs II", xp: 500 },
+  { name: "Vārdu Mednieks I", xp: 800 },
+  { name: "Vārdu Mednieks II", xp: 1200 },
+  { name: "Vārdu Šāvējs I", xp: 1700 },
+  { name: "Vārdu Šāvējs II", xp: 2300 },
+  { name: "Vārdu Burvis I", xp: 3000 },
+  { name: "Vārdu Burvis II", xp: 3800 },
+  { name: "Lingo Leģenda I", xp: 4700 },
+  { name: "Lingo Leģenda II", xp: 5700 },
+  { name: "Bugats Čempions I", xp: 7000 },
+  { name: "Bugats Čempions II", xp: 8500 },
+  { name: "Bugats Elites I", xp: 10000 },
+  { name: "Bugats Elites II", xp: 12000 },
+  { name: "Bugats Imperators I", xp: 15000 },
+  { name: "Bugats Imperators II", xp: 19000 },
+  { name: "Valodas Dievs", xp: 24000 },
+];
 
-function normalizeWord(word) {
-  // pārvēršam uz augšējiem burtiem un noņemam garumzīmes salīdzināšanai
-  const map = {
-    "ā": "A","Ā": "A",
-    "č": "C","Č": "C",
-    "ē": "E","Ē": "E",
-    "ģ": "G","Ģ": "G",
-    "ī": "I","Ī": "I",
-    "ķ": "K","Ķ": "K",
-    "ļ": "L","Ļ": "L",
-    "ņ": "N","Ņ": "N",
-    "š": "S","Š": "S",
-    "ū": "U","Ū": "U",
-    "ž": "Z","Ž": "Z"
-  };
-  return (word || "")
-    .split("")
-    .map(ch => map[ch] || ch.toUpperCase())
-    .join("");
-}
-
-function loadWords() {
-  const filePath = path.join(__dirname, "words.txt");
-  const raw = fs.readFileSync(filePath, "utf8");
-  const lines = raw.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
-
-  const list = [];
-  for (const line of lines) {
-    const orig = line;
-    const norm = normalizeWord(orig);
-    if (norm.length !== 5) continue; // spēle ir 5-burtu
-    list.push({ original: orig, normalized: norm });
+function getRankName(xp) {
+  let current = RANKS[0]?.name || "Jauniņais I";
+  for (const r of RANKS) {
+    if (xp >= r.xp) current = r.name;
+    else break;
   }
-  if (list.length === 0) {
-    throw new Error("words.txt neatrod nevienu 5-burtu vārdu!");
-  }
-  return list;
+  return current;
 }
 
-const WORDS = loadWords();
-
-// ======= SPĒLES STATUSS =======
-
-let currentWord = null; // { original, normalized }
-let currentRoundId = 1;
-let lastRoundStart = Date.now();
-
-// spēlētāju dati (24h robežās RAM)
-const players = new Map(); // id -> playerObj
-
-function pickNewWord() {
-  const prev = currentWord ? currentWord.original : null;
-  let candidate;
-  do {
-    candidate = WORDS[Math.floor(Math.random() * WORDS.length)];
-  } while (WORDS.length > 1 && candidate.original === prev);
-
-  currentWord = candidate;
-  currentRoundId += 1;
-  lastRoundStart = Date.now();
-  console.log("Jauns vārds:", currentWord.original, "round", currentRoundId);
+// ===== Palīgfunkcijas =====
+function normalizeWord(str) {
+  if (!str) return "";
+  // atļaujam latviešu burtus ar garumzīmēm
+  return str
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-zāčēģīķļņšūž]/g, "");
 }
 
-pickNewWord();
-
-// ======= Player helperi =======
-
-function getPlayerIdFromSocket(socket) {
-  const auth = socket.handshake.auth || {};
-  return auth.cid || socket.id;
-}
-
-function getOrCreatePlayer(socket) {
-  const id = getPlayerIdFromSocket(socket);
-  let player = players.get(id);
-  if (!player) {
-    const auth = socket.handshake.auth || {};
-    let name = auth.name || "Spēlētājs";
-    name = String(name).trim().slice(0, 20) || "Spēlētājs";
-
-    player = {
-      id,
-      name,
-      xp: 0,
-      wins: 0,
-      streak: 0,
-      bestStreak: 0,
-      rankTitle: "Jauniņais I",
-      lastSeenAt: Date.now()
-    };
-    players.set(id, player);
-  } else {
-    player.lastSeenAt = Date.now();
-  }
-  return player;
-}
-
-function calcRankTitle(xp) {
-  if (xp >= 500) return "Vārdu leģenda";
-  if (xp >= 250) return "Vārdu meistars";
-  if (xp >= 120) return "Vārdu mednieks";
-  if (xp >= 50) return "Jauniņais II";
-  return "Jauniņais I";
-}
-
-function buildLeaderboardArray() {
-  const now = Date.now();
-  const DAY_MS = 24 * 60 * 60 * 1000;
-
-  // izmetam sen neredzētos (vairāk par 24h)
-  for (const [id, p] of players.entries()) {
-    if (now - p.lastSeenAt > DAY_MS) {
-      players.delete(id);
-    }
-  }
-
-  return Array.from(players.values())
-    .sort((a, b) => {
-      if (b.xp !== a.xp) return b.xp - a.xp;
-      if (b.wins !== a.wins) return b.wins - a.wins;
-      return b.bestStreak - a.bestStreak;
-    })
-    .slice(0, 20)
-    .map(p => ({
-      id: p.id,
-      name: p.name,
-      xp: p.xp,
-      wins: p.wins,
-      streak: p.streak,
-      bestStreak: p.bestStreak,
-      rankTitle: p.rankTitle
-    }));
-}
-
-function getOnlineCount() {
-  const room = io.sockets.adapter.rooms.get("game");
-  return room ? room.size : 0;
-}
-
-// ======= XP piešķiršana =======
-
-function applyWinXP(socket) {
-  const player = getOrCreatePlayer(socket);
-
-  player.wins += 1;
-  player.streak += 1;
-  if (player.streak > player.bestStreak) {
-    player.bestStreak = player.streak;
-  }
-
-  const gainedXP = 10 + player.streak * 5; // 10 XP + 5 XP par katru streaku
-  player.xp += gainedXP;
-  player.rankTitle = calcRankTitle(player.xp);
-
-  const statsPayload = {
-    xp: player.xp,
-    wins: player.wins,
-    streak: player.streak,
-    bestStreak: player.bestStreak,
-    rankTitle: player.rankTitle,
-    gainedXP
-  };
-
-  socket.emit("statsUpdate", statsPayload);
-  io.to("game").emit("leaderboardUpdate", {
-    players: buildLeaderboardArray()
-  });
-}
-
-function applyFail(socket) {
-  const player = getOrCreatePlayer(socket);
-  player.streak = 0;
-  const statsPayload = {
-    xp: player.xp,
-    wins: player.wins,
-    streak: player.streak,
-    bestStreak: player.bestStreak,
-    rankTitle: player.rankTitle,
-    gainedXP: 0
-  };
-  socket.emit("statsUpdate", statsPayload);
-  io.to("game").emit("leaderboardUpdate", {
-    players: buildLeaderboardArray()
-  });
-}
-
-// ======= GUESS SCORE =======
-
-function scoreGuess(guessNorm, targetNorm, guessDisplay) {
+function evaluateGuess(guessNorm, targetNorm) {
   const len = targetNorm.length;
-  const result = new Array(len);
-  const targetChars = targetNorm.split("");
-  const used = new Array(len).fill(false);
+  const result = Array(len).fill("absent");
+  const targetArr = targetNorm.split("");
+  const guessArr = guessNorm.split("");
 
-  // 1. Pareizie burti pareizajās vietās
+  // precīzie
   for (let i = 0; i < len; i++) {
-    const g = guessNorm[i];
-    if (g === targetNorm[i]) {
-      result[i] = {
-        letter: guessDisplay[i] || guessNorm[i],
-        status: "correct"
-      };
-      used[i] = true;
+    if (guessArr[i] === targetArr[i]) {
+      result[i] = "correct";
+      targetArr[i] = null;
     }
   }
 
-  // 2. Pareizie burti nepareizajās vietās
+  // ir vārdā, citā vietā
   for (let i = 0; i < len; i++) {
-    if (result[i]) continue;
-    const g = guessNorm[i];
-    let foundIndex = -1;
-    for (let j = 0; j < len; j++) {
-      if (!used[j] && targetChars[j] === g) {
-        foundIndex = j;
-        break;
-      }
-    }
-    if (foundIndex >= 0) {
-      result[i] = {
-        letter: guessDisplay[i] || guessNorm[i],
-        status: "present"
-      };
-      used[foundIndex] = true;
-    } else {
-      result[i] = {
-        letter: guessDisplay[i] || guessNorm[i],
-        status: "absent"
-      };
+    if (result[i] === "correct") continue;
+    const idx = targetArr.indexOf(guessArr[i]);
+    if (idx !== -1) {
+      result[i] = "present";
+      targetArr[idx] = null;
     }
   }
 
   return result;
 }
 
-// ======= SOCKET.IO =======
+// ===== Words.txt ielāde =====
+let WORD_LIST = [];
+
+function loadWords() {
+  const filePath = path.join(__dirname, "words.txt");
+  const txt = fs.readFileSync(filePath, "utf8");
+
+  WORD_LIST = txt
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => ({
+      raw: line,
+      norm: normalizeWord(line),
+    }))
+    .filter((w) => w.norm.length === 5);
+
+  console.log(`Loaded ${WORD_LIST.length} words with length 5 from words.txt`);
+}
+
+loadWords();
+
+// ===== Leaderboard ar XP + streak + avatar =====
+// nick -> { wins, games, xp, streak, avatar }
+const leaderboard = new Map();
+
+// online skaitītājs
+let onlineCount = 0;
+
+function updateLeaderboard(nick, isWin, attemptsUsed, maxAttempts) {
+  if (!nick) return null;
+
+  if (!leaderboard.has(nick)) {
+    leaderboard.set(nick, {
+      wins: 0,
+      games: 0,
+      xp: 0,
+      streak: 0,
+      avatar: null,
+    });
+  }
+  const entry = leaderboard.get(nick);
+
+  entry.games += 1;
+
+  let xpGain = 0;
+
+  if (isWin) {
+    entry.wins += 1;
+    // streak + XP grinds
+    entry.streak = (entry.streak || 0) + 1;
+
+    const attemptsLeft = Math.max(0, maxAttempts - attemptsUsed);
+    // pamata XP par uzvaru
+    xpGain = 50 + attemptsLeft * 10;
+
+    // bonus XP par streaku
+    if (entry.streak >= 2) {
+      xpGain += entry.streak * 10; // streak 2 = +20, 3 = +30, ...
+    }
+  } else {
+    // lose – mazliet XP, streak reset
+    xpGain = 5;
+    entry.streak = 0;
+  }
+
+  entry.xp += xpGain;
+
+  const rank = getRankName(entry.xp);
+
+  return {
+    xpGain,
+    xpTotal: entry.xp,
+    rank,
+    streak: entry.streak,
+  };
+}
+
+function getLeaderboardList() {
+  return Array.from(leaderboard.entries())
+    .map(([nick, data]) => ({
+      nick,
+      wins: data.wins,
+      games: data.games,
+      xp: data.xp,
+      rank: getRankName(data.xp),
+      streak: data.streak || 0,
+      avatar: data.avatar || null,
+    }))
+    .sort((a, b) => b.xp - a.xp || b.wins - a.wins || a.games - b.games)
+    .slice(0, 20);
+}
+
+// ===== Express + Socket.IO =====
+const app = express();
+
+app.get("/health", (_, res) => {
+  res.json({ ok: true });
+});
+
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: { origin: "*", methods: ["GET", "POST"] },
+});
+
+function startNewRound(socket) {
+  if (!WORD_LIST.length) {
+    loadWords();
+  }
+
+  const pick = WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)];
+  socket.data.currentWordRaw = pick.raw.toUpperCase();
+  socket.data.currentWordNorm = pick.norm;
+  socket.data.attempts = 0;
+  socket.data.finishedRound = false;
+
+  socket.emit("roundStarted", { maxAttempts: MAX_ATTEMPTS });
+}
 
 io.on("connection", (socket) => {
-  socket.join("game");
+  console.log("Client connected:", socket.id);
 
-  const player = getOrCreatePlayer(socket);
+  // online++
+  onlineCount++;
+  io.emit("online", onlineCount);
+
+  socket.data.nick = "Guest";
+  socket.data.avatar = null;
   socket.data.attempts = 0;
+  socket.data.finishedRound = false;
+  socket.data.currentWordRaw = null;
+  socket.data.currentWordNorm = null;
 
-  // Sveiciena pakete klientam
-  socket.emit("hello", {
-    wordLength: currentWord.normalized.length,
-    maxAttempts: MAX_ATTEMPTS,
-    roundId: currentRoundId,
-    stats: {
-      xp: player.xp,
-      wins: player.wins,
-      streak: player.streak,
-      bestStreak: player.bestStreak,
-      rankTitle: player.rankTitle
-    },
-    leaderboard: buildLeaderboardArray(),
-    onlineCount: getOnlineCount()
+  // JOIN ar niku + opcionālu avatar URL
+  socket.on("join", ({ nick, avatarUrl }) => {
+    const safeNick = (nick || "Guest").toString().trim().slice(0, 20);
+    const safeAvatar = (avatarUrl || "").toString().trim().slice(0, 300);
+
+    socket.data.nick = safeNick || "Guest";
+    socket.data.avatar = safeAvatar || null;
+
+    // atjaunojam/izveidojam leaderboard ierakstu ar avataru, ja vajadzīgs
+    if (!leaderboard.has(socket.data.nick)) {
+      leaderboard.set(socket.data.nick, {
+        wins: 0,
+        games: 0,
+        xp: 0,
+        streak: 0,
+        avatar: safeAvatar || null,
+      });
+    } else {
+      const entry = leaderboard.get(socket.data.nick);
+      if (safeAvatar) {
+        entry.avatar = safeAvatar;
+      }
+    }
+
+    socket.emit("leaderboard", getLeaderboardList());
+    io.emit("online", onlineCount);
+    startNewRound(socket);
   });
 
-  // jauns online skaits visiem
-  io.to("game").emit("onlineCount", { count: getOnlineCount() });
+  socket.on("newRound", () => {
+    startNewRound(socket);
+  });
 
-  // ======= GUESS =======
-  socket.on("guess", (payload) => {
-    try {
-      if (!payload || typeof payload.word !== "string") {
-        return socket.emit("guessResult", {
-          error: true,
-          msg: "Nederīgs vārds."
-        });
-      }
-      const { word, roundId } = payload;
-
-      if (roundId !== currentRoundId) {
-        return socket.emit("guessResult", {
-          error: true,
-          msg: "Raunds jau ir mainījies. Spied 'Jauna spēle'."
-        });
-      }
-
-      const guessRaw = word.trim();
-      const guessDisplay = guessRaw.toUpperCase();
-      const guessNorm = normalizeWord(guessRaw);
-
-      if (!guessNorm || guessNorm.length !== currentWord.normalized.length) {
-        return socket.emit("guessResult", {
-          error: true,
-          msg: `Jābūt ${currentWord.normalized.length} burtiem.`
-        });
-      }
-
-      if (typeof socket.data.attempts !== "number") {
-        socket.data.attempts = 0;
-      }
-      if (socket.data.attempts >= MAX_ATTEMPTS) {
-        return socket.emit("guessResult", {
-          error: true,
-          msg: "Vairs nav mēģinājumu."
-        });
-      }
-
-      socket.data.attempts += 1;
-
-      const letters = scoreGuess(
-        guessNorm,
-        currentWord.normalized,
-        guessDisplay
-      );
-      const isWin = letters.every((l) => l.status === "correct");
-      const attemptsLeft = MAX_ATTEMPTS - socket.data.attempts;
-
-      socket.emit("guessResult", {
-        letters,
-        isWin,
-        attemptsLeft
-      });
-
-      if (isWin) {
-        applyWinXP(socket);
-        return;
-      }
-
-      if (attemptsLeft <= 0) {
-        // zaudējums: vārdu NEatklājam
-        applyFail(socket);
-      }
-    } catch (err) {
-      console.error("guess error", err);
-      socket.emit("guessResult", {
+  socket.on("guess", ({ word }) => {
+    if (typeof word !== "string") {
+      return socket.emit("guessResult", {
         error: true,
-        msg: "Kļūda apstrādājot minējumu."
+        msg: "Nederīgs vārds.",
       });
     }
-  });
 
-  // ======= JAUNAIS RAUNDS =======
-  socket.on("requestNewRound", () => {
-    // tikai viens process — lai nav spam
-    pickNewWord();
-    for (const [, s] of io.sockets.sockets) {
-      s.data.attempts = 0;
+    if (!socket.data.currentWordNorm) {
+      return socket.emit("guessResult", {
+        error: true,
+        msg: "Raunds vēl nav sācies.",
+      });
     }
-    io.to("game").emit("newRound", {
-      roundId: currentRoundId,
-      wordLength: currentWord.normalized.length,
-      maxAttempts: MAX_ATTEMPTS
+
+    const guessRaw = word.trim();
+    const guessNorm = normalizeWord(guessRaw);
+
+    if (guessNorm.length !== socket.data.currentWordNorm.length) {
+      return socket.emit("guessResult", {
+        error: true,
+        msg: `Jābūt ${socket.data.currentWordNorm.length} burtiem.`,
+      });
+    }
+
+    if (typeof socket.data.attempts !== "number") {
+      socket.data.attempts = 0;
+    }
+
+    if (socket.data.attempts >= MAX_ATTEMPTS) {
+      return socket.emit("guessResult", {
+        error: true,
+        msg: "Mēģinājumi beigušies.",
+      });
+    }
+
+    socket.data.attempts += 1;
+    const result = evaluateGuess(guessNorm, socket.data.currentWordNorm);
+    const isWin = result.every((r) => r === "correct");
+    const finishedRound =
+      isWin || socket.data.attempts >= MAX_ATTEMPTS;
+
+    const remainingAttempts = Math.max(
+      0,
+      MAX_ATTEMPTS - socket.data.attempts
+    );
+
+    let correctWordToSend = null;
+    if (isWin) {
+      correctWordToSend = socket.data.currentWordRaw;
+    }
+
+    let reward = null;
+    if (finishedRound) {
+      socket.data.finishedRound = true;
+      reward = updateLeaderboard(
+        socket.data.nick,
+        isWin,
+        socket.data.attempts,
+        MAX_ATTEMPTS
+      );
+      io.emit("leaderboard", getLeaderboardList());
+    }
+
+    socket.emit("guessResult", {
+      error: false,
+      result,
+      isWin,
+      finishedRound,
+      correctWord: correctWordToSend,
+      remainingAttempts,
+      reward,
     });
   });
 
   socket.on("disconnect", () => {
-    io.to("game").emit("onlineCount", { count: getOnlineCount() });
+    console.log("Client disconnected:", socket.id);
+    onlineCount = Math.max(0, onlineCount - 1);
+    io.emit("online", onlineCount);
   });
 });
 
-// vienkāršs health-check
-app.get("/health", (_req, res) => {
-  res.json({ ok: true, roundId: currentRoundId });
-});
-
-server.listen(PORT, () => {
-  console.log("Bugats VĀRDU ZONA server running on port", PORT);
+httpServer.listen(PORT, () => {
+  console.log("VĀRDU ZONA server running on port", PORT);
 });
