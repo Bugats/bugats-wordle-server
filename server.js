@@ -108,14 +108,13 @@ io.on("connection", (socket) => {
     socket.data.attempts = 0;
 
     socket.emit("joined", { nick: socket.data.nick });
-
     socket.emit("roundStarted", { maxAttempts: MAX_ATTEMPTS });
 
     io.emit("leaderboard", formatLeaderboard());
   });
 
   socket.on("newRound", () => {
-    // Ja gribi vienu vārdu visiem – komentē ārā šo:
+    // ja gribi visiem vienu vārdu ilgi – šeit var komentēt ārā
     currentWord = getRandomWord();
     console.log("New round word:", currentWord);
 
@@ -191,7 +190,6 @@ io.on("connection", (socket) => {
 
       io.emit("leaderboard", formatLeaderboard());
 
-      // uzreiz sagatavojam nākamo vārdu nākamajam raundam
       currentWord = getRandomWord();
       console.log("Word solved by", socket.data.nick, "-> new word:", currentWord);
     } else if (remainingAttempts <= 0) {
