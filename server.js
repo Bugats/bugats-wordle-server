@@ -1,10 +1,8 @@
-// Bugats Wordle serveris ar words.txt
-// Saderīgs ar front-end (join, guess, newRound, leaderboard, guessResult)
+// server.js — Bugats Wordle serveris (Node + Socket.IO)
 
 import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
-import cors from "cors";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -12,196 +10,208 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = process.env.PORT || 10000;
+// ===== Konstantes =====
+const PORT = process.env.PORT || 10080;
 const MAX_ATTEMPTS = 6;
 
-// ===== Helper: normalizē latviešu burtus uz A-Z =====
-const LV_MAP = {
-  "ā": "a",
-  "č": "c",
-  "ē": "e",
-  "ģ": "g",
-  "ī": "i",
-  "ķ": "k",
-  "ļ": "l",
-  "ņ": "n",
-  "š": "s",
-  "ū": "u",
-  "ž": "z",
-};
-
-function normalizeWord(raw) {
-  if (!raw) return "";
-  return raw
+// ===== Palīgfunkcijas =====
+function normalizeWord(str) {
+  if (!str) return "";
+  // noņem garumzīmes u.c. diakritiskās zīmes
+  let s = str
+    .toString()
+    .trim()
     .toLowerCase()
-    .replace(/[āčēģīķļņšūž]/g, ch => LV_MAP[ch] || ch)
-    .replace(/[^a-z]/g, "");
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, ""); // ā → a, ē → e, š → s, utt.
+
+  // atstājam tikai latīņu burtus
+  s = s.replace(/[^a-z]/g, "");
+  return s;
 }
 
-// ===== Ielādējam words.txt =====
+// saliek stāvokļus priekš katra burta
+function evaluateGuess(guessNorm, targetNorm) {
+  const len = targetNorm.length;
+  const result = Array(len).fill("absent");
+  const targetArr = targetNorm.split("");
+  const guessArr = guessNorm.split("");
+
+  // vispirms precīzie (pareizā vietā)
+  for (let i = 0; i < len; i++) {
+    if (guessArr[i] === targetArr[i]) {
+      result[i] = "correct";
+      targetArr[i] = null; // šo burtu vairāk nelietot
+    }
+  }
+
+  // pēc tam "ir vārdā, bet citā vietā"
+  for (let i = 0; i < len; i++) {
+    if (result[i] === "correct") continue;
+    const idx = targetArr.indexOf(guessArr[i]);
+    if (idx !== -1) {
+      result[i] = "present";
+      targetArr[idx] = null;
+    }
+  }
+
+  return result;
+}
+
+// ===== Words.txt ielāde =====
 let WORD_LIST = [];
 
-try {
-  const txt = fs.readFileSync(path.join(__dirname, "words.txt"), "utf8");
+function loadWords() {
+  const filePath = path.join(__dirname, "words.txt");
+  const txt = fs.readFileSync(filePath, "utf8");
 
   WORD_LIST = txt
     .split(/\r?\n/)
-    .map(line => normalizeWord(line))
-    .filter(w => w.length === 5); // tikai 5-burtu vārdi
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      return {
+        raw: line,
+        norm: normalizeWord(line),
+      };
+    })
+    .filter((w) => w.norm.length === 5); // tikai 5-burtu vārdi
 
-  console.log("Loaded words from words.txt:", WORD_LIST.length);
+  console.log(`Loaded ${WORD_LIST.length} words with length 5 from words.txt`);
+}
 
-  if (WORD_LIST.length === 0) {
-    console.warn("⚠️ words.txt nav neviena korekta 5-burtu vārda pēc normalizācijas!");
-    WORD_LIST = ["bugat", "prime", "spels", "vards", "lauks"]; // rezerves
+loadWords();
+
+// ===== Leaderboard =====
+const leaderboard = new Map(); // nick -> { wins, games }
+
+function updateLeaderboard(nick, isWin) {
+  if (!nick) return;
+  if (!leaderboard.has(nick)) {
+    leaderboard.set(nick, { wins: 0, games: 0 });
   }
-} catch (err) {
-  console.error("❌ Neizdevās nolasīt words.txt:", err);
-  WORD_LIST = ["bugat", "prime", "spels", "vards", "lauks"];
+  const entry = leaderboard.get(nick);
+  entry.games += 1;
+  if (isWin) entry.wins += 1;
 }
 
-function getRandomWord() {
-  return WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)].toUpperCase();
+function getLeaderboardList() {
+  return Array.from(leaderboard.entries())
+    .map(([nick, data]) => ({ nick, ...data }))
+    .sort((a, b) => b.wins - a.wins || a.games - b.games)
+    .slice(0, 20);
 }
-
-// ===== Spēles stāvoklis =====
-let currentWord = getRandomWord();
-let leaderboard = {}; // { nick: wins }
-
-console.log("First word:", currentWord);
 
 // ===== Express + Socket.IO =====
 const app = express();
-app.use(cors());
 
-app.get("/health", (req, res) => {
-  res.json({ ok: true, wordLength: currentWord.length });
+app.get("/health", (_, res) => {
+  res.json({ ok: true });
 });
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-  },
+  cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
-// ===== Leaderboard palīgfunkcija =====
-function formatLeaderboard() {
-  return Object.entries(leaderboard)
-    .map(([nick, wins]) => ({ nick, wins }))
-    .sort((a, b) => b.wins - a.wins)
-    .slice(0, 50);
+// Startē jaunu raundu vienam socketam
+function startNewRound(socket) {
+  if (!WORD_LIST.length) {
+    loadWords();
+  }
+
+  const pick = WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)];
+  socket.data.currentWordRaw = pick.raw.toUpperCase();  // priekš ziņas
+  socket.data.currentWordNorm = pick.norm;              // salīdzināšanai
+  socket.data.attempts = 0;
+  socket.data.finishedRound = false;
+
+  socket.emit("roundStarted", { maxAttempts: MAX_ATTEMPTS });
 }
 
-// ===== Socket.IO loģika =====
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
 
+  socket.data.nick = "Guest";
   socket.data.attempts = 0;
-  socket.data.nick = "Guest" + socket.id.slice(-4);
+  socket.data.finishedRound = false;
+  socket.data.currentWordRaw = null;
+  socket.data.currentWordNorm = null;
 
   socket.on("join", ({ nick }) => {
-    if (typeof nick === "string" && nick.trim().length > 0) {
-      socket.data.nick = nick.trim().slice(0, 20);
-    }
-    socket.data.attempts = 0;
+    const safeNick = (nick || "Guest").toString().trim().slice(0, 20);
+    socket.data.nick = safeNick || "Guest";
 
-    socket.emit("joined", { nick: socket.data.nick });
-    socket.emit("roundStarted", { maxAttempts: MAX_ATTEMPTS });
+    // sūtam pašreizējo leaderboard
+    socket.emit("leaderboard", getLeaderboardList());
 
-    io.emit("leaderboard", formatLeaderboard());
+    // sākam raundu
+    startNewRound(socket);
   });
 
   socket.on("newRound", () => {
-    currentWord = getRandomWord();
-    console.log("New round word:", currentWord);
-
-    socket.data.attempts = 0;
-    socket.emit("roundStarted", { maxAttempts: MAX_ATTEMPTS });
+    // ja iepriekšējais raunds nav beidzies, vienkārši sākam jaunu
+    startNewRound(socket);
   });
 
   socket.on("guess", ({ word }) => {
-    if (!word || typeof word !== "string") {
+    if (typeof word !== "string") {
       return socket.emit("guessResult", {
         error: true,
         msg: "Nederīgs vārds.",
       });
     }
 
-    const guessRaw = word.trim().toLowerCase();
-    const guessNorm = normalizeWord(guessRaw).toUpperCase();
-
-    if (guessNorm.length !== currentWord.length) {
+    if (!socket.data.currentWordNorm) {
       return socket.emit("guessResult", {
         error: true,
-        msg: `Jābūt ${currentWord.length} burtiem.`,
+        msg: "Raunds vēl nav sācies.",
+      });
+    }
+
+    const guessRaw = word.trim();
+    const guessNorm = normalizeWord(guessRaw);
+
+    if (guessNorm.length !== socket.data.currentWordNorm.length) {
+      return socket.emit("guessResult", {
+        error: true,
+        msg: `Jābūt ${socket.data.currentWordNorm.length} burtiem.`,
       });
     }
 
     if (typeof socket.data.attempts !== "number") {
       socket.data.attempts = 0;
     }
+
     if (socket.data.attempts >= MAX_ATTEMPTS) {
       return socket.emit("guessResult", {
         error: true,
-        msg: "Nav atlikušo mēģinājumu. Spied 'Jauna spēle'.",
+        msg: "Mēģinājumi beigušies.",
       });
     }
 
-    socket.data.attempts++;
-    const remainingAttempts = Math.max(0, MAX_ATTEMPTS - socket.data.attempts);
+    socket.data.attempts += 1;
+    const result = evaluateGuess(guessNorm, socket.data.currentWordNorm);
+    const isWin = result.every((r) => r === "correct");
+    const finishedRound = isWin || socket.data.attempts >= MAX_ATTEMPTS;
 
-    const target = currentWord;
-    const result = new Array(target.length);
-    const targetLetters = target.split("");
+    const remainingAttempts = Math.max(
+      0,
+      MAX_ATTEMPTS - socket.data.attempts
+    );
 
-    // Zaļie
-    for (let i = 0; i < guessNorm.length; i++) {
-      if (guessNorm[i] === targetLetters[i]) {
-        result[i] = "correct";
-        targetLetters[i] = "*";
-      }
-    }
-
-    // Dzeltenie / pelēkie
-    for (let i = 0; i < guessNorm.length; i++) {
-      if (!result[i]) {
-        const idx = targetLetters.indexOf(guessNorm[i]);
-        if (idx !== -1) {
-          result[i] = "present";
-          targetLetters[idx] = "*";
-        } else {
-          result[i] = "absent";
-        }
-      }
-    }
-
-    const isWin = guessNorm === target;
-    let finishedRound = false;
-    let correctWordToSend = undefined;
-
-    if (isWin) {
-      finishedRound = true;
-      correctWordToSend = target;
-      const nick = socket.data.nick || "Guest";
-      leaderboard[nick] = (leaderboard[nick] || 0) + 1;
-
-      io.emit("leaderboard", formatLeaderboard());
-
-      // serverī uzreiz sagatavojam nākamo vārdu
-      currentWord = getRandomWord();
-      console.log("Word solved by", socket.data.nick, "-> new word:", currentWord);
-    } else if (remainingAttempts <= 0) {
-      finishedRound = true;
-      correctWordToSend = target;
+    if (finishedRound) {
+      socket.data.finishedRound = true;
+      updateLeaderboard(socket.data.nick, isWin);
+      io.emit("leaderboard", getLeaderboardList());
     }
 
     socket.emit("guessResult", {
+      error: false,
       result,
       isWin,
       finishedRound,
-      correctWord: correctWordToSend,
+      correctWord: socket.data.currentWordRaw,
       remainingAttempts,
     });
   });
@@ -211,7 +221,6 @@ io.on("connection", (socket) => {
   });
 });
 
-// ===== START =====
 httpServer.listen(PORT, () => {
   console.log("Bugats Wordle server running on port", PORT);
 });
