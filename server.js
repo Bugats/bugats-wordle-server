@@ -1,4 +1,4 @@
-// server.js — VĀRDU ZONA serveris (Node + Socket.IO) ar XP, rankiem, streakiem
+// server.js — VĀRDU ZONA serveris (Node + Socket.IO) ar XP, rankiem, streakiem, avataru un online skaitītāju
 
 import express from "express";
 import { createServer } from "http";
@@ -106,15 +106,24 @@ function loadWords() {
 
 loadWords();
 
-// ===== Leaderboard ar XP + streak =====
-// nick -> { wins, games, xp, streak }
+// ===== Leaderboard ar XP + streak + avatar =====
+// nick -> { wins, games, xp, streak, avatar }
 const leaderboard = new Map();
+
+// online skaitītājs
+let onlineCount = 0;
 
 function updateLeaderboard(nick, isWin, attemptsUsed, maxAttempts) {
   if (!nick) return null;
 
   if (!leaderboard.has(nick)) {
-    leaderboard.set(nick, { wins: 0, games: 0, xp: 0, streak: 0 });
+    leaderboard.set(nick, {
+      wins: 0,
+      games: 0,
+      xp: 0,
+      streak: 0,
+      avatar: null,
+    });
   }
   const entry = leaderboard.get(nick);
 
@@ -162,6 +171,7 @@ function getLeaderboardList() {
       xp: data.xp,
       rank: getRankName(data.xp),
       streak: data.streak || 0,
+      avatar: data.avatar || null,
     }))
     .sort((a, b) => b.xp - a.xp || b.wins - a.wins || a.games - b.games)
     .slice(0, 20);
@@ -196,17 +206,43 @@ function startNewRound(socket) {
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
 
+  // online++
+  onlineCount++;
+  io.emit("online", onlineCount);
+
   socket.data.nick = "Guest";
+  socket.data.avatar = null;
   socket.data.attempts = 0;
   socket.data.finishedRound = false;
   socket.data.currentWordRaw = null;
   socket.data.currentWordNorm = null;
 
-  socket.on("join", ({ nick }) => {
+  // JOIN ar niku + opcionālu avatar URL
+  socket.on("join", ({ nick, avatarUrl }) => {
     const safeNick = (nick || "Guest").toString().trim().slice(0, 20);
+    const safeAvatar = (avatarUrl || "").toString().trim().slice(0, 300);
+
     socket.data.nick = safeNick || "Guest";
+    socket.data.avatar = safeAvatar || null;
+
+    // atjaunojam/izveidojam leaderboard ierakstu ar avataru, ja vajadzīgs
+    if (!leaderboard.has(socket.data.nick)) {
+      leaderboard.set(socket.data.nick, {
+        wins: 0,
+        games: 0,
+        xp: 0,
+        streak: 0,
+        avatar: safeAvatar || null,
+      });
+    } else {
+      const entry = leaderboard.get(socket.data.nick);
+      if (safeAvatar) {
+        entry.avatar = safeAvatar;
+      }
+    }
 
     socket.emit("leaderboard", getLeaderboardList());
+    io.emit("online", onlineCount);
     startNewRound(socket);
   });
 
@@ -291,6 +327,8 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     console.log("Client disconnected:", socket.id);
+    onlineCount = Math.max(0, onlineCount - 1);
+    io.emit("online", onlineCount);
   });
 });
 
