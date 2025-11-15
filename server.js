@@ -1,4 +1,5 @@
-// server.js — VĀRDU ZONA serveris (Node + Socket.IO) ar XP, rankiem, streakiem
+// server.js — VĀRDU ZONA serveris (Node + Socket.IO) ar XP, rankiem, streakiem,
+// saskaņots ar tavu pašreizējo script.js (hello, statsUpdate, leaderboardUpdate, onlineCount)
 
 import express from "express";
 import { createServer } from "http";
@@ -47,6 +48,8 @@ function getRankName(xp) {
 }
 
 // ===== Palīgfunkcijas =====
+
+// normalizē: mazajiem burtiem, noņem diakritikas un visu, kas nav a–z
 function normalizeWord(str) {
   if (!str) return "";
   let s = str
@@ -59,6 +62,7 @@ function normalizeWord(str) {
   return s;
 }
 
+// vērtē minējumu: atgriež masīvu ["correct"|"present"|"absent", ...]
 function evaluateGuess(guessNorm, targetNorm) {
   const len = targetNorm.length;
   const result = Array(len).fill("absent");
@@ -86,7 +90,7 @@ function evaluateGuess(guessNorm, targetNorm) {
   return result;
 }
 
-// ===== Words.txt ielāde =====
+// ===== Words.txt ielāde (5-burtu vārdi) =====
 let WORD_LIST = [];
 
 function loadWords() {
@@ -108,72 +112,152 @@ function loadWords() {
 
 loadWords();
 
-// ===== Leaderboard ar XP + streak =====
-// nick -> { wins, games, xp, streak }
-const leaderboard = new Map();
+// ===== Globālais raunds visiem spēlētājiem =====
+let currentWord = null; // { raw, norm }
+let currentRoundId = 1;
 
-function updateLeaderboard(nick, isWin, attemptsUsed, maxAttempts) {
-  if (!nick) return null;
-
-  if (!leaderboard.has(nick)) {
-    leaderboard.set(nick, { wins: 0, games: 0, xp: 0, streak: 0 });
+function pickNewWord() {
+  if (!WORD_LIST.length) {
+    loadWords();
   }
-  const entry = leaderboard.get(nick);
+  const prev = currentWord ? currentWord.raw : null;
+  let candidate;
+  do {
+    candidate = WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)];
+  } while (WORD_LIST.length > 1 && candidate.raw === prev);
 
-  entry.games += 1;
-
-  let xpGain = 0;
-
-  if (isWin) {
-    entry.wins += 1;
-    // streak + XP grinds
-    entry.streak = (entry.streak || 0) + 1;
-
-    const attemptsLeft = Math.max(0, maxAttempts - attemptsUsed);
-    // pamata XP par uzvaru
-    xpGain = 50 + attemptsLeft * 10;
-
-    // bonus XP par streaku (jo lielāks streak, jo vairāk)
-    if (entry.streak >= 2) {
-      xpGain += entry.streak * 10; // piem.: streak 2 = +20, streak 3 = +30, utt.
-    }
-  } else {
-    // lose – mazliet XP, streak reset
-    xpGain = 5;
-    entry.streak = 0;
-  }
-
-  entry.xp += xpGain;
-
-  const rank = getRankName(entry.xp);
-
-  return {
-    xpGain,
-    xpTotal: entry.xp,
-    rank,
-    streak: entry.streak,
-  };
+  currentWord = candidate;
+  currentRoundId += 1;
+  console.log("Jauns vārds:", currentWord.raw, "| raunds:", currentRoundId);
 }
 
-function getLeaderboardList() {
-  return Array.from(leaderboard.entries())
-    .map(([nick, data]) => ({
-      nick,
-      wins: data.wins,
-      games: data.games,
-      xp: data.xp,
-      rank: getRankName(data.xp),
-      streak: data.streak || 0,
-    }))
-    .sort((a, b) => b.xp - a.xp || b.wins - a.wins || a.games - b.games)
-    .slice(0, 20);
+pickNewWord();
+
+// ===== Spēlētāji ar XP (24h RAM) =====
+const players = new Map(); // id -> playerObj
+
+function getPlayerId(socket) {
+  const auth = socket.handshake.auth || {};
+  return auth.cid || socket.id;
+}
+
+function getOrCreatePlayer(socket) {
+  const id = getPlayerId(socket);
+  let player = players.get(id);
+  if (!player) {
+    const auth = socket.handshake.auth || {};
+    let name = (auth.name || "Spēlētājs").toString().trim().slice(0, 20);
+    if (!name) name = "Spēlētājs";
+
+    player = {
+      id,
+      name,
+      xp: 0,
+      wins: 0,
+      games: 0,
+      streak: 0,
+      bestStreak: 0,
+      rankTitle: getRankName(0),
+      lastSeenAt: Date.now(),
+    };
+    players.set(id, player);
+  } else {
+    player.lastSeenAt = Date.now();
+  }
+  return player;
+}
+
+function buildLeaderboard() {
+  const now = Date.now();
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  for (const [id, p] of players.entries()) {
+    if (now - p.lastSeenAt > DAY_MS) {
+      players.delete(id);
+    }
+  }
+
+  return Array.from(players.values())
+    .sort((a, b) => {
+      if (b.xp !== a.xp) return b.xp - a.xp;
+      if (b.wins !== a.wins) return b.wins - a.wins;
+      return a.games - b.games;
+    })
+    .slice(0, 20)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      xp: p.xp,
+      wins: p.wins,
+      streak: p.streak,
+      bestStreak: p.bestStreak,
+      rankTitle: p.rankTitle,
+    }));
+}
+
+function getOnlineCount(io) {
+  const room = io.sockets.adapter.rooms.get("game");
+  return room ? room.size : 0;
+}
+
+// ===== XP piešķiršana (izmanto tavu XP formulu) =====
+function applyResult(io, socket, isWin) {
+  const player = getOrCreatePlayer(socket);
+  player.games += 1;
+
+  let xpGain = 0;
+  if (isWin) {
+    player.wins += 1;
+    player.streak = (player.streak || 0) + 1;
+    if (player.streak > player.bestStreak) {
+      player.bestStreak = player.streak;
+    }
+
+    const attemptsUsed = socket.data.attempts || 0;
+    const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attemptsUsed);
+
+    // tava loģika: 50 + attemptsLeft*10 + streak bonuss
+    xpGain = 50 + attemptsLeft * 10;
+    if (player.streak >= 2) {
+      xpGain += player.streak * 10;
+    }
+  } else {
+    xpGain = 5;
+    player.streak = 0;
+  }
+
+  player.xp += xpGain;
+  player.rankTitle = getRankName(player.xp);
+
+  const statsPayload = {
+    xp: player.xp,
+    wins: player.wins,
+    streak: player.streak,
+    bestStreak: player.bestStreak,
+    rankTitle: player.rankTitle,
+    gainedXP: xpGain,
+  };
+
+  // šim spēlētājam statistika
+  socket.emit("statsUpdate", statsPayload);
+
+  // visiem – leaderboard
+  io.to("game").emit("leaderboardUpdate", {
+    players: buildLeaderboard(),
+  });
+
+  console.log(
+    `[XP] ${isWin ? "WIN" : "FAIL"} ${player.name} → +${xpGain} XP (kopā ${
+      player.xp
+    }), streak ${player.streak}`
+  );
 }
 
 // ===== Express + Socket.IO =====
 const app = express();
 
-app.get("/health", (_, res) => {
-  res.json({ ok: true });
+app.get("/health", (_req, res) => {
+  res.json({ ok: true, roundId: currentRoundId });
 });
 
 const httpServer = createServer(app);
@@ -181,121 +265,135 @@ const io = new Server(httpServer, {
   cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
-function startNewRound(socket) {
-  if (!WORD_LIST.length) {
-    loadWords();
-  }
-
-  const pick = WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)];
-  socket.data.currentWordRaw = pick.raw.toUpperCase();
-  socket.data.currentWordNorm = pick.norm;
-  socket.data.attempts = 0;
-  socket.data.finishedRound = false;
-
-  socket.emit("roundStarted", { maxAttempts: MAX_ATTEMPTS });
-}
-
+// ===== Socket.IO loģika (pielāgota script.js) =====
 io.on("connection", (socket) => {
-  console.log("Client connected:", socket.id);
+  socket.join("game");
 
-  socket.data.nick = "Guest";
+  const player = getOrCreatePlayer(socket);
   socket.data.attempts = 0;
-  socket.data.finishedRound = false;
-  socket.data.currentWordRaw = null;
-  socket.data.currentWordNorm = null;
 
-  socket.on("join", ({ nick }) => {
-    const safeNick = (nick || "Guest").toString().trim().slice(0, 20);
-    socket.data.nick = safeNick || "Guest";
-
-    socket.emit("leaderboard", getLeaderboardList());
-    startNewRound(socket);
+  // sākuma info klientam: script.js gaida "hello"
+  socket.emit("hello", {
+    wordLength: currentWord.norm.length,
+    maxAttempts: MAX_ATTEMPTS,
+    roundId: currentRoundId,
+    stats: {
+      xp: player.xp,
+      wins: player.wins,
+      streak: player.streak,
+      bestStreak: player.bestStreak,
+      rankTitle: player.rankTitle,
+    },
+    leaderboard: buildLeaderboard(),
+    onlineCount: getOnlineCount(io),
   });
 
-  socket.on("newRound", () => {
-    startNewRound(socket);
-  });
+  // online skaits visiem
+  io.to("game").emit("onlineCount", { count: getOnlineCount(io) });
 
-  socket.on("guess", ({ word }) => {
-    if (typeof word !== "string") {
-      return socket.emit("guessResult", {
-        error: true,
-        msg: "Nederīgs vārds.",
-      });
-    }
+  // ===== Minējums (script.js -> socket.emit("guess", { word, roundId })) =====
+  socket.on("guess", (payload) => {
+    try {
+      if (!payload || typeof payload.word !== "string") {
+        return socket.emit("guessResult", {
+          error: true,
+          msg: "Nederīgs vārds.",
+        });
+      }
 
-    if (!socket.data.currentWordNorm) {
-      return socket.emit("guessResult", {
-        error: true,
-        msg: "Raunds vēl nav sācies.",
-      });
-    }
+      const { word, roundId } = payload;
 
-    const guessRaw = word.trim();
-    const guessNorm = normalizeWord(guessRaw);
+      // ja raunds starp klientu un serveri neatbilst
+      if (roundId !== currentRoundId) {
+        return socket.emit("guessResult", {
+          error: true,
+          msg: "Raunds jau ir mainījies. Spied 'Jauna spēle'.",
+        });
+      }
 
-    if (guessNorm.length !== socket.data.currentWordNorm.length) {
-      return socket.emit("guessResult", {
-        error: true,
-        msg: `Jābūt ${socket.data.currentWordNorm.length} burtiem.`,
-      });
-    }
+      if (!currentWord || !currentWord.norm) {
+        return socket.emit("guessResult", {
+          error: true,
+          msg: "Raunds vēl nav gatavs.",
+        });
+      }
 
-    if (typeof socket.data.attempts !== "number") {
-      socket.data.attempts = 0;
-    }
+      const guessRaw = word.trim();
+      const guessNorm = normalizeWord(guessRaw);
+      const display = guessRaw.toUpperCase();
 
-    if (socket.data.attempts >= MAX_ATTEMPTS) {
-      return socket.emit("guessResult", {
-        error: true,
-        msg: "Mēģinājumi beigušies.",
-      });
-    }
+      if (guessNorm.length !== currentWord.norm.length) {
+        return socket.emit("guessResult", {
+          error: true,
+          msg: `Jābūt ${currentWord.norm.length} burtiem.`,
+        });
+      }
 
-    socket.data.attempts += 1;
-    const result = evaluateGuess(guessNorm, socket.data.currentWordNorm);
-    const isWin = result.every((r) => r === "correct");
-    const finishedRound =
-      isWin || socket.data.attempts >= MAX_ATTEMPTS;
+      if (typeof socket.data.attempts !== "number") {
+        socket.data.attempts = 0;
+      }
+      if (socket.data.attempts >= MAX_ATTEMPTS) {
+        return socket.emit("guessResult", {
+          error: true,
+          msg: "Mēģinājumi beigušies.",
+        });
+      }
 
-    const remainingAttempts = Math.max(
-      0,
-      MAX_ATTEMPTS - socket.data.attempts
-    );
+      socket.data.attempts += 1;
 
-    let correctWordToSend = null;
-    if (isWin) {
-      correctWordToSend = socket.data.currentWordRaw;
-    }
+      const statuses = evaluateGuess(guessNorm, currentWord.norm);
+      const letters = statuses.map((st, i) => ({
+        letter: display[i],
+        status: st,
+      }));
 
-    let reward = null;
-    if (finishedRound) {
-      socket.data.finishedRound = true;
-      reward = updateLeaderboard(
-        socket.data.nick,
+      const isWin = statuses.every((s) => s === "correct");
+      const attemptsLeft = Math.max(0, MAX_ATTEMPTS - socket.data.attempts);
+
+      // tas, ko script.js gaida: letters, isWin, attemptsLeft
+      socket.emit("guessResult", {
+        letters,
         isWin,
-        socket.data.attempts,
-        MAX_ATTEMPTS
-      );
-      io.emit("leaderboard", getLeaderboardList());
-    }
+        attemptsLeft,
+      });
 
-    socket.emit("guessResult", {
-      error: false,
-      result,
-      isWin,
-      finishedRound,
-      correctWord: correctWordToSend,
-      remainingAttempts,
-      reward,
+      if (isWin) {
+        applyResult(io, socket, true);
+        return;
+      }
+
+      if (attemptsLeft <= 0) {
+        // zaudējums, vārdu NEatklājam
+        applyResult(io, socket, false);
+      }
+    } catch (err) {
+      console.error("guess error", err);
+      socket.emit("guessResult", {
+        error: true,
+        msg: "Kļūda apstrādājot minējumu.",
+      });
+    }
+  });
+
+  // ===== Jauna spēle (script.js -> requestNewRound) =====
+  socket.on("requestNewRound", () => {
+    pickNewWord();
+    for (const [, s] of io.sockets.sockets) {
+      s.data.attempts = 0;
+    }
+    io.to("game").emit("newRound", {
+      roundId: currentRoundId,
+      wordLength: currentWord.norm.length,
+      maxAttempts: MAX_ATTEMPTS,
     });
   });
 
   socket.on("disconnect", () => {
-    console.log("Client disconnected:", socket.id);
+    io.to("game").emit("onlineCount", { count: getOnlineCount(io) });
   });
 });
 
+// ===== Start =====
 httpServer.listen(PORT, () => {
   console.log("VĀRDU ZONA server running on port", PORT);
 });
