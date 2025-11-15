@@ -1,4 +1,4 @@
-// server.js — Bugats Wordle serveris (Node + Socket.IO)
+// server.js — Bugats Wordle serveris (Node + Socket.IO) ar XP + rankiem
 
 import express from "express";
 import { createServer } from "http";
@@ -13,6 +13,39 @@ const __dirname = path.dirname(__filename);
 // ===== Konstantes =====
 const PORT = process.env.PORT || 10080;
 const MAX_ATTEMPTS = 6;
+
+// ===== Ranku definīcijas (XP threshold) =====
+// XP grinds – jo tālāk, jo nenormāli grūti
+const RANKS = [
+  { name: "Jauniņais I", xp: 0 },
+  { name: "Jauniņais II", xp: 100 },
+  { name: "Meklētājs I", xp: 250 },
+  { name: "Meklētājs II", xp: 500 },
+  { name: "Vārdu Mednieks I", xp: 800 },
+  { name: "Vārdu Mednieks II", xp: 1200 },
+  { name: "Vārdu Šāvējs I", xp: 1700 },
+  { name: "Vārdu Šāvējs II", xp: 2300 },
+  { name: "Vārdu Burvis I", xp: 3000 },
+  { name: "Vārdu Burvis II", xp: 3800 },
+  { name: "Lingo Leģenda I", xp: 4700 },
+  { name: "Lingo Leģenda II", xp: 5700 },
+  { name: "Bugats Čempions I", xp: 7000 },
+  { name: "Bugats Čempions II", xp: 8500 },
+  { name: "Bugats Elites I", xp: 10000 },
+  { name: "Bugats Elites II", xp: 12000 },
+  { name: "Bugats Imperators I", xp: 15000 },
+  { name: "Bugats Imperators II", xp: 19000 },
+  { name: "Valodas Dievs", xp: 24000 },
+];
+
+function getRankName(xp) {
+  let current = RANKS[0]?.name || "Jauniņais I";
+  for (const r of RANKS) {
+    if (xp >= r.xp) current = r.name;
+    else break;
+  }
+  return current;
+}
 
 // ===== Palīgfunkcijas =====
 function normalizeWord(str) {
@@ -82,23 +115,47 @@ function loadWords() {
 
 loadWords();
 
-// ===== Leaderboard =====
-const leaderboard = new Map(); // nick -> { wins, games }
+// ===== Leaderboard ar XP =====
+// nick -> { wins, games, xp }
+const leaderboard = new Map();
 
-function updateLeaderboard(nick, isWin) {
+function updateLeaderboard(nick, isWin, attemptsUsed, maxAttempts) {
   if (!nick) return;
   if (!leaderboard.has(nick)) {
-    leaderboard.set(nick, { wins: 0, games: 0 });
+    leaderboard.set(nick, { wins: 0, games: 0, xp: 0 });
   }
   const entry = leaderboard.get(nick);
+
   entry.games += 1;
-  if (isWin) entry.wins += 1;
+  if (isWin) {
+    entry.wins += 1;
+  }
+
+  // XP piešķiršana:
+  // Win: 50 pamata XP + 10 XP par katru atlikušos mēģinājumu
+  // Lose: 5 XP (mazs, bet kaut kas)
+  let xpGain = 0;
+  if (isWin) {
+    const attemptsLeft = Math.max(0, maxAttempts - attemptsUsed);
+    xpGain = 50 + attemptsLeft * 10;
+  } else {
+    xpGain = 5;
+  }
+
+  entry.xp += xpGain;
 }
 
 function getLeaderboardList() {
   return Array.from(leaderboard.entries())
-    .map(([nick, data]) => ({ nick, ...data }))
-    .sort((a, b) => b.wins - a.wins || a.games - b.games)
+    .map(([nick, data]) => ({
+      nick,
+      wins: data.wins,
+      games: data.games,
+      xp: data.xp,
+      rank: getRankName(data.xp),
+    }))
+    // sortē pēc XP, tad pēc uzvarām
+    .sort((a, b) => b.xp - a.xp || b.wins - a.wins || a.games - b.games)
     .slice(0, 20);
 }
 
@@ -208,7 +265,12 @@ io.on("connection", (socket) => {
 
     if (finishedRound) {
       socket.data.finishedRound = true;
-      updateLeaderboard(socket.data.nick, isWin);
+      updateLeaderboard(
+        socket.data.nick,
+        isWin,
+        socket.data.attempts,
+        MAX_ATTEMPTS
+      );
       io.emit("leaderboard", getLeaderboardList());
     }
 
