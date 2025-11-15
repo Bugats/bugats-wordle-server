@@ -1,4 +1,4 @@
-// server.js — Bugats Wordle serveris (Node + Socket.IO) ar XP + rankiem
+// server.js — VĀRDU ZONA serveris (Node + Socket.IO) ar XP, rankiem, streakiem
 
 import express from "express";
 import { createServer } from "http";
@@ -15,7 +15,6 @@ const PORT = process.env.PORT || 10080;
 const MAX_ATTEMPTS = 6;
 
 // ===== Ranku definīcijas (XP threshold) =====
-// XP grinds – jo tālāk, jo nenormāli grūti
 const RANKS = [
   { name: "Jauniņais I", xp: 0 },
   { name: "Jauniņais II", xp: 100 },
@@ -50,35 +49,31 @@ function getRankName(xp) {
 // ===== Palīgfunkcijas =====
 function normalizeWord(str) {
   if (!str) return "";
-  // noņem garumzīmes u.c. diakritiskās zīmes
   let s = str
     .toString()
     .trim()
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, ""); // ā → a, ē → e, š → s, utt.
-
-  // atstājam tikai latīņu burtus
+    .replace(/[\u0300-\u036f]/g, "");
   s = s.replace(/[^a-z]/g, "");
   return s;
 }
 
-// saliek stāvokļus priekš katra burta
 function evaluateGuess(guessNorm, targetNorm) {
   const len = targetNorm.length;
   const result = Array(len).fill("absent");
   const targetArr = targetNorm.split("");
   const guessArr = guessNorm.split("");
 
-  // vispirms precīzie (pareizā vietā)
+  // precīzie
   for (let i = 0; i < len; i++) {
     if (guessArr[i] === targetArr[i]) {
       result[i] = "correct";
-      targetArr[i] = null; // šo burtu vairāk nelietot
+      targetArr[i] = null;
     }
   }
 
-  // pēc tam "ir vārdā, bet citā vietā"
+  // ir vārdā, citā vietā
   for (let i = 0; i < len; i++) {
     if (result[i] === "correct") continue;
     const idx = targetArr.indexOf(guessArr[i]);
@@ -102,47 +97,62 @@ function loadWords() {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
-    .map((line) => {
-      return {
-        raw: line,
-        norm: normalizeWord(line),
-      };
-    })
-    .filter((w) => w.norm.length === 5); // tikai 5-burtu vārdi
+    .map((line) => ({
+      raw: line,
+      norm: normalizeWord(line),
+    }))
+    .filter((w) => w.norm.length === 5);
 
   console.log(`Loaded ${WORD_LIST.length} words with length 5 from words.txt`);
 }
 
 loadWords();
 
-// ===== Leaderboard ar XP =====
-// nick -> { wins, games, xp }
+// ===== Leaderboard ar XP + streak =====
+// nick -> { wins, games, xp, streak }
 const leaderboard = new Map();
 
 function updateLeaderboard(nick, isWin, attemptsUsed, maxAttempts) {
-  if (!nick) return;
+  if (!nick) return null;
+
   if (!leaderboard.has(nick)) {
-    leaderboard.set(nick, { wins: 0, games: 0, xp: 0 });
+    leaderboard.set(nick, { wins: 0, games: 0, xp: 0, streak: 0 });
   }
   const entry = leaderboard.get(nick);
 
   entry.games += 1;
+
+  let xpGain = 0;
+
   if (isWin) {
     entry.wins += 1;
-  }
+    // streak + XP grinds
+    entry.streak = (entry.streak || 0) + 1;
 
-  // XP piešķiršana:
-  // Win: 50 pamata XP + 10 XP par katru atlikušos mēģinājumu
-  // Lose: 5 XP (mazs, bet kaut kas)
-  let xpGain = 0;
-  if (isWin) {
     const attemptsLeft = Math.max(0, maxAttempts - attemptsUsed);
+    // pamata XP par uzvaru
     xpGain = 50 + attemptsLeft * 10;
+
+    // bonus XP par streaku (jo lielāks streak, jo vairāk)
+    if (entry.streak >= 2) {
+      xpGain += entry.streak * 10; // piem.: streak 2 = +20, streak 3 = +30, utt.
+    }
   } else {
+    // lose – mazliet XP, streak reset
     xpGain = 5;
+    entry.streak = 0;
   }
 
   entry.xp += xpGain;
+
+  const rank = getRankName(entry.xp);
+
+  return {
+    xpGain,
+    xpTotal: entry.xp,
+    rank,
+    streak: entry.streak,
+  };
 }
 
 function getLeaderboardList() {
@@ -153,8 +163,8 @@ function getLeaderboardList() {
       games: data.games,
       xp: data.xp,
       rank: getRankName(data.xp),
+      streak: data.streak || 0,
     }))
-    // sortē pēc XP, tad pēc uzvarām
     .sort((a, b) => b.xp - a.xp || b.wins - a.wins || a.games - b.games)
     .slice(0, 20);
 }
@@ -171,15 +181,14 @@ const io = new Server(httpServer, {
   cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
-// Startē jaunu raundu vienam socketam
 function startNewRound(socket) {
   if (!WORD_LIST.length) {
     loadWords();
   }
 
   const pick = WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)];
-  socket.data.currentWordRaw = pick.raw.toUpperCase();  // priekš parādīšanas, ja vajag
-  socket.data.currentWordNorm = pick.norm;              // salīdzināšanai
+  socket.data.currentWordRaw = pick.raw.toUpperCase();
+  socket.data.currentWordNorm = pick.norm;
   socket.data.attempts = 0;
   socket.data.finishedRound = false;
 
@@ -199,15 +208,11 @@ io.on("connection", (socket) => {
     const safeNick = (nick || "Guest").toString().trim().slice(0, 20);
     socket.data.nick = safeNick || "Guest";
 
-    // sūtam pašreizējo leaderboard
     socket.emit("leaderboard", getLeaderboardList());
-
-    // sākam raundu
     startNewRound(socket);
   });
 
   socket.on("newRound", () => {
-    // vienkārši sākam jaunu raundu (katram savs vārds)
     startNewRound(socket);
   });
 
@@ -250,22 +255,23 @@ io.on("connection", (socket) => {
     socket.data.attempts += 1;
     const result = evaluateGuess(guessNorm, socket.data.currentWordNorm);
     const isWin = result.every((r) => r === "correct");
-    const finishedRound = isWin || socket.data.attempts >= MAX_ATTEMPTS;
+    const finishedRound =
+      isWin || socket.data.attempts >= MAX_ATTEMPTS;
 
     const remainingAttempts = Math.max(
       0,
       MAX_ATTEMPTS - socket.data.attempts
     );
 
-    // Pareizo vārdu sūtam TIKAI, ja ir uzvara
     let correctWordToSend = null;
     if (isWin) {
       correctWordToSend = socket.data.currentWordRaw;
     }
 
+    let reward = null;
     if (finishedRound) {
       socket.data.finishedRound = true;
-      updateLeaderboard(
+      reward = updateLeaderboard(
         socket.data.nick,
         isWin,
         socket.data.attempts,
@@ -281,6 +287,7 @@ io.on("connection", (socket) => {
       finishedRound,
       correctWord: correctWordToSend,
       remainingAttempts,
+      reward,
     });
   });
 
@@ -290,5 +297,5 @@ io.on("connection", (socket) => {
 });
 
 httpServer.listen(PORT, () => {
-  console.log("Bugats Wordle server running on port", PORT);
+  console.log("VĀRDU ZONA server running on port", PORT);
 });
