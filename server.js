@@ -49,14 +49,12 @@ function getRankName(xp) {
 // ===== Palīgfunkcijas =====
 function normalizeWord(str) {
   if (!str) return "";
-  let s = str
+  // atļaujam latviešu burtus ar garumzīmēm
+  return str
     .toString()
     .trim()
     .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-  s = s.replace(/[^a-z]/g, "");
-  return s;
+    .replace(/[^a-zāčēģīķļņšūž]/g, "");
 }
 
 function evaluateGuess(guessNorm, targetNorm) {
@@ -133,9 +131,9 @@ function updateLeaderboard(nick, isWin, attemptsUsed, maxAttempts) {
     // pamata XP par uzvaru
     xpGain = 50 + attemptsLeft * 10;
 
-    // bonus XP par streaku (jo lielāks streak, jo vairāk)
+    // bonus XP par streaku
     if (entry.streak >= 2) {
-      xpGain += entry.streak * 10; // piem.: streak 2 = +20, streak 3 = +30, utt.
+      xpGain += entry.streak * 10; // streak 2 = +20, 3 = +30, ...
     }
   } else {
     // lose – mazliet XP, streak reset
