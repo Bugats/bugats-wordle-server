@@ -121,7 +121,7 @@ function startNewRound(socket) {
   }
 
   const pick = WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)];
-  socket.data.currentWordRaw = pick.raw.toUpperCase();  // priekš ziņas
+  socket.data.currentWordRaw = pick.raw.toUpperCase();  // priekš parādīšanas, ja vajag
   socket.data.currentWordNorm = pick.norm;              // salīdzināšanai
   socket.data.attempts = 0;
   socket.data.finishedRound = false;
@@ -150,7 +150,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("newRound", () => {
-    // ja iepriekšējais raunds nav beidzies, vienkārši sākam jaunu
+    // vienkārši sākam jaunu raundu (katram savs vārds)
     startNewRound(socket);
   });
 
@@ -200,6 +200,12 @@ io.on("connection", (socket) => {
       MAX_ATTEMPTS - socket.data.attempts
     );
 
+    // Pareizo vārdu sūtam TIKAI, ja ir uzvara
+    let correctWordToSend = null;
+    if (isWin) {
+      correctWordToSend = socket.data.currentWordRaw;
+    }
+
     if (finishedRound) {
       socket.data.finishedRound = true;
       updateLeaderboard(socket.data.nick, isWin);
@@ -211,7 +217,7 @@ io.on("connection", (socket) => {
       result,
       isWin,
       finishedRound,
-      correctWord: socket.data.currentWordRaw,
+      correctWord: correctWordToSend,
       remainingAttempts,
     });
   });
