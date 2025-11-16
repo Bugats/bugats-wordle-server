@@ -109,7 +109,7 @@ function evaluateGuess(guessNorm, targetNorm) {
   return result;
 }
 
-// ========== words.txt ielāde (5-burtu) ==========
+// ========== words.txt ielāde (5–6 burtu) ==========
 let WORD_LIST = [];
 
 function loadWords() {
@@ -124,9 +124,12 @@ function loadWords() {
       raw: line,
       norm: normalizeWord(line),
     }))
-    .filter((w) => w.norm.length === 5);
+    // atļaujam 5 UN 6 burtu vārdus
+    .filter((w) => w.norm.length === 5 || w.norm.length === 6);
 
-  console.log(`Loaded ${WORD_LIST.length} words with length 5 from words.txt`);
+  console.log(
+    `Loaded ${WORD_LIST.length} words with length 5 or 6 from words.txt`
+  );
 }
 
 loadWords();
