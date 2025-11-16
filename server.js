@@ -1,6 +1,6 @@
 // server.js — VĀRDU ZONA serveris (Node + Socket.IO) ar
 // XP, rankiem, streakiem, Dienas čempionu, PERSISTENCI,
-// online spēlētāju sarakstu un real-time kill-feed.
+// online spēlētāju sarakstu, real-time kill-feed un ČATU.
 
 // ========== IMPORTI ==========
 import express from "express";
@@ -140,6 +140,21 @@ let dailyChampion = null;
 // Kill-feed: pēdējie atminētāji
 const recentSolves = []; // { name, xpGain, streak, ts }
 
+// ČATS: pēdējās ziņas atmiņā (nav failā)
+const chatHistory = []; // { name, text, ts }
+
+// Saglabā max 50 čata ziņas
+function pushChatMessage(name, text) {
+  chatHistory.push({
+    name,
+    text,
+    ts: Date.now(),
+  });
+  while (chatHistory.length > 50) {
+    chatHistory.shift();
+  }
+}
+
 function loadData() {
   try {
     if (!fs.existsSync(DATA_FILE)) {
@@ -186,7 +201,7 @@ function saveData() {
     const data = {
       players: Array.from(players.values()),
       dailyChampion,
-      // recentSolves nav jāsaglabā
+      // recentSolves un chatHistory nav jāsaglabā
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf8");
   } catch (err) {
@@ -433,6 +448,11 @@ io.on("connection", (socket) => {
       xpGain: e.xpGain,
       streak: e.streak,
     })),
+    // čata vēsture klientam
+    chatHistory: chatHistory.map((m) => ({
+      name: m.name,
+      text: m.text,
+    })),
   });
 
   if (dailyChampion && dailyChampion.date === todayString()) {
@@ -443,9 +463,18 @@ io.on("connection", (socket) => {
     });
   }
 
+  // sākotnējā čata vēsture kā atsevišķs events (ja gribi izmantot arī to)
+  socket.emit("chatHistory", {
+    messages: chatHistory.map((m) => ({
+      name: m.name,
+      text: m.text,
+    })),
+  });
+
   io.to("game").emit("onlineCount", { count: getOnlineCount(io) });
   broadcastOnlinePlayers(io);
 
+  // ===== MINĒJUMS =====
   socket.on("guess", (payload) => {
     try {
       if (!payload || typeof payload.word !== "string") {
@@ -526,6 +555,7 @@ io.on("connection", (socket) => {
     }
   });
 
+  // ===== JAUNS RAUNDS =====
   socket.on("requestNewRound", () => {
     pickNewWord();
     for (const [, s] of io.sockets.sockets) {
@@ -538,6 +568,35 @@ io.on("connection", (socket) => {
     });
   });
 
+  // ===== ČATS =====
+  socket.on("chatMessage", (data) => {
+    try {
+      const raw = (data && data.text) || "";
+      let text = raw.toString().trim();
+      if (!text) return;
+
+      // maksimālais garums – drošībai
+      if (text.length > 140) {
+        text = text.slice(0, 140);
+      }
+
+      const player = getOrCreatePlayer(socket);
+      const name = player.name || "Spēlētājs";
+
+      // saglabājam lokālajā čata vēsturē
+      pushChatMessage(name, text);
+
+      // izsūtām visiem spēlētājiem
+      io.to("game").emit("chatMessage", {
+        name,
+        text,
+      });
+    } catch (err) {
+      console.error("chatMessage error:", err);
+    }
+  });
+
+  // ===== ATVIENOŠANĀS =====
   socket.on("disconnect", () => {
     io.to("game").emit("onlineCount", { count: getOnlineCount(io) });
     broadcastOnlinePlayers(io);
