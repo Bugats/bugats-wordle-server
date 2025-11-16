@@ -1,6 +1,7 @@
 // server.js — VĀRDU ZONA serveris (Node + Socket.IO) ar
 // XP, rankiem, streakiem, Dienas čempionu, PERSISTENCI,
-// online spēlētāju sarakstu, real-time kill-feed un ČATU.
+// online spēlētāju sarakstu, real-time kill-feed, ČATU
+// un DIENAS MISIJĀM.
 
 // ========== IMPORTI ==========
 import express from "express";
@@ -17,7 +18,7 @@ const __dirname = path.dirname(__filename);
 const PORT = process.env.PORT || 10080;
 const MAX_ATTEMPTS = 6;
 
-// Failā glabāsim visus spēlētājus + Dienas čempionu
+// Failā glabāsim visus spēlētājus + Dienas čempionu + misijas
 const DATA_FILE = path.join(__dirname, "vardu-zona-data.json");
 
 // ========== Ranku definīcijas ==========
@@ -72,12 +73,58 @@ function getRankName(xp) {
   return current;
 }
 
+// ========== DIENAS MISIJAS ==========
+
+// Vienkāršs, bet dažāds misiju pools.
+// type = kādu counteru izmantosim progresa mērīšanai.
+const MISSION_TEMPLATES = [
+  {
+    key: "win_1",
+    type: "wins",
+    target: 1,
+    xpReward: 50,
+    text: "Atmini 1 vārdu šodien",
+  },
+  {
+    key: "win_3",
+    type: "wins",
+    target: 3,
+    xpReward: 150,
+    text: "Atmini 3 vārdus šodien",
+  },
+  {
+    key: "games_5",
+    type: "games",
+    target: 5,
+    xpReward: 60,
+    text: "Nospēlē 5 raundus šodien",
+  },
+  {
+    key: "games_10",
+    type: "games",
+    target: 10,
+    xpReward: 130,
+    text: "Nospēlē 10 raundus šodien",
+  },
+  {
+    key: "fast_1",
+    type: "fastWins",
+    target: 1,
+    attemptsMax: 3,
+    xpReward: 100,
+    text: "Atmini 1 vārdu max 3 mēģinājumos",
+  },
+];
+
+// Šodienas misiju struktūra:
+// dailyMissions = { date: "YYYY-MM-DD", missions: [ { key, type, target, xpReward, text, attemptsMax? } ] }
+let dailyMissions = null;
+
 // ========== Palīgfunkcijas vārdam ==========
-// JAUNA VERSIJA — saglabā latviešu garumzīmes/mīkstinājumus.
+
 function normalizeWord(str) {
   if (!str) return "";
   let s = str.toString().trim().toLowerCase();
-  // atļaujam a–z + latviešu diakritiskos burtus
   s = s.replace(/[^a-zāčēģīķļņšūž]/g, "");
   return s;
 }
@@ -109,7 +156,7 @@ function evaluateGuess(guessNorm, targetNorm) {
   return result;
 }
 
-// ========== words.txt ielāde (5–6 burtu) ==========
+// ========== words.txt ielāde (5 un 6 burti) ==========
 let WORD_LIST = [];
 
 function loadWords() {
@@ -124,11 +171,10 @@ function loadWords() {
       raw: line,
       norm: normalizeWord(line),
     }))
-    // atļaujam 5 UN 6 burtu vārdus
     .filter((w) => w.norm.length === 5 || w.norm.length === 6);
 
   console.log(
-    `Loaded ${WORD_LIST.length} words with length 5 or 6 from words.txt`
+    `Loaded ${WORD_LIST.length} words (5 un 6 burti) from words.txt`
   );
 }
 
@@ -150,7 +196,14 @@ function pickNewWord() {
 
   currentWord = candidate;
   currentRoundId += 1;
-  console.log("Jauns vārds:", currentWord.raw, "| raunds:", currentRoundId);
+  console.log(
+    "Jauns vārds:",
+    currentWord.raw,
+    "| garums:",
+    currentWord.norm.length,
+    "| raunds:",
+    currentRoundId
+  );
 }
 
 pickNewWord();
@@ -165,6 +218,113 @@ const recentSolves = []; // { name, xpGain, streak, ts }
 
 // ČATS: pēdējās ziņas atmiņā (nav failā)
 const chatHistory = []; // { name, text, ts }
+
+// Helperis – šodienas datums (YYYY-MM-DD)
+function todayString() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// ========== DIENAS MISIJU / DAILY PROGRESU helperi ==========
+
+function rollDailyMissions() {
+  const today = todayString();
+  // vienkārši izvēlamies 3 dažādas no pool
+  const pool = [...MISSION_TEMPLATES];
+  const chosen = [];
+
+  for (let i = 0; i < 3 && pool.length > 0; i++) {
+    const idx = Math.floor(Math.random() * pool.length);
+    const tpl = pool.splice(idx, 1)[0];
+    chosen.push({ ...tpl }); // kopija
+  }
+
+  dailyMissions = {
+    date: today,
+    missions: chosen,
+  };
+
+  console.log(
+    "Jaunas dienas misijas (" + today + "):",
+    chosen.map((m) => m.key).join(", ")
+  );
+}
+
+function ensureDailyMissionsAndResetPlayersIfNeeded() {
+  const today = todayString();
+
+  // ja nav vai datums mainījies ➜ jaunas misijas un visiem reset daily
+  if (!dailyMissions || dailyMissions.date !== today) {
+    rollDailyMissions();
+
+    for (const p of players.values()) {
+      p.daily = {
+        date: today,
+        wins: 0,
+        games: 0,
+        fastWins: 0,
+        completed: {}, // key -> true
+      };
+    }
+  }
+}
+
+function ensurePlayerDaily(player) {
+  const today = todayString();
+  if (!player.daily || player.daily.date !== today) {
+    player.daily = {
+      date: today,
+      wins: 0,
+      games: 0,
+      fastWins: 0,
+      completed: {},
+    };
+  }
+}
+
+// Šis izsaucas katrā raunda rezultātā
+function applyDailyProgressAndMissions(player, { isWin, attemptsUsed }) {
+  ensureDailyMissionsAndResetPlayersIfNeeded();
+  ensurePlayerDaily(player);
+
+  const daily = player.daily;
+  daily.games += 1;
+  if (isWin) {
+    daily.wins += 1;
+    if (typeof attemptsUsed === "number" && attemptsUsed > 0 && attemptsUsed <= 3) {
+      daily.fastWins += 1;
+    }
+  }
+
+  let extraXP = 0;
+  const completedNow = [];
+
+  if (!dailyMissions || !dailyMissions.missions) return { extraXP, completedNow };
+
+  for (const mission of dailyMissions.missions) {
+    if (!mission || !mission.key) continue;
+    if (daily.completed[mission.key]) continue; // jau izpildīta
+
+    let progress = 0;
+    if (mission.type === "wins") progress = daily.wins;
+    else if (mission.type === "games") progress = daily.games;
+    else if (mission.type === "fastWins") progress = daily.fastWins;
+
+    if (progress >= mission.target) {
+      daily.completed[mission.key] = true;
+      extraXP += mission.xpReward || 0;
+      completedNow.push({
+        key: mission.key,
+        text: mission.text,
+        xpReward: mission.xpReward || 0,
+      });
+      console.log(
+        `[MISSION] ${player.name} pabeidza misiju ${mission.key} (+${mission.xpReward} XP)`
+      );
+    }
+  }
+
+  return { extraXP, completedNow };
+}
 
 // Saglabā max 50 čata ziņas
 function pushChatMessage(name, text) {
@@ -200,6 +360,7 @@ function loadData() {
           bestStreak: p.bestStreak || 0,
           rankTitle: p.rankTitle || getRankName(p.xp || 0),
           lastSeenAt: p.lastSeenAt || Date.now(),
+          daily: p.daily || null,
         };
         players.set(player.id, player);
       });
@@ -209,8 +370,12 @@ function loadData() {
       dailyChampion = json.dailyChampion;
     }
 
+    if (json.dailyMissions) {
+      dailyMissions = json.dailyMissions;
+    }
+
     console.log(
-      `Ielādēti ${players.size} spēlētāji no faila un dailyChampion = ${
+      `Ielādēti ${players.size} spēlētāji no faila. DailyChampion = ${
         dailyChampion ? dailyChampion.name + " (" + dailyChampion.date + ")" : "nav"
       }`
     );
@@ -224,6 +389,7 @@ function saveData() {
     const data = {
       players: Array.from(players.values()),
       dailyChampion,
+      dailyMissions,
       // recentSolves un chatHistory nav jāsaglabā
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf8");
@@ -233,11 +399,7 @@ function saveData() {
 }
 
 loadData();
-
-// Helperis – šodienas datums (YYYY-MM-DD)
-function todayString() {
-  return new Date().toISOString().slice(0, 10);
-}
+ensureDailyMissionsAndResetPlayersIfNeeded();
 
 // Tagad identitāte = nika string mazajiem burtiem
 function getPlayerIdFromAuth(auth) {
@@ -263,12 +425,15 @@ function getOrCreatePlayer(socket) {
       bestStreak: 0,
       rankTitle: getRankName(0),
       lastSeenAt: Date.now(),
+      daily: null,
     };
+    ensurePlayerDaily(player);
     players.set(id, player);
     saveData();
   } else {
     player.name = name;
     player.lastSeenAt = Date.now();
+    ensurePlayerDaily(player);
     saveData();
   }
   return player;
@@ -350,13 +515,15 @@ function pushSolveAndBroadcast(io, player, xpGain) {
   });
 }
 
-// ========== XP piešķiršana + Dienas čempions ==========
+// ========== XP piešķiršana + Dienas čempions + misijas ==========
 function applyResult(io, socket, isWin) {
   const player = getOrCreatePlayer(socket);
   player.games += 1;
 
   let xpGain = 0;
   let dailyBonus = 0;
+
+  const attemptsUsed = socket.data.attempts || 0;
 
   if (isWin) {
     player.wins += 1;
@@ -365,7 +532,6 @@ function applyResult(io, socket, isWin) {
       player.bestStreak = player.streak;
     }
 
-    const attemptsUsed = socket.data.attempts || 0;
     const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attemptsUsed);
 
     xpGain = 50 + attemptsLeft * 10;
@@ -399,6 +565,13 @@ function applyResult(io, socket, isWin) {
     player.streak = 0;
   }
 
+  // Daily misijas + extraXP
+  const { extraXP, completedNow } = applyDailyProgressAndMissions(player, {
+    isWin,
+    attemptsUsed,
+  });
+
+  xpGain += extraXP;
   player.xp += xpGain;
   player.rankTitle = getRankName(player.xp);
   player.lastSeenAt = Date.now();
@@ -413,9 +586,27 @@ function applyResult(io, socket, isWin) {
     rankTitle: player.rankTitle,
     gainedXP: xpGain,
     dailyBonus,
+    // progress priekš UI
+    dailyProgress: player.daily
+      ? {
+          date: player.daily.date,
+          wins: player.daily.wins || 0,
+          games: player.daily.games || 0,
+          fastWins: player.daily.fastWins || 0,
+          completed: player.daily.completed || {},
+        }
+      : null,
+    // lai, ja vajag, klients var nolasīt šodienas misijas no jauna
+    dailyMissions,
   };
 
   socket.emit("statsUpdate", statsPayload);
+
+  if (completedNow && completedNow.length) {
+    socket.emit("dailyMissionsCompleted", {
+      missions: completedNow,
+    });
+  }
 
   if (isWin) {
     pushSolveAndBroadcast(io, player, xpGain);
@@ -436,7 +627,11 @@ function applyResult(io, socket, isWin) {
 const app = express();
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, roundId: currentRoundId });
+  res.json({
+    ok: true,
+    roundId: currentRoundId,
+    wordLength: currentWord?.norm?.length || null,
+  });
 });
 
 const httpServer = createServer(app);
@@ -449,6 +644,9 @@ io.on("connection", (socket) => {
   socket.join("game");
   const player = getOrCreatePlayer(socket);
   socket.data.attempts = 0;
+
+  ensureDailyMissionsAndResetPlayersIfNeeded();
+  ensurePlayerDaily(player);
 
   const onlinePlayers = buildOnlinePlayers(io);
 
@@ -471,11 +669,21 @@ io.on("connection", (socket) => {
       xpGain: e.xpGain,
       streak: e.streak,
     })),
-    // čata vēsture klientam
     chatHistory: chatHistory.map((m) => ({
       name: m.name,
       text: m.text,
     })),
+    // šodienas misijas + konkrētā spēlētāja progress
+    dailyMissions,
+    dailyProgress: player.daily
+      ? {
+          date: player.daily.date,
+          wins: player.daily.wins || 0,
+          games: player.daily.games || 0,
+          fastWins: player.daily.fastWins || 0,
+          completed: player.daily.completed || {},
+        }
+      : null,
   });
 
   if (dailyChampion && dailyChampion.date === todayString()) {
@@ -485,14 +693,6 @@ io.on("connection", (socket) => {
       bonusXp: 0,
     });
   }
-
-  // sākotnējā čata vēsture kā atsevišķs events (ja gribi izmantot arī to)
-  socket.emit("chatHistory", {
-    messages: chatHistory.map((m) => ({
-      name: m.name,
-      text: m.text,
-    })),
-  });
 
   io.to("game").emit("onlineCount", { count: getOnlineCount(io) });
   broadcastOnlinePlayers(io);
@@ -598,7 +798,6 @@ io.on("connection", (socket) => {
       let text = raw.toString().trim();
       if (!text) return;
 
-      // maksimālais garums – drošībai
       if (text.length > 140) {
         text = text.slice(0, 140);
       }
@@ -606,10 +805,8 @@ io.on("connection", (socket) => {
       const player = getOrCreatePlayer(socket);
       const name = player.name || "Spēlētājs";
 
-      // saglabājam lokālajā čata vēsturē
       pushChatMessage(name, text);
 
-      // izsūtām visiem spēlētājiem
       io.to("game").emit("chatMessage", {
         name,
         text,
