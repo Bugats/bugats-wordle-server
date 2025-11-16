@@ -1,5 +1,5 @@
 // server.js — VĀRDU ZONA serveris (Node + Socket.IO) ar XP, rankiem, streakiem,
-// saskaņots ar tavu pašreizējo script.js (hello, statsUpdate, leaderboardUpdate, onlineCount)
+// Dienas vārda XP bonusu, saskaņots ar pašreizējo script.js
 
 import express from "express";
 import { createServer } from "http";
@@ -45,6 +45,15 @@ function getRankName(xp) {
     else break;
   }
   return current;
+}
+
+// ===== Datums (Dienas vārda loģikai) =====
+function getTodayKey() {
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(now.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`; // piem., "2025-11-16"
 }
 
 // ===== Palīgfunkcijas =====
@@ -101,8 +110,8 @@ function loadWords() {
     .map((line) => {
       const norm = normalizeWord(line);
       return {
-        raw: line,   // oriģinālais (ja vajag kādreiz)
-        norm,        // UPPERCASE ar garumzīmēm
+        raw: line, // oriģinālais (ja vajag kādreiz)
+        norm, // UPPERCASE ar garumzīmēm
       };
     })
     .filter((w) => w.norm.length === 5);
@@ -131,10 +140,15 @@ function pickNewWord() {
   console.log("Jauns vārds:", currentWord.raw, "| raunds:", currentRoundId);
 }
 
+// sākumā izvēlamies jebkuru vārdu
 pickNewWord();
 
 // ===== Spēlētāji ar XP (24h RAM) =====
 const players = new Map(); // id -> playerObj
+
+// “Dienas čempions”: pirmais spēlētājs ar uzvaru konkrētajā dienā
+let todayChampionDate = null;    // "YYYY-MM-DD"
+let todayChampionPlayerId = null;
 
 function getPlayerId(socket) {
   const auth = socket.handshake.auth || {};
@@ -159,6 +173,7 @@ function getOrCreatePlayer(socket) {
       bestStreak: 0,
       rankTitle: getRankName(0),
       lastSeenAt: Date.now(),
+      lastDailyWinDate: null, // <- pirmais “dienas vārds” šodienai
     };
     players.set(id, player);
   } else {
@@ -200,13 +215,16 @@ function getOnlineCount(io) {
   return room ? room.size : 0;
 }
 
-// ===== XP piešķiršana =====
+// ===== XP piešķiršana + Dienas vārda bonusi =====
 // XP TIKAI PAR isWin === true, zaudējums = 0 XP (antifarm)
 function applyResult(io, socket, isWin) {
   const player = getOrCreatePlayer(socket);
   player.games += 1;
 
   let xpGain = 0;
+  let isDaily = false;
+  let isFirstDaily = false;
+
   if (isWin) {
     player.wins += 1;
     player.streak = (player.streak || 0) + 1;
@@ -217,10 +235,31 @@ function applyResult(io, socket, isWin) {
     const attemptsUsed = socket.data.attempts || 0;
     const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attemptsUsed);
 
-    // XP modelis: 50 + attemptsLeft*10 + streak bonuss
+    // pamat XP par uzvaru + bonuss par atlikušo mēģinājumu skaitu + streak
     xpGain = 50 + attemptsLeft * 10;
     if (player.streak >= 2) {
       xpGain += player.streak * 10;
+    }
+
+    // ==== DIENAS VĀRDS: pirmajā uzvarā šodien ====
+    const todayKey = getTodayKey();
+    if (player.lastDailyWinDate !== todayKey) {
+      // šis ir šī spēlētāja "dienas vārds"
+      isDaily = true;
+      player.lastDailyWinDate = todayKey;
+
+      // pamata daily bonuss (piem., +100 XP)
+      xpGain += 100;
+
+      // Pēc tam skatāmies – vai viņš ir PATS PIRMAIS šodien
+      if (todayChampionDate !== todayKey) {
+        todayChampionDate = todayKey;
+        todayChampionPlayerId = player.id;
+        isFirstDaily = true;
+
+        // Papildu bonuss dienas čempionam (piem., +150 XP)
+        xpGain += 150;
+      }
     }
   } else {
     // ZAUDĒJUMS: streak = 0, XP = 0
@@ -238,6 +277,8 @@ function applyResult(io, socket, isWin) {
     bestStreak: player.bestStreak,
     rankTitle: player.rankTitle,
     gainedXP: xpGain,
+    isDaily,
+    isFirstDaily,
   };
 
   // šim spēlētājam statistika
@@ -251,7 +292,7 @@ function applyResult(io, socket, isWin) {
   console.log(
     `[XP] ${isWin ? "WIN" : "FAIL"} ${player.name} → +${xpGain} XP (kopā ${
       player.xp
-    }), streak ${player.streak}`
+    }), streak ${player.streak}, daily=${isDaily}, firstDaily=${isFirstDaily}`
   );
 }
 
