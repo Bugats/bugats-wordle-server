@@ -22,24 +22,44 @@ const DATA_FILE = path.join(__dirname, "vardu-zona-data.json");
 
 // ========== Ranku definīcijas ==========
 const RANKS = [
+  // Sākums – viegli līmeņi, lai ātri just progresu
   { name: "Jauniņais I", xp: 0 },
-  { name: "Jauniņais II", xp: 100 },
-  { name: "Meklētājs I", xp: 250 },
-  { name: "Meklētājs II", xp: 500 },
-  { name: "Vārdu Mednieks I", xp: 800 },
-  { name: "Vārdu Mednieks II", xp: 1200 },
-  { name: "Vārdu Šāvējs I", xp: 1700 },
-  { name: "Vārdu Šāvējs II", xp: 2300 },
-  { name: "Vārdu Burvis I", xp: 3000 },
-  { name: "Vārdu Burvis II", xp: 3800 },
-  { name: "Lingo Leģenda I", xp: 4700 },
-  { name: "Lingo Leģenda II", xp: 5700 },
-  { name: "Bugats Čempions I", xp: 7000 },
-  { name: "Bugats Čempions II", xp: 8500 },
-  { name: "Bugats Elites I", xp: 10000 },
-  { name: "Bugats Elites II", xp: 12000 },
-  { name: "Bugats Imperators I", xp: 15000 },
-  { name: "Bugats Imperators II", xp: 19000 },
+  { name: "Jauniņais II", xp: 80 },
+  { name: "Jauniņais III", xp: 180 },
+
+  { name: "Vārdu Skolnieks I", xp: 320 },
+  { name: "Vārdu Skolnieks II", xp: 500 },
+  { name: "Vārdu Skolnieks III", xp: 720 },
+
+  { name: "Vārdu Meklētājs I", xp: 1000 },
+  { name: "Vārdu Meklētājs II", xp: 1350 },
+  { name: "Vārdu Meklētājs III", xp: 1750 },
+
+  { name: "Vārdu Mednieks I", xp: 2200 },
+  { name: "Vārdu Mednieks II", xp: 2700 },
+  { name: "Vārdu Mednieks III", xp: 3250 },
+
+  { name: "Vārdu Šāvējs I", xp: 3850 },
+  { name: "Vārdu Šāvējs II", xp: 4500 },
+  { name: "Vārdu Šāvējs III", xp: 5200 },
+
+  { name: "Vārdu Burvis I", xp: 5950 },
+  { name: "Vārdu Burvis II", xp: 6750 },
+  { name: "Vārdu Burvis III", xp: 7600 },
+
+  { name: "Lingo Leģenda I", xp: 8500 },
+  { name: "Lingo Leģenda II", xp: 9450 },
+  { name: "Lingo Leģenda III", xp: 10450 },
+
+  { name: "Lingo Čempions I", xp: 11550 },
+  { name: "Lingo Čempions II", xp: 12750 },
+  { name: "Lingo Čempions III", xp: 14050 },
+
+  { name: "Valodas Imperators I", xp: 15450 },
+  { name: "Valodas Imperators II", xp: 16950 },
+  { name: "Valodas Imperators III", xp: 18550 },
+
+  // Fināls – lēns, prestižs
   { name: "Valodas Dievs", xp: 24000 },
 ];
 
