@@ -53,15 +53,12 @@ function getRankName(xp) {
 }
 
 // ========== Palīgfunkcijas vārdam ==========
+// JAUNA VERSIJA — saglabā latviešu garumzīmes/mīkstinājumus.
 function normalizeWord(str) {
   if (!str) return "";
-  let s = str
-    .toString()
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-  s = s.replace(/[^a-z]/g, "");
+  let s = str.toString().trim().toLowerCase();
+  // atļaujam a–z + latviešu diakritiskos burtus
+  s = s.replace(/[^a-zāčēģīķļņšūž]/g, "");
   return s;
 }
 
@@ -137,10 +134,7 @@ pickNewWord();
 
 // ========== Spēlētāji + Dienas čempions (PERSISTENCE) ==========
 
-// id = nika mazajiem burtiem (viena identitāte per niks)
 const players = new Map(); // id -> playerObj
-
-// dailyChampion = { date: "YYYY-MM-DD", playerId: "...", name: "Bugats" }
 let dailyChampion = null;
 
 // Kill-feed: pēdējie atminētāji
@@ -192,7 +186,7 @@ function saveData() {
     const data = {
       players: Array.from(players.values()),
       dailyChampion,
-      // recentSolves nevajag persistēt – tikai “šī sesija”
+      // recentSolves nav jāsaglabā
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf8");
   } catch (err) {
@@ -235,7 +229,6 @@ function getOrCreatePlayer(socket) {
     players.set(id, player);
     saveData();
   } else {
-    // atjaunojam display name
     player.name = name;
     player.lastSeenAt = Date.now();
     saveData();
@@ -267,7 +260,7 @@ function getOnlineCount(io) {
   return room ? room.size : 0;
 }
 
-// Online saraksts (unikāli spēlētāji ar XP/Rank)
+// Online saraksts
 function buildOnlinePlayers(io) {
   const result = [];
   const seenIds = new Set();
@@ -312,7 +305,6 @@ function pushSolveAndBroadcast(io, player, xpGain) {
     recentSolves.pop();
   }
 
-  // Reāllaika kill-feed visiem
   io.to("game").emit("wordSolvedFeed", {
     name: entry.name,
     xpGain: entry.xpGain,
@@ -338,30 +330,26 @@ function applyResult(io, socket, isWin) {
     const attemptsUsed = socket.data.attempts || 0;
     const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attemptsUsed);
 
-    // Bāzes XP formula
     xpGain = 50 + attemptsLeft * 10;
     if (player.streak >= 2) {
       xpGain += player.streak * 10;
     }
 
-    // === DIENAS ČEMPIONS loģika ===
     const today = todayString();
     if (!dailyChampion || dailyChampion.date !== today) {
-      // Šis ir pirmais uzvarētājs šodien ⇒ Dienas čempions
       dailyChampion = {
         date: today,
         playerId: player.id,
         name: player.name,
       };
 
-      dailyBonus = 100; // piem. +100 XP par “Dienas čempionu”
+      dailyBonus = 100;
       xpGain += dailyBonus;
 
-      // Paziņojums visiem klientiem
       io.to("game").emit("dailyChampionUpdate", {
         name: player.name,
         date: today,
-        bonusXp: dailyBonus, // <- script.js gaida bonusXp
+        bonusXp: dailyBonus,
       });
 
       console.log(
@@ -389,15 +377,12 @@ function applyResult(io, socket, isWin) {
     dailyBonus,
   };
 
-  // tikai šim spēlētājam – personīgais stats
   socket.emit("statsUpdate", statsPayload);
 
-  // kill-feed tikai uzvaras gadījumā
   if (isWin) {
     pushSolveAndBroadcast(io, player, xpGain);
   }
 
-  // leaderboard visiem
   io.to("game").emit("leaderboardUpdate", {
     players: buildLeaderboard(),
   });
@@ -429,7 +414,6 @@ io.on("connection", (socket) => {
 
   const onlinePlayers = buildOnlinePlayers(io);
 
-  // Sākuma info
   socket.emit("hello", {
     wordLength: currentWord.norm.length,
     maxAttempts: MAX_ATTEMPTS,
@@ -451,7 +435,6 @@ io.on("connection", (socket) => {
     })),
   });
 
-  // Ja Dienas čempions šodien jau ir – pasakām jaunajam spēlētājam
   if (dailyChampion && dailyChampion.date === todayString()) {
     socket.emit("dailyChampionUpdate", {
       name: dailyChampion.name,
@@ -463,7 +446,6 @@ io.on("connection", (socket) => {
   io.to("game").emit("onlineCount", { count: getOnlineCount(io) });
   broadcastOnlinePlayers(io);
 
-  // ===== Minējums =====
   socket.on("guess", (payload) => {
     try {
       if (!payload || typeof payload.word !== "string") {
@@ -544,7 +526,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // ===== Jauna spēle =====
   socket.on("requestNewRound", () => {
     pickNewWord();
     for (const [, s] of io.sockets.sockets) {
