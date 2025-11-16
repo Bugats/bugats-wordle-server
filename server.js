@@ -200,7 +200,8 @@ function getOnlineCount(io) {
   return room ? room.size : 0;
 }
 
-// ===== XP piešķiršana (izmanto tavu XP formulu) =====
+// ===== XP piešķiršana =====
+// TE IR IZMAIŅA: XP TIKAI PAR isWin === true
 function applyResult(io, socket, isWin) {
   const player = getOrCreatePlayer(socket);
   player.games += 1;
@@ -216,13 +217,14 @@ function applyResult(io, socket, isWin) {
     const attemptsUsed = socket.data.attempts || 0;
     const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attemptsUsed);
 
-    // tava loģika: 50 + attemptsLeft*10 + streak bonuss
+    // tavs XP modelis: 50 + attemptsLeft*10 + streak bonuss
     xpGain = 50 + attemptsLeft * 10;
     if (player.streak >= 2) {
       xpGain += player.streak * 10;
     }
   } else {
-    xpGain = 5;
+    // ZAUDĒJUMS: streak = 0, XP = 0 (antifarm)
+    xpGain = 0;
     player.streak = 0;
   }
 
