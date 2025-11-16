@@ -1,5 +1,5 @@
 // server.js — VĀRDU ZONA serveris (Node + Socket.IO) ar XP, rankiem, streakiem,
-// Dienas vārda XP bonusu + "Dienas čempions: [niks]" broadcastu
+// Dienas čempionu (bonuss tikai pirmajam uzvarētājam dienā)
 
 import express from "express";
 import { createServer } from "http";
@@ -47,25 +47,19 @@ function getRankName(xp) {
   return current;
 }
 
-// ===== Datums (Dienas vārda loģikai) =====
-function getTodayKey() {
-  const now = new Date();
-  const y = now.getUTCFullYear();
-  const m = String(now.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(now.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
 // ===== Palīgfunkcijas =====
 
-// normalizē: UPPERCASE, atstāj latviešu burtus A-Z + ĀČĒĢĪĶĻŅŠŪŽ
+// normalizē: mazajiem burtiem, noņem diakritikas un visu, kas nav a–z
 function normalizeWord(str) {
   if (!str) return "";
-  return str
+  let s = str
     .toString()
     .trim()
-    .toUpperCase()
-    .replace(/[^A-ZĀČĒĢĪĶĻŅŠŪŽ]/g, "");
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  s = s.replace(/[^a-z]/g, "");
+  return s;
 }
 
 // vērtē minējumu: atgriež masīvu ["correct"|"present"|"absent", ...]
@@ -107,13 +101,10 @@ function loadWords() {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
-    .map((line) => {
-      const norm = normalizeWord(line);
-      return {
-        raw: line,
-        norm,
-      };
-    })
+    .map((line) => ({
+      raw: line,
+      norm: normalizeWord(line),
+    }))
     .filter((w) => w.norm.length === 5);
 
   console.log(`Loaded ${WORD_LIST.length} words with length 5 from words.txt`);
@@ -145,11 +136,6 @@ pickNewWord();
 // ===== Spēlētāji ar XP (24h RAM) =====
 const players = new Map(); // id -> playerObj
 
-// “Dienas čempions”
-let todayChampionDate = null;       // "YYYY-MM-DD"
-let todayChampionPlayerId = null;   // player.id
-let todayChampionName = null;       // player.name
-
 function getPlayerId(socket) {
   const auth = socket.handshake.auth || {};
   return auth.cid || socket.id;
@@ -173,7 +159,6 @@ function getOrCreatePlayer(socket) {
       bestStreak: 0,
       rankTitle: getRankName(0),
       lastSeenAt: Date.now(),
-      lastDailyWinDate: null,
     };
     players.set(id, player);
   } else {
@@ -215,14 +200,40 @@ function getOnlineCount(io) {
   return room ? room.size : 0;
 }
 
-// ===== XP piešķiršana + Dienas vārda bonusi =====
+// ===== DIENAS ČEMPIONS =====
+
+function getTodayStr() {
+  // izmanto UTC datumu, lai visiem vienādi
+  return new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+}
+
+let dailyState = {
+  date: getTodayStr(),
+  championId: null,
+  championName: null,
+};
+
+function ensureDailyState() {
+  const today = getTodayStr();
+  if (!dailyState || dailyState.date !== today) {
+    dailyState = {
+      date: today,
+      championId: null,
+      championName: null,
+    };
+    console.log("Jauna diena – Dienas čempions resetēts.");
+  }
+}
+
+// ===== XP piešķiršana (tikai pirmais uzvarētājs dienā saņem čempiona bonusu) =====
 function applyResult(io, socket, isWin) {
+  ensureDailyState();
+
   const player = getOrCreatePlayer(socket);
   player.games += 1;
 
   let xpGain = 0;
-  let isDaily = false;
-  let isFirstDaily = false;
+  let gotDailyBonus = false;
 
   if (isWin) {
     player.wins += 1;
@@ -234,35 +245,35 @@ function applyResult(io, socket, isWin) {
     const attemptsUsed = socket.data.attempts || 0;
     const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attemptsUsed);
 
-    // Pamat XP par uzvaru + bonuss par atlikušo mēģinājumu skaitu + streak bonuss
+    // pamat XP par uzvaru
     xpGain = 50 + attemptsLeft * 10;
+
+    // streak bonuss
     if (player.streak >= 2) {
       xpGain += player.streak * 10;
     }
 
-    // ==== DIENAS VĀRDS: pirmajā uzvarā šodien ====
-    const todayKey = getTodayKey();
-    if (player.lastDailyWinDate !== todayKey) {
-      isDaily = true;
-      player.lastDailyWinDate = todayKey;
-      xpGain += 100; // daily bonuss
+    // DIENAS ČEMPIONS – tikai pirmais uzvarētājs šodien
+    if (!dailyState.championId) {
+      dailyState.championId = player.id;
+      dailyState.championName = player.name;
+      const dailyBonus = 150; // vari pielāgot, piemēram, 100/200
+      xpGain += dailyBonus;
+      gotDailyBonus = true;
 
-      // Pērnais dienas čempions nav šodienas? -> šis ir pirmais uzvarētājs šodien
-      if (todayChampionDate !== todayKey) {
-        todayChampionDate = todayKey;
-        todayChampionPlayerId = player.id;
-        todayChampionName = player.name;
-        isFirstDaily = true;
-        xpGain += 150; // dienas čempiona ekstra bonuss
+      // paziņojam visiem, kurš ir dienas čempions
+      io.to("game").emit("dailyChampionUpdate", {
+        name: dailyState.championName,
+        bonus: dailyBonus,
+      });
 
-        // Paziņojam visiem, ka ir jauns dienas čempions
-        io.to("game").emit("dailyChampionUpdate", {
-          name: todayChampionName,
-        });
-      }
+      console.log(
+        `[DAILY] Dienas čempions: ${player.name} (+${dailyBonus} XP bonuss)`
+      );
     }
   } else {
-    xpGain = 0;
+    // zaudējums – mazs XP, streak reset
+    xpGain = 5;
     player.streak = 0;
   }
 
@@ -276,9 +287,7 @@ function applyResult(io, socket, isWin) {
     bestStreak: player.bestStreak,
     rankTitle: player.rankTitle,
     gainedXP: xpGain,
-    isDaily,
-    isFirstDaily,
-    championName: todayChampionName || null,
+    gotDailyBonus,
   };
 
   // šim spēlētājam statistika
@@ -292,7 +301,7 @@ function applyResult(io, socket, isWin) {
   console.log(
     `[XP] ${isWin ? "WIN" : "FAIL"} ${player.name} → +${xpGain} XP (kopā ${
       player.xp
-    }), streak ${player.streak}, daily=${isDaily}, firstDaily=${isFirstDaily}, champion=${todayChampionName}`
+    }), streak ${player.streak}`
   );
 }
 
@@ -300,11 +309,7 @@ function applyResult(io, socket, isWin) {
 const app = express();
 
 app.get("/health", (_req, res) => {
-  res.json({
-    ok: true,
-    roundId: currentRoundId,
-    dailyChampion: todayChampionName || null,
-  });
+  res.json({ ok: true, roundId: currentRoundId });
 });
 
 const httpServer = createServer(app);
@@ -315,10 +320,12 @@ const io = new Server(httpServer, {
 // ===== Socket.IO loģika (pielāgota script.js) =====
 io.on("connection", (socket) => {
   socket.join("game");
+  ensureDailyState();
 
   const player = getOrCreatePlayer(socket);
   socket.data.attempts = 0;
 
+  // sākuma info klientam: script.js gaida "hello"
   socket.emit("hello", {
     wordLength: currentWord.norm.length,
     maxAttempts: MAX_ATTEMPTS,
@@ -332,11 +339,13 @@ io.on("connection", (socket) => {
     },
     leaderboard: buildLeaderboard(),
     onlineCount: getOnlineCount(io),
-    dailyChampion: todayChampionName || null,
+    dailyChampionName: dailyState.championName, // lai klienti redz, ja jau ir čempions
   });
 
+  // online skaits visiem
   io.to("game").emit("onlineCount", { count: getOnlineCount(io) });
 
+  // ===== Minējums (script.js -> socket.emit("guess", { word, roundId })) =====
   socket.on("guess", (payload) => {
     try {
       if (!payload || typeof payload.word !== "string") {
@@ -348,6 +357,7 @@ io.on("connection", (socket) => {
 
       const { word, roundId } = payload;
 
+      // ja raunds starp klientu un serveri neatbilst
       if (roundId !== currentRoundId) {
         return socket.emit("guessResult", {
           error: true,
@@ -364,7 +374,7 @@ io.on("connection", (socket) => {
 
       const guessRaw = word.trim();
       const guessNorm = normalizeWord(guessRaw);
-      const display = guessNorm;
+      const display = guessRaw.toUpperCase();
 
       if (guessNorm.length !== currentWord.norm.length) {
         return socket.emit("guessResult", {
@@ -394,6 +404,7 @@ io.on("connection", (socket) => {
       const isWin = statuses.every((s) => s === "correct");
       const attemptsLeft = Math.max(0, MAX_ATTEMPTS - socket.data.attempts);
 
+      // tas, ko script.js gaida: letters, isWin, attemptsLeft
       socket.emit("guessResult", {
         letters,
         isWin,
@@ -406,6 +417,7 @@ io.on("connection", (socket) => {
       }
 
       if (attemptsLeft <= 0) {
+        // zaudējums, vārdu NEatklājam
         applyResult(io, socket, false);
       }
     } catch (err) {
@@ -417,6 +429,7 @@ io.on("connection", (socket) => {
     }
   });
 
+  // ===== Jauna spēle (script.js -> requestNewRound) =====
   socket.on("requestNewRound", () => {
     pickNewWord();
     for (const [, s] of io.sockets.sockets) {
