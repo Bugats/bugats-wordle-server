@@ -49,17 +49,14 @@ function getRankName(xp) {
 
 // ===== Palīgfunkcijas =====
 
-// normalizē: mazajiem burtiem, noņem diakritikas un visu, kas nav a–z
+// normalizē: UPPERCASE, atstāj latviešu burtus A-Z + ĀČĒĢĪĶĻŅŠŪŽ
 function normalizeWord(str) {
   if (!str) return "";
-  let s = str
+  return str
     .toString()
     .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-  s = s.replace(/[^a-z]/g, "");
-  return s;
+    .toUpperCase()
+    .replace(/[^A-ZĀČĒĢĪĶĻŅŠŪŽ]/g, "");
 }
 
 // vērtē minējumu: atgriež masīvu ["correct"|"present"|"absent", ...]
@@ -101,10 +98,13 @@ function loadWords() {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
-    .map((line) => ({
-      raw: line,
-      norm: normalizeWord(line),
-    }))
+    .map((line) => {
+      const norm = normalizeWord(line);
+      return {
+        raw: line,   // oriģinālais (ja vajag kādreiz)
+        norm,        // UPPERCASE ar garumzīmēm
+      };
+    })
     .filter((w) => w.norm.length === 5);
 
   console.log(`Loaded ${WORD_LIST.length} words with length 5 from words.txt`);
@@ -201,7 +201,7 @@ function getOnlineCount(io) {
 }
 
 // ===== XP piešķiršana =====
-// TE IR IZMAIŅA: XP TIKAI PAR isWin === true
+// XP TIKAI PAR isWin === true, zaudējums = 0 XP (antifarm)
 function applyResult(io, socket, isWin) {
   const player = getOrCreatePlayer(socket);
   player.games += 1;
@@ -217,13 +217,13 @@ function applyResult(io, socket, isWin) {
     const attemptsUsed = socket.data.attempts || 0;
     const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attemptsUsed);
 
-    // tavs XP modelis: 50 + attemptsLeft*10 + streak bonuss
+    // XP modelis: 50 + attemptsLeft*10 + streak bonuss
     xpGain = 50 + attemptsLeft * 10;
     if (player.streak >= 2) {
       xpGain += player.streak * 10;
     }
   } else {
-    // ZAUDĒJUMS: streak = 0, XP = 0 (antifarm)
+    // ZAUDĒJUMS: streak = 0, XP = 0
     xpGain = 0;
     player.streak = 0;
   }
@@ -322,7 +322,7 @@ io.on("connection", (socket) => {
 
       const guessRaw = word.trim();
       const guessNorm = normalizeWord(guessRaw);
-      const display = guessRaw.toUpperCase();
+      const display = guessNorm; // jau UPPERCASE ar garumzīmēm
 
       if (guessNorm.length !== currentWord.norm.length) {
         return socket.emit("guessResult", {
