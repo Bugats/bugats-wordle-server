@@ -1,5 +1,6 @@
 // server.js — VĀRDU ZONA serveris (Node + Socket.IO) ar
-// XP, rankiem, streakiem, Dienas čempionu un PERSISTENCI failā.
+// XP, rankiem, streakiem, Dienas čempionu, PERSISTENCI,
+// online spēlētāju sarakstu un real-time kill-feed.
 
 // ========== IMPORTI ==========
 import express from "express";
@@ -134,13 +135,16 @@ function pickNewWord() {
 
 pickNewWord();
 
-// ========== Spēlētāji + Dienas čempions (PERSISTENCI) ==========
+// ========== Spēlētāji + Dienas čempions (PERSISTENCE) ==========
 
 // id = nika mazajiem burtiem (viena identitāte per niks)
 const players = new Map(); // id -> playerObj
 
 // dailyChampion = { date: "YYYY-MM-DD", playerId: "...", name: "Bugats" }
 let dailyChampion = null;
+
+// Kill-feed: pēdējie atminētāji
+const recentSolves = []; // { name, xpGain, streak, ts }
 
 function loadData() {
   try {
@@ -154,7 +158,6 @@ function loadData() {
     if (Array.isArray(json.players)) {
       json.players.forEach((p) => {
         if (!p.id || !p.name) return;
-        // Defaulti, ja kāds lauks trūkst
         const player = {
           id: p.id,
           name: p.name,
@@ -189,6 +192,7 @@ function saveData() {
     const data = {
       players: Array.from(players.values()),
       dailyChampion,
+      // recentSolves nevajag persistēt – tikai “šī sesija”
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf8");
   } catch (err) {
@@ -231,7 +235,7 @@ function getOrCreatePlayer(socket) {
     players.set(id, player);
     saveData();
   } else {
-    // Ja niku nedaudz pamainīja (piemēram, lielie/mazie burti) – atjaunojam display name
+    // atjaunojam display name
     player.name = name;
     player.lastSeenAt = Date.now();
     saveData();
@@ -261,6 +265,59 @@ function buildLeaderboard() {
 function getOnlineCount(io) {
   const room = io.sockets.adapter.rooms.get("game");
   return room ? room.size : 0;
+}
+
+// Online saraksts (unikāli spēlētāji ar XP/Rank)
+function buildOnlinePlayers(io) {
+  const result = [];
+  const seenIds = new Set();
+
+  for (const [, socket] of io.sockets.sockets) {
+    if (!socket.rooms.has("game")) continue;
+    const auth = socket.handshake.auth || {};
+    const { id } = getPlayerIdFromAuth(auth);
+    if (seenIds.has(id)) continue;
+    seenIds.add(id);
+
+    const p = players.get(id);
+    result.push({
+      id,
+      name: p?.name || auth.name || "Spēlētājs",
+      xp: p?.xp || 0,
+      rankTitle: p?.rankTitle || (p ? getRankName(p.xp) : "Jauniņais I"),
+      cid: auth.cid || null,
+    });
+  }
+
+  result.sort((a, b) => b.xp - a.xp);
+  return result;
+}
+
+function broadcastOnlinePlayers(io) {
+  const list = buildOnlinePlayers(io);
+  io.to("game").emit("onlinePlayers", { players: list });
+}
+
+// Kill-feed helperis
+function pushSolveAndBroadcast(io, player, xpGain) {
+  const entry = {
+    name: player.name,
+    xpGain,
+    streak: player.streak || 0,
+    ts: Date.now(),
+  };
+
+  recentSolves.unshift(entry);
+  if (recentSolves.length > 15) {
+    recentSolves.pop();
+  }
+
+  // Reāllaika kill-feed visiem
+  io.to("game").emit("wordSolvedFeed", {
+    name: entry.name,
+    xpGain: entry.xpGain,
+    streak: entry.streak,
+  });
 }
 
 // ========== XP piešķiršana + Dienas čempions ==========
@@ -304,7 +361,7 @@ function applyResult(io, socket, isWin) {
       io.to("game").emit("dailyChampionUpdate", {
         name: player.name,
         date: today,
-        bonus: dailyBonus,
+        bonusXp: dailyBonus, // <- script.js gaida bonusXp
       });
 
       console.log(
@@ -332,8 +389,15 @@ function applyResult(io, socket, isWin) {
     dailyBonus,
   };
 
+  // tikai šim spēlētājam – personīgais stats
   socket.emit("statsUpdate", statsPayload);
 
+  // kill-feed tikai uzvaras gadījumā
+  if (isWin) {
+    pushSolveAndBroadcast(io, player, xpGain);
+  }
+
+  // leaderboard visiem
   io.to("game").emit("leaderboardUpdate", {
     players: buildLeaderboard(),
   });
@@ -363,6 +427,8 @@ io.on("connection", (socket) => {
   const player = getOrCreatePlayer(socket);
   socket.data.attempts = 0;
 
+  const onlinePlayers = buildOnlinePlayers(io);
+
   // Sākuma info
   socket.emit("hello", {
     wordLength: currentWord.norm.length,
@@ -377,6 +443,12 @@ io.on("connection", (socket) => {
     },
     leaderboard: buildLeaderboard(),
     onlineCount: getOnlineCount(io),
+    onlinePlayers,
+    recentSolves: recentSolves.map((e) => ({
+      name: e.name,
+      xpGain: e.xpGain,
+      streak: e.streak,
+    })),
   });
 
   // Ja Dienas čempions šodien jau ir – pasakām jaunajam spēlētājam
@@ -384,11 +456,12 @@ io.on("connection", (socket) => {
     socket.emit("dailyChampionUpdate", {
       name: dailyChampion.name,
       date: dailyChampion.date,
-      bonus: 0,
+      bonusXp: 0,
     });
   }
 
   io.to("game").emit("onlineCount", { count: getOnlineCount(io) });
+  broadcastOnlinePlayers(io);
 
   // ===== Minējums =====
   socket.on("guess", (payload) => {
@@ -486,6 +559,7 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     io.to("game").emit("onlineCount", { count: getOnlineCount(io) });
+    broadcastOnlinePlayers(io);
   });
 });
 
