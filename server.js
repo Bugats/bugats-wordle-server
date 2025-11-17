@@ -261,7 +261,7 @@ function pickNewWord() {
 pickNewWord();
 
 // ========== Spēlētāji + Dienas čempions ==========
-const players = new Map(); // id -> playerObj
+const players = new Map(); // id (CID vai guest-...) -> playerObj
 let dailyChampion = null;
 
 // Kill-feed: pēdējie atminētāji
@@ -279,6 +279,34 @@ function pushChatMessage(name, text) {
   });
   while (chatHistory.length > 50) {
     chatHistory.shift();
+  }
+}
+
+// Palīgs, lai pārbaudītu, vai niks jau aizņemts (izņemot konkrēto spēlētāju pēc id)
+function isNameTaken(name, exceptId = null) {
+  const target = (name || "").toString().trim().toLowerCase();
+  if (!target) return false;
+
+  for (const p of players.values()) {
+    if (exceptId && p.id === exceptId) continue;
+    const pName = (p.name || "").toString().trim().toLowerCase();
+    if (pName === target) return true;
+  }
+  return false;
+}
+
+// Ja niks aizņemts, piešķiram Santa_2, Santa_3, ...
+function makeUniqueName(baseName, selfId = null) {
+  let name = (baseName || "Spēlētājs").toString().trim();
+  if (!name) name = "Spēlētājs";
+
+  if (!isNameTaken(name, selfId)) return name;
+
+  let i = 2;
+  while (true) {
+    const candidate = `${name}_${i}`;
+    if (!isNameTaken(candidate, selfId)) return candidate;
+    i++;
   }
 }
 
@@ -346,27 +374,33 @@ const ADMIN_IDS = ["bugats"];              // niki (lower-case)
 const ADMIN_CIDS = ["cid-cboqqj5n3fm"];    // tavs reālais CID no localStorage "vz_cid"
 
 // ========== Spēlētāju identitāte ==========
+// ID = CID (ja ir); niks tiek padarīts unikāls atsevišķi
 function getPlayerIdFromAuth(auth) {
   let name = (auth.name || "Spēlētājs").toString().trim().slice(0, 20);
   if (!name) name = "Spēlētājs";
 
-  let id = name.toLowerCase();
   const cid = auth.cid;
+  let nameLower = name.toLowerCase();
 
   // Rezervējam niku "Bugats" tikai īstajam CID
-  if (id === "bugats" && !ADMIN_CIDS.includes(cid)) {
+  if (nameLower === "bugats" && !ADMIN_CIDS.includes(cid)) {
     name = "Bugats_fans";
-    id = name.toLowerCase();
+    nameLower = name.toLowerCase();
   }
+
+  // ID = CID (unikāls spēlētājs), ja nav CID, tad kaut kas no nika
+  let id = cid || `guest-${nameLower}`;
 
   return { id, name };
 }
 
 function isAdminSocket(socket) {
   const auth = socket.handshake.auth || {};
-  const { id } = getPlayerIdFromAuth(auth);
   const cid = auth.cid;
-  return ADMIN_IDS.includes(id) && ADMIN_CIDS.includes(cid);
+  const nameLower = (auth.name || "").toString().trim().toLowerCase();
+
+  // admin ir tikai tad, ja SAKRĪT gan niks, gan CID
+  return ADMIN_IDS.includes(nameLower) && ADMIN_CIDS.includes(cid);
 }
 
 // nodrošina, ka player.daily atbilst šodienai
@@ -387,13 +421,15 @@ function ensurePlayerDaily(player) {
 
 function getOrCreatePlayer(socket) {
   const auth = socket.handshake.auth || {};
-  const { id, name } = getPlayerIdFromAuth(auth);
+  const { id, name: rawName } = getPlayerIdFromAuth(auth);
 
   let player = players.get(id);
   if (!player) {
+    const finalName = makeUniqueName(rawName, id);
+
     player = {
       id,
-      name,
+      name: finalName,
       xp: 0,
       coins: 0,
       tokens: 0,
@@ -407,7 +443,9 @@ function getOrCreatePlayer(socket) {
     };
     players.set(id, player);
   } else {
-    player.name = name;
+    // ja lietotājs nomaina niku – piemērojam unikālo variantu
+    const finalName = makeUniqueName(rawName, id);
+    player.name = finalName;
     player.lastSeenAt = Date.now();
     if (typeof player.coins !== "number") player.coins = 0;
     if (typeof player.tokens !== "number") player.tokens = 0;
@@ -917,8 +955,18 @@ io.on("connection", (socket) => {
 
       if (!nickname || !delta) return;
 
-      const targetId = nickname.toLowerCase();
-      const player = players.get(targetId);
+      const targetNickLower = nickname.toLowerCase();
+
+      // atrodam spēlētāju pēc nika (case-insensitive)
+      let player = null;
+      for (const p of players.values()) {
+        const pNameLower = (p.name || "").toString().trim().toLowerCase();
+        if (pNameLower === targetNickLower) {
+          player = p;
+          break;
+        }
+      }
+
       if (!player) {
         socket.emit("shopError", { msg: "Spēlētājs nav atrasts." });
         return;
@@ -931,11 +979,11 @@ io.on("connection", (socket) => {
       player.lastSeenAt = Date.now();
       saveData();
 
-      // Atjaunojam stats šim playerim, ja viņš ir online
+      // Atjaunojam stats šim playerim, ja viņš ir online (pēc ID = CID)
       for (const [, s] of io.sockets.sockets) {
         const auth = s.handshake.auth || {};
         const { id } = getPlayerIdFromAuth(auth);
-        if (id === targetId) {
+        if (id === player.id) {
           s.emit("statsUpdate", {
             xp: player.xp,
             coins: player.coins || 0,
@@ -960,7 +1008,7 @@ io.on("connection", (socket) => {
       broadcastOnlinePlayers(io);
 
       console.log(
-        `[ADMIN] Žetoni laboti: ${player.name} (${targetId}) → ` +
+        `[ADMIN] Žetoni laboti: ${player.name} (${player.id}) → ` +
           `${delta >= 0 ? "+" : ""}${delta}, tagad tokens = ${player.tokens}`
       );
     } catch (err) {
