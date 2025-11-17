@@ -17,7 +17,7 @@ const PORT = process.env.PORT || 10080;
 const MAX_ATTEMPTS = 6;
 
 // COINS parametri
-// 1 žetons = 100 coins
+// 1 žetons = 150 coins
 const COINS_PER_WIN_BASE = 3;        // bāze par uzvaru
 const COINS_PER_ATTEMPT_LEFT = 1;    // +1 coin par katru atlikušā mēģinājuma punktu
 const COINS_STREAK_MAX_BONUS = 5;    // max +5 coins par streak
@@ -930,13 +930,15 @@ io.on("connection", (socket) => {
       if (typeof player.coins !== "number") player.coins = 0;
       if (typeof player.tokens !== "number") player.tokens = 0;
 
-      if (player.coins < 100) {
+      const TOKEN_PRICE = 150;
+
+      if (player.coins < TOKEN_PRICE) {
         return socket.emit("shopError", {
-          msg: "Nepietiek coins (vajag 100).",
+          msg: `Nepietiek coins (vajag ${TOKEN_PRICE}).`,
         });
       }
 
-      player.coins -= 100;
+      player.coins -= TOKEN_PRICE;
       player.tokens += 1;
       player.lastSeenAt = Date.now();
       saveData();
