@@ -1,6 +1,6 @@
 // server.js — VĀRDU ZONA serveris (Node + Socket.IO) ar
 // XP, rankiem, streakiem, Dienas čempionu, PERSISTENCI,
-// ONLINE sarakstu, kill-feed, ČATU, DIENAS MISIJĀM, COINS un ŽETONIEM.
+// ONLINE sarakstu, kill-feed, ČATU, DIENAS MISIJĀM, COINS, ŽETONIEM un ADMIN BAN.
 
 import express from "express";
 import { createServer } from "http";
@@ -25,7 +25,7 @@ const COINS_STREAK_MAX_BONUS = 5;    // max +5 coins par streak
 const COIN_TICK_MS = 10 * 60 * 1000; // 10 min
 const COINS_PER_TICK = 1;
 
-// Failā glabāsim visus spēlētājus + Dienas čempionu
+// Failā glabāsim visus spēlētājus + Dienas čempionu + ban sarakstu
 const DATA_FILE = path.join(__dirname, "vardu-zona-data.json");
 
 // ========== Ranku definīcijas ==========
@@ -264,8 +264,8 @@ pickNewWord();
 const players = new Map(); // id (CID vai guest-...) -> playerObj
 let dailyChampion = null;
 
-// BANOTIE PROFILI (pēc ID/CID)
-const bannedIds = new Set(); // JAUNS
+// BAN saraksts: id (CID/guest-...) -> info
+const bannedProfiles = new Map();
 
 // Kill-feed: pēdējie atminētāji
 const recentSolves = []; // { name, xpGain, coinsGain, streak, ts }
@@ -313,12 +313,6 @@ function makeUniqueName(baseName, selfId = null) {
   }
 }
 
-// BAN helperis
-function isIdBanned(id) {
-  if (!id) return false;
-  return bannedIds.has(id);
-}
-
 // ====== LOAD / SAVE ======
 function loadData() {
   try {
@@ -354,16 +348,23 @@ function loadData() {
       dailyChampion = json.dailyChampion;
     }
 
-    if (Array.isArray(json.bannedIds)) {
-      json.bannedIds.forEach((id) => {
-        if (id) bannedIds.add(id);
+    if (Array.isArray(json.bannedProfiles)) {
+      json.bannedProfiles.forEach((b) => {
+        if (!b.id) return;
+        bannedProfiles.set(b.id, {
+          id: b.id,
+          name: b.name || "Bloķēts spēlētājs",
+          reason: b.reason || "",
+          bannedAt: b.bannedAt || Date.now(),
+        });
       });
     }
 
     console.log(
-      `Ielādēti ${players.size} spēlētāji, dailyChampion = ${
-        dailyChampion ? dailyChampion.name + " (" + dailyChampion.date + ")" : "nav"
-      }, bannedIds = ${bannedIds.size}`
+      `Ielādēti ${players.size} spēlētāji, ` +
+        `dailyChampion = ${
+          dailyChampion ? dailyChampion.name + " (" + dailyChampion.date + ")" : "nav"
+        }, banned = ${bannedProfiles.size}`
     );
   } catch (err) {
     console.error("Kļūda ielādējot DATA_FILE:", err);
@@ -375,7 +376,7 @@ function saveData() {
     const data = {
       players: Array.from(players.values()),
       dailyChampion,
-      bannedIds: Array.from(bannedIds),
+      bannedProfiles: Array.from(bannedProfiles.values()),
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf8");
   } catch (err) {
@@ -388,6 +389,13 @@ loadData();
 // ===== ADMIN (niks + CID) =====
 const ADMIN_IDS = ["bugats"];              // niki (lower-case)
 const ADMIN_CIDS = ["cid-cboqqj5n3fm"];    // tavs reālais CID no localStorage "vz_cid"
+
+function isAdminSocket(socket) {
+  const auth = socket.handshake.auth || {};
+  const cid = auth.cid;
+  const nameLower = (auth.name || "").toString().trim().toLowerCase();
+  return ADMIN_IDS.includes(nameLower) && ADMIN_CIDS.includes(cid);
+}
 
 // ========== Spēlētāju identitāte ==========
 // ID = CID (ja ir); niks tiek padarīts unikāls atsevišķi
@@ -408,15 +416,6 @@ function getPlayerIdFromAuth(auth) {
   let id = cid || `guest-${nameLower}`;
 
   return { id, name };
-}
-
-function isAdminSocket(socket) {
-  const auth = socket.handshake.auth || {};
-  const cid = auth.cid;
-  const nameLower = (auth.name || "").toString().trim().toLowerCase();
-
-  // admin ir tikai tad, ja SAKRĪT gan niks, gan CID
-  return ADMIN_IDS.includes(nameLower) && ADMIN_CIDS.includes(cid);
 }
 
 // nodrošina, ka player.daily atbilst šodienai
@@ -507,8 +506,6 @@ function buildOnlinePlayers(io) {
     const auth = socket.handshake.auth || {};
     const { id } = getPlayerIdFromAuth(auth);
     if (seenIds.has(id)) continue;
-    if (isIdBanned(id)) continue; // neparādam banotos
-
     seenIds.add(id);
 
     const p = players.get(id);
@@ -733,13 +730,18 @@ const io = new Server(httpServer, {
 
 // ========== SOCKET.IO loģika ==========
 io.on("connection", (socket) => {
-  // PIRMS jebkā pārbaudām, vai profils nav nobloķēts
   const auth = socket.handshake.auth || {};
   const { id } = getPlayerIdFromAuth(auth);
 
-  if (isIdBanned(id)) {
-    socket.emit("banned", { reason: "Profils ir bloķēts." });
-    socket.disconnect(true);
+  // BAN pārbaude jau pie pieslēgšanās
+  if (bannedProfiles.has(id)) {
+    socket.emit("banned", {
+      reason: "Tavs profils ir bloķēts VĀRDU ZONA spēlē.",
+    });
+    setTimeout(() => {
+      socket.disconnect(true);
+    }, 100);
+    console.log("[BAN] Bloķēts profils mēģināja pieslēgties:", id);
     return;
   }
 
@@ -747,8 +749,6 @@ io.on("connection", (socket) => {
   const player = getOrCreatePlayer(socket);
   socket.data.attempts = 0;
   socket.data.lastCoinTs = Date.now();
-
-  const isAdmin = isAdminSocket(socket);
 
   refreshDailyMissionsIfNeeded();
   ensurePlayerDaily(player);
@@ -789,7 +789,8 @@ io.on("connection", (socket) => {
       dailyChampion && dailyChampion.date === todayString()
         ? { name: dailyChampion.name, date: dailyChampion.date }
         : null,
-    isAdmin, // JAUNS — lai klients zina, ka šis socket ir admins
+    // vai šis klients ir admins
+    isAdmin: isAdminSocket(socket),
   });
 
   if (dailyChampion && dailyChampion.date === todayString()) {
@@ -1047,7 +1048,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // ===== ADMIN: profila BAN (JAUNS) =====
+  // ===== ADMIN: PROFILA BAN =====
   socket.on("adminBanProfile", (payload = {}) => {
     try {
       if (!isAdminSocket(socket)) {
@@ -1055,52 +1056,58 @@ io.on("connection", (socket) => {
         return;
       }
 
-      const playerIdRaw = (payload.playerId || "").toString().trim();
-      const nicknameRaw = (payload.nickname || "").toString().trim();
+      let playerId = (payload.playerId || "").toString();
+      const nickname = (payload.nickname || "").toString().trim();
 
-      let targetPlayer = null;
+      if (!playerId && !nickname) return;
 
-      if (playerIdRaw) {
-        targetPlayer = players.get(playerIdRaw) || null;
-      }
-
-      if (!targetPlayer && nicknameRaw) {
-        const targetLower = nicknameRaw.toLowerCase();
+      if (!playerId && nickname) {
+        const targetNickLower = nickname.toLowerCase();
         for (const p of players.values()) {
           const pNameLower = (p.name || "").toString().trim().toLowerCase();
-          if (pNameLower === targetLower) {
-            targetPlayer = p;
+          if (pNameLower === targetNickLower) {
+            playerId = p.id;
             break;
           }
         }
       }
 
-      if (!targetPlayer) {
-        console.log("[ADMIN] adminBanProfile: player nav atrasts");
+      if (!playerId) {
+        socket.emit("shopError", {
+          msg: "Spēlētājs nav atrasts (BAN).",
+        });
         return;
       }
 
-      bannedIds.add(targetPlayer.id);
+      const existing = players.get(playerId);
+      const nameToBan =
+        (existing && existing.name) || nickname || "Bloķēts spēlētājs";
+
+      bannedProfiles.set(playerId, {
+        id: playerId,
+        name: nameToBan,
+        reason: "Admin BAN",
+        bannedAt: Date.now(),
+      });
       saveData();
 
-      // Izmetam visus socketus, kas pieder tam pašam profilam
+      console.log(`[ADMIN] BAN: ${nameToBan} (${playerId})`);
+
+      // izmetam visus soketus ar šo id
       for (const [, s] of io.sockets.sockets) {
-        const a = s.handshake.auth || {};
-        const { id } = getPlayerIdFromAuth(a);
-        if (id === targetPlayer.id) {
-          s.emit("banned", { reason: "Profils ir bloķēts." });
-          s.disconnect(true);
+        const auth = s.handshake.auth || {};
+        const { id } = getPlayerIdFromAuth(auth);
+        if (id === playerId) {
+          s.emit("banned", {
+            reason: "Tavs profils ir bloķēts VĀRDU ZONA spēlē.",
+          });
+          setTimeout(() => s.disconnect(true), 50);
         }
       }
 
+      // Atjauninām online skaitu + sarakstu
+      io.to("game").emit("onlineCount", { count: getOnlineCount(io) });
       broadcastOnlinePlayers(io);
-      io.to("game").emit("leaderboardUpdate", {
-        players: buildLeaderboard(),
-      });
-
-      console.log(
-        `[ADMIN] BAN: ${targetPlayer.name} (${targetPlayer.id}) ir nobloķēts.`
-      );
     } catch (err) {
       console.error("adminBanProfile error:", err);
     }
