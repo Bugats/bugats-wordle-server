@@ -341,13 +341,32 @@ function saveData() {
 
 loadData();
 
-// ========== Spēlētāju identitāte ==========
+// ===== ADMIN (niks + CID) =====
+const ADMIN_IDS = ["bugats"];              // niki (lower-case)
+const ADMIN_CIDS = ["cid-cboqqj5n3fm"];    // tavs reālais CID no localStorage "vz_cid"
 
+// ========== Spēlētāju identitāte ==========
 function getPlayerIdFromAuth(auth) {
   let name = (auth.name || "Spēlētājs").toString().trim().slice(0, 20);
   if (!name) name = "Spēlētājs";
-  const id = name.toLowerCase();
+
+  let id = name.toLowerCase();
+  const cid = auth.cid;
+
+  // Rezervējam niku "Bugats" tikai īstajam CID
+  if (id === "bugats" && !ADMIN_CIDS.includes(cid)) {
+    name = "Bugats_fans";
+    id = name.toLowerCase();
+  }
+
   return { id, name };
+}
+
+function isAdminSocket(socket) {
+  const auth = socket.handshake.auth || {};
+  const { id } = getPlayerIdFromAuth(auth);
+  const cid = auth.cid;
+  return ADMIN_IDS.includes(id) && ADMIN_CIDS.includes(cid);
 }
 
 // nodrošina, ka player.daily atbilst šodienai
@@ -455,15 +474,6 @@ function buildOnlinePlayers(io) {
 function broadcastOnlinePlayers(io) {
   const list = buildOnlinePlayers(io);
   io.to("game").emit("onlinePlayers", { players: list });
-}
-
-// ===== ADMINI =====
-const ADMINS = ["bugats"]; // niki lower-case, kam ir admin tiesības
-
-function isAdminSocket(socket) {
-  const auth = socket.handshake.auth || {};
-  const { id } = getPlayerIdFromAuth(auth); // id = nika lower-case
-  return ADMINS.includes(id);
 }
 
 // Kill-feed helperis
@@ -690,6 +700,8 @@ io.on("connection", (socket) => {
       bestStreak: player.bestStreak,
       rankTitle: player.rankTitle,
     },
+    // svarīgi: atgriežam galīgo niku, ko serveris pieņēmis
+    finalName: player.name,
     leaderboard: buildLeaderboard(),
     onlineCount: getOnlineCount(io),
     onlinePlayers,
@@ -893,28 +905,27 @@ io.on("connection", (socket) => {
   });
 
   // ===== ADMIN: ŽETONU LABOŠANA =====
-  socket.on("adminAdjustTokens", (payload) => {
+  socket.on("adminAdjustTokens", (payload = {}) => {
     try {
       if (!isAdminSocket(socket)) {
-        console.log("[ADMIN] Pieeja liegta: ne-admins mēģina mainīt žetonus");
+        console.log("[ADMIN] Neautorizēts mēģinājums adminAdjustTokens");
         return;
       }
 
-      const rawName =
-        (payload && (payload.name || payload.nick || payload.id)) || "";
-      const amount = Number(payload && payload.amount) || 0;
+      const nickname = (payload.nickname || "").toString().trim().slice(0, 20);
+      const delta = Number(payload.deltaTokens || 0);
 
-      const targetId = rawName.toString().trim().toLowerCase();
-      if (!targetId || !amount) return;
+      if (!nickname || !delta) return;
 
+      const targetId = nickname.toLowerCase();
       const player = players.get(targetId);
       if (!player) {
-        console.log("[ADMIN] Nav atrasts spēlētājs:", targetId);
+        socket.emit("shopError", { msg: "Spēlētājs nav atrasts." });
         return;
       }
 
       if (typeof player.tokens !== "number") player.tokens = 0;
-      player.tokens += amount;
+      player.tokens += delta;
       if (player.tokens < 0) player.tokens = 0;
 
       player.lastSeenAt = Date.now();
@@ -950,7 +961,7 @@ io.on("connection", (socket) => {
 
       console.log(
         `[ADMIN] Žetoni laboti: ${player.name} (${targetId}) → ` +
-          `${amount >= 0 ? "+" : ""}${amount}, tagad tokens = ${player.tokens}`
+          `${delta >= 0 ? "+" : ""}${delta}, tagad tokens = ${player.tokens}`
       );
     } catch (err) {
       console.error("adminAdjustTokens error:", err);
