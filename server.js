@@ -866,6 +866,12 @@ io.on("connection", (socket) => {
         dailyProgress: player.daily ? player.daily.progress : null,
       });
 
+      // Uzreiz pārzīmējam TOP + ONLINE visiem
+      io.to("game").emit("leaderboardUpdate", {
+        players: buildLeaderboard(),
+      });
+      broadcastOnlinePlayers(io);
+
       console.log(
         `[SHOP] ${player.name} nopirka 1 žetonu → tokens = ${player.tokens}, coins = ${player.coins}`
       );
