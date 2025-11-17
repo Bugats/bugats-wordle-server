@@ -1,6 +1,6 @@
 // server.js — VĀRDU ZONA serveris (Node + Socket.IO) ar
 // XP, rankiem, streakiem, Dienas čempionu, PERSISTENCI,
-// ONLINE sarakstu, kill-feed, ČATU un DIENAS MISIJĀM (auto katru dienu).
+// ONLINE sarakstu, kill-feed, ČATU, DIENAS MISIJĀM un COINS.
 
 import express from "express";
 import { createServer } from "http";
@@ -15,6 +15,15 @@ const __dirname = path.dirname(__filename);
 // ========== KONSTANTES ==========
 const PORT = process.env.PORT || 10080;
 const MAX_ATTEMPTS = 6;
+
+// COINS parametri
+// 1 žetons = 100 coins (šobrīd tikai krājam; ratu izmantosim vēlāk)
+const COINS_PER_WIN_BASE = 3;        // bāze par uzvaru
+const COINS_PER_ATTEMPT_LEFT = 1;    // +1 coin par katru atlikušā mēģinājuma punktu
+const COINS_STREAK_MAX_BONUS = 5;    // max +5 coins par streak
+// Coins par uzturēšanos spēlē: 1 coin ik pēc 2 min online
+const COIN_TICK_MS = 2 * 60 * 1000;  // 2 min
+const COINS_PER_TICK = 1;
 
 // Failā glabāsim visus spēlētājus + Dienas čempionu
 const DATA_FILE = path.join(__dirname, "vardu-zona-data.json");
@@ -70,13 +79,14 @@ function getRankName(xp) {
 }
 
 // ========== DIENAS MISIJU BĀZE (kopīgas visiem) ==========
-// Šeit ir baseins; katru dienu no tā paņemam 3 nejaušas, bet izpildāmas.
+// Katru dienu no baseina paņemam 3 nejaušas, bet izpildāmas.
 const MISSION_POOL = [
   {
     key: "fast_1",
     type: "fastWins",
     target: 1,
     xpReward: 25,
+    coinsReward: 30,
     text: "Atmini 1 vārdu max 3 mēģinājumos",
   },
   {
@@ -84,6 +94,7 @@ const MISSION_POOL = [
     type: "wins",
     target: 1,
     xpReward: 10,
+    coinsReward: 15,
     text: "Atmini 1 vārdu šodien",
   },
   {
@@ -91,6 +102,7 @@ const MISSION_POOL = [
     type: "games",
     target: 10,
     xpReward: 30,
+    coinsReward: 40,
     text: "Nospēlē 10 raundus šodien",
   },
   {
@@ -98,6 +110,7 @@ const MISSION_POOL = [
     type: "wins",
     target: 3,
     xpReward: 40,
+    coinsReward: 60,
     text: "Atmini 3 vārdus šodien",
   },
   {
@@ -105,6 +118,7 @@ const MISSION_POOL = [
     type: "games",
     target: 5,
     xpReward: 20,
+    coinsReward: 25,
     text: "Nospēlē 5 raundus šodien",
   },
   {
@@ -112,6 +126,7 @@ const MISSION_POOL = [
     type: "fastWins",
     target: 2,
     xpReward: 35,
+    coinsReward: 50,
     text: "Atmini 2 vārdus max 3 mēģinājumos",
   },
 ];
@@ -252,7 +267,7 @@ const players = new Map(); // id -> playerObj
 let dailyChampion = null;
 
 // Kill-feed: pēdējie atminētāji
-const recentSolves = []; // { name, xpGain, streak, ts }
+const recentSolves = []; // { name, xpGain, coinsGain, streak, ts }
 
 // ČATS: pēdējās ziņas atmiņā (nav failā)
 const chatHistory = []; // { name, text, ts }
@@ -286,6 +301,7 @@ function loadData() {
           id: p.id,
           name: p.name,
           xp: p.xp || 0,
+          coins: p.coins || 0,
           wins: p.wins || 0,
           games: p.games || 0,
           streak: p.streak || 0,
@@ -361,6 +377,7 @@ function getOrCreatePlayer(socket) {
       id,
       name,
       xp: 0,
+      coins: 0,
       wins: 0,
       games: 0,
       streak: 0,
@@ -373,6 +390,7 @@ function getOrCreatePlayer(socket) {
   } else {
     player.name = name;
     player.lastSeenAt = Date.now();
+    if (typeof player.coins !== "number") player.coins = 0;
   }
 
   ensurePlayerDaily(player);
@@ -392,6 +410,7 @@ function buildLeaderboard() {
       id: p.id,
       name: p.name,
       xp: p.xp,
+      coins: p.coins || 0,
       wins: p.wins,
       streak: p.streak,
       bestStreak: p.bestStreak,
@@ -420,6 +439,7 @@ function buildOnlinePlayers(io) {
       id,
       name: p?.name || auth.name || "Spēlētājs",
       xp: p?.xp || 0,
+      coins: p?.coins || 0,
       rankTitle: p?.rankTitle || (p ? getRankName(p.xp) : "Jauniņais I"),
       cid: auth.cid || null,
     });
@@ -435,10 +455,11 @@ function broadcastOnlinePlayers(io) {
 }
 
 // Kill-feed helperis
-function pushSolveAndBroadcast(io, player, xpGain) {
+function pushSolveAndBroadcast(io, player, xpGain, coinGain) {
   const entry = {
     name: player.name,
     xpGain,
+    coinsGain: coinGain,
     streak: player.streak || 0,
     ts: Date.now(),
   };
@@ -452,6 +473,7 @@ function pushSolveAndBroadcast(io, player, xpGain) {
     name: entry.name,
     xpGain: entry.xpGain,
     streak: entry.streak,
+    coinsGain: entry.coinsGain,
   });
 }
 
@@ -471,6 +493,7 @@ function updateDailyProgressOnRoundEnd(player, { isWin, attemptsUsed }) {
 
   const completedMissions = [];
   let extraXp = 0;
+  let extraCoins = 0;
 
   for (const m of CURRENT_DAILY_MISSIONS) {
     if (prog.completed[m.key]) continue;
@@ -483,19 +506,21 @@ function updateDailyProgressOnRoundEnd(player, { isWin, attemptsUsed }) {
     if (cur >= m.target) {
       prog.completed[m.key] = true;
       extraXp += m.xpReward || 0;
+      extraCoins += m.coinsReward || 0;
       completedMissions.push(m);
     }
   }
 
-  return { completedMissions, extraXp };
+  return { completedMissions, extraXp, extraCoins };
 }
 
-// ========== XP piešķiršana + Dienas čempions ==========
+// ========== XP + COINS piešķiršana + Dienas čempions ==========
 function applyResult(io, socket, isWin) {
   const player = getOrCreatePlayer(socket);
   player.games += 1;
 
   let xpGain = 0;
+  let coinGain = 0;
   let dailyBonus = 0;
 
   const attemptsUsed = socket.data.attempts || 0;
@@ -512,9 +537,19 @@ function applyResult(io, socket, isWin) {
     const baseXP = 5;                       // bāze
     const attemptsBonus = attemptsLeft * 2; // +2 XP par atlikušajiem mēģinājumiem (max +10)
     const streakBonus =
-      player.streak > 1 ? Math.min(player.streak - 1, 5) : 0; // neliels bonuss, max +5
+      player.streak > 1 ? Math.min(player.streak - 1, 5) : 0; // max +5
 
     xpGain = baseXP + attemptsBonus + streakBonus;
+
+    // ==== COINS PAR UZVARU (lēns progress) ====
+    const baseCoins = COINS_PER_WIN_BASE;
+    const attemptsCoinBonus = attemptsLeft * COINS_PER_ATTEMPT_LEFT;
+    const streakCoinBonus =
+      player.streak > 1
+        ? Math.min(player.streak - 1, COINS_STREAK_MAX_BONUS)
+        : 0;
+
+    coinGain = baseCoins + attemptsCoinBonus + streakCoinBonus;
 
     // Dienas čempions – pirmais, kas šodien uzvar, dabū +50 XP
     const today = todayString();
@@ -539,19 +574,21 @@ function applyResult(io, socket, isWin) {
       );
     }
   } else {
-    // Zaudējums → XP nav, streak nolūst
+    // Zaudējums → XP nav, streak nolūst, coins arī nav
     xpGain = 0;
+    coinGain = 0;
     player.streak = 0;
   }
 
-  // Dienas misiju XP + pabeigtās misijas
-  const { completedMissions, extraXp } = updateDailyProgressOnRoundEnd(
-    player,
-    { isWin, attemptsUsed }
-  );
+  // Dienas misiju XP + COINS + pabeigtās misijas
+  const { completedMissions, extraXp, extraCoins } =
+    updateDailyProgressOnRoundEnd(player, { isWin, attemptsUsed });
+
   xpGain += extraXp;
+  coinGain += extraCoins;
 
   player.xp += xpGain;
+  player.coins = (player.coins || 0) + coinGain;
   player.rankTitle = getRankName(player.xp);
   player.lastSeenAt = Date.now();
 
@@ -559,11 +596,13 @@ function applyResult(io, socket, isWin) {
 
   const statsPayload = {
     xp: player.xp,
+    coins: player.coins,
     wins: player.wins,
     streak: player.streak,
     bestStreak: player.bestStreak,
     rankTitle: player.rankTitle,
     gainedXP: xpGain,
+    gainedCoins: coinGain,
     dailyBonus,
     // priekš klienta misiju panelim
     dailyMissions: { missions: CURRENT_DAILY_MISSIONS },
@@ -579,17 +618,18 @@ function applyResult(io, socket, isWin) {
         key: m.key,
         text: m.text,
         xpReward: m.xpReward || 0,
+        coinsReward: m.coinsReward || 0,
       })),
     });
     console.log(
       `[MISIJAS] ${player.name} pabeidza: ${completedMissions
         .map((m) => m.key)
-        .join(", ")} (+${extraXp} XP)`
+        .join(", ")} (+${extraXp} XP, +${extraCoins} coins)`
     );
   }
 
   if (isWin) {
-    pushSolveAndBroadcast(io, player, xpGain);
+    pushSolveAndBroadcast(io, player, xpGain, coinGain);
   }
 
   io.to("game").emit("leaderboardUpdate", {
@@ -597,9 +637,7 @@ function applyResult(io, socket, isWin) {
   });
 
   console.log(
-    `[XP] ${isWin ? "WIN" : "FAIL"} ${player.name} → +${xpGain} XP (kopā ${
-      player.xp
-    }), streak ${player.streak}`
+    `[XP/COINS] ${isWin ? "WIN" : "FAIL"} ${player.name} → +${xpGain} XP, +${coinGain} coins (kopā ${player.xp} XP, ${player.coins} coins), streak ${player.streak}`
   );
 }
 
@@ -620,6 +658,7 @@ io.on("connection", (socket) => {
   socket.join("game");
   const player = getOrCreatePlayer(socket);
   socket.data.attempts = 0;
+  socket.data.lastCoinTs = Date.now();
 
   refreshDailyMissionsIfNeeded();
   ensurePlayerDaily(player);
@@ -632,6 +671,7 @@ io.on("connection", (socket) => {
     roundId: currentRoundId,
     stats: {
       xp: player.xp,
+      coins: player.coins || 0,
       wins: player.wins,
       streak: player.streak,
       bestStreak: player.bestStreak,
@@ -644,6 +684,7 @@ io.on("connection", (socket) => {
       name: e.name,
       xpGain: e.xpGain,
       streak: e.streak,
+      coinsGain: e.coinsGain,
     })),
     chatHistory: chatHistory.map((m) => ({
       name: m.name,
@@ -794,6 +835,34 @@ io.on("connection", (socket) => {
     broadcastOnlinePlayers(io);
   });
 });
+
+// ========== COINS PAR UZTURĒŠANOS ONLINE ==========
+setInterval(() => {
+  const now = Date.now();
+  for (const [, socket] of io.sockets.sockets) {
+    if (!socket.rooms.has("game")) continue;
+    const player = getOrCreatePlayer(socket);
+    if (!socket.data.lastCoinTs) {
+      socket.data.lastCoinTs = now;
+      continue;
+    }
+    const diff = now - socket.data.lastCoinTs;
+    if (diff < COIN_TICK_MS) continue;
+
+    const ticks = Math.floor(diff / COIN_TICK_MS);
+    const gained = ticks * COINS_PER_TICK;
+    if (gained <= 0) continue;
+
+    player.coins = (player.coins || 0) + gained;
+    socket.data.lastCoinTs += ticks * COIN_TICK_MS;
+
+    socket.emit("coinUpdate", {
+      coins: player.coins,
+      gained,
+    });
+  }
+  saveData();
+}, COIN_TICK_MS);
 
 // ========== STARTS ==========
 httpServer.listen(PORT, () => {
