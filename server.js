@@ -457,6 +457,15 @@ function broadcastOnlinePlayers(io) {
   io.to("game").emit("onlinePlayers", { players: list });
 }
 
+// ===== ADMINI =====
+const ADMINS = ["bugats"]; // niki lower-case, kam ir admin tiesības
+
+function isAdminSocket(socket) {
+  const auth = socket.handshake.auth || {};
+  const { id } = getPlayerIdFromAuth(auth); // id = nika lower-case
+  return ADMINS.includes(id);
+}
+
 // Kill-feed helperis
 function pushSolveAndBroadcast(io, player, xpGain, coinGain) {
   const entry = {
@@ -880,6 +889,71 @@ io.on("connection", (socket) => {
       socket.emit("shopError", {
         msg: "Neizdevās nopirkt žetonu.",
       });
+    }
+  });
+
+  // ===== ADMIN: ŽETONU LABOŠANA =====
+  socket.on("adminAdjustTokens", (payload) => {
+    try {
+      if (!isAdminSocket(socket)) {
+        console.log("[ADMIN] Pieeja liegta: ne-admins mēģina mainīt žetonus");
+        return;
+      }
+
+      const rawName =
+        (payload && (payload.name || payload.nick || payload.id)) || "";
+      const amount = Number(payload && payload.amount) || 0;
+
+      const targetId = rawName.toString().trim().toLowerCase();
+      if (!targetId || !amount) return;
+
+      const player = players.get(targetId);
+      if (!player) {
+        console.log("[ADMIN] Nav atrasts spēlētājs:", targetId);
+        return;
+      }
+
+      if (typeof player.tokens !== "number") player.tokens = 0;
+      player.tokens += amount;
+      if (player.tokens < 0) player.tokens = 0;
+
+      player.lastSeenAt = Date.now();
+      saveData();
+
+      // Atjaunojam stats šim playerim, ja viņš ir online
+      for (const [, s] of io.sockets.sockets) {
+        const auth = s.handshake.auth || {};
+        const { id } = getPlayerIdFromAuth(auth);
+        if (id === targetId) {
+          s.emit("statsUpdate", {
+            xp: player.xp,
+            coins: player.coins || 0,
+            tokens: player.tokens || 0,
+            wins: player.wins,
+            streak: player.streak,
+            bestStreak: player.bestStreak,
+            rankTitle: player.rankTitle,
+            gainedXP: 0,
+            gainedCoins: 0,
+            dailyBonus: 0,
+            dailyMissions: { missions: CURRENT_DAILY_MISSIONS },
+            dailyProgress: player.daily ? player.daily.progress : null,
+          });
+        }
+      }
+
+      // pārzīmējam TOP + ONLINE visiem
+      io.to("game").emit("leaderboardUpdate", {
+        players: buildLeaderboard(),
+      });
+      broadcastOnlinePlayers(io);
+
+      console.log(
+        `[ADMIN] Žetoni laboti: ${player.name} (${targetId}) → ` +
+          `${amount >= 0 ? "+" : ""}${amount}, tagad tokens = ${player.tokens}`
+      );
+    } catch (err) {
+      console.error("adminAdjustTokens error:", err);
     }
   });
 
