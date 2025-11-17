@@ -78,7 +78,7 @@ function getRankName(xp) {
   return current;
 }
 
-// ========== DIENAS MISIJU BĀZE (kopīgas visiem) ==========
+// ========== DIENAS MISIJU BĀZE ==========
 const MISSION_POOL = [
   {
     key: "fast_1",
@@ -134,6 +134,7 @@ function todayString() {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
+// deterministisks random no dienas ID, lai misijas visiem shārējas
 function seededRandomFromString(str) {
   let h = 0;
   for (let i = 0; i < str.length; i++) {
@@ -186,6 +187,7 @@ function evaluateGuess(guessNorm, targetNorm) {
   const targetArr = targetNorm.split("");
   const guessArr = guessNorm.split("");
 
+  // precīgie
   for (let i = 0; i < len; i++) {
     if (guessArr[i] === targetArr[i]) {
       result[i] = "correct";
@@ -193,6 +195,7 @@ function evaluateGuess(guessNorm, targetNorm) {
     }
   }
 
+  // ir vārdā citā vietā
   for (let i = 0; i < len; i++) {
     if (result[i] === "correct") continue;
     const idx = targetArr.indexOf(guessArr[i]);
@@ -261,12 +264,13 @@ pickNewWord();
 const players = new Map(); // id -> playerObj
 let dailyChampion = null;
 
-// Kill-feed
+// Kill-feed: pēdējie atminētāji
 const recentSolves = []; // { name, xpGain, coinsGain, streak, ts }
 
-// ČATS
+// ČATS: pēdējās ziņas atmiņā (nav failā)
 const chatHistory = []; // { name, text, ts }
 
+// Saglabā max 50 čata ziņas
 function pushChatMessage(name, text) {
   chatHistory.push({
     name,
@@ -296,14 +300,14 @@ function loadData() {
           name: p.name,
           xp: p.xp || 0,
           coins: p.coins || 0,
-          tokens: p.tokens || 0, // žetoni
+          tokens: p.tokens || 0,
           wins: p.wins || 0,
           games: p.games || 0,
           streak: p.streak || 0,
           bestStreak: p.bestStreak || 0,
           rankTitle: p.rankTitle || getRankName(p.xp || 0),
           lastSeenAt: p.lastSeenAt || Date.now(),
-          daily: p.daily || null,
+          daily: p.daily || null, // dienas misiju progress, ja bija saglabāts
         };
         players.set(player.id, player);
       });
@@ -346,6 +350,7 @@ function getPlayerIdFromAuth(auth) {
   return { id, name };
 }
 
+// nodrošina, ka player.daily atbilst šodienai
 function ensurePlayerDaily(player) {
   refreshDailyMissionsIfNeeded();
   if (!player.daily || player.daily.dayId !== CURRENT_DAY_ID) {
@@ -480,6 +485,7 @@ function updateDailyProgressOnRoundEnd(player, { isWin, attemptsUsed }) {
   ensurePlayerDaily(player);
   const prog = player.daily.progress;
 
+  // skaitām šodienas statistiku
   prog.games += 1;
   if (isWin) {
     prog.wins += 1;
@@ -530,6 +536,7 @@ function applyResult(io, socket, isWin) {
       player.bestStreak = player.streak;
     }
 
+    // XP formula
     const baseXP = 5;
     const attemptsBonus = attemptsLeft * 2;
     const streakBonus =
@@ -537,7 +544,7 @@ function applyResult(io, socket, isWin) {
 
     xpGain = baseXP + attemptsBonus + streakBonus;
 
-    // COINS par uzvaru
+    // COINS formula
     const baseCoins = COINS_PER_WIN_BASE;
     const attemptsCoinBonus = attemptsLeft * COINS_PER_ATTEMPT_LEFT;
     const streakCoinBonus =
@@ -575,6 +582,7 @@ function applyResult(io, socket, isWin) {
     player.streak = 0;
   }
 
+  // Dienas misijas
   const { completedMissions, extraXp, extraCoins } =
     updateDailyProgressOnRoundEnd(player, { isWin, attemptsUsed });
 
@@ -583,6 +591,7 @@ function applyResult(io, socket, isWin) {
 
   player.xp += xpGain;
   player.coins = (player.coins || 0) + coinGain;
+  if (typeof player.tokens !== "number") player.tokens = 0;
   player.rankTitle = getRankName(player.xp);
   player.lastSeenAt = Date.now();
 
@@ -591,7 +600,7 @@ function applyResult(io, socket, isWin) {
   const statsPayload = {
     xp: player.xp,
     coins: player.coins,
-    tokens: player.tokens || 0,
+    tokens: player.tokens,
     wins: player.wins,
     streak: player.streak,
     bestStreak: player.bestStreak,
@@ -605,6 +614,7 @@ function applyResult(io, socket, isWin) {
 
   socket.emit("statsUpdate", statsPayload);
 
+  // paziņojumi par pabeigtajām misijām
   if (completedMissions.length) {
     socket.emit("dailyMissionsCompleted", {
       missions: completedMissions.map((m) => ({
@@ -784,50 +794,17 @@ io.on("connection", (socket) => {
     }
   });
 
-  // ===== ŽETONA PIRKŠANA =====
-  socket.on("buyToken", () => {
-    const player = getOrCreatePlayer(socket);
-
-    if ((player.coins || 0) < 100) {
-      return socket.emit("shopError", {
-        msg: "Nepietiek coins (vajag 100).",
-      });
+  // ===== JAUNS RAUNDS =====
+  socket.on("requestNewRound", () => {
+    pickNewWord();
+    for (const [, s] of io.sockets.sockets) {
+      s.data.attempts = 0;
     }
-
-    player.coins -= 100;
-    player.tokens = (player.tokens || 0) + 1;
-    player.lastSeenAt = Date.now();
-    saveData();
-
-    // atjaunojam statistiku profilā
-    socket.emit("statsUpdate", {
-      xp: player.xp,
-      coins: player.coins,
-      tokens: player.tokens,
-      wins: player.wins,
-      streak: player.streak,
-      bestStreak: player.bestStreak,
-      rankTitle: player.rankTitle,
-      gainedXP: 0,
-      gainedCoins: -100,
-      dailyBonus: 0,
-      dailyMissions: { missions: CURRENT_DAILY_MISSIONS },
-      dailyProgress: player.daily ? player.daily.progress : null,
+    io.to("game").emit("newRound", {
+      roundId: currentRoundId,
+      wordLength: currentWord.norm.length,
+      maxAttempts: MAX_ATTEMPTS,
     });
-
-    // neliels paziņojums (tu šo jau ķer klienta pusē ar showToast)
-    socket.emit("shopError", {
-      msg: "Žetons veiksmīgi nopirkts! (-100 coins, +1 žetons)",
-    });
-
-    // leaderboard, ja vēlies tur redzēt coins/tokens
-    io.to("game").emit("leaderboardUpdate", {
-      players: buildLeaderboard(),
-    });
-
-    console.log(
-      `[SHOP] ${player.name} nopirka žetonu → tokens=${player.tokens}, coins=${player.coins}`
-    );
   });
 
   // ===== ČATS =====
@@ -855,17 +832,49 @@ io.on("connection", (socket) => {
     }
   });
 
-  // ===== JAUNS RAUNDS =====
-  socket.on("requestNewRound", () => {
-    pickNewWord();
-    for (const [, s] of io.sockets.sockets) {
-      s.data.attempts = 0;
+  // ===== ŽETONU PIRKŠANA =====
+  socket.on("buyToken", () => {
+    try {
+      const player = getOrCreatePlayer(socket);
+      if (typeof player.coins !== "number") player.coins = 0;
+      if (typeof player.tokens !== "number") player.tokens = 0;
+
+      if (player.coins < 100) {
+        return socket.emit("shopError", {
+          msg: "Nepietiek coins (vajag 100).",
+        });
+      }
+
+      player.coins -= 100;
+      player.tokens += 1;
+      player.lastSeenAt = Date.now();
+      saveData();
+
+      // Atjaunojam statuss tikai šim spēlētājam
+      socket.emit("statsUpdate", {
+        xp: player.xp,
+        coins: player.coins,
+        tokens: player.tokens,
+        wins: player.wins,
+        streak: player.streak,
+        bestStreak: player.bestStreak,
+        rankTitle: player.rankTitle,
+        gainedXP: 0,
+        gainedCoins: 0,
+        dailyBonus: 0,
+        dailyMissions: { missions: CURRENT_DAILY_MISSIONS },
+        dailyProgress: player.daily ? player.daily.progress : null,
+      });
+
+      console.log(
+        `[SHOP] ${player.name} nopirka 1 žetonu → tokens = ${player.tokens}, coins = ${player.coins}`
+      );
+    } catch (err) {
+      console.error("buyToken error:", err);
+      socket.emit("shopError", {
+        msg: "Neizdevās nopirkt žetonu.",
+      });
     }
-    io.to("game").emit("newRound", {
-      roundId: currentRoundId,
-      wordLength: currentWord.norm.length,
-      maxAttempts: MAX_ATTEMPTS,
-    });
   });
 
   // ===== ATVIENOŠANĀS =====
@@ -893,6 +902,7 @@ setInterval(() => {
     if (gained <= 0) continue;
 
     player.coins = (player.coins || 0) + gained;
+    if (typeof player.tokens !== "number") player.tokens = 0;
     socket.data.lastCoinTs += ticks * COIN_TICK_MS;
 
     socket.emit("coinUpdate", {
