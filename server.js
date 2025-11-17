@@ -16,7 +16,7 @@ const __dirname = path.dirname(__filename);
 const PORT = process.env.PORT || 10080;
 const MAX_ATTEMPTS = 6;
 
-// Failā glabāsim visus spēlētājus + Dienas čempionu + misijas
+// Failā glabāsim visus spēlētājus + Dienas čempionu
 const DATA_FILE = path.join(__dirname, "vardu-zona-data.json");
 
 // ========== Ranku definīcijas ==========
@@ -69,49 +69,94 @@ function getRankName(xp) {
   return current;
 }
 
-// ========== MISIJU TEMPLATES ==========
-// Šis ir “base” saraksts. Katru dienu izvēlamies 3 dažādas misijas.
-const MISSION_TEMPLATES = [
+// ========== DIENAS MISIJU BĀZE (kopīgas visiem) ==========
+// Šeit ir baseins; katru dienu no tā paņemam 3 nejaušas, bet izpildāmas.
+const MISSION_POOL = [
   {
-    id: "fast_win_3",
-    title: "Atmini 1 vārdu max 3 mēģinājumos",
-    type: "fast_win",
+    key: "fast_1",
+    type: "fastWins",
     target: 1,
-    xp: 100,
-    maxAttempts: 3,
+    xpReward: 100,
+    text: "Atmini 1 vārdu max 3 mēģinājumos",
   },
   {
-    id: "any_win_1",
-    title: "Atmini 1 vārdu šodien",
+    key: "win_1",
     type: "wins",
     target: 1,
-    xp: 50,
+    xpReward: 50,
+    text: "Atmini 1 vārdu šodien",
   },
   {
-    id: "play_10",
-    title: "Nospēlē 10 raundus šodien",
+    key: "games_10",
     type: "games",
     target: 10,
-    xp: 130,
+    xpReward: 130,
+    text: "Nospēlē 10 raundus šodien",
   },
   {
-    id: "wins_3",
-    title: "Atmini 3 vārdus šodien",
+    key: "wins_3",
     type: "wins",
     target: 3,
-    xp: 180,
+    xpReward: 180,
+    text: "Atmini 3 vārdus šodien",
   },
   {
-    id: "streak_3",
-    title: "Sasniedz 3 uzvaru sēriju",
-    type: "streak",
-    target: 3,
-    xp: 150,
+    key: "games_5",
+    type: "games",
+    target: 5,
+    xpReward: 90,
+    text: "Nospēlē 5 raundus šodien",
+  },
+  {
+    key: "fast_2",
+    type: "fastWins",
+    target: 2,
+    xpReward: 180,
+    text: "Atmini 2 vārdus max 3 mēģinājumos",
   },
 ];
 
 function todayString() {
-  return new Date().toISOString().slice(0, 10);
+  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+// deterministisks random no dienas ID, lai misijas visiem shārējas
+function seededRandomFromString(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (h * 31 + str.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0) / 4294967296;
+}
+
+function pickMissionsForDay(dayId) {
+  const pool = [...MISSION_POOL];
+  const chosen = [];
+  let r = seededRandomFromString(dayId);
+
+  while (pool.length && chosen.length < 3) {
+    r = (r * 9301 + 49297) % 233280;
+    const idx = Math.floor((r / 233280) * pool.length);
+    chosen.push(pool.splice(idx, 1)[0]);
+  }
+  return chosen;
+}
+
+let CURRENT_DAY_ID = todayString();
+let CURRENT_DAILY_MISSIONS = pickMissionsForDay(CURRENT_DAY_ID);
+
+function refreshDailyMissionsIfNeeded() {
+  const today = todayString();
+  if (today !== CURRENT_DAY_ID) {
+    CURRENT_DAY_ID = today;
+    CURRENT_DAILY_MISSIONS = pickMissionsForDay(CURRENT_DAY_ID);
+    console.log(
+      "[MISIJAS] Jauna diena",
+      CURRENT_DAY_ID,
+      "→",
+      CURRENT_DAILY_MISSIONS.map((m) => m.key).join(", ")
+    );
+  }
 }
 
 // ========== Palīgfunkcijas vārdam ==========
@@ -202,8 +247,7 @@ function pickNewWord() {
 
 pickNewWord();
 
-// ========== Spēlētāji + Dienas čempions + MISIJAS (PERSISTENCE) ==========
-
+// ========== Spēlētāji + Dienas čempions ==========
 const players = new Map(); // id -> playerObj
 let dailyChampion = null;
 
@@ -212,9 +256,6 @@ const recentSolves = []; // { name, xpGain, streak, ts }
 
 // ČATS: pēdējās ziņas atmiņā (nav failā)
 const chatHistory = []; // { name, text, ts }
-
-// DIENAS MISIJAS (kopējas visiem, bet progress per player)
-let dailyMissions = null; // { date, missions:[...], playerProgress: { [playerId]: { [missionId]: {progress,done} } } }
 
 // Saglabā max 50 čata ziņas
 function pushChatMessage(name, text) {
@@ -228,6 +269,7 @@ function pushChatMessage(name, text) {
   }
 }
 
+// ====== LOAD / SAVE ======
 function loadData() {
   try {
     if (!fs.existsSync(DATA_FILE)) {
@@ -250,6 +292,7 @@ function loadData() {
           bestStreak: p.bestStreak || 0,
           rankTitle: p.rankTitle || getRankName(p.xp || 0),
           lastSeenAt: p.lastSeenAt || Date.now(),
+          daily: p.daily || null, // dienas misiju progress, ja bija saglabāts
         };
         players.set(player.id, player);
       });
@@ -257,10 +300,6 @@ function loadData() {
 
     if (json.dailyChampion) {
       dailyChampion = json.dailyChampion;
-    }
-
-    if (json.dailyMissions) {
-      dailyMissions = json.dailyMissions;
     }
 
     console.log(
@@ -278,7 +317,6 @@ function saveData() {
     const data = {
       players: Array.from(players.values()),
       dailyChampion,
-      dailyMissions,
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf8");
   } catch (err) {
@@ -297,6 +335,22 @@ function getPlayerIdFromAuth(auth) {
   return { id, name };
 }
 
+// nodrošina, ka player.daily atbilst šodienai
+function ensurePlayerDaily(player) {
+  refreshDailyMissionsIfNeeded();
+  if (!player.daily || player.daily.dayId !== CURRENT_DAY_ID) {
+    player.daily = {
+      dayId: CURRENT_DAY_ID,
+      progress: {
+        wins: 0,
+        games: 0,
+        fastWins: 0,
+        completed: {}, // key -> true
+      },
+    };
+  }
+}
+
 function getOrCreatePlayer(socket) {
   const auth = socket.handshake.auth || {};
   const { id, name } = getPlayerIdFromAuth(auth);
@@ -313,12 +367,15 @@ function getOrCreatePlayer(socket) {
       bestStreak: 0,
       rankTitle: getRankName(0),
       lastSeenAt: Date.now(),
+      daily: null,
     };
     players.set(id, player);
   } else {
     player.name = name;
     player.lastSeenAt = Date.now();
   }
+
+  ensurePlayerDaily(player);
   saveData();
   return player;
 }
@@ -398,142 +455,39 @@ function pushSolveAndBroadcast(io, player, xpGain) {
   });
 }
 
-// ========== DIENAS MISIJAS LOĢIKA ==========
+// ===== DIENAS MISIJU PROGRESS PER PLAYER =====
+function updateDailyProgressOnRoundEnd(player, { isWin, attemptsUsed }) {
+  ensurePlayerDaily(player);
+  const prog = player.daily.progress;
 
-function ensureDailyMissions() {
-  const today = todayString();
-  if (!dailyMissions || dailyMissions.date !== today) {
-    rollMissionsForToday();
-  }
-}
-
-function rollMissionsForToday() {
-  const today = todayString();
-  const pool = [...MISSION_TEMPLATES];
-  const chosen = [];
-
-  while (pool.length && chosen.length < 3) {
-    const idx = Math.floor(Math.random() * pool.length);
-    chosen.push(pool[idx]);
-    pool.splice(idx, 1);
+  // skaitām šodienas statistiku
+  prog.games += 1;
+  if (isWin) {
+    prog.wins += 1;
+    if (attemptsUsed <= 3) {
+      prog.fastWins += 1;
+    }
   }
 
-  dailyMissions = {
-    date: today,
-    missions: chosen,
-    playerProgress: {}, // { [playerId]: { [missionId]: {progress,done} } }
-  };
-
-  console.log(
-    "[MISIJAS] Jaunas dienas misijas",
-    today,
-    "→",
-    chosen.map((m) => m.title).join(", ")
-  );
-  saveData();
-}
-
-function buildPlayerMissions(playerId) {
-  ensureDailyMissions();
-  if (!dailyMissions) return [];
-
-  const missions = dailyMissions.missions || [];
-  const allProgress = dailyMissions.playerProgress || {};
-  const playerProg = allProgress[playerId] || {};
-
-  return missions.map((m) => {
-    const p = playerProg[m.id] || { progress: 0, done: false };
-    return {
-      id: m.id,
-      title: m.title,
-      target: m.target || 1,
-      xp: m.xp || 0,
-      progress: p.progress || 0,
-      done: !!p.done,
-    };
-  });
-}
-
-// atjauno misiju progresu pēc raunda rezultāta
-function updateMissionsOnResult(socket, player, isWin, attemptsUsed) {
-  ensureDailyMissions();
-  if (!dailyMissions) return 0;
-
-  const playerId = player.id;
-  if (!dailyMissions.playerProgress) dailyMissions.playerProgress = {};
-  let playerProg = dailyMissions.playerProgress[playerId];
-  if (!playerProg) {
-    playerProg = {};
-    dailyMissions.playerProgress[playerId] = playerProg;
-  }
-
+  const completedMissions = [];
   let extraXp = 0;
-  const completedNow = [];
 
-  const missions = dailyMissions.missions || [];
-  for (const m of missions) {
-    let mState = playerProg[m.id];
-    if (!mState) {
-      mState = { progress: 0, done: false };
-      playerProg[m.id] = mState;
-    }
-    if (mState.done) continue;
+  for (const m of CURRENT_DAILY_MISSIONS) {
+    if (prog.completed[m.key]) continue;
 
-    const target = m.target || 1;
+    let cur = 0;
+    if (m.type === "wins") cur = prog.wins;
+    else if (m.type === "games") cur = prog.games;
+    else if (m.type === "fastWins") cur = prog.fastWins;
 
-    switch (m.type) {
-      case "wins":
-        if (isWin) mState.progress += 1;
-        break;
-      case "fast_win":
-        if (isWin && attemptsUsed <= (m.maxAttempts || 3)) {
-          mState.progress += 1;
-        }
-        break;
-      case "games":
-        // jebkurš raunds skaitās
-        mState.progress += 1;
-        break;
-      case "streak":
-        // “Sasniedz 3 uzvaru sēriju” – ja streak jau sasniegts, atzīmē kā izpildītu
-        if (isWin && player.streak >= target) {
-          mState.progress = target;
-        }
-        break;
-      default:
-        break;
-    }
-
-    if (mState.progress >= target) {
-      mState.progress = target;
-      mState.done = true;
-      const xp = m.xp || 0;
-      extraXp += xp;
-      completedNow.push({ id: m.id, title: m.title, xp });
+    if (cur >= m.target) {
+      prog.completed[m.key] = true;
+      extraXp += m.xpReward || 0;
+      completedMissions.push(m);
     }
   }
 
-  // saglabājam misiju progresu
-  saveData();
-
-  // atjaunojam misijas šim spēlētājam
-  socket.emit("missionsUpdate", {
-    missions: buildPlayerMissions(playerId),
-  });
-
-  // paziņojumi par pabeigtām misijām
-  for (const m of completedNow) {
-    socket.emit("missionCompleted", {
-      id: m.id,
-      title: m.title,
-      xp: m.xp,
-    });
-    console.log(
-      `[MISIJAS] ${player.name} pabeidza misiju "${m.title}" (+${m.xp} XP)`
-    );
-  }
-
-  return extraXp;
+  return { completedMissions, extraXp };
 }
 
 // ========== XP piešķiršana + Dienas čempions ==========
@@ -585,9 +539,12 @@ function applyResult(io, socket, isWin) {
     player.streak = 0;
   }
 
-  // Dienas misiju XP
-  const missionsXp = updateMissionsOnResult(socket, player, isWin, attemptsUsed);
-  xpGain += missionsXp;
+  // Dienas misiju XP + pabeigtās misijas
+  const { completedMissions, extraXp } = updateDailyProgressOnRoundEnd(
+    player,
+    { isWin, attemptsUsed }
+  );
+  xpGain += extraXp;
 
   player.xp += xpGain;
   player.rankTitle = getRankName(player.xp);
@@ -603,9 +560,28 @@ function applyResult(io, socket, isWin) {
     rankTitle: player.rankTitle,
     gainedXP: xpGain,
     dailyBonus,
+    // priekš klienta misiju panelim
+    dailyMissions: { missions: CURRENT_DAILY_MISSIONS },
+    dailyProgress: player.daily ? player.daily.progress : null,
   };
 
   socket.emit("statsUpdate", statsPayload);
+
+  // paziņojumi par pabeigtajām misijām (toast)
+  if (completedMissions.length) {
+    socket.emit("dailyMissionsCompleted", {
+      missions: completedMissions.map((m) => ({
+        key: m.key,
+        text: m.text,
+        xpReward: m.xpReward || 0,
+      })),
+    });
+    console.log(
+      `[MISIJAS] ${player.name} pabeidza: ${completedMissions
+        .map((m) => m.key)
+        .join(", ")} (+${extraXp} XP)`
+    );
+  }
 
   if (isWin) {
     pushSolveAndBroadcast(io, player, xpGain);
@@ -640,10 +616,10 @@ io.on("connection", (socket) => {
   const player = getOrCreatePlayer(socket);
   socket.data.attempts = 0;
 
-  ensureDailyMissions();
+  refreshDailyMissionsIfNeeded();
+  ensurePlayerDaily(player);
 
   const onlinePlayers = buildOnlinePlayers(io);
-  const missionsForPlayer = buildPlayerMissions(player.id);
 
   socket.emit("hello", {
     wordLength: currentWord.norm.length,
@@ -668,7 +644,9 @@ io.on("connection", (socket) => {
       name: m.name,
       text: m.text,
     })),
-    missions: missionsForPlayer,
+    // jaunais misiju formāts priekš klienta
+    dailyMissions: { missions: CURRENT_DAILY_MISSIONS },
+    dailyProgress: player.daily ? player.daily.progress : null,
     dailyChampion:
       dailyChampion && dailyChampion.date === todayString()
         ? { name: dailyChampion.name, date: dailyChampion.date }
