@@ -21,8 +21,8 @@ const MAX_ATTEMPTS = 6;
 const COINS_PER_WIN_BASE = 3;        // bāze par uzvaru
 const COINS_PER_ATTEMPT_LEFT = 1;    // +1 coin par katru atlikušā mēģinājuma punktu
 const COINS_STREAK_MAX_BONUS = 5;    // max +5 coins par streak
-// Coins par uzturēšanos spēlē: 1 coin ik pēc 2 min online
-const COIN_TICK_MS = 2 * 60 * 1000;  // 2 min
+// Coins par uzturēšanos spēlē: 1 coin ik pēc 10 min online
+const COIN_TICK_MS = 10 * 60 * 1000; // 10 min
 const COINS_PER_TICK = 1;
 
 // Failā glabāsim visus spēlētājus + Dienas čempionu
