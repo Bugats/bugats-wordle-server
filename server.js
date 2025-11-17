@@ -76,42 +76,42 @@ const MISSION_POOL = [
     key: "fast_1",
     type: "fastWins",
     target: 1,
-    xpReward: 100,
+    xpReward: 25,
     text: "Atmini 1 vārdu max 3 mēģinājumos",
   },
   {
     key: "win_1",
     type: "wins",
     target: 1,
-    xpReward: 50,
+    xpReward: 10,
     text: "Atmini 1 vārdu šodien",
   },
   {
     key: "games_10",
     type: "games",
     target: 10,
-    xpReward: 130,
+    xpReward: 30,
     text: "Nospēlē 10 raundus šodien",
   },
   {
     key: "wins_3",
     type: "wins",
     target: 3,
-    xpReward: 180,
+    xpReward: 40,
     text: "Atmini 3 vārdus šodien",
   },
   {
     key: "games_5",
     type: "games",
     target: 5,
-    xpReward: 90,
+    xpReward: 20,
     text: "Nospēlē 5 raundus šodien",
   },
   {
     key: "fast_2",
     type: "fastWins",
     target: 2,
-    xpReward: 180,
+    xpReward: 35,
     text: "Atmini 2 vārdus max 3 mēģinājumos",
   },
 ];
@@ -174,7 +174,7 @@ function evaluateGuess(guessNorm, targetNorm) {
   const targetArr = targetNorm.split("");
   const guessArr = guessNorm.split("");
 
-  // precīzie
+  // precīgie
   for (let i = 0; i < len; i++) {
     if (guessArr[i] === targetArr[i]) {
       result[i] = "correct";
@@ -508,11 +508,15 @@ function applyResult(io, socket, isWin) {
       player.bestStreak = player.streak;
     }
 
-    xpGain = 50 + attemptsLeft * 10;
-    if (player.streak >= 2) {
-      xpGain += player.streak * 10;
-    }
+    // ==== JAUNĀ XP FORMULA ====
+    const baseXP = 5;                       // bāze
+    const attemptsBonus = attemptsLeft * 2; // +2 XP par atlikušajiem mēģinājumiem (max +10)
+    const streakBonus =
+      player.streak > 1 ? Math.min(player.streak - 1, 5) : 0; // neliels bonuss, max +5
 
+    xpGain = baseXP + attemptsBonus + streakBonus;
+
+    // Dienas čempions – pirmais, kas šodien uzvar, dabū +50 XP
     const today = todayString();
     if (!dailyChampion || dailyChampion.date !== today) {
       dailyChampion = {
@@ -521,7 +525,7 @@ function applyResult(io, socket, isWin) {
         name: player.name,
       };
 
-      dailyBonus = 100;
+      dailyBonus = 50;
       xpGain += dailyBonus;
 
       io.to("game").emit("dailyChampionUpdate", {
@@ -535,7 +539,8 @@ function applyResult(io, socket, isWin) {
       );
     }
   } else {
-    xpGain = 5;
+    // Zaudējums → XP nav, streak nolūst
+    xpGain = 0;
     player.streak = 0;
   }
 
