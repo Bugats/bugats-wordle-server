@@ -1,6 +1,7 @@
 // server.js — VĀRDU ZONA serveris (Node + Socket.IO) ar
 // XP, rankiem, streakiem, Dienas čempionu, PERSISTENCI,
-// ONLINE sarakstu, kill-feed, ČATU, DIENAS MISIJĀM, COINS, ŽETONIEM un ADMIN BAN.
+// ONLINE sarakstu, kill-feed, ČATU, DIENAS MISIJĀM, COINS,
+// ŽETONIEM, ADMIN BAN un RAUNDA MEDAĻĀM.
 
 import express from "express";
 import { createServer } from "http";
@@ -212,7 +213,7 @@ function evaluateGuess(guessNorm, targetNorm) {
   return result;
 }
 
-// ========== words.txt ielāde (5–6 burtu) ==========
+// ========== words.txt ielāde (5–7 burtu) ==========
 let WORD_LIST = [];
 
 function loadWords() {
@@ -227,18 +228,22 @@ function loadWords() {
       raw: line,
       norm: normalizeWord(line),
     }))
-    .filter((w) => w.norm.length === 5 || w.norm.length === 6);
+    .filter((w) => w.norm.length >= 5 && w.norm.length <= 7);
 
   console.log(
-    `Loaded ${WORD_LIST.length} words (length 5–6) from words.txt`
+    `Loaded ${WORD_LIST.length} words (length 5–7) from words.txt`
   );
 }
 
 loadWords();
 
-// ========== GLOBĀLAIS RAUNDS ==========
+// ========== GLOBĀLAIS RAUNDS + MEDAĻU TRACKER ==========
 let currentWord = null; // { raw, norm }
 let currentRoundId = 1;
+
+// roundSolves: katram raundam – secība, kā spēlētāji atminējuši
+// roundId -> [{ playerId, attemptsUsed, solvedAt }]
+const roundSolves = new Map();
 
 function pickNewWord() {
   if (!WORD_LIST.length) {
@@ -252,6 +257,10 @@ function pickNewWord() {
 
   currentWord = candidate;
   currentRoundId += 1;
+
+  // sagatavojam tukšu solve list šim raundam
+  roundSolves.set(currentRoundId, []);
+
   console.log(
     "Jauns vārds:",
     currentWord.raw,
@@ -343,6 +352,11 @@ function loadData() {
           rankTitle: p.rankTitle || getRankName(p.xp || 0),
           lastSeenAt: p.lastSeenAt || Date.now(),
           daily: p.daily || null, // dienas misiju progress, ja bija saglabāts
+
+          // jaunie lauki medaļām
+          medalsCount: p.medalsCount || 0,
+          lastMedal: p.lastMedal || null,
+          bestFastWin: p.bestFastWin || null,
         };
         players.set(player.id, player);
       });
@@ -459,6 +473,11 @@ function getOrCreatePlayer(socket) {
       rankTitle: getRankName(0),
       lastSeenAt: Date.now(),
       daily: null,
+
+      // medaļu info
+      medalsCount: 0,
+      lastMedal: null,
+      bestFastWin: null,
     };
     players.set(id, player);
   } else {
@@ -468,6 +487,9 @@ function getOrCreatePlayer(socket) {
     player.lastSeenAt = Date.now();
     if (typeof player.coins !== "number") player.coins = 0;
     if (typeof player.tokens !== "number") player.tokens = 0;
+    if (typeof player.medalsCount !== "number") player.medalsCount = player.medalsCount || 0;
+    if (!("lastMedal" in player)) player.lastMedal = null;
+    if (!("bestFastWin" in player)) player.bestFastWin = null;
   }
 
   ensurePlayerDaily(player);
@@ -493,6 +515,7 @@ function buildLeaderboard() {
       streak: p.streak,
       bestStreak: p.bestStreak,
       rankTitle: p.rankTitle,
+      medalsCount: p.medalsCount || 0,
     }));
 }
 
@@ -520,6 +543,7 @@ function buildOnlinePlayers(io) {
       coins: p?.coins || 0,
       tokens: p?.tokens || 0,
       rankTitle: p?.rankTitle || (p ? getRankName(p.xp) : "Jauniņais I"),
+      medalsCount: p?.medalsCount || 0,
       cid: auth.cid || null,
     });
   }
@@ -593,17 +617,19 @@ function updateDailyProgressOnRoundEnd(player, { isWin, attemptsUsed }) {
   return { completedMissions, extraXp, extraCoins };
 }
 
-// ========== XP + COINS piešķiršana + Dienas čempions ==========
-function applyResult(io, socket, isWin) {
+// ========== XP + COINS + MEDAĻAS + Dienas čempions ==========
+function applyResult(io, socket, isWin, roundId) {
   const player = getOrCreatePlayer(socket);
   player.games += 1;
 
   let xpGain = 0;
   let coinGain = 0;
   let dailyBonus = 0;
+  let medalInfo = null;
 
   const attemptsUsed = socket.data.attempts || 0;
   const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attemptsUsed);
+  const wordLength = currentWord ? currentWord.norm.length : null;
 
   if (isWin) {
     player.wins += 1;
@@ -629,6 +655,55 @@ function applyResult(io, socket, isWin) {
         : 0;
 
     coinGain = baseCoins + attemptsCoinBonus + streakCoinBonus;
+
+    // ===== RAUNDA MEDAĻA (GOLD/SILVER/BRONZE) =====
+    const solvedList = roundSolves.get(roundId) || [];
+    const solvedAt = Date.now();
+    const position = solvedList.length; // 0 = pirmais, 1 = otrais, 2 = trešais...
+
+    let medalType = null;
+    if (position === 0) medalType = "gold";
+    else if (position === 1) medalType = "silver";
+    else if (position === 2) medalType = "bronze";
+
+    solvedList.push({
+      playerId: player.id,
+      attemptsUsed,
+      solvedAt,
+    });
+    roundSolves.set(roundId, solvedList);
+
+    if (medalType) {
+      player.medalsCount = (player.medalsCount || 0) + 1;
+
+      const medal = {
+        type: medalType,          // "gold" | "silver" | "bronze"
+        attemptsUsed,
+        wordLength,
+        roundId,
+        ts: solvedAt,
+      };
+
+      player.lastMedal = medal;
+
+      // bestFastWin: mazākais mēģinājumu skaits (ja vienāds – ņemam pirmo)
+      if (
+        !player.bestFastWin ||
+        attemptsUsed < player.bestFastWin.attemptsUsed
+      ) {
+        player.bestFastWin = medal;
+      }
+
+      medalInfo = medal;
+
+      // paziņojums visiem par medaļu
+      io.to("game").emit("roundMedal", {
+        name: player.name,
+        type: medalType,
+        attemptsUsed,
+        wordLength,
+      });
+    }
 
     // Dienas čempions
     const today = todayString();
@@ -681,11 +756,19 @@ function applyResult(io, socket, isWin) {
     streak: player.streak,
     bestStreak: player.bestStreak,
     rankTitle: player.rankTitle,
+
     gainedXP: xpGain,
     gainedCoins: coinGain,
     dailyBonus,
+
     dailyMissions: { missions: CURRENT_DAILY_MISSIONS },
     dailyProgress: player.daily ? player.daily.progress : null,
+
+    // medaļu info
+    medalsCount: player.medalsCount || 0,
+    lastMedal: player.lastMedal || null,
+    bestFastWin: player.bestFastWin || null,
+    medal: medalInfo, // konkrētā raunda medaļa, ja ir
   };
 
   socket.emit("statsUpdate", statsPayload);
@@ -724,7 +807,11 @@ function applyResult(io, socket, isWin) {
 const app = express();
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, roundId: currentRoundId });
+  res.json({
+    ok: true,
+    roundId: currentRoundId,
+    wordLength: currentWord ? currentWord.norm.length : null,
+  });
 });
 
 const httpServer = createServer(app);
@@ -771,6 +858,9 @@ io.on("connection", (socket) => {
       streak: player.streak,
       bestStreak: player.bestStreak,
       rankTitle: player.rankTitle,
+      medalsCount: player.medalsCount || 0,
+      lastMedal: player.lastMedal || null,
+      bestFastWin: player.bestFastWin || null,
     },
     // svarīgi: atgriežam galīgo niku, ko serveris pieņēmis
     finalName: player.name,
@@ -873,12 +963,12 @@ io.on("connection", (socket) => {
       });
 
       if (isWin) {
-        applyResult(io, socket, true);
+        applyResult(io, socket, true, roundId);
         return;
       }
 
       if (attemptsLeft <= 0) {
-        applyResult(io, socket, false);
+        applyResult(io, socket, false, roundId);
       }
     } catch (err) {
       console.error("guess error", err);
@@ -959,6 +1049,10 @@ io.on("connection", (socket) => {
         dailyBonus: 0,
         dailyMissions: { missions: CURRENT_DAILY_MISSIONS },
         dailyProgress: player.daily ? player.daily.progress : null,
+        medalsCount: player.medalsCount || 0,
+        lastMedal: player.lastMedal || null,
+        bestFastWin: player.bestFastWin || null,
+        medal: null,
       });
 
       // Uzreiz pārzīmējam TOP + ONLINE visiem
@@ -1033,6 +1127,10 @@ io.on("connection", (socket) => {
             dailyBonus: 0,
             dailyMissions: { missions: CURRENT_DAILY_MISSIONS },
             dailyProgress: player.daily ? player.daily.progress : null,
+            medalsCount: player.medalsCount || 0,
+            lastMedal: player.lastMedal || null,
+            bestFastWin: player.bestFastWin || null,
+            medal: null,
           });
         }
       }
