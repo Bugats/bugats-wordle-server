@@ -1,4 +1,4 @@
-// ======== VĀRDU ZONA — Bugats edition server.js ========
+// ======== VĀRDU ZONA — Bugats edition (Render server.js) ========
 
 import express from "express";
 import { createServer } from "http";
@@ -19,25 +19,20 @@ const JWT_SECRET = process.env.JWT_SECRET || "BUGATS_VARDU_ZONA_SUPER_SLEPENS_JW
 const USERS_FILE = path.join(__dirname, "users.json");
 const WORDS_FILE = path.join(__dirname, "words.txt");
 
-// ======== Servera inicializācija ========
+// ======== Express un CORS ========
 const app = express();
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(cors({
+  origin: [
+    "https://thezone.lv",
+    "https://www.thezone.lv",
+    "http://localhost:10080"
+  ],
+  methods: ["GET", "POST"],
+  credentials: true
+}));
 
-// ======== CORS ========
-app.use(
-  cors({
-    origin: [
-      "https://thezone.lv",
-      "https://www.thezone.lv",
-      "http://localhost:10080"
-    ],
-    methods: ["GET", "POST"],
-    credentials: true
-  })
-);
-
-// ======== HTTP Server un Socket.IO ========
+// ======== HTTP Server + Socket.IO ========
 const httpServer = createServer(app);
 
 const io = new Server(httpServer, {
@@ -51,10 +46,10 @@ const io = new Server(httpServer, {
     credentials: true
   },
   allowEIO3: true,
-  transports: ["websocket", "polling"]
+  transports: ["polling", "websocket"]
 });
 
-// ======== Lietotāju datu fails ========
+// ======== Lietotāji ========
 function readUsers() {
   try {
     return JSON.parse(fs.readFileSync(USERS_FILE, "utf8"));
@@ -62,16 +57,14 @@ function readUsers() {
     return {};
   }
 }
-
 function writeUsers(data) {
   fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2));
 }
 
-// ======== JWT Autentifikācija ========
+// ======== JWT ========
 function createToken(username) {
   return jwt.sign({ username }, JWT_SECRET, { expiresIn: "24h" });
 }
-
 function verifyToken(token) {
   try {
     return jwt.verify(token, JWT_SECRET);
@@ -80,13 +73,15 @@ function verifyToken(token) {
   }
 }
 
-// ======== API: reģistrācija / pieteikšanās ========
+// ======== API: login/signup/password ========
 app.post("/signup", async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ message: "Nepieciešams lietotājvārds un parole." });
+  if (!username || !password)
+    return res.status(400).json({ message: "Nepieciešams lietotājvārds un parole." });
 
   const users = readUsers();
-  if (users[username]) return res.status(400).json({ message: "Lietotājvārds jau eksistē." });
+  if (users[username])
+    return res.status(400).json({ message: "Lietotājvārds jau eksistē." });
 
   const hash = await bcrypt.hash(password, 10);
   users[username] = { password: hash, xp: 0, coins: 0 };
@@ -113,7 +108,8 @@ app.post("/change-password", async (req, res) => {
   const { token, oldPassword, newPassword, confirmNew } = req.body;
   const data = verifyToken(token);
   if (!data) return res.status(401).json({ message: "Token nederīgs." });
-  if (newPassword !== confirmNew) return res.status(400).json({ message: "Paroles nesakrīt." });
+  if (newPassword !== confirmNew)
+    return res.status(400).json({ message: "Paroles nesakrīt." });
 
   const users = readUsers();
   const user = users[data.username];
@@ -127,9 +123,9 @@ app.post("/change-password", async (req, res) => {
   res.json({ message: "Parole veiksmīgi nomainīta." });
 });
 
-// ======== SOCKET.IO SAVIENOJUMS ========
+// ======== SOCKET.IO ========
 io.on("connection", (socket) => {
-  console.log(`🔌 Jauns savienojums: ${socket.id}`);
+  console.log("🔌 Jauns savienojums:", socket.id);
 
   socket.emit("hello", {
     roundId: "demo-round",
@@ -152,11 +148,11 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    console.log(`❌ Atvienojās: ${socket.id}`);
+    console.log("❌ Atvienojās:", socket.id);
   });
 });
 
-// ======== Servera starts ========
+// ======== Serveris ========
 httpServer.listen(PORT, () => {
   console.log(`✅ Serveris darbojas uz porta ${PORT}`);
 });
