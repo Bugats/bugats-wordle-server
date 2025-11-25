@@ -1,7 +1,8 @@
 // server.js — VĀRDU ZONA serveris (Node + Socket.IO) ar
 // XP, rankiem, streakiem, Dienas čempionu, PERSISTENCI,
 // ONLINE sarakstu, kill-feed, ČATU, DIENAS MISIJĀM, COINS,
-// ŽETONIEM, ADMIN BAN un RAUNDA MEDAĻĀM.
+// ŽETONIEM, ADMIN BAN, RAUNDA MEDAĻĀM un LOGIN/SIGNUP ar
+// hashētām parolēm (JWT bez termiņa).
 
 import express from "express";
 import { createServer } from "http";
@@ -9,6 +10,9 @@ import { Server } from "socket.io";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import cors from "cors";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,9 +22,9 @@ const PORT = process.env.PORT || 10080;
 const MAX_ATTEMPTS = 6;
 
 // COINS parametri
-const COINS_PER_WIN_BASE = 3;        // bāze par uzvaru
-const COINS_PER_ATTEMPT_LEFT = 1;    // +1 coin par katru atlikušā mēģinājuma punktu
-const COINS_STREAK_MAX_BONUS = 5;    // max +5 coins par streak
+const COINS_PER_WIN_BASE = 3; // bāze par uzvaru
+const COINS_PER_ATTEMPT_LEFT = 1; // +1 coin par katru atlikušā mēģinājuma punktu
+const COINS_STREAK_MAX_BONUS = 5; // max +5 coins par streak
 
 // ŽETONU CENA
 // 1 žetons = 150 coins (šis ir tas, ko redzi arī UI)
@@ -30,8 +34,16 @@ const TOKEN_PRICE = 150;
 const COIN_TICK_MS = 10 * 60 * 1000; // 10 min
 const COINS_PER_TICK = 1;
 
-// Failā glabāsim visus spēlētājus + Dienas čempionu + ban sarakstu
+// Spēlētāju / čempiona / BAN persistences fails
 const DATA_FILE = path.join(__dirname, "vardu-zona-data.json");
+
+// Lietotāju (login) fails
+const USERS_FILE = path.join(__dirname, "users.json");
+const JWT_SECRET =
+  process.env.JWT_SECRET || "BUGATS_VARDU_ZONA_SUPER_SLEPENS_JWT";
+
+// ADMIN niki (lower-case)
+const ADMIN_USERNAMES = ["bugats"];
 
 // ========== Ranku definīcijas ==========
 const RANKS = [
@@ -274,10 +286,10 @@ function pickNewWord() {
 pickNewWord();
 
 // ========== Spēlētāji + Dienas čempions ==========
-const players = new Map(); // id (CID vai guest-...) -> playerObj
+const players = new Map(); // id (username lower) -> playerObj
 let dailyChampion = null;
 
-// BAN saraksts: id (CID/guest-...) -> info
+// BAN saraksts: id (username lower) -> info
 const bannedProfiles = new Map();
 
 // Kill-feed: pēdējie atminētāji
@@ -298,35 +310,49 @@ function pushChatMessage(name, text) {
   }
 }
 
-// Palīgs, lai pārbaudītu, vai niks jau aizņemts (izņemot konkrēto spēlētāju pēc id)
-function isNameTaken(name, exceptId = null) {
-  const target = (name || "").toString().trim().toLowerCase();
-  if (!target) return false;
+// ====== USERS (login) FAILS ======
+let USERS = [];
 
-  for (const p of players.values()) {
-    if (exceptId && p.id === exceptId) continue;
-    const pName = (p.name || "").toString().trim().toLowerCase();
-    if (pName === target) return true;
-  }
-  return false;
-}
-
-// Ja niks aizņemts, piešķiram Santa_2, Santa_3, ...
-function makeUniqueName(baseName, selfId = null) {
-  let name = (baseName || "Spēlētājs").toString().trim();
-  if (!name) name = "Spēlētājs";
-
-  if (!isNameTaken(name, selfId)) return name;
-
-  let i = 2;
-  while (true) {
-    const candidate = `${name}_${i}`;
-    if (!isNameTaken(candidate, selfId)) return candidate;
-    i++;
+function loadUsers() {
+  try {
+    if (!fs.existsSync(USERS_FILE)) {
+      USERS = [];
+      fs.writeFileSync(JSON.stringify({ users: [] }, null, 2), "utf8");
+      return;
+    }
+    const raw = fs.readFileSync(USERS_FILE, "utf8");
+    const json = JSON.parse(raw || "{}");
+    USERS = Array.isArray(json.users) ? json.users : [];
+    console.log(`[USERS] Ielādēti ${USERS.length} konti`);
+  } catch (err) {
+    console.error("[USERS] Kļūda ielādējot users.json:", err);
+    USERS = [];
   }
 }
 
-// ====== LOAD / SAVE ======
+function saveUsers() {
+  try {
+    fs.writeFileSync(
+      USERS_FILE,
+      JSON.stringify({ users: USERS }, null, 2),
+      "utf8"
+    );
+  } catch (err) {
+    console.error("[USERS] Kļūda saglabājot users.json:", err);
+  }
+}
+
+function findUser(username) {
+  const uName = (username || "").toString().trim().toLowerCase();
+  if (!uName) return null;
+  return USERS.find(
+    (u) => (u.username || "").toString().trim().toLowerCase() === uName
+  );
+}
+
+loadUsers();
+
+// ====== LOAD / SAVE SPĒLĒTĀJU STATISTIKU ======
 function loadData() {
   try {
     if (!fs.existsSync(DATA_FILE)) {
@@ -404,39 +430,8 @@ function saveData() {
 
 loadData();
 
-// ===== ADMIN (niks + CID) =====
-const ADMIN_IDS = ["bugats"];              // niki (lower-case)
-const ADMIN_CIDS = ["cid-cboqqj5n3fm"];    // tavs reālais CID no localStorage "vz_cid"
+// ========== PLAYER HELPERS (balstīti uz username) ==========
 
-function isAdminSocket(socket) {
-  const auth = socket.handshake.auth || {};
-  const cid = auth.cid;
-  const nameLower = (auth.name || "").toString().trim().toLowerCase();
-  return ADMIN_IDS.includes(nameLower) && ADMIN_CIDS.includes(cid);
-}
-
-// ========== Spēlētāju identitāte ==========
-// ID = CID (ja ir); niks tiek padarīts unikāls atsevišķi
-function getPlayerIdFromAuth(auth) {
-  let name = (auth.name || "Spēlētājs").toString().trim().slice(0, 20);
-  if (!name) name = "Spēlētājs";
-
-  const cid = auth.cid;
-  let nameLower = name.toLowerCase();
-
-  // Rezervējam niku "Bugats" tikai īstajam CID
-  if (nameLower === "bugats" && !ADMIN_CIDS.includes(cid)) {
-    name = "Bugats_fans";
-    nameLower = name.toLowerCase();
-  }
-
-  // ID = CID (unikāls spēlētājs), ja nav CID, tad kaut kas no nika
-  let id = cid || `guest-${nameLower}`;
-
-  return { id, name };
-}
-
-// nodrošina, ka player.daily atbilst šodienai
 function ensurePlayerDaily(player) {
   refreshDailyMissionsIfNeeded();
   if (!player.daily || player.daily.dayId !== CURRENT_DAY_ID) {
@@ -453,16 +448,16 @@ function ensurePlayerDaily(player) {
 }
 
 function getOrCreatePlayer(socket) {
-  const auth = socket.handshake.auth || {};
-  const { id, name: rawName } = getPlayerIdFromAuth(auth);
+  const username = socket.data?.username;
+  if (!username) return null;
 
+  const id = username.toLowerCase();
   let player = players.get(id);
-  if (!player) {
-    const finalName = makeUniqueName(rawName, id);
 
+  if (!player) {
     player = {
       id,
-      name: finalName,
+      name: username,
       xp: 0,
       coins: 0,
       tokens: 0,
@@ -474,20 +469,18 @@ function getOrCreatePlayer(socket) {
       lastSeenAt: Date.now(),
       daily: null,
 
-      // medaļu info
       medalsCount: 0,
       lastMedal: null,
       bestFastWin: null,
     };
     players.set(id, player);
   } else {
-    // ja lietotājs nomaina niku – piemērojam unikālo variantu
-    const finalName = makeUniqueName(rawName, id);
-    player.name = finalName;
+    player.name = username;
     player.lastSeenAt = Date.now();
     if (typeof player.coins !== "number") player.coins = 0;
     if (typeof player.tokens !== "number") player.tokens = 0;
-    if (typeof player.medalsCount !== "number") player.medalsCount = player.medalsCount || 0;
+    if (typeof player.medalsCount !== "number")
+      player.medalsCount = player.medalsCount || 0;
     if (!("lastMedal" in player)) player.lastMedal = null;
     if (!("bestFastWin" in player)) player.bestFastWin = null;
   }
@@ -530,21 +523,22 @@ function buildOnlinePlayers(io) {
 
   for (const [, socket] of io.sockets.sockets) {
     if (!socket.rooms.has("game")) continue;
-    const auth = socket.handshake.auth || {};
-    const { id } = getPlayerIdFromAuth(auth);
+    const username = socket.data?.username;
+    if (!username) continue;
+
+    const id = username.toLowerCase();
     if (seenIds.has(id)) continue;
     seenIds.add(id);
 
     const p = players.get(id);
     result.push({
       id,
-      name: p?.name || auth.name || "Spēlētājs",
+      name: p?.name || username,
       xp: p?.xp || 0,
       coins: p?.coins || 0,
       tokens: p?.tokens || 0,
       rankTitle: p?.rankTitle || (p ? getRankName(p.xp) : "Jauniņais I"),
       medalsCount: p?.medalsCount || 0,
-      cid: auth.cid || null,
     });
   }
 
@@ -620,6 +614,8 @@ function updateDailyProgressOnRoundEnd(player, { isWin, attemptsUsed }) {
 // ========== XP + COINS + MEDAĻAS + Dienas čempions ==========
 function applyResult(io, socket, isWin, roundId) {
   const player = getOrCreatePlayer(socket);
+  if (!player) return;
+
   player.games += 1;
 
   let xpGain = 0;
@@ -677,7 +673,7 @@ function applyResult(io, socket, isWin, roundId) {
       player.medalsCount = (player.medalsCount || 0) + 1;
 
       const medal = {
-        type: medalType,          // "gold" | "silver" | "bronze"
+        type: medalType, // "gold" | "silver" | "bronze"
         attemptsUsed,
         wordLength,
         roundId,
@@ -803,8 +799,29 @@ function applyResult(io, socket, isWin, roundId) {
   );
 }
 
-// ========== Express + Socket.IO ==========
+// ========== JWT / ADMIN HELPERS ==========
+
+function getUsernameFromToken(token) {
+  if (!token) return null;
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    return decoded && decoded.username ? decoded.username : null;
+  } catch {
+    return null;
+  }
+}
+
+function isAdminSocket(socket) {
+  const username = socket.data?.username;
+  if (!username) return false;
+  return ADMIN_USERNAMES.includes(username.toLowerCase());
+}
+
+// ========== Express + API ==========
 const app = express();
+
+app.use(cors());
+app.use(express.json());
 
 app.get("/health", (_req, res) => {
   res.json({
@@ -812,6 +829,108 @@ app.get("/health", (_req, res) => {
     roundId: currentRoundId,
     wordLength: currentWord ? currentWord.norm.length : null,
   });
+});
+
+// ===== SIGNUP (reģistrācija) =====
+app.post("/signup", async (req, res) => {
+  try {
+    const { username, password, confirmPassword } = req.body || {};
+    const name = (username || "").toString().trim();
+
+    if (!name || name.length < 3 || name.length > 20) {
+      return res
+        .status(400)
+        .json({ ok: false, message: "Niks jābūt 3–20 simboli." });
+    }
+
+    const safeName = name.replace(/\s+/g, "");
+    if (safeName !== name) {
+      return res
+        .status(400)
+        .json({ ok: false, message: "Niks nedrīkst saturēt atstarpes." });
+    }
+
+    if (!password || password.length < 6) {
+      return res
+        .status(400)
+        .json({ ok: false, message: "Parole jābūt vismaz 6 simboli." });
+    }
+    if (password !== confirmPassword) {
+      return res
+        .status(400)
+        .json({ ok: false, message: "Paroles nesakrīt." });
+    }
+
+    if (findUser(name)) {
+      return res
+        .status(409)
+        .json({ ok: false, message: "Šāds niks jau ir aizņemts." });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = {
+      username: name,
+      passwordHash,
+      createdAt: Date.now(),
+    };
+    USERS.push(user);
+    saveUsers();
+
+    console.log("[SIGNUP] Jauns lietotājs:", name);
+    return res.json({
+      ok: true,
+      message: "Reģistrācija izdevās. Tagad vari ielogoties.",
+    });
+  } catch (err) {
+    console.error("SIGNUP error:", err);
+    return res
+      .status(500)
+      .json({ ok: false, message: "Servera kļūda reģistrācijā." });
+  }
+});
+
+// ===== LOGIN =====
+app.post("/login", async (req, res) => {
+  try {
+    const { username, password } = req.body || {};
+    const name = (username || "").toString().trim();
+
+    if (!name || !password) {
+      return res
+        .status(400)
+        .json({ ok: false, message: "Ievadi niku un paroli." });
+    }
+
+    const user = findUser(name);
+    if (!user) {
+      return res
+        .status(401)
+        .json({ ok: false, message: "Nepareizs niks vai parole." });
+    }
+
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) {
+      return res
+        .status(401)
+        .json({ ok: false, message: "Nepareizs niks vai parole." });
+    }
+
+    // JWT bez termiņa – derīgs, līdz parole tiek nomainīta (nākotnē varēsi
+    // ieviest paroles maiņu un tad ģenerēt jaunu token).
+    const token = jwt.sign({ username: user.username }, JWT_SECRET);
+
+    console.log("[LOGIN] OK:", user.username);
+    return res.json({
+      ok: true,
+      token,
+      username: user.username,
+    });
+  } catch (err) {
+    console.error("LOGIN error:", err);
+    return res
+      .status(500)
+      .json({ ok: false, message: "Servera kļūda ielogošanās laikā." });
+  }
 });
 
 const httpServer = createServer(app);
@@ -822,7 +941,20 @@ const io = new Server(httpServer, {
 // ========== SOCKET.IO loģika ==========
 io.on("connection", (socket) => {
   const auth = socket.handshake.auth || {};
-  const { id } = getPlayerIdFromAuth(auth);
+  const token = auth.token;
+
+  const username = getUsernameFromToken(token);
+
+  if (!username) {
+    socket.emit("banned", {
+      reason: "Nav autorizēts. Lūdzu ielogojies vēlreiz.",
+    });
+    setTimeout(() => socket.disconnect(true), 50);
+    console.log("[AUTH] Atteikts savienojums bez derīga token.");
+    return;
+  }
+
+  const id = username.toLowerCase();
 
   // BAN pārbaude jau pie pieslēgšanās
   if (bannedProfiles.has(id)) {
@@ -835,6 +967,8 @@ io.on("connection", (socket) => {
     console.log("[BAN] Bloķēts profils mēģināja pieslēgties:", id);
     return;
   }
+
+  socket.data.username = username;
 
   socket.join("game");
   const player = getOrCreatePlayer(socket);
@@ -862,7 +996,7 @@ io.on("connection", (socket) => {
       lastMedal: player.lastMedal || null,
       bestFastWin: player.bestFastWin || null,
     },
-    // svarīgi: atgriežam galīgo niku, ko serveris pieņēmis
+    // Servera apstiprinātais niks
     finalName: player.name,
     leaderboard: buildLeaderboard(),
     onlineCount: getOnlineCount(io),
@@ -1004,6 +1138,7 @@ io.on("connection", (socket) => {
       }
 
       const p = getOrCreatePlayer(socket);
+      if (!p) return;
       const name = p.name || "Spēlētājs";
 
       pushChatMessage(name, text);
@@ -1021,6 +1156,8 @@ io.on("connection", (socket) => {
   socket.on("buyToken", () => {
     try {
       const player = getOrCreatePlayer(socket);
+      if (!player) return;
+
       if (typeof player.coins !== "number") player.coins = 0;
       if (typeof player.tokens !== "number") player.tokens = 0;
 
@@ -1109,11 +1246,12 @@ io.on("connection", (socket) => {
       player.lastSeenAt = Date.now();
       saveData();
 
-      // Atjaunojam stats šim playerim, ja viņš ir online (pēc ID = CID)
+      // Atjaunojam stats šim playerim, ja viņš ir online
       for (const [, s] of io.sockets.sockets) {
-        const auth = s.handshake.auth || {};
-        const { id } = getPlayerIdFromAuth(auth);
-        if (id === player.id) {
+        const uname = s.data?.username;
+        if (!uname) continue;
+        const pid = uname.toLowerCase();
+        if (pid === player.id) {
           s.emit("statsUpdate", {
             xp: player.xp,
             coins: player.coins || 0,
@@ -1197,9 +1335,10 @@ io.on("connection", (socket) => {
 
       // izmetam visus soketus ar šo id
       for (const [, s] of io.sockets.sockets) {
-        const auth = s.handshake.auth || {};
-        const { id } = getPlayerIdFromAuth(auth);
-        if (id === playerId) {
+        const uname = s.data?.username;
+        if (!uname) continue;
+        const pid = uname.toLowerCase();
+        if (pid === playerId) {
           s.emit("banned", {
             reason: "Tavs profils ir bloķēts VĀRDU ZONA spēlē.",
           });
@@ -1228,6 +1367,8 @@ setInterval(() => {
   for (const [, socket] of io.sockets.sockets) {
     if (!socket.rooms.has("game")) continue;
     const player = getOrCreatePlayer(socket);
+    if (!player) continue;
+
     if (!socket.data.lastCoinTs) {
       socket.data.lastCoinTs = now;
       continue;
