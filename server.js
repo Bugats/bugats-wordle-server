@@ -1,329 +1,172 @@
-// ================= Helperi =================
-function $(sel) { return document.querySelector(sel); }
-function createEl(tag, cls) { const el = document.createElement(tag); if(cls) el.className = cls; return el; }
-function escapeHtml(str) { return str.replace(/[&<>]/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[s])); }
+// ======== VĀRDU ZONA — Servera versija ========
+import express from "express";
+import { createServer } from "http";
+import { Server } from "socket.io";
+import cors from "cors";
+import fs from "fs";
+import path from "path";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 
+const app = express();
+const httpServer = createServer(app);
 
-// ================= Client state =================
-const state = {
-    rows: 6,
-    cols: 5,
-    currentRow: 0,
-    currentCol: 0,
-    roundId: null,
-    isLocked: false,
-    isRoundOver: false,
-    gridTiles: [],
-    gridLetters: [],
-    keyboardButtons: new Map(),
-    shiftOn: false,
+const JWT_SECRET = process.env.JWT_SECRET || "VARDU_ZONA_BUGATS_2025_SECRET";
+const USERS_FILE = path.join(__dirname, "users.json");
 
+app.use(cors());
+app.use(express.json());
+
+// Function to load users from the file
+function loadUsers() {
+  if (!fs.existsSync(USERS_FILE)) return {};
+  return JSON.parse(fs.readFileSync(USERS_FILE, "utf8"));
+}
+
+// Function to save users to the file
+function saveUsers(data) {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2));
+}
+
+// Handling registration
+app.post("/register", async (req, res) => {
+  const { nick, password } = req.body;
+  if (!nick || !password) return res.status(400).json({ error: "Bad data" });
+
+  const users = loadUsers();
+  if (users[nick]) return res.status(400).json({ error: "This nickname exists" });
+
+  const hash = await bcrypt.hash(password, 10);
+  users[nick] = {
+    password: hash,
     xp: 0,
-    rank: "-",
+    rank: "Jauniņais I",
     streak: 0,
     coins: 0,
     tokens: 0,
+  };
 
-    lastGuessTime: 0
-};
+  saveUsers(users);
 
-
-// ================= JWT =================
-function needAuth() {
-    const token = localStorage.getItem("varduZonaToken");
-    const nick  = localStorage.getItem("varduZonaNick");
-
-    if (!token || !nick) {
-        alert("Lūdzu pieslēdzies!");
-        location.href = "index.html";
-        return null;
-    }
-    return { token, nick };
-}
-
-const auth = needAuth();
-if (!auth) throw new Error("NAV AUTH");
-
-
-// ================= Socket.IO =================
-const socket = io("https://bugats-wordle-server.onrender.com", {
-    transports: ["websocket"],
-    auth: { token: auth.token }
+  const token = jwt.sign({ nick }, JWT_SECRET, { expiresIn: "7d" });
+  res.json({ token, nick });
 });
 
+// Handling login
+app.post("/login", async (req, res) => {
+  const { nick, password } = req.body;
+  const users = loadUsers();
+  const user = users[nick];
 
-// ================= DOM refs =================
-const gridEl = $("#grid");
-const keyboardEl = $("#keyboard");
+  if (!user) return res.status(400).json({ error: "Bad login" });
 
-const statsRankEl  = $("#stat-rank");
-const statsXP      = $("#stat-xp");
-const statsStreak  = $("#stat-streak");
-const statsCoins   = $("#stat-coins");
-const statsTokens  = $("#stat-tokens");
+  const ok = await bcrypt.compare(password, user.password);
+  if (!ok) return res.status(400).json({ error: "Bad password" });
 
-const chatBox = $("#chat-box");
-const chatInput = $("#chat-input");
-const onlineEl = $("#online-count");
-
-
-// ================= Skaņas =================
-const sndFlip = new Audio("sounds/flip.mp3");
-const sndPop  = new Audio("sounds/pop.mp3");
-const sndWin  = new Audio("sounds/win.mp3");
-const sndKey  = new Audio("sounds/key.mp3");
-
-const bgMusic = new Audio("sounds/bg.mp3");
-bgMusic.loop = true;
-bgMusic.volume = 0.25;
-bgMusic.play().catch(()=>{});
-
-
-// ================= Confetti =================
-function spawnConfetti() {
-    for (let i = 0; i < 40; i++) {
-        const c = createEl("div","confetti");
-        c.style.left = Math.random()*100+"%";
-        c.style.backgroundColor = `hsl(${Math.random()*360},100%,60%)`;
-        document.body.appendChild(c);
-        setTimeout(()=>c.remove(),1500);
-    }
-}
-
-
-// ================= GRID =================
-function buildGrid() {
-    gridEl.innerHTML = "";
-    gridEl.style.setProperty("--cols", state.cols);
-
-    state.gridTiles = [];
-    state.gridLetters = [];
-
-    for (let r = 0; r < state.rows; r++) {
-        const rowTiles = [];
-        const rowLetters = [];
-
-        for (let c = 0; c < state.cols; c++) {
-            const tile = createEl("div", "tile");
-            tile.dataset.row = r;
-            tile.dataset.col = c;
-            gridEl.appendChild(tile);
-
-            rowTiles.push(tile);
-            rowLetters.push("");
-        }
-        state.gridTiles.push(rowTiles);
-        state.gridLetters.push(rowLetters);
-    }
-}
-
-
-// ================== Keyboard ==================
-const KEYS = {
-    normal: [
-        ["q","w","e","r","t","y","u","i","o","p"],
-        ["a","s","d","f","g","h","j","k","l","ņ"],
-        ["z","č","ž","c","v","b","n","m","ē","ū"],
-    ],
-    shift: [
-        ["ā","ē","ī","ū","š","ž","č","ņ","ļ","ķ"],
-        ["â","ê","î","ô","û","ģ","ŗ","ö","ā","ē"],
-        ["á","é","í","ó","ú","ä","ë","ï","ö","ü"]
-    ]
-};
-
-function buildKeyboard() {
-    keyboardEl.innerHTML = "";
-    state.keyboardButtons.clear();
-
-    const mode = state.shiftOn ? KEYS.shift : KEYS.normal;
-
-    mode.forEach(row => {
-        const rowDiv = createEl("div", "kb-row");
-        row.forEach(key => {
-            const btn = createEl("button", "kb-key");
-            btn.textContent = key;
-            btn.dataset.key = key;
-            btn.onclick = () => handleKey(key);
-            state.keyboardButtons.set(key, btn);
-            rowDiv.appendChild(btn);
-        });
-        keyboardEl.appendChild(rowDiv);
-    });
-
-    // SHIFT
-    const rowShift = createEl("div", "kb-row");
-    const shiftBtn = createEl("button", "kb-key");
-    shiftBtn.textContent = "↑";
-    shiftBtn.classList.toggle("shift-on", state.shiftOn);
-    shiftBtn.onclick = () => {
-        state.shiftOn = !state.shiftOn;
-        buildKeyboard();
-    };
-    rowShift.appendChild(shiftBtn);
-
-    // ENTER
-    const enterBtn = createEl("button", "kb-key");
-    enterBtn.textContent = "Ievadīt";
-    enterBtn.onclick = () => submitWord();
-    rowShift.appendChild(enterBtn);
-
-    // DELETE
-    const delBtn = createEl("button", "kb-key");
-    delBtn.textContent = "Dzēst";
-    delBtn.onclick = () => deleteLetter();
-    rowShift.appendChild(delBtn);
-
-    keyboardEl.appendChild(rowShift);
-}
-
-
-// ===================== Letter Handling =====================
-function handleKey(k) {
-    if (state.isLocked || state.isRoundOver) return;
-
-    sndKey.currentTime = 0;
-    sndKey.play();
-
-    if (k === "Ievadīt") return submitWord();
-    if (k === "Dzēst") return deleteLetter();
-
-    addLetter(k);
-}
-
-function addLetter(ch) {
-    if (state.currentCol >= state.cols) return;
-
-    state.gridLetters[state.currentRow][state.currentCol] = ch;
-
-    const tile = state.gridTiles[state.currentRow][state.currentCol];
-    tile.textContent = ch;
-    tile.classList.add("pop");
-
-    sndPop.currentTime = 0;
-    sndPop.play();
-
-    state.currentCol++;
-}
-
-function deleteLetter() {
-    if (state.currentCol === 0) return;
-
-    state.currentCol--;
-    state.gridLetters[state.currentRow][state.currentCol] = "";
-    state.gridTiles[state.currentRow][state.currentCol].textContent = "";
-}
-
-
-// ===================== Submit guess =====================
-function submitWord() {
-    const now = Date.now();
-    if (now - state.lastGuessTime < 800) return;
-    state.lastGuessTime = now;
-
-    if (state.currentCol < state.cols) return;
-
-    const word = state.gridLetters[state.currentRow].join("");
-    socket.emit("guess", word);
-}
-
-
-// ===================== Color from server =====================
-function applyColorFromServer(word, target) {
-    const row = state.currentRow;
-    const tiles = state.gridTiles[row];
-
-    for (let i = 0; i < word.length; i++) {
-        setTimeout(() => {
-            sndFlip.currentTime = 0;
-            sndFlip.play();
-
-            tiles[i].classList.add("flip");
-            const keyBtn = state.keyboardButtons.get(word[i]);
-
-            if (target[i] === "correct") {
-                tiles[i].classList.add("correct");
-                if (keyBtn) keyBtn.classList.add("correct");
-
-            } else if (target[i] === "present") {
-                tiles[i].classList.add("present");
-                if (keyBtn && !keyBtn.classList.contains("correct"))
-                    keyBtn.classList.add("present");
-
-            } else {
-                tiles[i].classList.add("absent");
-                if (keyBtn &&
-                    !keyBtn.classList.contains("correct") &&
-                    !keyBtn.classList.contains("present"))
-                    keyBtn.classList.add("absent");
-            }
-        }, i * 180);
-    }
-}
-
-
-// ===================== SOCKET EVENTS =====================
-socket.on("roundStart", data => {
-    state.roundId = data.roundId;
-    state.cols = data.length;
-
-    document.documentElement.style.setProperty("--cols", state.cols);
-
-    state.currentRow = 0;
-    state.currentCol = 0;
-    state.isRoundOver = false;
-
-    buildGrid();
-    buildKeyboard();
+  const token = jwt.sign({ nick }, JWT_SECRET, { expiresIn: "7d" });
+  res.json({ token, nick });
 });
 
-socket.on("guess", ({ nick, word, target }) => {
-    if (nick === auth.nick) {
+// Initialize the WebSocket server
+const io = new Server(httpServer, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
-        applyColorFromServer(word, target);
+// Server-side game logic (rounds, guesses, etc.)
+let roundWord = "mēnes";
+let roundId = Date.now();
+let guesses = {};
+let attempts = {};
+let roundOver = false;
 
-        state.currentRow++;
-        state.currentCol = 0;
+function startNewRound() {
+  roundWord = "mēnes"; // You can replace this with a random word from a list.
+  roundId = Date.now();
+  guesses = {};
+  attempts = {};
+  roundOver = false;
+
+  io.emit("roundStart", {
+    roundId,
+    length: roundWord.length
+  });
+}
+
+io.on("connection", socket => {
+  let nick = null;
+
+  try {
+    if (socket.handshake.auth?.token) {
+      const data = jwt.verify(socket.handshake.auth.token, JWT_SECRET);
+      nick = data.nick;
     }
-});
+  } catch (e) {
+    socket.disconnect();
+    return;
+  }
 
-socket.on("win", ({ nick, word, rank, xp, coins, tokens }) => {
+  if (!nick) {
+    socket.disconnect();
+    return;
+  }
 
-    if (nick === auth.nick) {
-        sndWin.currentTime = 0;
-        sndWin.play();
-        spawnConfetti();
+  socket.join("players");
+
+  io.to("players").emit("online", io.sockets.adapter.rooms.get("players")?.size || 1);
+
+  socket.emit("roundStart", {
+    roundId,
+    length: roundWord.length
+  });
+
+  socket.on("guess", word => {
+    if (roundOver) return;
+
+    word = word.toLowerCase();
+
+    if (word.length !== roundWord.length) return;
+
+    attempts[nick] = (attempts[nick] || 0) + 1;
+    if (attempts[nick] > 6) return;
+
+    guesses[nick] = word;
+    io.emit("guess", { nick, word });
+
+    if (word === roundWord) {
+      roundOver = true;
+
+      const users = loadUsers();
+      const user = users[nick];
+
+      user.streak++;
+      user.xp += 20;
+      user.coins += 5;
+      user.tokens += 1;
+
+      saveUsers(users);
+
+      io.emit("win", {
+        nick,
+        word: roundWord,
+        rank: user.rank,
+        xp: user.xp,
+        coins: user.coins,
+        tokens: user.tokens
+      });
+
+      setTimeout(startNewRound, 4000);
     }
+  });
 
-    if (nick === auth.nick) {
-        statsRankEl.textContent = rank;
-        statsXP.textContent = xp;
-        statsCoins.textContent = coins;
-        statsTokens.textContent = tokens;
-    }
+  socket.on("disconnect", () => {
+    io.to("players").emit("online", io.sockets.adapter.rooms.get("players")?.size || 0);
+  });
 });
 
-socket.on("chat", ({ nick, msg }) => {
-    const div = createEl("div", "chat-msg");
-    div.innerHTML = `<b>${escapeHtml(nick)}:</b> ${escapeHtml(msg)}`;
-    chatBox.appendChild(div);
-    chatBox.scrollTop = chatBox.scrollHeight;
+// Start the server
+httpServer.listen(10080, () => {
+  console.log("VĀRDU ZONA server running on port 10080");
 });
-
-socket.on("online", n => {
-    onlineEl.textContent = `Online: ${n}`;
-});
-
-
-// ===================== Chat Input =====================
-chatInput.addEventListener("keydown", e => {
-    if (e.key === "Enter" && chatInput.value.trim()) {
-        socket.emit("chat", chatInput.value.trim());
-        chatInput.value = "";
-    }
-});
-
-
-// ===================== INIT =====================
-buildGrid();
-buildKeyboard();
