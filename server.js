@@ -1,123 +1,162 @@
-// ====== VĀRDU ZONA — SERVERIS (Render + Hostinger stabilā versija) ======
+// ======== VĀRDU ZONA — Bugats edition server.js ========
+
 import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import cors from "cors";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { fileURLToPath } from "url";
 
+// ======== Ceļi un konstantes ========
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PORT = process.env.PORT || 10080;
+const PORT = process.env.PORT || 10000;
 
-const JWT_SECRET = process.env.JWT_SECRET || "BUGATS_SUPER_SLEPENS_JWT";
+const JWT_SECRET = process.env.JWT_SECRET || "BUGATS_VARDU_ZONA_SUPER_SLEPENS_JWT";
 const USERS_FILE = path.join(__dirname, "users.json");
 const WORDS_FILE = path.join(__dirname, "words.txt");
 
-// ===== EXPRESS =====
+// ======== Servera inicializācija ========
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ===== CORS KONFIGURĀCIJA (ļauj thezone.lv frontend pieslēgties) =====
+// ======== CORS ========
 app.use(
   cors({
     origin: [
       "https://thezone.lv",
       "https://www.thezone.lv",
-      "http://localhost:10080",
+      "http://localhost:10080"
     ],
     methods: ["GET", "POST"],
-    credentials: true,
+    credentials: true
   })
 );
 
-// ===== HTTP + SOCKET.IO =====
+// ======== HTTP Server un Socket.IO ========
 const httpServer = createServer(app);
+
 const io = new Server(httpServer, {
   cors: {
     origin: [
       "https://thezone.lv",
       "https://www.thezone.lv",
-      "http://localhost:10080",
+      "http://localhost:10080"
     ],
     methods: ["GET", "POST"],
+    credentials: true
   },
+  allowEIO3: true,
+  transports: ["websocket", "polling"]
 });
 
-// ===== PALĪGFUNCTIONS =====
-function loadUsers() {
+// ======== Lietotāju datu fails ========
+function readUsers() {
   try {
     return JSON.parse(fs.readFileSync(USERS_FILE, "utf8"));
   } catch {
-    return [];
+    return {};
   }
 }
 
-function saveUsers(users) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+function writeUsers(data) {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2));
 }
 
-// ===== SIGNUP =====
+// ======== JWT Autentifikācija ========
+function createToken(username) {
+  return jwt.sign({ username }, JWT_SECRET, { expiresIn: "24h" });
+}
+
+function verifyToken(token) {
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch {
+    return null;
+  }
+}
+
+// ======== API: reģistrācija / pieteikšanās ========
 app.post("/signup", async (req, res) => {
-  const { username, password, confirmPassword } = req.body;
-  if (!username || !password || !confirmPassword)
-    return res.status(400).json({ error: "Nepieciešams viss ievadīts." });
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ message: "Nepieciešams lietotājvārds un parole." });
 
-  if (password !== confirmPassword)
-    return res.status(400).json({ error: "Paroles nesakrīt." });
+  const users = readUsers();
+  if (users[username]) return res.status(400).json({ message: "Lietotājvārds jau eksistē." });
 
-  const users = loadUsers();
-  if (users.find((u) => u.username === username))
-    return res.status(400).json({ error: "Lietotājvārds jau eksistē." });
+  const hash = await bcrypt.hash(password, 10);
+  users[username] = { password: hash, xp: 0, coins: 0 };
+  writeUsers(users);
 
-  const hashed = await bcrypt.hash(password, 10);
-  const newUser = {
-    id: Date.now(),
-    username,
-    password: hashed,
-    xp: 0,
-    coins: 0,
-    tokens: 0,
-    streak: 0,
-    rank: "Jauniņais I",
-  };
-  users.push(newUser);
-  saveUsers(users);
-
-  const token = jwt.sign({ username }, JWT_SECRET);
-  res.json({ message: "Profils izveidots!", token });
+  const token = createToken(username);
+  res.json({ token, message: "Reģistrācija veiksmīga." });
 });
 
-// ===== SIGNIN =====
-app.post("/signin", async (req, res) => {
+app.post("/login", async (req, res) => {
   const { username, password } = req.body;
-  const users = loadUsers();
-  const user = users.find((u) => u.username === username);
-  if (!user) return res.status(400).json({ error: "Nepareizs lietotājvārds." });
+  const users = readUsers();
+  const user = users[username];
+  if (!user) return res.status(400).json({ message: "Lietotājs nav atrasts." });
 
   const match = await bcrypt.compare(password, user.password);
-  if (!match) return res.status(400).json({ error: "Nepareiza parole." });
+  if (!match) return res.status(401).json({ message: "Nepareiza parole." });
 
-  const token = jwt.sign({ username }, JWT_SECRET);
-  res.json({ message: "Pieteikšanās veiksmīga!", token });
+  const token = createToken(username);
+  res.json({ token, message: "Pieteikšanās veiksmīga." });
 });
 
-// ===== SOCKET.IO =====
-io.on("connection", (socket) => {
-  console.log("Jauns klients:", socket.id);
+app.post("/change-password", async (req, res) => {
+  const { token, oldPassword, newPassword, confirmNew } = req.body;
+  const data = verifyToken(token);
+  if (!data) return res.status(401).json({ message: "Token nederīgs." });
+  if (newPassword !== confirmNew) return res.status(400).json({ message: "Paroles nesakrīt." });
 
-  socket.emit("welcome", { msg: "Savienots ar VĀRDU ZONA serveri!" });
+  const users = readUsers();
+  const user = users[data.username];
+  if (!user) return res.status(404).json({ message: "Lietotājs nav atrasts." });
+
+  const match = await bcrypt.compare(oldPassword, user.password);
+  if (!match) return res.status(401).json({ message: "Nepareiza vecā parole." });
+
+  users[data.username].password = await bcrypt.hash(newPassword, 10);
+  writeUsers(users);
+  res.json({ message: "Parole veiksmīgi nomainīta." });
+});
+
+// ======== SOCKET.IO SAVIENOJUMS ========
+io.on("connection", (socket) => {
+  console.log(`🔌 Jauns savienojums: ${socket.id}`);
+
+  socket.emit("hello", {
+    roundId: "demo-round",
+    maxAttempts: 6,
+    wordLength: 5,
+    stats: { xp: 0, coins: 0, tokens: 0, rankTitle: "Jauniņais I" },
+    leaderboard: [],
+    onlineCount: io.engine.clientsCount,
+    dailyChampion: null
+  });
+
+  socket.on("guess", (data) => {
+    socket.emit("guessResult", {
+      letters: data.word.split("").map(ch => ({
+        letter: ch,
+        status: "absent"
+      })),
+      attemptsLeft: 6
+    });
+  });
 
   socket.on("disconnect", () => {
-    console.log("Klients atvienots:", socket.id);
+    console.log(`❌ Atvienojās: ${socket.id}`);
   });
 });
 
-// ===== START =====
+// ======== Servera starts ========
 httpServer.listen(PORT, () => {
   console.log(`✅ Serveris darbojas uz porta ${PORT}`);
 });
