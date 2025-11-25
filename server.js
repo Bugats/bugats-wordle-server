@@ -1,4 +1,4 @@
-// server.js — VĀRDU ZONA (Bugats edition) ar kontiem (signup/login)
+// server.js — VĀRDU ZONA (Bugats edition) ar kontiem (signup/login) + avatari + CID atbalsts
 
 import express from "express";
 import { createServer } from "http";
@@ -30,6 +30,10 @@ const MAX_ATTEMPTS = 6;
 
 // Admin lietotājvārdi (ar šiem username būs admin panelis ONLINE sarakstā)
 const ADMIN_USERNAMES = ["Bugats"];
+
+// Avatari – cik gab. tev būs front-endā (1..N)
+const AVATAR_MIN_ID = 1;
+const AVATAR_MAX_ID = 12; // vari pielāgot savam avataru skaitam
 
 // ===== Palīgfunkcijas failiem =====
 
@@ -82,6 +86,16 @@ function ensureUserStats(u) {
   if (typeof u.medalsCount !== "number") u.medalsCount = 0;
   if (!u.lastMedal) u.lastMedal = null;
   if (!u.bestFastWin) u.bestFastWin = null;
+
+  // Jaunie lauki:
+  if (typeof u.avatarId !== "number") {
+    // default – 1. avatar
+    u.avatarId = AVATAR_MIN_ID;
+  }
+  if (!("cid" in u)) {
+    // cid var būt null, ja profils izveidots pirms CID ieviešanas
+    u.cid = null;
+  }
 }
 
 users.forEach(ensureUserStats);
@@ -184,6 +198,10 @@ function createToken(user) {
 app.post("/api/signup", async (req, res) => {
   try {
     const { username, password } = req.body || {};
+    const rawCid =
+      (req.body && typeof req.body.cid === "string" && req.body.cid.trim()) ||
+      "";
+
     if (!username || !password) {
       return res
         .status(400)
@@ -196,6 +214,16 @@ app.post("/api/signup", async (req, res) => {
     }
     if (findUserByUsername(username)) {
       return res.status(409).json({ error: "Šāds lietotājvārds jau ir" });
+    }
+
+    // Ja front-ends sūta CID – ierobežojam 1 profilu uz 1 ierīci
+    if (rawCid) {
+      const existingForCid = users.find((u) => u.cid === rawCid);
+      if (existingForCid) {
+        return res.status(409).json({
+          error: "Šai ierīcei jau ir izveidots profils.",
+        });
+      }
     }
 
     const hash = await bcrypt.hash(password, 10);
@@ -214,6 +242,9 @@ app.post("/api/signup", async (req, res) => {
       medalsCount: 0,
       lastMedal: null,
       bestFastWin: null,
+      // jaunie lauki:
+      avatarId: AVATAR_MIN_ID, // default avatars
+      cid: rawCid || null,
     };
     users.push(user);
     saveUsers();
@@ -229,6 +260,7 @@ app.post("/api/signup", async (req, res) => {
         tokens: user.tokens,
         streak: user.streak,
         rankTitle: user.rankTitle,
+        avatarId: user.avatarId,
       },
     });
   } catch (e) {
@@ -264,6 +296,7 @@ app.post("/api/login", async (req, res) => {
         tokens: user.tokens,
         streak: user.streak,
         rankTitle: user.rankTitle,
+        avatarId: user.avatarId,
       },
     });
   } catch (e) {
@@ -286,6 +319,11 @@ const io = new Server(httpServer, {
 
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
+  // no front-end tu varēsi sūtīt arī cid: socket = io(SERVER_URL, { auth: { token, cid } })
+  const cid =
+    (socket.handshake.auth && socket.handshake.auth.cid) ||
+    null;
+
   if (!token) return next(new Error("NO_AUTH"));
   try {
     const payload = jwt.verify(token, JWT_SECRET);
@@ -296,6 +334,7 @@ io.use((socket, next) => {
     }
     ensureUserStats(user);
     socket.data.user = user;
+    socket.data.cid = cid;
     return next();
   } catch (e) {
     return next(new Error("BAD_TOKEN"));
@@ -350,6 +389,7 @@ function getStatsPayload(u) {
     medalsCount: u.medalsCount,
     lastMedal: u.lastMedal,
     bestFastWin: u.bestFastWin,
+    avatarId: u.avatarId,
   };
 }
 
@@ -360,6 +400,7 @@ function getLeaderboard() {
       name: u.username,
       xp: u.xp || 0,
       rankTitle: u.rankTitle || xpToRank(u.xp || 0),
+      avatarId: u.avatarId || AVATAR_MIN_ID,
     }))
     .sort((a, b) => b.xp - a.xp)
     .slice(0, 50);
@@ -367,17 +408,21 @@ function getLeaderboard() {
 }
 
 function getOnlinePlayers() {
-  const list = [];
+  // unikāls saraksts pēc user.id (lai 2 tabas neskaitās 2x)
+  const byUserId = new Map();
   for (const s of io.sockets.sockets.values()) {
     const u = s.data.user;
     if (!u) continue;
-    list.push({
-      id: u.id,
-      name: u.username,
-      rankTitle: u.rankTitle,
-    });
+    if (!byUserId.has(u.id)) {
+      byUserId.set(u.id, {
+        id: u.id,
+        name: u.username,
+        rankTitle: u.rankTitle,
+        avatarId: u.avatarId || AVATAR_MIN_ID,
+      });
+    }
   }
-  return list;
+  return Array.from(byUserId.values());
 }
 
 function broadcastOnline() {
@@ -529,20 +574,24 @@ io.on("connection", (socket) => {
 
   console.log("Savienojās:", user.username, "(", user.id, ")");
 
-  // Hello payload
-  const stats = getStatsPayload(user);
+  ensureUserStats(user);
 
+  const stats = getStatsPayload(user);
+  const onlinePlayers = getOnlinePlayers();
+
+  // Hello payload
   socket.emit("hello", {
     userId: user.id,
     finalName: user.username,
+    avatarId: user.avatarId || AVATAR_MIN_ID,
     roundId: currentRound.id,
     maxAttempts: MAX_ATTEMPTS,
     wordLength: currentRound.word.length,
     stats,
     isAdmin,
     leaderboard: getLeaderboard(),
-    onlineCount: getOnlinePlayers().length,
-    onlinePlayers: getOnlinePlayers(),
+    onlineCount: onlinePlayers.length,
+    onlinePlayers,
     recentSolves,
     chatHistory,
     dailyMissions: { missions: DAILY_MISSIONS },
@@ -644,6 +693,7 @@ io.on("connection", (socket) => {
             xpGain: gainedXp,
             streak: user.streak,
             coinsGain: gainedCoins,
+            avatarId: user.avatarId || AVATAR_MIN_ID,
           });
 
           socket.emit("statsUpdate", {
@@ -656,7 +706,7 @@ io.on("connection", (socket) => {
           broadcastLeaderboard();
         }
       } else {
-        // zaudējums – streak reset
+        // zaudējums – streak reset, ja vairs nav mēģinājumu
         if (attemptsLeft === 0) {
           user.streak = 0;
           saveUsers();
@@ -695,6 +745,7 @@ io.on("connection", (socket) => {
     const entry = {
       name: user.username,
       text: text.trim().slice(0, 200),
+      avatarId: user.avatarId || AVATAR_MIN_ID,
     };
     chatHistory.push(entry);
     if (chatHistory.length > 50) {
@@ -719,6 +770,30 @@ io.on("connection", (socket) => {
       gainedCoins: 0,
       dailyBonus: 0,
     });
+  });
+
+  // ===== Avatara maiņa =====
+  socket.on("setAvatar", (data) => {
+    try {
+      const raw = data && data.avatarId;
+      let avatarId = parseInt(raw, 10);
+      if (!Number.isInteger(avatarId)) return;
+      if (avatarId < AVATAR_MIN_ID || avatarId > AVATAR_MAX_ID) return;
+
+      user.avatarId = avatarId;
+      ensureUserStats(user);
+      saveUsers();
+
+      socket.emit("profileUpdate", {
+        username: user.username,
+        avatarId: user.avatarId,
+      });
+
+      broadcastOnline();
+      broadcastLeaderboard();
+    } catch (e) {
+      console.error("setAvatar kļūda:", e);
+    }
   });
 
   // ===== Admin BAN =====
