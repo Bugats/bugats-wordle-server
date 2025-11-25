@@ -20,7 +20,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "VARDU_ZONA_BUGATS_2025_SECRET";
 const USERS_FILE = path.join(__dirname, "users.json");
 const WORDS_FILE = path.join(__dirname, "words.txt");
 
-// ======== Helperi ========
+// ======== Failu helperi ========
 function loadUsers() {
   if (!fs.existsSync(USERS_FILE)) return {};
   return JSON.parse(fs.readFileSync(USERS_FILE, "utf8"));
@@ -30,16 +30,16 @@ function saveUsers(data) {
 }
 
 // ======== Wordlist ========
+// ⭐ ATBALSTA 5–7 BURTU VĀRDUS
 let WORDS = fs.readFileSync(WORDS_FILE, "utf8")
   .split("\n")
   .map(w => w.trim().toLowerCase())
-  .filter(w => w.length === 5);
+  .filter(w => w.length >= 5 && w.length <= 7);
 
-// ======== App ========
+// ======== Serveris ========
 const app = express();
 const httpServer = createServer(app);
 
-// ======== CORS FIX (NEPIECIEŠAMS!) ========
 app.use(cors({
   origin: [
     "https://thezone.lv",
@@ -51,7 +51,7 @@ app.use(cors({
 
 app.use(express.json());
 
-// ======== LOGIN + REGISTER ========
+// ======== Auth API ========
 app.post("/register", async (req, res) => {
   const { nick, password } = req.body;
 
@@ -93,7 +93,7 @@ app.post("/login", async (req, res) => {
   res.json({ token, nick });
 });
 
-// ======== RANK Formula ========
+// ======== Rank Aprēķins ========
 function calculateRank(xp) {
   if (xp < 20) return "Jauniņais I";
   if (xp < 40) return "Jauniņais II";
@@ -147,6 +147,7 @@ let guesses = {};
 let attempts = {};
 let roundOver = false;
 
+// ======== Jauns raunds ========
 function startNewRound() {
   roundWord = WORDS[Math.floor(Math.random() * WORDS.length)];
   roundId = Date.now();
@@ -156,7 +157,7 @@ function startNewRound() {
 
   io.emit("roundStart", {
     roundId,
-    length: 5
+    length: roundWord.length  // ⭐ Sūta uz klientu vārda garumu
   });
 }
 
@@ -188,7 +189,7 @@ io.on("connection", socket => {
 
   socket.emit("roundStart", {
     roundId,
-    length: 5
+    length: roundWord.length   // ⭐ Dinamisks garums 5–7
   });
 
   // ===== ČATS =====
@@ -197,12 +198,12 @@ io.on("connection", socket => {
     io.emit("chat", { nick, msg });
   });
 
-  // ===== GUESS =====
+  // ===== Guess =====
   socket.on("guess", word => {
     if (roundOver) return;
 
     word = String(word).toLowerCase();
-    if (word.length !== 5) return;
+    if (word.length !== roundWord.length) return;
 
     attempts[nick] = (attempts[nick] || 0) + 1;
     if (attempts[nick] > 6) return;
@@ -212,6 +213,7 @@ io.on("connection", socket => {
 
     io.emit("guess", { nick, word });
 
+    // ===== Uzvara =====
     if (word === roundWord) {
       roundOver = true;
 
@@ -239,6 +241,7 @@ io.on("connection", socket => {
     }
   });
 
+  // ===== Disconnect =====
   socket.on("disconnect", () => {
     io.to("players").emit(
       "online",
