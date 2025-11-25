@@ -1,5 +1,6 @@
-// ======== VĀRDU ZONA — Bugats edition ========
+// ======== VĀRDU ZONA — Bugats edition v1.1 ========
 // Serveris ar login/signup, XP, ranks, čatu, misijām, CID un JWT
+// Atjaunināts: 2025-11-25 — Pievienots dailyMissions, novērsta "missions undefined" kļūda
 
 import express from "express";
 import { createServer } from "http";
@@ -240,7 +241,6 @@ function broadcastOnline() {
 io.on("connection", (socket) => {
   const user = socket.data.user;
   console.log("Savienojās:", user.username);
-  const isAdmin = ADMIN_USERNAMES.includes(user.username);
 
   socket.emit("hello", {
     roundId: currentRound.id,
@@ -250,7 +250,17 @@ io.on("connection", (socket) => {
     leaderboard: getLeaderboard(),
     onlinePlayers: [],
     recentSolves,
-    chatHistory
+    chatHistory,
+    dailyMissions: {
+      missions: [
+        { key: "solve1", text: "Atmini 1 vārdu šodien", target: 1 },
+        { key: "solve3", text: "Atmini 3 vārdus šodien", target: 3 },
+        { key: "rounds5", text: "Nospēlē 5 raundus", target: 5 }
+      ]
+    },
+    dailyProgress: {
+      completed: {}
+    }
   });
 
   broadcastOnline();
