@@ -40,7 +40,16 @@ let WORDS = fs.readFileSync(WORDS_FILE, "utf8")
 const app = express();
 const httpServer = createServer(app);
 
-app.use(cors());
+// ======== CORS FIX — FRONT-END ATĻAUTS ========
+app.use(cors({
+  origin: [
+    "https://thezone.lv",
+    "https://www.thezone.lv",
+  ],
+  methods: ["GET", "POST"],
+  credentials: true
+}));
+
 app.use(express.json());
 
 // ======== LOGIN + REGISTER ========
@@ -85,7 +94,7 @@ app.post("/login", async (req, res) => {
   res.json({ token, nick });
 });
 
-// ======== RANK Formula ========
+// ======== RANK FORMULA ========
 function calculateRank(xp) {
   if (xp < 20) return "Jauniņais I";
   if (xp < 40) return "Jauniņais II";
@@ -123,12 +132,16 @@ function calculateRank(xp) {
 // ======== SOCKET.IO ========
 const io = new Server(httpServer, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
+    origin: [
+      "https://thezone.lv",
+      "https://www.thezone.lv",
+    ],
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
-// Spēles stāvoklis
+// ======== SPĒLES STĀVOKLIS ========
 let roundWord = WORDS[Math.floor(Math.random() * WORDS.length)];
 let roundId = Date.now();
 let guesses = {};
@@ -170,7 +183,6 @@ io.on("connection", socket => {
   socket.join("players");
   io.to("players").emit("online", io.sockets.adapter.rooms.get("players")?.size || 1);
 
-  // Sūtam round info
   socket.emit("roundStart", {
     roundId,
     length: 5
@@ -182,7 +194,7 @@ io.on("connection", socket => {
     io.emit("chat", { nick, msg });
   });
 
-  // ===== GŪESS =====
+  // ===== GUESS =====
   socket.on("guess", word => {
     if (roundOver) return;
 
@@ -197,7 +209,7 @@ io.on("connection", socket => {
 
     io.emit("guess", { nick, word });
 
-    // Uzvara
+    // ===== UZVARA =====
     if (word === roundWord) {
       roundOver = true;
 
@@ -212,13 +224,13 @@ io.on("connection", socket => {
 
       saveUsers(users);
 
-      io.emit("win", { 
-        nick, 
-        word: roundWord, 
-        rank: u.rank, 
-        xp: u.xp, 
-        coins: u.coins, 
-        tokens: u.tokens 
+      io.emit("win", {
+        nick,
+        word: roundWord,
+        rank: u.rank,
+        xp: u.xp,
+        coins: u.coins,
+        tokens: u.tokens
       });
 
       setTimeout(startNewRound, 4000);
