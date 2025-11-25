@@ -1,5 +1,5 @@
 // =====================================================
-//  VĀRDU ZONA — BUGATS ULTIMATE SERVER (2025)
+//  VĀRDU ZONA — BUGATS ULTIMATE SERVER (RANK C SISTĒMA)
 //  Login/Register, JWT, XP, Rank, Streak, Coins, Tokens
 //  5–7 burti, Krāsošana, Win/Lose, Top Listi, Chat
 // =====================================================
@@ -33,32 +33,59 @@ function saveUsers(data) {
     fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2));
 }
 
-// ================= LOAD WORDS =================
+// ================= LOAD WORDS (5–7 burti) =================
 let WORDS = fs.readFileSync(WORDS_FILE, "utf8")
     .split("\n")
     .map(w => w.trim().toLowerCase())
     .filter(w => w.length >= 5 && w.length <= 7);
 
-// ================= RANKS =================
+// ================= RANKS – C varianta trepe =================
+// Rekrutētājs I–V, Jauniņais I–V, Prasmīgais I–V, Meistars I–V,
+// Eksperts I–V, Elite I–V, Leģenda I–V, Mītiskais, Nemirstīgais
 function calculateRank(xp) {
-    if (xp < 20) return "Jauniņais I";
-    if (xp < 40) return "Jauniņais II";
-    if (xp < 70) return "Jauniņais III";
-    if (xp < 100) return "Jauniņais IV";
+    if (xp < 20)  return "Rekrutētājs I";
+    if (xp < 40)  return "Rekrutētājs II";
+    if (xp < 60)  return "Rekrutētājs III";
+    if (xp < 80)  return "Rekrutētājs IV";
+    if (xp < 100) return "Rekrutētājs V";
 
-    if (xp < 160) return "Prasmīgais I";
-    if (xp < 230) return "Prasmīgais II";
-    if (xp < 320) return "Prasmīgais III";
+    if (xp < 140) return "Jauniņais I";
+    if (xp < 180) return "Jauniņais II";
+    if (xp < 220) return "Jauniņais III";
+    if (xp < 260) return "Jauniņais IV";
+    if (xp < 300) return "Jauniņais V";
 
-    if (xp < 500) return "Meistars I";
-    if (xp < 800) return "Meistars II";
-    if (xp < 1200) return "Meistars III";
+    if (xp < 350) return "Prasmīgais I";
+    if (xp < 400) return "Prasmīgais II";
+    if (xp < 450) return "Prasmīgais III";
+    if (xp < 500) return "Prasmīgais IV";
+    if (xp < 550) return "Prasmīgais V";
 
-    if (xp < 1800) return "Elite I";
-    if (xp < 2500) return "Elite II";
+    if (xp < 620) return "Meistars I";
+    if (xp < 690) return "Meistars II";
+    if (xp < 760) return "Meistars III";
+    if (xp < 830) return "Meistars IV";
+    if (xp < 900) return "Meistars V";
 
-    if (xp < 4000) return "Leģenda";
+    if (xp < 1000) return "Eksperts I";
+    if (xp < 1100) return "Eksperts II";
+    if (xp < 1200) return "Eksperts III";
+    if (xp < 1300) return "Eksperts IV";
+    if (xp < 1400) return "Eksperts V";
 
+    if (xp < 1600) return "Elite I";
+    if (xp < 1800) return "Elite II";
+    if (xp < 2000) return "Elite III";
+    if (xp < 2200) return "Elite IV";
+    if (xp < 2400) return "Elite V";
+
+    if (xp < 2700) return "Leģenda I";
+    if (xp < 3000) return "Leģenda II";
+    if (xp < 3500) return "Leģenda III";
+    if (xp < 4000) return "Leģenda IV";
+    if (xp < 5000) return "Leģenda V";
+
+    if (xp < 7000) return "Mītiskais";
     return "Nemirstīgais";
 }
 
@@ -83,7 +110,7 @@ app.post("/register", async (req, res) => {
     users[nick] = {
         password: hash,
         xp: 0,
-        rank: "Jauniņais I",
+        rank: "Rekrutētājs I",
         streak: 0,
         coins: 0,
         tokens: 0
@@ -131,6 +158,8 @@ function newRound() {
         roundId,
         length: roundLength
     });
+
+    console.log("NEW ROUND WORD (hidden for players):", roundWord);
 }
 
 // ================= WORD COLORING =================
@@ -138,7 +167,7 @@ function colorWord(word, targetWord) {
     const res = Array(word.length).fill("absent");
     const used = {};
 
-    // correct
+    // Correct vietas
     for (let i = 0; i < word.length; i++) {
         if (word[i] === targetWord[i]) {
             res[i] = "correct";
@@ -146,7 +175,7 @@ function colorWord(word, targetWord) {
         }
     }
 
-    // present
+    // Present nepareizās vietās
     for (let i = 0; i < word.length; i++) {
         if (res[i] === "correct") continue;
 
@@ -182,15 +211,19 @@ function generateTopLists() {
     };
 }
 
-// AUTO TOP PUSH
-setInterval(() => {
-    io.emit("topData", generateTopLists());
-}, 5000);
+// Auto TOP push ik pēc 5s
+// (klients to lasa ar socket.on("topData", ...))
+let io; // definējam augstāk, lai setInterval var izmantot
+setTimeout(() => {
+    if (io) {
+        setInterval(() => {
+            io.emit("topData", generateTopLists());
+        }, 5000);
+    }
+}, 2000);
 
 // ================= SOCKET.IO =================
-const io = new Server(httpServer, {
-    cors: { origin: "*" }
-});
+io = new Server(httpServer, { cors: { origin: "*" } });
 
 io.on("connection", socket => {
     let nick = null;
@@ -205,10 +238,12 @@ io.on("connection", socket => {
 
     socket.join("players");
 
-    io.to("players").emit("online",
+    io.to("players").emit(
+        "online",
         io.sockets.adapter.rooms.get("players")?.size || 1
     );
 
+    // Pēc connect nosūtām aktuālo raundu
     socket.emit("roundStart", {
         roundId,
         length: roundLength
@@ -216,13 +251,15 @@ io.on("connection", socket => {
 
     // ================= CHAT =================
     socket.on("chat", msg => {
-        if (!msg) return;
+        if (!msg || typeof msg !== "string") return;
         io.emit("chat", { nick, msg });
     });
 
     // ================= GUESS =================
     socket.on("guess", word => {
         if (roundOver) return;
+        if (typeof word !== "string") return;
+        word = word.toLowerCase().trim();
         if (word.length !== roundLength) return;
 
         attempts[nick] = (attempts[nick] || 0) + 1;
@@ -232,6 +269,7 @@ io.on("connection", socket => {
 
         io.emit("guess", { nick, word, target });
 
+        // Uzvara
         if (word === roundWord) {
             roundOver = true;
 
@@ -257,14 +295,15 @@ io.on("connection", socket => {
             setTimeout(newRound, 4000);
         }
 
-        // AUTO LOSE
-        if (attempts[nick] === 6) {
+        // Zaudējums šim spēlētājam (6 mēģinājumi iztērēti)
+        if (attempts[nick] === 6 && word !== roundWord) {
             io.emit("lose", { nick });
         }
     });
 
     socket.on("disconnect", () => {
-        io.to("players").emit("online",
+        io.to("players").emit(
+            "online",
             io.sockets.adapter.rooms.get("players")?.size || 0
         );
     });
