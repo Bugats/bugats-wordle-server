@@ -1,6 +1,5 @@
 // ======== VĀRDU ZONA — stabilā servera versija (Hostinger + Render) ========
-// JWT + Login/Register, XP + Rank + Streak, Coins, Tokens, Missions, Chat
-// Words.txt backend, 6 attempts, serveris atklāj vārdu TIKAI uzvaras brīdī
+// JWT + Login/Register, XP + Rank + Streak, Coins, Tokens, Chat, Multi-rounds
 
 import express from "express";
 import { createServer } from "http";
@@ -36,15 +35,15 @@ let WORDS = fs.readFileSync(WORDS_FILE, "utf8")
   .map(w => w.trim().toLowerCase())
   .filter(w => w.length === 5);
 
-// ======== Servera sākums ========
+// ======== App ========
 const app = express();
 const httpServer = createServer(app);
 
-// ======== CORS FIX — FRONT-END ATĻAUTS ========
+// ======== CORS FIX (NEPIECIEŠAMS!) ========
 app.use(cors({
   origin: [
     "https://thezone.lv",
-    "https://www.thezone.lv",
+    "https://www.thezone.lv"
   ],
   methods: ["GET", "POST"],
   credentials: true
@@ -56,10 +55,12 @@ app.use(express.json());
 app.post("/register", async (req, res) => {
   const { nick, password } = req.body;
 
-  if (!nick || !password) return res.status(400).json({ error: "Bad data" });
+  if (!nick || !password)
+    return res.status(400).json({ error: "Bad data" });
 
   const users = loadUsers();
-  if (users[nick]) return res.status(400).json({ error: "This nickname exists" });
+  if (users[nick])
+    return res.status(400).json({ error: "This nickname exists" });
 
   const hash = await bcrypt.hash(password, 10);
 
@@ -69,8 +70,7 @@ app.post("/register", async (req, res) => {
     rank: "Jauniņais I",
     streak: 0,
     coins: 0,
-    tokens: 0,
-    missions: { daily: 0, weekly: 0 },
+    tokens: 0
   };
 
   saveUsers(users);
@@ -84,7 +84,6 @@ app.post("/login", async (req, res) => {
 
   const users = loadUsers();
   const user = users[nick];
-
   if (!user) return res.status(400).json({ error: "Bad login" });
 
   const ok = await bcrypt.compare(password, user.password);
@@ -94,7 +93,7 @@ app.post("/login", async (req, res) => {
   res.json({ token, nick });
 });
 
-// ======== RANK FORMULA ========
+// ======== RANK Formula ========
 function calculateRank(xp) {
   if (xp < 20) return "Jauniņais I";
   if (xp < 40) return "Jauniņais II";
@@ -134,14 +133,14 @@ const io = new Server(httpServer, {
   cors: {
     origin: [
       "https://thezone.lv",
-      "https://www.thezone.lv",
+      "https://www.thezone.lv"
     ],
     methods: ["GET", "POST"],
     credentials: true
   }
 });
 
-// ======== SPĒLES STĀVOKLIS ========
+// ======== Spēles stāvoklis ========
 let roundWord = WORDS[Math.floor(Math.random() * WORDS.length)];
 let roundId = Date.now();
 let guesses = {};
@@ -170,7 +169,7 @@ io.on("connection", socket => {
       const data = jwt.verify(socket.handshake.auth.token, JWT_SECRET);
       nick = data.nick;
     }
-  } catch (e) {
+  } catch {
     socket.disconnect();
     return;
   }
@@ -181,7 +180,11 @@ io.on("connection", socket => {
   }
 
   socket.join("players");
-  io.to("players").emit("online", io.sockets.adapter.rooms.get("players")?.size || 1);
+
+  io.to("players").emit(
+    "online",
+    io.sockets.adapter.rooms.get("players")?.size || 1
+  );
 
   socket.emit("roundStart", {
     roundId,
@@ -209,7 +212,6 @@ io.on("connection", socket => {
 
     io.emit("guess", { nick, word });
 
-    // ===== UZVARA =====
     if (word === roundWord) {
       roundOver = true;
 
@@ -238,7 +240,10 @@ io.on("connection", socket => {
   });
 
   socket.on("disconnect", () => {
-    io.to("players").emit("online", io.sockets.adapter.rooms.get("players")?.size || 0);
+    io.to("players").emit(
+      "online",
+      io.sockets.adapter.rooms.get("players")?.size || 0
+    );
   });
 });
 
