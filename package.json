@@ -1,14 +1,20 @@
 {
   "name": "bugats-wordle-server",
   "version": "1.0.0",
+  "description": "Bugats VARDU ZONA server (Render)",
   "main": "server.js",
+  "type": "module",
   "scripts": {
     "start": "node server.js"
   },
   "engines": {
-    "node": "20.x"
+    "node": ">=20.0.0"
   },
   "dependencies": {
-    ...
+    "express": "^4.19.2",
+    "socket.io": "^4.8.1",
+    "cors": "^2.8.5",
+    "bcrypt": "^5.1.1",
+    "jsonwebtoken": "^9.0.2"
   }
 }
