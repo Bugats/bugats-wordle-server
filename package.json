@@ -1,17 +1,16 @@
 {
   "name": "bugats-wordle-server",
   "version": "1.0.0",
-  "description": "Vārdu Zona serveris",
+  "description": "VARDU ZONA auth + word server",
   "main": "server.js",
+  "type": "module",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.17.1",
-    "jsonwebtoken": "^8.5.1",
-    "bcryptjs": "^2.4.3"
-  },
-  "author": "",
-  "license": "ISC"
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2"
+  }
 }
-
