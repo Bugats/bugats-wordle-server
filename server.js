@@ -1,7 +1,7 @@
 // ======== VĀRDU ZONA — Bugats edition ========
 // Serveris ar login/signup, JWT, XP, RANKIEM (25 līmeņi),
 // streak, coins, žetoniem, pasīvajiem coiniem ar Anti-AFK,
-// TOP10, online sarakstu un čatu.
+// TOP10, online sarakstu un čatu + ADMIN komandām.
 
 import express from "express";
 import { createServer } from "http";
@@ -32,21 +32,24 @@ const MAX_ATTEMPTS = 6;
 
 const BASE_TOKEN_PRICE = 150;
 
+// Admin lietotāji
+const ADMIN_USERNAMES = ["Bugats"];
+
 // ========== XP / COINS EKONOMIKA (HARD GRIND) ==========
 
 // XP bāze par uzvaru (mazāka nekā iepriekš)
-const XP_PER_WIN_BASE = 8;        // bija 12
+const XP_PER_WIN_BASE = 8; // bija 12
 const SCORE_PER_WIN = 1;
 
 // Bonuss par garākiem vārdiem (6 un 7 burti) – mazāks
-const XP_PER_LETTER_BONUS = 1;    // bija 2
+const XP_PER_LETTER_BONUS = 1; // bija 2
 
 // Streak bonuss (XP) – limitēts
 const XP_PER_STREAK_STEP = 1;
-const XP_STREAK_MAX_STEPS = 3;    // max +3 XP no streak, nevis +5
+const XP_STREAK_MAX_STEPS = 3; // max +3 XP no streak, nevis +5
 
 // Coins bāze un bonusi – tuvāk oriģinālajam
-const COINS_PER_WIN_BASE = 3;     // bija 4
+const COINS_PER_WIN_BASE = 3; // bija 4
 const COINS_PER_LETTER_BONUS = 0; // vairs nav bonusa par garāku vārdu
 const COINS_STREAK_MAX_BONUS = 2; // max +2 coins no streak
 
@@ -65,7 +68,15 @@ function loadUsers() {
     const arr = JSON.parse(raw);
     const out = {};
     for (const u of arr) {
-      if (u.username) out[u.username] = u;
+      if (!u || !u.username) continue;
+
+      // Default lauki, ja vecos datos to nav
+      if (typeof u.isBanned !== "boolean") u.isBanned = false;
+      if (typeof u.mutedUntil !== "number") u.mutedUntil = 0;
+      if (!u.lastActionAt) u.lastActionAt = Date.now();
+      if (!u.lastPassiveTickAt) u.lastPassiveTickAt = u.lastActionAt;
+
+      out[u.username] = u;
     }
     return out;
   } catch (err) {
@@ -191,6 +202,9 @@ function authMiddleware(req, res, next) {
     const payload = jwt.verify(token, JWT_SECRET);
     const user = USERS[payload.username];
     if (!user) return res.status(401).json({ message: "Lietotājs nav atrasts" });
+    if (user.isBanned) {
+      return res.status(403).json({ message: "Lietotājs ir nobanots no VĀRDU ZONAS." });
+    }
     req.user = user;
     next();
   } catch (err) {
@@ -221,8 +235,11 @@ function broadcastOnlineList() {
     if (!u) continue;
 
     const last = u.lastActionAt || 0;
-    // "Online" tikai, ja pēdējā aktivitāte nav vecāka par ONLINE_TIMEOUT_MS
-    if (now - last <= ONLINE_TIMEOUT_MS) {
+    const isAdmin = ADMIN_USERNAMES.includes(username);
+
+    // Admins vienmēr online, kamēr socket dzīvs.
+    // Pārējiem – "Online" tikai, ja pēdējā aktivitāte nav vecāka par ONLINE_TIMEOUT_MS
+    if (isAdmin || now - last <= ONLINE_TIMEOUT_MS) {
       activeUsers.add(username);
     }
   }
@@ -236,6 +253,158 @@ function broadcastOnlineList() {
 setInterval(() => {
   broadcastOnlineList();
 }, 30 * 1000); // ik pēc 30 sekundēm
+
+// === Admin & čata helperi ===
+
+// Sistēmas ziņa čatam (parādīsies kā username = "SYSTEM")
+function broadcastSystemMessage(text) {
+  const payload = {
+    username: "SYSTEM",
+    text,
+    ts: Date.now(),
+  };
+  io.emit("chatMessage", payload);
+}
+
+// Izmest lietotāju no socket.io pēc lietotājvārda
+function kickUserByName(username, reason) {
+  for (const [sid, uname] of onlineBySocket.entries()) {
+    if (uname === username) {
+      const s = io.sockets.sockets.get(sid);
+      if (s) {
+        try {
+          s.emit("forceDisconnect", { reason: reason || "kick" });
+        } catch (e) {
+          console.error("forceDisconnect emit error:", e);
+        }
+        s.disconnect(true);
+      }
+      onlineBySocket.delete(sid);
+    }
+  }
+  broadcastOnlineList();
+}
+
+// Admin komandu apstrāde ( /kick, /ban, /unban, /mute, /unmute )
+function handleAdminCommand(raw, adminUser, adminSocket) {
+  const parts = raw.slice(1).trim().split(/\s+/); // noņemam sākuma "/"
+  const cmd = (parts[0] || "").toLowerCase();
+  const targetName = parts[1];
+  const arg = parts[2];
+
+  if (!cmd) {
+    adminSocket.emit("chatMessage", {
+      username: "SYSTEM",
+      text: "Komanda nav norādīta.",
+      ts: Date.now(),
+    });
+    return;
+  }
+
+  if (["ban", "unban", "kick", "mute", "unmute"].includes(cmd) && !targetName) {
+    adminSocket.emit("chatMessage", {
+      username: "SYSTEM",
+      text: "Norādi lietotājvārdu. Piem.: /kick Nick",
+      ts: Date.now(),
+    });
+    return;
+  }
+
+  const target = targetName ? USERS[targetName] : null;
+
+  switch (cmd) {
+    case "kick":
+      if (!target) {
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: `Lietotājs '${targetName}' nav atrasts.`,
+          ts: Date.now(),
+        });
+        return;
+      }
+      kickUserByName(targetName, "kick");
+      broadcastSystemMessage(
+        `Admin ${adminUser.username} izmeta lietotāju ${targetName}.`
+      );
+      break;
+
+    case "ban":
+      if (!target) {
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: `Lietotājs '${targetName}' nav atrasts.`,
+          ts: Date.now(),
+        });
+        return;
+      }
+      target.isBanned = true;
+      saveUsers(USERS);
+      kickUserByName(targetName, "ban");
+      broadcastSystemMessage(
+        `Admin ${adminUser.username} nobanoja lietotāju ${targetName}.`
+      );
+      break;
+
+    case "unban":
+      if (!target) {
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: `Lietotājs '${targetName}' nav atrasts.`,
+          ts: Date.now(),
+        });
+        return;
+      }
+      target.isBanned = false;
+      saveUsers(USERS);
+      broadcastSystemMessage(
+        `Admin ${adminUser.username} atbanoja lietotāju ${targetName}.`
+      );
+      break;
+
+    case "mute": {
+      if (!target) {
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: `Lietotājs '${targetName}' nav atrasts.`,
+          ts: Date.now(),
+        });
+        return;
+      }
+      const minutes = parseInt(arg || "5", 10);
+      const mins = Number.isNaN(minutes) ? 5 : Math.max(1, minutes);
+      target.mutedUntil = Date.now() + mins * 60 * 1000;
+      saveUsers(USERS);
+      broadcastSystemMessage(
+        `Admin ${adminUser.username} uzlika mute lietotājam ${targetName} uz ${mins} min.`
+      );
+      break;
+    }
+
+    case "unmute":
+      if (!target) {
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: `Lietotājs '${targetName}' nav atrasts.`,
+          ts: Date.now(),
+        });
+        return;
+      }
+      target.mutedUntil = 0;
+      saveUsers(USERS);
+      broadcastSystemMessage(
+        `Admin ${adminUser.username} noņēma mute lietotājam ${targetName}.`
+      );
+      break;
+
+    default:
+      adminSocket.emit("chatMessage", {
+        username: "SYSTEM",
+        text:
+          "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute.",
+        ts: Date.now(),
+      });
+  }
+}
 
 // ======== AUTH ENDPOINTI ========
 
@@ -273,6 +442,8 @@ async function signupHandler(req, res) {
     currentRound: null,
     lastActionAt: now,
     lastPassiveTickAt: now,
+    isBanned: false,
+    mutedUntil: 0,
   };
 
   const rankInfo = calcRankFromXp(user.xp);
@@ -297,7 +468,7 @@ async function signupHandler(req, res) {
   });
 }
 
-// Jauns + vecais maršruts (abi dara to pašu)
+// Jauns + vecais maršruts (abi dara to pašu – signup alias)
 app.post("/signup", signupHandler);
 app.post("/signin", signupHandler);
 
@@ -314,6 +485,13 @@ app.post("/login", async (req, res) => {
   const user = USERS[name];
   if (!user) {
     return res.status(400).json({ message: "Lietotājs nav atrasts" });
+  }
+
+  // BAN check
+  if (user.isBanned) {
+    return res
+      .status(403)
+      .json({ message: "Šis lietotājs ir nobanots no VĀRDU ZONAS. Sazinies ar Bugats." });
   }
 
   const ok = await bcrypt.compare(password, user.passwordHash || "");
@@ -581,6 +759,7 @@ io.use((socket, next) => {
     const payload = jwt.verify(token, JWT_SECRET);
     const user = USERS[payload.username];
     if (!user) return next(new Error("Lietotājs nav atrasts"));
+    if (user.isBanned) return next(new Error("Lietotājs ir nobanots"));
     socket.data.user = user;
     return next();
   } catch (err) {
@@ -608,11 +787,48 @@ io.on("connection", (socket) => {
     const msg = text.trim();
     if (!msg) return;
 
-    markActivity(user);
+    // ņemam svaigāko user objektu (ja pa to laiku mainīts/stāvoklis)
+    const u = USERS[user.username] || user;
+    markActivity(u);
+
+    const now = Date.now();
+
+    // BAN – ziņa tikai sev
+    if (u.isBanned) {
+      socket.emit("chatMessage", {
+        username: "SYSTEM",
+        text: "Tu esi nobanots no VĀRDU ZONAS.",
+        ts: Date.now(),
+      });
+      return;
+    }
+
+    // MUTE – ziņa tikai sev
+    if (u.mutedUntil && u.mutedUntil > now) {
+      const until = new Date(u.mutedUntil).toLocaleTimeString("lv-LV", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      socket.emit("chatMessage", {
+        username: "SYSTEM",
+        text: `Tev ir mute līdz ${until}.`,
+        ts: Date.now(),
+      });
+      return;
+    }
+
+    const isAdmin = ADMIN_USERNAMES.includes(u.username);
+
+    // Admin komandas sākas ar "/"
+    if (isAdmin && msg.startsWith("/")) {
+      handleAdminCommand(msg, u, socket);
+      return;
+    }
+
     saveUsers(USERS);
 
     const payload = {
-      username: user.username,
+      username: u.username,
       text: msg,
       ts: Date.now(),
     };
