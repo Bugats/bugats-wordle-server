@@ -206,13 +206,33 @@ const io = new Server(httpServer, {
 });
 
 // ======== ONLINE saraksts ========
-const onlineBySocket = new Map(); // socket.id -> username
+// socket.id -> username
+const onlineBySocket = new Map();
 
 function broadcastOnlineList() {
-  const set = new Set(onlineBySocket.values());
-  const users = Array.from(set);
+  const now = Date.now();
+  const activeUsers = new Set();
+
+  for (const username of onlineBySocket.values()) {
+    const u = USERS[username];
+    if (!u) continue;
+
+    const last = u.lastActionAt || 0;
+    // "Online" tikai, ja pēdējā aktivitāte nav vecāka par ONLINE_TIMEOUT_MS
+    if (now - last <= ONLINE_TIMEOUT_MS) {
+      activeUsers.add(username);
+    }
+  }
+
+  const users = Array.from(activeUsers);
   io.emit("onlineList", { count: users.length, users });
 }
+
+// Regulāri pārskaitām online sarakstu,
+// lai AFK spēlētāji pēc ~2 min automātiski pazūd no online skaita
+setInterval(() => {
+  broadcastOnlineList();
+}, 30 * 1000); // ik pēc 30 sekundēm
 
 // ======== AUTH ENDPOINTI ========
 
