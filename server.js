@@ -21,7 +21,9 @@ const PORT = process.env.PORT || 10080;
 const JWT_SECRET =
   process.env.JWT_SECRET || "BUGATS_VARDU_ZONA_SUPER_SLEPENS_JWT";
 
-const USERS_FILE = path.join(__dirname, "users.json");
+// users.json atrašanās vieta – pēc noklusējuma blakus server.js,
+// bet Renderā varam pārrakstīt ar env mainīgo (piem., /var/data/users.json)
+const USERS_FILE = process.env.USERS_FILE || path.join(__dirname, "users.json");
 const WORDS_FILE = path.join(__dirname, "words.txt");
 
 const MIN_WORD_LEN = 5;
