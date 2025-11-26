@@ -1,6 +1,7 @@
 // ======== VĀRDU ZONA — Bugats edition ========
-// Serveris ar login/signup, JWT, XP, rank, streak, coins, žetoniem,
-// pasīvajiem coiniem ar Anti-AFK, TOP10, online sarakstu un čatu.
+// Serveris ar login/signup, JWT, XP, RANKIEM (25 līmeņi),
+// streak, coins, žetoniem, pasīvajiem coiniem ar Anti-AFK,
+// TOP10, online sarakstu un čatu.
 
 import express from "express";
 import { createServer } from "http";
@@ -9,7 +10,7 @@ import cors from "cors";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import bcrypt from "bcryptjs";            // ← SVARĪGI: bcryptjs, nevis bcrypt
+import bcrypt from "bcryptjs"; // IMPORTANT: bcryptjs
 import jwt from "jsonwebtoken";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -29,15 +30,28 @@ const MAX_ATTEMPTS = 6;
 
 const BASE_TOKEN_PRICE = 150;
 
-// XP / coins par uzvaru
-const XP_PER_WIN = 10;
-const SCORE_PER_WIN = 1;
-const COINS_PER_WIN = 3;
+// ========== XP / COINS EKONOMIKA (BOOSTED) ==========
 
-// Pasīvie coini
-const PASSIVE_COINS_PER_TICK = 2; // coins par aktīvu periodu
+// XP bāze par uzvaru
+const XP_PER_WIN_BASE = 12; // agrāk bija 10
+const SCORE_PER_WIN = 1;
+
+// Bonuss par garākiem vārdiem (6 un 7 burti)
+const XP_PER_LETTER_BONUS = 2; // +2 XP par katru burtu virs MIN_WORD_LEN (5)
+
+// Streak bonuss (jo lielāks winning streak, jo vairāk XP)
+const XP_PER_STREAK_STEP = 1; // +1 XP par streak soli
+const XP_STREAK_MAX_STEPS = 5; // max +5 XP no streak bonusa
+
+// Coins bāze un bonusi
+const COINS_PER_WIN_BASE = 4; // agrāk 3
+const COINS_PER_LETTER_BONUS = 1; // +1 coins par katru burtu virs MIN_WORD_LEN
+const COINS_STREAK_MAX_BONUS = 3; // max +3 coins no streak bonusa
+
+// ========== Pasīvie coini + Anti-AFK ==========
+const PASSIVE_COINS_PER_TICK = 2; // cik coins par aktīvu periodu
 const PASSIVE_INTERVAL_MS = 20 * 60 * 1000; // 20 min
-const AFK_BREAK_MS = 3 * 60 * 1000; // >3 min bez aktivitātes = AFK
+const AFK_BREAK_MS = 3 * 60 * 1000; // >3 min bez aktivitātes = AFK reset
 
 // ======== Failu helperi ========
 function loadUsers() {
@@ -77,15 +91,51 @@ try {
   console.error("Neizdevās ielādēt words.txt:", err);
 }
 
-// ======== Rank loģika ========
+// ======== Rank loģika (25 līmeņi) ========
 function calcRankFromXp(xp) {
-  const level = Math.max(1, Math.floor((xp || 0) / 50) + 1);
-  let title;
-  if (level <= 3) title = "Jauniņais";
-  else if (level <= 6) title = "Spēlētājs";
-  else if (level <= 9) title = "Meistars";
-  else title = "Leģenda";
-  return { level, title: `${title} ${level}` };
+  const table = [
+    { minXp: 0, title: "Jauniņais" },
+    { minXp: 40, title: "Burtu Skolnieks" },
+    { minXp: 90, title: "Vārdu Mednieks" },
+    { minXp: 160, title: "Burtošanas Aizrautis" },
+    { minXp: 250, title: "Vārdu Taktikis" },
+    { minXp: 360, title: "Leksikas Kareivis" },
+    { minXp: 490, title: "Leksikas Bruņinieks" },
+    { minXp: 640, title: "Erudīcijas Cīnītājs" },
+    { minXp: 810, title: "Erudīcijas Kapteinis" },
+    { minXp: 1000, title: "Erudīcijas Komandieris" },
+    { minXp: 1200, title: "Smadzeņu Atlēts" },
+    { minXp: 1450, title: "Loģikas Inženieris" },
+    { minXp: 1750, title: "Stratēģijas Arhitekts" },
+    { minXp: 2100, title: "Vārdu Burvis" },
+    { minXp: 2500, title: "Vārdu Maģistrs" },
+    { minXp: 2950, title: "Vārdu Profesors" },
+    { minXp: 3450, title: "ZONAS Sargs" },
+    { minXp: 4000, title: "ZONAS Boss" },
+    { minXp: 4600, title: "ZONAS Karalis" },
+    { minXp: 5250, title: "Bugats Māceklis" },
+    { minXp: 5950, title: "Bugats Elites Spēlētājs" },
+    { minXp: 6700, title: "Bugats PRIME" },
+    { minXp: 7500, title: "Bugats Mītiskais" },
+    { minXp: 8350, title: "Kosmiskais Prāts" },
+    { minXp: 9250, title: "Nemirstīgais ZONAS Mīts" },
+  ];
+
+  const currentXp = xp || 0;
+  let current = table[0];
+  for (const r of table) {
+    if (currentXp >= r.minXp) {
+      current = r;
+    } else {
+      break;
+    }
+  }
+
+  const level = table.indexOf(current) + 1;
+  return {
+    level,
+    title: current.title,
+  };
 }
 
 function getTokenPrice(user) {
@@ -106,13 +156,14 @@ function markActivity(user) {
     user.lastPassiveTickAt = user.lastActionAt;
   }
 
-  // AFK breaks
+  // ja > AFK_BREAK_MS kopš pēdējās aktivitātes → uzskatām, ka bija AFK, resetējam periodu
   if (now - user.lastActionAt > AFK_BREAK_MS) {
     user.lastActionAt = now;
     user.lastPassiveTickAt = now;
     return;
   }
 
+  // normāla aktivitāte
   user.lastActionAt = now;
   const diff = now - user.lastPassiveTickAt;
 
@@ -165,7 +216,7 @@ function broadcastOnlineList() {
 
 // ======== AUTH ENDPOINTI ========
 
-// kopējais signup handleris, ko piesaistām /signup un /signin
+// Kopējais signup handleris (reģistrācija)
 async function signupHandler(req, res) {
   const { username, password } = req.body || {};
   if (!username || !password) {
@@ -223,9 +274,9 @@ async function signupHandler(req, res) {
   });
 }
 
-// jauns + vecais maršruts
+// Jauns + vecais maršruts (abi dara to pašu)
 app.post("/signup", signupHandler);
-app.post("/signin", signupHandler); // ← ALIAS priekš tava vecā klienta
+app.post("/signin", signupHandler);
 
 // Login
 app.post("/login", async (req, res) => {
@@ -272,7 +323,7 @@ app.post("/login", async (req, res) => {
 // ======== /me ========
 app.get("/me", authMiddleware, (req, res) => {
   const u = req.user;
-  const rankInfo = calcRankFromXp(u.xp);
+  const rankInfo = calcRankFromXp(u.xp || 0);
   u.rankLevel = rankInfo.level;
   u.rankTitle = rankInfo.title;
   saveUsers(USERS);
@@ -318,6 +369,7 @@ app.get("/start-round", authMiddleware, (req, res) => {
   res.json({ len });
 });
 
+// Pattern priekš flīžu krāsām
 function buildPattern(secret, guess) {
   const sArr = secret.split("");
   const gArr = guess.split("");
@@ -326,12 +378,14 @@ function buildPattern(secret, guess) {
   for (const ch of sArr) {
     counts[ch] = (counts[ch] || 0) + 1;
   }
+  // correct
   for (let i = 0; i < gArr.length; i++) {
     if (gArr[i] === sArr[i]) {
       result[i] = "correct";
       counts[gArr[i]] -= 1;
     }
   }
+  // present
   for (let i = 0; i < gArr.length; i++) {
     if (result[i] === "correct") continue;
     const ch = gArr[i];
@@ -374,29 +428,55 @@ app.post("/guess", authMiddleware, (req, res) => {
   const pattern = buildPattern(round.word, guessRaw);
   round.attemptsLeft -= 1;
 
-  const win = guessRaw === round.word;
-  let finished = win || round.attemptsLeft <= 0;
+  const len = round.len;
+  const isWin = guessRaw === round.word;
+  let finished = isWin || round.attemptsLeft <= 0;
 
   let xpGain = 0;
   let coinsGain = 0;
 
-  if (win) {
-    xpGain = XP_PER_WIN;
-    coinsGain = COINS_PER_WIN;
+  if (isWin) {
+    // streak pirms šīs uzvaras
+    const prevStreak = user.streak || 0;
+    user.streak = prevStreak + 1;
 
-    user.xp = (user.xp || 0) + XP_PER_WIN;
+    // ---- XP aprēķins ----
+    xpGain = XP_PER_WIN_BASE;
+
+    const extraLetters = Math.max(0, len - MIN_WORD_LEN); // MIN_WORD_LEN = 5
+    xpGain += XP_PER_LETTER_BONUS * extraLetters;
+
+    const streakSteps = Math.min(user.streak - 1, XP_STREAK_MAX_STEPS);
+    if (streakSteps > 0) {
+      xpGain += XP_PER_STREAK_STEP * streakSteps;
+    }
+
+    // ---- COINS aprēķins ----
+    coinsGain = COINS_PER_WIN_BASE;
+
+    coinsGain += COINS_PER_LETTER_BONUS * extraLetters;
+
+    const coinStreakBonus = Math.min(user.streak - 1, COINS_STREAK_MAX_BONUS);
+    if (coinStreakBonus > 0) {
+      coinsGain += coinStreakBonus;
+    }
+
+    // XP / score / coins pieaugums
+    user.xp = (user.xp || 0) + xpGain;
     user.score = (user.score || 0) + SCORE_PER_WIN;
-    user.coins = (user.coins || 0) + COINS_PER_WIN;
+    user.coins = (user.coins || 0) + coinsGain;
 
-    user.streak = (user.streak || 0) + 1;
+    // streak rekords
     user.bestStreak = Math.max(user.bestStreak || 0, user.streak || 0);
 
     round.finished = true;
 
+    // rank atjaunošana
     const rankInfo = calcRankFromXp(user.xp);
     user.rankLevel = rankInfo.level;
     user.rankTitle = rankInfo.title;
 
+    // paziņojums visiem
     io.emit("playerWin", {
       username: user.username,
       xpGain,
@@ -405,7 +485,9 @@ app.post("/guess", authMiddleware, (req, res) => {
       streak: user.streak || 0,
     });
   } else {
+    // minējums nav pareizs
     if (finished) {
+      // raunds beidzies bez uzvaras → streak reset
       user.streak = 0;
     }
   }
@@ -414,10 +496,10 @@ app.post("/guess", authMiddleware, (req, res) => {
 
   res.json({
     pattern,
-    win,
+    win: isWin,
     finished,
     attemptsLeft: round.attemptsLeft,
-    rewards: win ? { xpGain, coinsGain } : null,
+    rewards: isWin ? { xpGain, coinsGain } : null,
   });
 });
 
