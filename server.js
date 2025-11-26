@@ -57,7 +57,7 @@ const COINS_STREAK_MAX_BONUS = 2; // max +2 coins no streak
 const PASSIVE_COINS_PER_TICK = 2; // cik coins par aktīvu periodu
 const PASSIVE_INTERVAL_MS = 20 * 60 * 1000; // 20 min
 const AFK_BREAK_MS = 3 * 60 * 1000; // >3 min bez aktivitātes = AFK reset
-const ONLINE_TIMEOUT_MS = 2 * 60 * 1000; // 2 min max bez aktivitātes, lai skaitītos online
+const ONLINE_TIMEOUT_MS = 2 * 60 * 1000; // 2 min max bez aktivitātes, lai skaitītos online (šobrīd vairs neizmantojam filtram, bet atstājam nākotnei)
 
 // ========== MISIJAS ==========
 const DAILY_MISSIONS_CONFIG = [
@@ -358,29 +358,13 @@ const io = new Server(httpServer, {
 // socket.id -> username
 const onlineBySocket = new Map();
 
+// VIENKĀRŠĀ ONLINE LOĢIKA: visi aktīvie socketi
 function broadcastOnlineList() {
-  const now = Date.now();
-  const activeUsers = new Set();
-
-  for (const username of onlineBySocket.values()) {
-    const u = USERS[username];
-    if (!u) continue;
-
-    const last = u.lastActionAt || 0;
-    const isAdmin = ADMIN_USERNAMES.includes(username);
-
-    // Admins vienmēr online, kamēr socket dzīvs.
-    // Pārējiem – "Online" tikai, ja pēdējā aktivitāte nav vecāka par ONLINE_TIMEOUT_MS
-    if (isAdmin || now - last <= ONLINE_TIMEOUT_MS) {
-      activeUsers.add(username);
-    }
-  }
-
-  const users = Array.from(activeUsers);
+  const users = Array.from(new Set(onlineBySocket.values()));
   io.emit("onlineList", { count: users.length, users });
 }
 
-// Regulāri pārskaitām online sarakstu
+// Regulāri pārskaitām online sarakstu (ja kas mainās pa vidu)
 setInterval(() => {
   broadcastOnlineList();
 }, 30 * 1000);
@@ -980,14 +964,16 @@ io.on("connection", (socket) => {
     return;
   }
 
-  onlineBySocket.set(socket.id, user.username);
-  broadcastOnlineList();
-
   console.log("Pieslēdzās:", user.username, "socket:", socket.id);
 
+  // Atjaunojam aktivitāti/misijas tikko pēc pieslēgšanās
   markActivity(user);
   ensureDailyMissions(user);
   saveUsers(USERS);
+
+  // Reģistrējam online mapē un izplatām online sarakstu
+  onlineBySocket.set(socket.id, user.username);
+  broadcastOnlineList();
 
   socket.on("chatMessage", (text) => {
     if (typeof text !== "string") return;
