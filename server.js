@@ -10,7 +10,7 @@ import cors from "cors";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import bcrypt from "bcryptjs"; // IMPORTANT: bcryptjs
+import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -21,8 +21,6 @@ const PORT = process.env.PORT || 10080;
 const JWT_SECRET =
   process.env.JWT_SECRET || "BUGATS_VARDU_ZONA_SUPER_SLEPENS_JWT";
 
-// users.json atrašanās vieta – pēc noklusējuma blakus server.js,
-// bet Renderā varam pārrakstīt ar env mainīgo (piem., /var/data/users.json)
 const USERS_FILE = process.env.USERS_FILE || path.join(__dirname, "users.json");
 const WORDS_FILE = path.join(__dirname, "words.txt");
 
@@ -35,50 +33,42 @@ const BASE_TOKEN_PRICE = 150;
 // Admin lietotāji
 const ADMIN_USERNAMES = ["BugatsLV"];
 
-// ========== XP / COINS EKONOMIKA (HARD GRIND) ==========
-
-// XP bāze par uzvaru (mazāka nekā iepriekš)
-const XP_PER_WIN_BASE = 8; // bija 12
+// ========== XP / COINS EKONOMIKA ==========
+const XP_PER_WIN_BASE = 8;
 const SCORE_PER_WIN = 1;
-
-// Bonuss par garākiem vārdiem (6 un 7 burti) – mazāks
-const XP_PER_LETTER_BONUS = 1; // bija 2
-
-// Streak bonuss (XP) – limitēts
+const XP_PER_LETTER_BONUS = 1;
 const XP_PER_STREAK_STEP = 1;
-const XP_STREAK_MAX_STEPS = 3; // max +3 XP no streak, nevis +5
+const XP_STREAK_MAX_STEPS = 3;
 
-// Coins bāze un bonusi – tuvāk oriģinālajam
-const COINS_PER_WIN_BASE = 3; // bija 4
-const COINS_PER_LETTER_BONUS = 0; // vairs nav bonusa par garāku vārdu
-const COINS_STREAK_MAX_BONUS = 2; // max +2 coins no streak
+const COINS_PER_WIN_BASE = 3;
+const COINS_PER_LETTER_BONUS = 0;
+const COINS_STREAK_MAX_BONUS = 2;
 
 // ========== Pasīvie coini + Anti-AFK ==========
-const PASSIVE_COINS_PER_TICK = 2; // cik coins par aktīvu periodu
+const PASSIVE_COINS_PER_TICK = 2;
 const PASSIVE_INTERVAL_MS = 20 * 60 * 1000; // 20 min
-const AFK_BREAK_MS = 3 * 60 * 1000; // >3 min bez aktivitātes = AFK reset
-const ONLINE_TIMEOUT_MS = 2 * 60 * 1000; // 2 min max bez aktivitātes, lai skaitītos online (šobrīd vairs neizmantojam filtram, bet atstājam nākotnei)
+const AFK_BREAK_MS = 3 * 60 * 1000;
 
 // ========== MISIJAS ==========
 const DAILY_MISSIONS_CONFIG = [
   {
     id: "win3",
     title: "Atmini 3 vārdus šodien",
-    type: "wins",        // +1, kad uzvar
+    type: "wins",
     target: 3,
     rewards: { xp: 30, coins: 25, tokens: 0 },
   },
   {
     id: "xp50",
     title: "Nopelni 50 XP šodien",
-    type: "xp",          // +xpGain no uzvarām
+    type: "xp",
     target: 50,
     rewards: { xp: 0, coins: 35, tokens: 0 },
   },
   {
     id: "guess20",
     title: "Izdari 20 minējumus",
-    type: "guesses",     // +1 par katru /guess
+    type: "guesses",
     target: 20,
     rewards: { xp: 20, coins: 15, tokens: 1 },
   },
@@ -95,15 +85,12 @@ function loadUsers() {
     for (const u of arr) {
       if (!u || !u.username) continue;
 
-      // Default lauki, ja vecos datos to nav
       if (typeof u.isBanned !== "boolean") u.isBanned = false;
       if (typeof u.mutedUntil !== "number") u.mutedUntil = 0;
       if (!u.lastActionAt) u.lastActionAt = Date.now();
       if (!u.lastPassiveTickAt) u.lastPassiveTickAt = u.lastActionAt;
-
       if (typeof u.bestStreak !== "number") u.bestStreak = 0;
 
-      // misiju lauki
       if (typeof u.missionsDate !== "string") u.missionsDate = "";
       if (!Array.isArray(u.missions)) u.missions = [];
 
@@ -169,18 +156,12 @@ function calcRankFromXp(xp) {
   const currentXp = xp || 0;
   let current = table[0];
   for (const r of table) {
-    if (currentXp >= r.minXp) {
-      current = r;
-    } else {
-      break;
-    }
+    if (currentXp >= r.minXp) current = r;
+    else break;
   }
 
   const level = table.indexOf(current) + 1;
-  return {
-    level,
-    title: current.title,
-  };
+  return { level, title: current.title };
 }
 
 function getTokenPrice(user) {
@@ -201,14 +182,12 @@ function markActivity(user) {
     user.lastPassiveTickAt = user.lastActionAt;
   }
 
-  // ja > AFK_BREAK_MS kopš pēdējās aktivitātes → uzskatām, ka bija AFK, resetējam periodu
   if (now - user.lastActionAt > AFK_BREAK_MS) {
     user.lastActionAt = now;
     user.lastPassiveTickAt = now;
     return;
   }
 
-  // normāla aktivitāte
   user.lastActionAt = now;
   const diff = now - user.lastPassiveTickAt;
 
@@ -224,15 +203,17 @@ function markActivity(user) {
 }
 
 // ======== MISIJU HELPERI ========
-
 function todayKey() {
-  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  return new Date().toISOString().slice(0, 10);
 }
 
 function ensureDailyMissions(user) {
   const key = todayKey();
-  if (user.missionsDate !== key || !Array.isArray(user.missions) || !user.missions.length) {
-    // ģenerējam jaunu dienas misiju setu
+  if (
+    user.missionsDate !== key ||
+    !Array.isArray(user.missions) ||
+    !user.missions.length
+  ) {
     user.missionsDate = key;
     user.missions = DAILY_MISSIONS_CONFIG.map((m) => ({
       id: m.id,
@@ -247,7 +228,6 @@ function ensureDailyMissions(user) {
   }
 }
 
-// atgriež tīru misiju sarakstu frontam
 function getPublicMissions(user) {
   ensureDailyMissions(user);
   return user.missions.map((m) => ({
@@ -261,14 +241,12 @@ function getPublicMissions(user) {
   }));
 }
 
-// atjauno misiju progresu pēc minējuma
 function updateMissionsOnGuess(user, { isWin, xpGain }) {
   ensureDailyMissions(user);
   let changed = false;
 
   for (const m of user.missions) {
     const prevProgress = m.progress || 0;
-
     switch (m.type) {
       case "wins":
         if (isWin) {
@@ -283,28 +261,22 @@ function updateMissionsOnGuess(user, { isWin, xpGain }) {
         }
         break;
       case "guesses":
-        // katrs /guess
         m.progress = prevProgress + 1;
         changed = true;
         break;
       default:
         break;
     }
-
-    // Nokompaktē statuss
     if (m.progress >= m.target && !m.isCompleted) {
       m.isCompleted = true;
       changed = true;
     }
   }
 
-  if (changed) {
-    saveUsers(USERS);
-  }
+  if (changed) saveUsers(USERS);
 }
 
 // ======== JWT helperi ========
-
 function buildMePayload(u) {
   const rankInfo = calcRankFromXp(u.xp || 0);
   u.rankLevel = rankInfo.level;
@@ -354,25 +326,22 @@ const io = new Server(httpServer, {
   cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
-// VIENKĀRŠĀ ONLINE LOĢIKA: visi aktīvie socketi
 // ======== ONLINE saraksts ========
 // socket.id -> username
 const onlineBySocket = new Map();
 
+// Vienkārša ONLINE loģika – visi aktīvie socketi
 function broadcastOnlineList() {
-  // Visi lietotāji, kuriem šobrīd ir atvērts socket
   const users = Array.from(new Set(onlineBySocket.values()));
   io.emit("onlineList", { count: users.length, users });
 }
 
-// Regulāri pārskaitām online sarakstu (ja kas mainās pa vidu)
+// Periodiski pārsūtām online sarakstu
 setInterval(() => {
   broadcastOnlineList();
 }, 30 * 1000);
 
 // === Admin & čata helperi ===
-
-// Sistēmas ziņa čatam (parādīsies kā username = "SYSTEM")
 function broadcastSystemMessage(text) {
   const payload = {
     username: "SYSTEM",
@@ -382,7 +351,6 @@ function broadcastSystemMessage(text) {
   io.emit("chatMessage", payload);
 }
 
-// Izmest lietotāju no socket.io pēc lietotājvārda
 function kickUserByName(username, reason) {
   for (const [sid, uname] of onlineBySocket.entries()) {
     if (uname === username) {
@@ -401,9 +369,8 @@ function kickUserByName(username, reason) {
   broadcastOnlineList();
 }
 
-// Admin komandu apstrāde ( /kick, /ban, /unban, /mute, /unmute )
 function handleAdminCommand(raw, adminUser, adminSocket) {
-  const parts = raw.slice(1).trim().split(/\s+/); // noņemam sākuma "/"
+  const parts = raw.slice(1).trim().split(/\s+/);
   const cmd = (parts[0] || "").toLowerCase();
   const targetName = parts[1];
   const arg = parts[2];
@@ -523,8 +490,6 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
 }
 
 // ======== AUTH ENDPOINTI ========
-
-// Kopējais signup handleris (reģistrācija)
 async function signupHandler(req, res) {
   const { username, password } = req.body || {};
   if (!username || !password) {
@@ -568,7 +533,6 @@ async function signupHandler(req, res) {
   user.rankLevel = rankInfo.level;
   user.rankTitle = rankInfo.title;
 
-  // misijas pirmajai dienai
   ensureDailyMissions(user);
 
   USERS[name] = user;
@@ -581,10 +545,8 @@ async function signupHandler(req, res) {
   });
 }
 
-// Reģistrācija
 app.post("/signup", signupHandler);
 
-// Kopējais login handleris
 async function loginHandler(req, res) {
   const { username, password } = req.body || {};
   if (!username || !password) {
@@ -599,7 +561,6 @@ async function loginHandler(req, res) {
     return res.status(400).json({ message: "Lietotājs nav atrasts" });
   }
 
-  // BAN check
   if (user.isBanned) {
     return res.status(403).json({
       message: "Šis lietotājs ir nobanots no VĀRDU ZONAS. Sazinies ar Bugats.",
@@ -613,7 +574,6 @@ async function loginHandler(req, res) {
 
   markActivity(user);
   ensureDailyMissions(user);
-
   saveUsers(USERS);
 
   const token = jwt.sign({ username: name }, JWT_SECRET, { expiresIn: "30d" });
@@ -623,11 +583,9 @@ async function loginHandler(req, res) {
   });
 }
 
-// Login maršruti
 app.post("/login", loginHandler);
 app.post("/signin", loginHandler);
 
-// ======== /me ========
 app.get("/me", authMiddleware, (req, res) => {
   const u = req.user;
   markActivity(u);
@@ -636,7 +594,7 @@ app.get("/me", authMiddleware, (req, res) => {
   res.json(buildMePayload(u));
 });
 
-// ======== Publiska spēlētāja profila API ========
+// Publiska profila API
 app.get("/player/:username", authMiddleware, (req, res) => {
   const requester = req.user;
   const name = String(req.params.username || "").trim();
@@ -673,8 +631,6 @@ app.get("/player/:username", authMiddleware, (req, res) => {
 });
 
 // ======== MISIJU ENDPOINTI ========
-
-// GET /missions – atgriež dienas misijas
 app.get("/missions", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
@@ -683,7 +639,6 @@ app.get("/missions", authMiddleware, (req, res) => {
   res.json(getPublicMissions(user));
 });
 
-// POST /missions/claim – saņem balvu par konkrētu misiju
 app.post("/missions/claim", authMiddleware, (req, res) => {
   const user = req.user;
   const { id } = req.body || {};
@@ -716,7 +671,6 @@ app.post("/missions/claim", authMiddleware, (req, res) => {
 
   mission.isClaimed = true;
 
-  // rank & bestStreak paliek pēc vecā
   const rankInfo = calcRankFromXp(user.xp);
   user.rankLevel = rankInfo.level;
   user.rankTitle = rankInfo.title;
@@ -739,7 +693,6 @@ function pickRandomWord() {
   return { word: w.toUpperCase(), len: w.length };
 }
 
-// Jauns raunds
 app.get("/start-round", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
@@ -757,7 +710,6 @@ app.get("/start-round", authMiddleware, (req, res) => {
   res.json({ len });
 });
 
-// Pattern priekš flīžu krāsām
 function buildPattern(secret, guess) {
   const sArr = secret.split("");
   const gArr = guess.split("");
@@ -766,14 +718,12 @@ function buildPattern(secret, guess) {
   for (const ch of sArr) {
     counts[ch] = (counts[ch] || 0) + 1;
   }
-  // correct
   for (let i = 0; i < gArr.length; i++) {
     if (gArr[i] === sArr[i]) {
       result[i] = "correct";
       counts[gArr[i]] -= 1;
     }
   }
-  // present
   for (let i = 0; i < gArr.length; i++) {
     if (result[i] === "correct") continue;
     const ch = gArr[i];
@@ -785,7 +735,6 @@ function buildPattern(secret, guess) {
   return result;
 }
 
-// Minējums
 app.post("/guess", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
@@ -819,20 +768,17 @@ app.post("/guess", authMiddleware, (req, res) => {
 
   const len = round.len;
   const isWin = guessRaw === round.word;
-  let finished = isWin || round.attemptsLeft <= 0;
+  const finished = isWin || round.attemptsLeft <= 0;
 
   let xpGain = 0;
   let coinsGain = 0;
 
   if (isWin) {
-    // streak pirms šīs uzvaras
     const prevStreak = user.streak || 0;
     user.streak = prevStreak + 1;
 
-    // ---- XP aprēķins ----
     xpGain = XP_PER_WIN_BASE;
-
-    const extraLetters = Math.max(0, len - MIN_WORD_LEN); // MIN_WORD_LEN = 5
+    const extraLetters = Math.max(0, len - MIN_WORD_LEN);
     xpGain += XP_PER_LETTER_BONUS * extraLetters;
 
     const streakSteps = Math.min(user.streak - 1, XP_STREAK_MAX_STEPS);
@@ -840,7 +786,6 @@ app.post("/guess", authMiddleware, (req, res) => {
       xpGain += XP_PER_STREAK_STEP * streakSteps;
     }
 
-    // ---- COINS aprēķins ----
     coinsGain = COINS_PER_WIN_BASE;
     coinsGain += COINS_PER_LETTER_BONUS * extraLetters;
 
@@ -849,22 +794,18 @@ app.post("/guess", authMiddleware, (req, res) => {
       coinsGain += coinStreakBonus;
     }
 
-    // XP / score / coins pieaugums
     user.xp = (user.xp || 0) + xpGain;
     user.score = (user.score || 0) + SCORE_PER_WIN;
     user.coins = (user.coins || 0) + coinsGain;
 
-    // streak rekords
     user.bestStreak = Math.max(user.bestStreak || 0, user.streak || 0);
 
     round.finished = true;
 
-    // rank atjaunošana
     const rankInfo = calcRankFromXp(user.xp);
     user.rankLevel = rankInfo.level;
     user.rankTitle = rankInfo.title;
 
-    // paziņojums visiem
     io.emit("playerWin", {
       username: user.username,
       xpGain,
@@ -873,14 +814,11 @@ app.post("/guess", authMiddleware, (req, res) => {
       streak: user.streak || 0,
     });
   } else {
-    // minējums nav pareizs
     if (finished) {
-      // raunds beidzies bez uzvaras → streak reset
       user.streak = 0;
     }
   }
 
-  // misiju progress (uzvaras, xp, minējumu skaits)
   updateMissionsOnGuess(user, { isWin, xpGain });
 
   saveUsers(USERS);
@@ -894,7 +832,6 @@ app.post("/guess", authMiddleware, (req, res) => {
   });
 });
 
-// Žetona pirkšana
 app.post("/buy-token", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
@@ -922,7 +859,6 @@ app.post("/buy-token", authMiddleware, (req, res) => {
   });
 });
 
-// TOP10
 app.get("/leaderboard", (req, res) => {
   const arr = Object.values(USERS);
   arr.forEach((u) => {
@@ -967,12 +903,10 @@ io.on("connection", (socket) => {
 
   console.log("Pieslēdzās:", user.username, "socket:", socket.id);
 
-  // Atjaunojam aktivitāti/misijas tikko pēc pieslēgšanās
   markActivity(user);
   ensureDailyMissions(user);
   saveUsers(USERS);
 
-  // Reģistrējam online mapē un izplatām online sarakstu
   onlineBySocket.set(socket.id, user.username);
   broadcastOnlineList();
 
@@ -987,7 +921,6 @@ io.on("connection", (socket) => {
 
     const now = Date.now();
 
-    // BAN – ziņa tikai sev
     if (u.isBanned) {
       socket.emit("chatMessage", {
         username: "SYSTEM",
@@ -997,7 +930,6 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // MUTE – ziņa tikai sev
     if (u.mutedUntil && u.mutedUntil > now) {
       const until = new Date(u.mutedUntil).toLocaleTimeString("lv-LV", {
         hour: "2-digit",
@@ -1012,8 +944,6 @@ io.on("connection", (socket) => {
     }
 
     const isAdmin = ADMIN_USERNAMES.includes(u.username);
-
-    // Admin komandas sākas ar "/"
     if (isAdmin && msg.startsWith("/")) {
       handleAdminCommand(msg, u, socket);
       return;
