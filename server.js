@@ -1,4 +1,4 @@
-// server.js — VĀRDU ZONA auth + Wordle backend
+// server.js — VĀRDU ZONA backend: Auth + Wordle + XP/Rank/Coins/Tokens/Leaderboard
 
 import express from "express";
 import fs from "fs";
@@ -22,19 +22,46 @@ const MIN_WORD_LEN = 5;
 const MAX_WORD_LEN = 7;
 const MAX_ATTEMPTS = 6;
 
+// XP/coins parametri
+const BASE_XP_PER_WIN = 50;
+const XP_PER_ATTEMPT_LEFT = 10;
+
+const BASE_COINS_PER_WIN = 20;
+const COINS_PER_ATTEMPT_LEFT = 3;
+
+const TOKEN_PRICE_COINS = 150;
+
+// Rank tabula
+const RANKS = [
+  { minXp: 0, title: "Jauniņais I" },
+  { minXp: 200, title: "Jauniņais II" },
+  { minXp: 600, title: "Cīnītājs" },
+  { minXp: 1200, title: "Pro I" },
+  { minXp: 2500, title: "Pro II" },
+  { minXp: 4000, title: "Leģenda" },
+];
+
+function getRank(xp) {
+  let current = RANKS[0];
+  let level = 1;
+  for (let i = 0; i < RANKS.length; i++) {
+    if (xp >= RANKS[i].minXp) {
+      current = RANKS[i];
+      level = i + 1;
+    }
+  }
+  return { title: current.title, level };
+}
+
 // ====== MIDDLEWARE ======
 app.use(express.json());
 
-// Atļaujam thezone.lv frontend
 app.use(
   cors({
     origin: ["https://thezone.lv", "https://www.thezone.lv"],
     methods: ["GET", "POST", "OPTIONS"],
   })
 );
-
-// Ja vajadzēs statiskos failus no servera
-app.use(express.static(path.join(__dirname, "public")));
 
 // ====== USERS ======
 function getUsers() {
@@ -46,7 +73,17 @@ function getUsers() {
     const raw = fs.readFileSync(USERS_FILE, "utf8").trim();
     if (!raw) return [];
     const data = JSON.parse(raw);
-    return Array.isArray(data) ? data : [];
+    if (!Array.isArray(data)) return [];
+    // default vērtības, ja kas pietrūkst
+    return data.map((u) => ({
+      username: u.username,
+      password: u.password,
+      xp: u.xp ?? 0,
+      coins: u.coins ?? 0,
+      tokens: u.tokens ?? 0,
+      score: u.score ?? 0, // punkti leaderboardam (1 par katru atminētu vārdu)
+      createdAt: u.createdAt || new Date().toISOString(),
+    }));
   } catch (err) {
     console.error("getUsers error:", err);
     return [];
@@ -59,6 +96,12 @@ function saveUsers(users) {
   } catch (err) {
     console.error("saveUsers error:", err);
   }
+}
+
+function findUser(users, username) {
+  return users.find(
+    (u) => u.username.toLowerCase() === username.toLowerCase()
+  );
 }
 
 // ====== WORDS ======
@@ -105,10 +148,7 @@ app.post("/signup", (req, res) => {
   }
 
   const users = getUsers();
-  const exists = users.find(
-    (u) => u.username.toLowerCase() === username.toLowerCase()
-  );
-  if (exists) {
+  if (findUser(users, username)) {
     return res.status(400).json({ message: "Šāds lietotājvārds jau eksistē" });
   }
 
@@ -119,17 +159,25 @@ app.post("/signup", (req, res) => {
     createdAt: new Date().toISOString(),
     xp: 0,
     coins: 0,
+    tokens: 0,
+    score: 0,
   };
 
   users.push(newUser);
   saveUsers(users);
 
   const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: "7d" });
+  const rank = getRank(newUser.xp);
+
   return res.status(201).json({
     token,
     username,
     xp: newUser.xp,
     coins: newUser.coins,
+    tokens: newUser.tokens,
+    score: newUser.score,
+    rankTitle: rank.title,
+    rankLevel: rank.level,
   });
 });
 
@@ -142,9 +190,7 @@ app.post("/signin", (req, res) => {
   }
 
   const users = getUsers();
-  const user = users.find(
-    (u) => u.username.toLowerCase() === username.toLowerCase()
-  );
+  const user = findUser(users, username);
   if (!user) {
     return res.status(401).json({ message: "Nepareizs lietotājvārds vai parole" });
   }
@@ -155,11 +201,17 @@ app.post("/signin", (req, res) => {
   }
 
   const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: "7d" });
+  const rank = getRank(user.xp);
+
   return res.json({
     token,
     username: user.username,
-    xp: user.xp ?? 0,
-    coins: user.coins ?? 0,
+    xp: user.xp,
+    coins: user.coins,
+    tokens: user.tokens,
+    score: user.score,
+    rankTitle: rank.title,
+    rankLevel: rank.level,
   });
 });
 
@@ -176,23 +228,81 @@ function authMiddleware(req, res, next) {
   });
 }
 
+// Spēlētāja karte
 app.get("/me", authMiddleware, (req, res) => {
   const users = getUsers();
-  const user = users.find(
-    (u) => u.username.toLowerCase() === req.user.username.toLowerCase()
-  );
+  const user = findUser(users, req.user.username);
   if (!user) return res.status(404).json({ message: "Lietotājs nav atrasts" });
 
+  const rank = getRank(user.xp);
   res.json({
     username: user.username,
-    xp: user.xp ?? 0,
-    coins: user.coins ?? 0,
+    xp: user.xp,
+    coins: user.coins,
+    tokens: user.tokens,
+    score: user.score,
+    rankTitle: rank.title,
+    rankLevel: rank.level,
+    tokenPriceCoins: TOKEN_PRICE_COINS,
   });
 });
 
-// ====== GAME API ======
+// TOP 10 leaderboard (pēc score, tad XP)
+app.get("/leaderboard", (req, res) => {
+  const users = getUsers();
+  const sorted = [...users].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return (b.xp ?? 0) - (a.xp ?? 0);
+  });
 
-// jauns raunds: izvēlamies random vārdu ar garumu 5–7
+  const top10 = sorted.slice(0, 10).map((u, idx) => {
+    const rank = getRank(u.xp);
+    return {
+      place: idx + 1,
+      username: u.username,
+      score: u.score,
+      xp: u.xp,
+      coins: u.coins,
+      tokens: u.tokens,
+      rankTitle: rank.title,
+      rankLevel: rank.level,
+    };
+  });
+
+  res.json(top10);
+});
+
+// Žetonu pirkšana (1 žetons = 150 coins)
+app.post("/buy-token", authMiddleware, (req, res) => {
+  const users = getUsers();
+  const user = findUser(users, req.user.username);
+  if (!user) return res.status(404).json({ message: "Lietotājs nav atrasts" });
+
+  if (user.coins < TOKEN_PRICE_COINS) {
+    return res
+      .status(400)
+      .json({ message: `Nepietiek coins (vajag ${TOKEN_PRICE_COINS})` });
+  }
+
+  user.coins -= TOKEN_PRICE_COINS;
+  user.tokens += 1;
+  saveUsers(users);
+
+  const rank = getRank(user.xp);
+  res.json({
+    username: user.username,
+    xp: user.xp,
+    coins: user.coins,
+    tokens: user.tokens,
+    score: user.score,
+    rankTitle: rank.title,
+    rankLevel: rank.level,
+  });
+});
+
+// ====== GAME (Wordle) ======
+
+// jauns raunds
 app.get("/start-round", authMiddleware, (req, res) => {
   if (!WORD_LIST.length) {
     loadWords();
@@ -217,18 +327,18 @@ app.get("/start-round", authMiddleware, (req, res) => {
   });
 });
 
-// palīgfunkcija Wordle krāsošanai
+// Wordle scoring
 function scoreGuess(guess, target) {
   const len = target.length;
   const result = new Array(len).fill("absent");
-
   const freq = {};
+
   for (let i = 0; i < len; i++) {
     const ch = target[i];
     freq[ch] = (freq[ch] || 0) + 1;
   }
 
-  // vispirms "correct"
+  // correct
   for (let i = 0; i < len; i++) {
     if (guess[i] === target[i]) {
       result[i] = "correct";
@@ -236,7 +346,7 @@ function scoreGuess(guess, target) {
     }
   }
 
-  // tad "present"
+  // present
   for (let i = 0; i < len; i++) {
     if (result[i] === "correct") continue;
     const ch = guess[i];
@@ -277,22 +387,71 @@ app.post("/guess", authMiddleware, (req, res) => {
   const pattern = scoreGuess(g, round.word);
   round.attemptsLeft -= 1;
 
-  const win = g === round.word;
-  const finished = win || round.attemptsLeft <= 0;
+  let win = g === round.word;
+  let finished = win || round.attemptsLeft <= 0;
+
+  let rewards = null;
+
+  if (finished && win) {
+    // XP/coins/score piešķiršana tikai par atminētu vārdu
+    const users = getUsers();
+    const user = findUser(users, username) || {
+      username,
+      password: "",
+      xp: 0,
+      coins: 0,
+      tokens: 0,
+      score: 0,
+      createdAt: new Date().toISOString(),
+    };
+
+    const rankBefore = getRank(user.xp);
+
+    const xpGain =
+      BASE_XP_PER_WIN + XP_PER_ATTEMPT_LEFT * round.attemptsLeft;
+    const coinsGain =
+      BASE_COINS_PER_WIN +
+      COINS_PER_ATTEMPT_LEFT * round.attemptsLeft +
+      (rankBefore.level - 1) * 5; // jo lielāks ranks, jo vairāk coins
+    const scoreGain = 1;
+
+    user.xp += xpGain;
+    user.coins += coinsGain;
+    user.score += scoreGain;
+
+    // ja users.json vēl nebija šis lietotājs
+    if (!findUser(users, username)) {
+      users.push(user);
+    }
+
+    saveUsers(users);
+
+    const rankAfter = getRank(user.xp);
+
+    rewards = {
+      xpGain,
+      coinsGain,
+      scoreGain,
+      newXp: user.xp,
+      newCoins: user.coins,
+      newScore: user.score,
+      rankTitle: rankAfter.title,
+      rankLevel: rankAfter.level,
+    };
+  }
 
   if (finished) {
-    // šeit vēlāk varēs piešķirt XP/coins un saglabāt users.json
-    // pēc raunda varam noņemt no kartes
     ROUNDS.delete(username);
   } else {
     ROUNDS.set(username, round);
   }
 
   return res.json({
-    pattern,           // ["correct","present","absent",...]
+    pattern,
     attemptsLeft: round.attemptsLeft,
     finished,
     win,
+    rewards,
   });
 });
 
