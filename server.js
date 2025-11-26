@@ -30,18 +30,23 @@ const MAX_ATTEMPTS = 6;
 
 const BASE_TOKEN_PRICE = 150;
 
-// ========== XP / COINS EKONOMIKA (BOOSTED) ==========
+// ========== XP / COINS EKONOMIKA (HARD GRIND) ==========
 
-// XP bāze par uzvaru
-const XP_PER_WIN_BASE = 12; // agrāk bija 10
+// XP bāze par uzvaru (mazāka nekā iepriekš)
+const XP_PER_WIN_BASE = 8;        // bija 12
 const SCORE_PER_WIN = 1;
 
-// Bonuss par garākiem vārdiem (6 un 7 burti)
-const XP_PER_LETTER_BONUS = 2; // +2 XP par katru burtu virs MIN_WORD_LEN (5)
+// Bonuss par garākiem vārdiem (6 un 7 burti) – mazāks
+const XP_PER_LETTER_BONUS = 1;    // bija 2
 
-// Streak bonuss (jo lielāks winning streak, jo vairāk XP)
-const XP_PER_STREAK_STEP = 1; // +1 XP par streak soli
-const XP_STREAK_MAX_STEPS = 5; // max +5 XP no streak bonusa
+// Streak bonuss (XP) – limitēts
+const XP_PER_STREAK_STEP = 1;
+const XP_STREAK_MAX_STEPS = 3;    // max +3 XP no streak, nevis +5
+
+// Coins bāze un bonusi – tuvāk oriģinālajam
+const COINS_PER_WIN_BASE = 3;     // bija 4
+const COINS_PER_LETTER_BONUS = 0; // vairs nav bonusa par garāku vārdu
+const COINS_STREAK_MAX_BONUS = 2; // max +2 coins no streak
 
 // Coins bāze un bonusi
 const COINS_PER_WIN_BASE = 4; // agrāk 3
