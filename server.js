@@ -359,7 +359,12 @@ const io = new Server(httpServer, {
 const onlineBySocket = new Map();
 
 // VIENKĀRŠĀ ONLINE LOĢIKA: visi aktīvie socketi
+// ======== ONLINE saraksts ========
+// socket.id -> username
+const onlineBySocket = new Map();
+
 function broadcastOnlineList() {
+  // Visi lietotāji, kuriem šobrīd ir atvērts socket
   const users = Array.from(new Set(onlineBySocket.values()));
   io.emit("onlineList", { count: users.length, users });
 }
