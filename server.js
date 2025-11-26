@@ -9,7 +9,7 @@ import cors from "cors";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import bcrypt from "bcryptjs";
+import bcrypt from "bcryptjs";            // ← SVARĪGI: bcryptjs, nevis bcrypt
 import jwt from "jsonwebtoken";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -17,7 +17,8 @@ const __dirname = path.dirname(__filename);
 
 // ======== Konstantes ========
 const PORT = process.env.PORT || 10080;
-const JWT_SECRET = process.env.JWT_SECRET || "BUGATS_VARDU_ZONA_SUPER_SLEPENS_JWT";
+const JWT_SECRET =
+  process.env.JWT_SECRET || "BUGATS_VARDU_ZONA_SUPER_SLEPENS_JWT";
 
 const USERS_FILE = path.join(__dirname, "users.json");
 const WORDS_FILE = path.join(__dirname, "words.txt");
@@ -28,17 +29,17 @@ const MAX_ATTEMPTS = 6;
 
 const BASE_TOKEN_PRICE = 150;
 
-// XP / coins par uzvaru (pielāgo, ja gribi)
+// XP / coins par uzvaru
 const XP_PER_WIN = 10;
 const SCORE_PER_WIN = 1;
 const COINS_PER_WIN = 3;
 
 // Pasīvie coini
-const PASSIVE_COINS_PER_TICK = 2;             // cik coins par reālu spēlēšanas periodu
-const PASSIVE_INTERVAL_MS = 20 * 60 * 1000;   // 20 min
-const AFK_BREAK_MS = 3 * 60 * 1000;           // ja >3 min bez aktivitātes, pasīvais periods pārtrūkst
+const PASSIVE_COINS_PER_TICK = 2; // coins par aktīvu periodu
+const PASSIVE_INTERVAL_MS = 20 * 60 * 1000; // 20 min
+const AFK_BREAK_MS = 3 * 60 * 1000; // >3 min bez aktivitātes = AFK
 
-// ======== Palīgfunkcijas failiem ========
+// ======== Failu helperi ========
 function loadUsers() {
   if (!fs.existsSync(USERS_FILE)) return {};
   try {
@@ -78,7 +79,6 @@ try {
 
 // ======== Rank loģika ========
 function calcRankFromXp(xp) {
-  // vienkārša sistēma: ik pa 50 XP jauns līmenis
   const level = Math.max(1, Math.floor((xp || 0) / 50) + 1);
   let title;
   if (level <= 3) title = "Jauniņais";
@@ -89,7 +89,6 @@ function calcRankFromXp(xp) {
 }
 
 function getTokenPrice(user) {
-  // var vienkārši būt konstants vai atkarīgs no žetonu skaita
   const tokens = user.tokens || 0;
   return BASE_TOKEN_PRICE + tokens * 50;
 }
@@ -103,20 +102,17 @@ function markActivity(user) {
     user.lastPassiveTickAt = now;
     return;
   }
-
   if (!user.lastPassiveTickAt) {
     user.lastPassiveTickAt = user.lastActionAt;
   }
 
-  // ja starpība starp iepriekšējo aktivitāti un tagad > AFK_BREAK_MS,
-  // tad uzskatām, ka viņš bija AFK – pasīvo periodu resetojam
+  // AFK breaks
   if (now - user.lastActionAt > AFK_BREAK_MS) {
     user.lastActionAt = now;
     user.lastPassiveTickAt = now;
     return;
   }
 
-  // normāla aktivitāte: uzkrājam pasīvos coinus tikai šeit
   user.lastActionAt = now;
   const diff = now - user.lastPassiveTickAt;
 
@@ -126,7 +122,7 @@ function markActivity(user) {
     user.coins = (user.coins || 0) + gained;
     user.lastPassiveTickAt += ticks * PASSIVE_INTERVAL_MS;
     console.log(
-      `Pasīvie coini: ${user.username} +${gained} coins (tagad: ${user.coins})`
+      `Pasīvie coini: ${user.username} +${gained} (tagad: ${user.coins})`
     );
   }
 }
@@ -148,7 +144,7 @@ function authMiddleware(req, res, next) {
   }
 }
 
-// ======== Express + Socket.IO setup ========
+// ======== Express + Socket.IO ========
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -167,20 +163,22 @@ function broadcastOnlineList() {
   io.emit("onlineList", { count: users.length, users });
 }
 
-// ======== Auth endpoints ========
+// ======== AUTH ENDPOINTI ========
 
-// Reģistrācija
-app.post("/signup", async (req, res) => {
+// kopējais signup handleris, ko piesaistām /signup un /signin
+async function signupHandler(req, res) {
   const { username, password } = req.body || {};
   if (!username || !password) {
-    return res.status(400).json({ message: "Nepieciešams username un password" });
+    return res
+      .status(400)
+      .json({ message: "Nepieciešams username un password" });
   }
 
   const name = String(username).trim();
   if (!/^[a-zA-Z0-9_\-]{3,20}$/.test(name)) {
-    return res
-      .status(400)
-      .json({ message: "Nickname: 3-20 simboli, tikai burti/cipari/ - _" });
+    return res.status(400).json({
+      message: "Nickname: 3-20 simboli, tikai burti/cipari/ - _",
+    });
   }
   if (USERS[name]) {
     return res.status(400).json({ message: "Šāds lietotājs jau eksistē" });
@@ -218,16 +216,24 @@ app.post("/signup", async (req, res) => {
     score: user.score,
     coins: user.coins,
     tokens: user.tokens,
+    streak: user.streak,
+    bestStreak: user.bestStreak,
     rankTitle: user.rankTitle,
     rankLevel: user.rankLevel,
   });
-});
+}
+
+// jauns + vecais maršruts
+app.post("/signup", signupHandler);
+app.post("/signin", signupHandler); // ← ALIAS priekš tava vecā klienta
 
 // Login
 app.post("/login", async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) {
-    return res.status(400).json({ message: "Nepieciešams username un password" });
+    return res
+      .status(400)
+      .json({ message: "Nepieciešams username un password" });
   }
 
   const name = String(username).trim();
@@ -241,8 +247,8 @@ app.post("/login", async (req, res) => {
     return res.status(400).json({ message: "Nepareiza parole" });
   }
 
-  // login arī skaitām kā aktivitāti
   markActivity(user);
+
   const rankInfo = calcRankFromXp(user.xp);
   user.rankLevel = rankInfo.level;
   user.rankTitle = rankInfo.title;
@@ -252,10 +258,10 @@ app.post("/login", async (req, res) => {
   return res.json({
     token,
     username: name,
-    xp: user.xp,
-    score: user.score,
-    coins: user.coins,
-    tokens: user.tokens,
+    xp: user.xp || 0,
+    score: user.score || 0,
+    coins: user.coins || 0,
+    tokens: user.tokens || 0,
     streak: user.streak || 0,
     bestStreak: user.bestStreak || 0,
     rankTitle: user.rankTitle,
@@ -269,8 +275,6 @@ app.get("/me", authMiddleware, (req, res) => {
   const rankInfo = calcRankFromXp(u.xp);
   u.rankLevel = rankInfo.level;
   u.rankTitle = rankInfo.title;
-
-  // tikai info – šeit markActivity neliekam, lai /me spams neskaitās aktivitāte
   saveUsers(USERS);
 
   res.json({
@@ -288,21 +292,19 @@ app.get("/me", authMiddleware, (req, res) => {
 });
 
 // ======== Spēles loģika ========
-
 function pickRandomWord() {
   if (!WORDS.length) {
     return { word: "BUGAT", len: 5 };
   }
-  const list = WORDS;
-  const idx = Math.floor(Math.random() * list.length);
-  const w = list[idx].trim();
+  const idx = Math.floor(Math.random() * WORDS.length);
+  const w = WORDS[idx].trim();
   return { word: w.toUpperCase(), len: w.length };
 }
 
 // Jauns raunds
 app.get("/start-round", authMiddleware, (req, res) => {
   const user = req.user;
-  markActivity(user); // aktivitāte
+  markActivity(user);
 
   const { word, len } = pickRandomWord();
   user.currentRound = {
@@ -316,26 +318,20 @@ app.get("/start-round", authMiddleware, (req, res) => {
   res.json({ len });
 });
 
-// Palīgfunkcija Wordle patternam
 function buildPattern(secret, guess) {
   const sArr = secret.split("");
   const gArr = guess.split("");
   const result = new Array(gArr.length).fill("absent");
   const counts = {};
-
   for (const ch of sArr) {
     counts[ch] = (counts[ch] || 0) + 1;
   }
-
-  // correct
   for (let i = 0; i < gArr.length; i++) {
     if (gArr[i] === sArr[i]) {
       result[i] = "correct";
       counts[gArr[i]] -= 1;
     }
   }
-
-  // present
   for (let i = 0; i < gArr.length; i++) {
     if (result[i] === "correct") continue;
     const ch = gArr[i];
@@ -344,17 +340,15 @@ function buildPattern(secret, guess) {
       counts[ch] -= 1;
     }
   }
-
   return result;
 }
 
 // Minējums
 app.post("/guess", authMiddleware, (req, res) => {
   const user = req.user;
-  markActivity(user); // Anti-AFK + pasīvie coini
+  markActivity(user);
 
   const guessRaw = (req.body?.guess || "").toString().trim().toUpperCase();
-
   if (!user.currentRound || user.currentRound.finished) {
     return res.status(400).json({ message: "Nav aktīva raunda" });
   }
@@ -380,7 +374,7 @@ app.post("/guess", authMiddleware, (req, res) => {
   const pattern = buildPattern(round.word, guessRaw);
   round.attemptsLeft -= 1;
 
-  let win = guessRaw === round.word;
+  const win = guessRaw === round.word;
   let finished = win || round.attemptsLeft <= 0;
 
   let xpGain = 0;
@@ -389,6 +383,7 @@ app.post("/guess", authMiddleware, (req, res) => {
   if (win) {
     xpGain = XP_PER_WIN;
     coinsGain = COINS_PER_WIN;
+
     user.xp = (user.xp || 0) + XP_PER_WIN;
     user.score = (user.score || 0) + SCORE_PER_WIN;
     user.coins = (user.coins || 0) + COINS_PER_WIN;
@@ -402,7 +397,6 @@ app.post("/guess", authMiddleware, (req, res) => {
     user.rankLevel = rankInfo.level;
     user.rankTitle = rankInfo.title;
 
-    // paziņojums visiem par uzvaru
     io.emit("playerWin", {
       username: user.username,
       xpGain,
@@ -411,7 +405,6 @@ app.post("/guess", authMiddleware, (req, res) => {
       streak: user.streak || 0,
     });
   } else {
-    // zaudēts minējums – streak reset tikai, ja raunds beidzas
     if (finished) {
       user.streak = 0;
     }
@@ -431,7 +424,7 @@ app.post("/guess", authMiddleware, (req, res) => {
 // Žetona pirkšana
 app.post("/buy-token", authMiddleware, (req, res) => {
   const user = req.user;
-  markActivity(user); // aktivitāte (arī Anti-AFK)
+  markActivity(user);
 
   const price = getTokenPrice(user);
   if ((user.coins || 0) < price) {
@@ -443,7 +436,6 @@ app.post("/buy-token", authMiddleware, (req, res) => {
 
   saveUsers(USERS);
 
-  // globāls paziņojums
   io.emit("tokenBuy", {
     username: user.username,
     tokens: user.tokens || 0,
@@ -457,7 +449,7 @@ app.post("/buy-token", authMiddleware, (req, res) => {
 });
 
 // TOP10
-app.get("/leaderboard", async (req, res) => {
+app.get("/leaderboard", (req, res) => {
   const arr = Object.values(USERS);
   arr.forEach((u) => {
     const info = calcRankFromXp(u.xp || 0);
@@ -503,17 +495,14 @@ io.on("connection", (socket) => {
 
   console.log("Pieslēdzās:", user.username, "socket:", socket.id);
 
-  // pirmā aktivitāte — connection
   markActivity(user);
   saveUsers(USERS);
 
-  // Čats
   socket.on("chatMessage", (text) => {
     if (typeof text !== "string") return;
     const msg = text.trim();
     if (!msg) return;
 
-    // čatošana = aktivitāte (Anti-AFK)
     markActivity(user);
     saveUsers(USERS);
 
