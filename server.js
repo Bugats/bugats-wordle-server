@@ -48,11 +48,6 @@ const COINS_PER_WIN_BASE = 3;     // bija 4
 const COINS_PER_LETTER_BONUS = 0; // vairs nav bonusa par garāku vārdu
 const COINS_STREAK_MAX_BONUS = 2; // max +2 coins no streak
 
-// Coins bāze un bonusi
-const COINS_PER_WIN_BASE = 4; // agrāk 3
-const COINS_PER_LETTER_BONUS = 1; // +1 coins par katru burtu virs MIN_WORD_LEN
-const COINS_STREAK_MAX_BONUS = 3; // max +3 coins no streak bonusa
-
 // ========== Pasīvie coini + Anti-AFK ==========
 const PASSIVE_COINS_PER_TICK = 2; // cik coins par aktīvu periodu
 const PASSIVE_INTERVAL_MS = 20 * 60 * 1000; // 20 min
