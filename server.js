@@ -548,6 +548,42 @@ app.get("/me", authMiddleware, (req, res) => {
   });
 });
 
+// ======== Publiska spēlētāja profila API ========
+app.get("/player/:username", authMiddleware, (req, res) => {
+  const requester = req.user;
+  const name = String(req.params.username || "").trim();
+  const user = USERS[name];
+
+  if (!user) {
+    return res.status(404).json({ message: "Lietotājs nav atrasts" });
+  }
+
+  const isAdmin = ADMIN_USERNAMES.includes(requester.username);
+
+  const rankInfo = calcRankFromXp(user.xp || 0);
+  user.rankLevel = rankInfo.level;
+  user.rankTitle = rankInfo.title;
+
+  const payload = {
+    username: user.username,
+    xp: user.xp || 0,
+    score: user.score || 0,
+    coins: user.coins || 0,
+    tokens: user.tokens || 0,
+    streak: user.streak || 0,
+    bestStreak: user.bestStreak || 0,
+    rankTitle: user.rankTitle,
+    rankLevel: user.rankLevel,
+  };
+
+  if (isAdmin) {
+    payload.isBanned = !!user.isBanned;
+    payload.mutedUntil = user.mutedUntil || 0;
+  }
+
+  res.json(payload);
+});
+
 // ======== Spēles loģika ========
 function pickRandomWord() {
   if (!WORDS.length) {
@@ -792,7 +828,6 @@ io.on("connection", (socket) => {
     const msg = text.trim();
     if (!msg) return;
 
-    // ņemam svaigāko user objektu (ja pa to laiku mainīts/stāvoklis)
     const u = USERS[user.username] || user;
     markActivity(u);
 
