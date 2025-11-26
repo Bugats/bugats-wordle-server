@@ -354,10 +354,6 @@ const io = new Server(httpServer, {
   cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
-// ======== ONLINE saraksts ========
-// socket.id -> username
-const onlineBySocket = new Map();
-
 // VIENKĀRŠĀ ONLINE LOĢIKA: visi aktīvie socketi
 // ======== ONLINE saraksts ========
 // socket.id -> username
