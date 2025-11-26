@@ -1,7 +1,6 @@
 {
   "name": "bugats-wordle-server",
   "version": "1.0.0",
-  "description": "VARDU ZONA backend (auth + wordle + XP/ranks/coins/tokens + leaderboard + socket.io)",
   "main": "server.js",
   "type": "module",
   "scripts": {
