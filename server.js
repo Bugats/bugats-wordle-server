@@ -1,4 +1,4 @@
-// server.js — VĀRDU ZONA backend: Auth + Wordle + XP/Rank/Coins/Tokens/Leaderboard
+// server.js — VĀRDU ZONA backend: Auth + Wordle + XP/Rank/Coins/Tokens/Leaderboard + Socket.IO (online + chat + win-events)
 
 import express from "express";
 import fs from "fs";
@@ -7,11 +7,15 @@ import { fileURLToPath } from "url";
 import cors from "cors";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import { createServer } from "http";
+import { Server as SocketIOServer } from "socket.io";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const httpServer = createServer(app);
+
 const PORT = process.env.PORT || 10080;
 const JWT_SECRET = process.env.JWT_SECRET || "BUGATS_VARDU_ZONA_SUPER_TOKENS";
 
@@ -55,7 +59,6 @@ function getRank(xp) {
 
 // ====== MIDDLEWARE ======
 app.use(express.json());
-
 app.use(
   cors({
     origin: ["https://thezone.lv", "https://www.thezone.lv"],
@@ -74,14 +77,13 @@ function getUsers() {
     if (!raw) return [];
     const data = JSON.parse(raw);
     if (!Array.isArray(data)) return [];
-    // default vērtības, ja kas pietrūkst
     return data.map((u) => ({
       username: u.username,
       password: u.password,
       xp: u.xp ?? 0,
       coins: u.coins ?? 0,
       tokens: u.tokens ?? 0,
-      score: u.score ?? 0, // punkti leaderboardam (1 par katru atminētu vārdu)
+      score: u.score ?? 0,
       createdAt: u.createdAt || new Date().toISOString(),
     }));
   } catch (err) {
@@ -138,7 +140,7 @@ loadWords();
 // rounds: username -> { word, attemptsLeft }
 const ROUNDS = new Map();
 
-// ====== AUTH ======
+// ====== AUTH REST ======
 app.post("/signup", (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) {
@@ -247,7 +249,7 @@ app.get("/me", authMiddleware, (req, res) => {
   });
 });
 
-// TOP 10 leaderboard (pēc score, tad XP)
+// TOP 10 leaderboard
 app.get("/leaderboard", (req, res) => {
   const users = getUsers();
   const sorted = [...users].sort((a, b) => {
@@ -272,7 +274,7 @@ app.get("/leaderboard", (req, res) => {
   res.json(top10);
 });
 
-// Žetonu pirkšana (1 žetons = 150 coins)
+// Žetonu pirkšana
 app.post("/buy-token", authMiddleware, (req, res) => {
   const users = getUsers();
   const user = findUser(users, req.user.username);
@@ -300,9 +302,7 @@ app.post("/buy-token", authMiddleware, (req, res) => {
   });
 });
 
-// ====== GAME (Wordle) ======
-
-// jauns raunds
+// ====== GAME (Wordle REST) ======
 app.get("/start-round", authMiddleware, (req, res) => {
   if (!WORD_LIST.length) {
     loadWords();
@@ -327,7 +327,6 @@ app.get("/start-round", authMiddleware, (req, res) => {
   });
 });
 
-// Wordle scoring
 function scoreGuess(guess, target) {
   const len = target.length;
   const result = new Array(len).fill("absent");
@@ -338,7 +337,6 @@ function scoreGuess(guess, target) {
     freq[ch] = (freq[ch] || 0) + 1;
   }
 
-  // correct
   for (let i = 0; i < len; i++) {
     if (guess[i] === target[i]) {
       result[i] = "correct";
@@ -346,7 +344,6 @@ function scoreGuess(guess, target) {
     }
   }
 
-  // present
   for (let i = 0; i < len; i++) {
     if (result[i] === "correct") continue;
     const ch = guess[i];
@@ -359,7 +356,6 @@ function scoreGuess(guess, target) {
   return result;
 }
 
-// minējums
 app.post("/guess", authMiddleware, (req, res) => {
   const { guess } = req.body || {};
   const username = req.user.username;
@@ -389,21 +385,23 @@ app.post("/guess", authMiddleware, (req, res) => {
 
   let win = g === round.word;
   let finished = win || round.attemptsLeft <= 0;
-
   let rewards = null;
 
   if (finished && win) {
-    // XP/coins/score piešķiršana tikai par atminētu vārdu
     const users = getUsers();
-    const user = findUser(users, username) || {
-      username,
-      password: "",
-      xp: 0,
-      coins: 0,
-      tokens: 0,
-      score: 0,
-      createdAt: new Date().toISOString(),
-    };
+    let user = findUser(users, username);
+    if (!user) {
+      user = {
+        username,
+        password: "",
+        xp: 0,
+        coins: 0,
+        tokens: 0,
+        score: 0,
+        createdAt: new Date().toISOString(),
+      };
+      users.push(user);
+    }
 
     const rankBefore = getRank(user.xp);
 
@@ -412,17 +410,12 @@ app.post("/guess", authMiddleware, (req, res) => {
     const coinsGain =
       BASE_COINS_PER_WIN +
       COINS_PER_ATTEMPT_LEFT * round.attemptsLeft +
-      (rankBefore.level - 1) * 5; // jo lielāks ranks, jo vairāk coins
+      (rankBefore.level - 1) * 5;
     const scoreGain = 1;
 
     user.xp += xpGain;
     user.coins += coinsGain;
     user.score += scoreGain;
-
-    // ja users.json vēl nebija šis lietotājs
-    if (!findUser(users, username)) {
-      users.push(user);
-    }
 
     saveUsers(users);
 
@@ -438,6 +431,16 @@ app.post("/guess", authMiddleware, (req, res) => {
       rankTitle: rankAfter.title,
       rankLevel: rankAfter.level,
     };
+
+    // Dopamīna casino win-event uz visiem
+    io.emit("playerWin", {
+      username,
+      xpGain,
+      coinsGain,
+      rankTitle: rankAfter.title,
+      rankLevel: rankAfter.level,
+      wordLen: round.word.length,
+    });
   }
 
   if (finished) {
@@ -460,6 +463,57 @@ app.get("/", (req, res) => {
   res.json({ ok: true, service: "VARDU ZONA backend" });
 });
 
-app.listen(PORT, () => {
+// ====== SOCKET.IO: online + chat + win-feed ======
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: ["https://thezone.lv", "https://www.thezone.lv"],
+    methods: ["GET", "POST"],
+  },
+});
+
+const onlineUsers = new Map(); // socket.id -> { username }
+
+io.use((socket, next) => {
+  const { token } = socket.handshake.auth || {};
+  if (!token) return next(new Error("No token"));
+
+  jwt.verify(token, JWT_SECRET, (err, payload) => {
+    if (err) return next(new Error("Bad token"));
+    socket.user = { username: payload.username };
+    next();
+  });
+});
+
+function broadcastOnline() {
+  const list = [...onlineUsers.values()].map((u) => u.username);
+  const unique = [...new Set(list)];
+  io.emit("onlineList", { count: unique.length, users: unique });
+}
+
+io.on("connection", (socket) => {
+  const username = socket.user?.username || "Nezināms";
+
+  onlineUsers.set(socket.id, { username });
+  broadcastOnline();
+
+  socket.on("chatMessage", (text) => {
+    const msgText = String(text || "").trim().slice(0, 200);
+    if (!msgText) return;
+    const msg = {
+      username,
+      text: msgText,
+      ts: Date.now(),
+    };
+    io.emit("chatMessage", msg);
+  });
+
+  socket.on("disconnect", () => {
+    onlineUsers.delete(socket.id);
+    broadcastOnline();
+  });
+});
+
+// ====== START ======
+httpServer.listen(PORT, () => {
   console.log("VĀRDU ZONA serveris klausās uz porta", PORT);
 });
