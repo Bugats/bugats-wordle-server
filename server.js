@@ -203,7 +203,9 @@ function authMiddleware(req, res, next) {
     const user = USERS[payload.username];
     if (!user) return res.status(401).json({ message: "Lietotājs nav atrasts" });
     if (user.isBanned) {
-      return res.status(403).json({ message: "Lietotājs ir nobanots no VĀRDU ZONAS." });
+      return res
+        .status(403)
+        .json({ message: "Lietotājs ir nobanots no VĀRDU ZONAS." });
     }
     req.user = user;
     next();
@@ -468,12 +470,11 @@ async function signupHandler(req, res) {
   });
 }
 
-// Jauns + vecais maršruts (abi dara to pašu – signup alias)
+// Reģistrācija
 app.post("/signup", signupHandler);
-app.post("/signin", signupHandler);
 
-// Login
-app.post("/login", async (req, res) => {
+// Kopējais login handleris
+async function loginHandler(req, res) {
   const { username, password } = req.body || {};
   if (!username || !password) {
     return res
@@ -489,9 +490,9 @@ app.post("/login", async (req, res) => {
 
   // BAN check
   if (user.isBanned) {
-    return res
-      .status(403)
-      .json({ message: "Šis lietotājs ir nobanots no VĀRDU ZONAS. Sazinies ar Bugats." });
+    return res.status(403).json({
+      message: "Šis lietotājs ir nobanots no VĀRDU ZONAS. Sazinies ar Bugats.",
+    });
   }
 
   const ok = await bcrypt.compare(password, user.passwordHash || "");
@@ -519,7 +520,11 @@ app.post("/login", async (req, res) => {
     rankTitle: user.rankTitle,
     rankLevel: user.rankLevel,
   });
-});
+}
+
+// Login maršruti (abi dara to pašu – ērti priekš fronta)
+app.post("/login", loginHandler);
+app.post("/signin", loginHandler);
 
 // ======== /me ========
 app.get("/me", authMiddleware, (req, res) => {
