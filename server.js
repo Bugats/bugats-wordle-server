@@ -54,6 +54,7 @@ const COINS_STREAK_MAX_BONUS = 2; // max +2 coins no streak
 const PASSIVE_COINS_PER_TICK = 2; // cik coins par aktīvu periodu
 const PASSIVE_INTERVAL_MS = 20 * 60 * 1000; // 20 min
 const AFK_BREAK_MS = 3 * 60 * 1000; // >3 min bez aktivitātes = AFK reset
+const ONLINE_TIMEOUT_MS = 2 * 60 * 1000; // 2 min max bez aktivitātes, lai skaitītos online
 
 // ======== Failu helperi ========
 function loadUsers() {
