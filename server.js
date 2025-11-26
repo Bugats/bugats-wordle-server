@@ -33,7 +33,7 @@ const MAX_ATTEMPTS = 6;
 const BASE_TOKEN_PRICE = 150;
 
 // Admin lietotāji
-const ADMIN_USERNAMES = ["Bugats"];
+const ADMIN_USERNAMES = ["BugatsLV"];
 
 // ========== XP / COINS EKONOMIKA (HARD GRIND) ==========
 
