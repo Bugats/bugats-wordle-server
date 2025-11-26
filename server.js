@@ -1,4 +1,4 @@
-// server.js — VĀRDU ZONA backend: Auth + Wordle + XP/Rank/Coins/Tokens/Leaderboard + Socket.IO (online + chat + win-events)
+// server.js — VĀRDU ZONA backend: Auth + Wordle + XP/Rank/Coins/Tokens/Streak + Leaderboard + Socket.IO
 
 import express from "express";
 import fs from "fs";
@@ -34,6 +34,10 @@ const BASE_COINS_PER_WIN = 20;
 const COINS_PER_ATTEMPT_LEFT = 3;
 
 const TOKEN_PRICE_COINS = 150;
+
+// Ik pēc 20 min +2 coins
+const PASSIVE_PERIOD_MS = 20 * 60 * 1000;
+const PASSIVE_COINS = 2;
 
 // Rank tabula
 const RANKS = [
@@ -84,6 +88,9 @@ function getUsers() {
       coins: u.coins ?? 0,
       tokens: u.tokens ?? 0,
       score: u.score ?? 0,
+      streak: u.streak ?? 0,
+      bestStreak: u.bestStreak ?? 0,
+      lastPassiveAt: u.lastPassiveAt || null,
       createdAt: u.createdAt || new Date().toISOString(),
     }));
   } catch (err) {
@@ -104,6 +111,25 @@ function findUser(users, username) {
   return users.find(
     (u) => u.username.toLowerCase() === username.toLowerCase()
   );
+}
+
+// Ik pēc 20 min +2 coins (kad lietotājs veic jebkuru darbību)
+function applyPassiveIncome(user) {
+  const now = Date.now();
+  if (!user.lastPassiveAt) {
+    user.lastPassiveAt = new Date(now).toISOString();
+    return 0;
+  }
+  const last = new Date(user.lastPassiveAt).getTime();
+  const diff = now - last;
+  if (diff < PASSIVE_PERIOD_MS) return 0;
+
+  const periods = Math.floor(diff / PASSIVE_PERIOD_MS);
+  const gain = periods * PASSIVE_COINS;
+
+  user.coins += gain;
+  user.lastPassiveAt = new Date(last + periods * PASSIVE_PERIOD_MS).toISOString();
+  return gain;
 }
 
 // ====== WORDS ======
@@ -155,14 +181,18 @@ app.post("/signup", (req, res) => {
   }
 
   const hashed = bcrypt.hashSync(password, 10);
+  const nowIso = new Date().toISOString();
   const newUser = {
     username,
     password: hashed,
-    createdAt: new Date().toISOString(),
+    createdAt: nowIso,
     xp: 0,
     coins: 0,
     tokens: 0,
     score: 0,
+    streak: 0,
+    bestStreak: 0,
+    lastPassiveAt: nowIso,
   };
 
   users.push(newUser);
@@ -178,6 +208,8 @@ app.post("/signup", (req, res) => {
     coins: newUser.coins,
     tokens: newUser.tokens,
     score: newUser.score,
+    streak: newUser.streak,
+    bestStreak: newUser.bestStreak,
     rankTitle: rank.title,
     rankLevel: rank.level,
   });
@@ -202,6 +234,9 @@ app.post("/signin", (req, res) => {
     return res.status(401).json({ message: "Nepareizs lietotājvārds vai parole" });
   }
 
+  const passiveGain = applyPassiveIncome(user);
+  if (passiveGain > 0) saveUsers(users);
+
   const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: "7d" });
   const rank = getRank(user.xp);
 
@@ -212,6 +247,8 @@ app.post("/signin", (req, res) => {
     coins: user.coins,
     tokens: user.tokens,
     score: user.score,
+    streak: user.streak,
+    bestStreak: user.bestStreak,
     rankTitle: rank.title,
     rankLevel: rank.level,
   });
@@ -236,6 +273,9 @@ app.get("/me", authMiddleware, (req, res) => {
   const user = findUser(users, req.user.username);
   if (!user) return res.status(404).json({ message: "Lietotājs nav atrasts" });
 
+  const passiveGain = applyPassiveIncome(user);
+  if (passiveGain > 0) saveUsers(users);
+
   const rank = getRank(user.xp);
   res.json({
     username: user.username,
@@ -243,6 +283,8 @@ app.get("/me", authMiddleware, (req, res) => {
     coins: user.coins,
     tokens: user.tokens,
     score: user.score,
+    streak: user.streak,
+    bestStreak: user.bestStreak,
     rankTitle: rank.title,
     rankLevel: rank.level,
     tokenPriceCoins: TOKEN_PRICE_COINS,
@@ -266,6 +308,8 @@ app.get("/leaderboard", (req, res) => {
       xp: u.xp,
       coins: u.coins,
       tokens: u.tokens,
+      streak: u.streak,
+      bestStreak: u.bestStreak,
       rankTitle: rank.title,
       rankLevel: rank.level,
     };
@@ -280,6 +324,8 @@ app.post("/buy-token", authMiddleware, (req, res) => {
   const user = findUser(users, req.user.username);
   if (!user) return res.status(404).json({ message: "Lietotājs nav atrasts" });
 
+  applyPassiveIncome(user);
+
   if (user.coins < TOKEN_PRICE_COINS) {
     return res
       .status(400)
@@ -291,12 +337,21 @@ app.post("/buy-token", authMiddleware, (req, res) => {
   saveUsers(users);
 
   const rank = getRank(user.xp);
+
+  // Paziņojums visiem par žetona pirkumu
+  io.emit("tokenBuy", {
+    username: user.username,
+    tokens: user.tokens,
+  });
+
   res.json({
     username: user.username,
     xp: user.xp,
     coins: user.coins,
     tokens: user.tokens,
     score: user.score,
+    streak: user.streak,
+    bestStreak: user.bestStreak,
     rankTitle: rank.title,
     rankLevel: rank.level,
   });
@@ -387,60 +442,79 @@ app.post("/guess", authMiddleware, (req, res) => {
   let finished = win || round.attemptsLeft <= 0;
   let rewards = null;
 
-  if (finished && win) {
-    const users = getUsers();
-    let user = findUser(users, username);
-    if (!user) {
-      user = {
-        username,
-        password: "",
-        xp: 0,
-        coins: 0,
-        tokens: 0,
-        score: 0,
-        createdAt: new Date().toISOString(),
+  const users = getUsers();
+  let user = findUser(users, username);
+  if (!user) {
+    const nowIso = new Date().toISOString();
+    user = {
+      username,
+      password: "",
+      xp: 0,
+      coins: 0,
+      tokens: 0,
+      score: 0,
+      streak: 0,
+      bestStreak: 0,
+      lastPassiveAt: nowIso,
+      createdAt: nowIso,
+    };
+    users.push(user);
+  }
+
+  applyPassiveIncome(user);
+
+  if (finished) {
+    if (win) {
+      const rankBefore = getRank(user.xp);
+
+      const xpGain =
+        BASE_XP_PER_WIN + XP_PER_ATTEMPT_LEFT * round.attemptsLeft;
+      const coinsGain =
+        BASE_COINS_PER_WIN +
+        COINS_PER_ATTEMPT_LEFT * round.attemptsLeft +
+        (rankBefore.level - 1) * 5;
+      const scoreGain = 1;
+
+      user.xp += xpGain;
+      user.coins += coinsGain;
+      user.score += scoreGain;
+
+      // streaks
+      user.streak = (user.streak || 0) + 1;
+      user.bestStreak = Math.max(user.bestStreak || 0, user.streak);
+
+      const rankAfter = getRank(user.xp);
+
+      rewards = {
+        xpGain,
+        coinsGain,
+        scoreGain,
+        newXp: user.xp,
+        newCoins: user.coins,
+        newScore: user.score,
+        rankTitle: rankAfter.title,
+        rankLevel: rankAfter.level,
+        streak: user.streak,
+        bestStreak: user.bestStreak,
       };
-      users.push(user);
+
+      // Dopamīna casino win-event uz visiem
+      io.emit("playerWin", {
+        username,
+        xpGain,
+        coinsGain,
+        rankTitle: rankAfter.title,
+        rankLevel: rankAfter.level,
+        streak: user.streak,
+        bestStreak: user.bestStreak,
+        wordLen: round.word.length,
+      });
+    } else {
+      // ja zaudē — streak nullējas
+      user.streak = 0;
     }
 
-    const rankBefore = getRank(user.xp);
-
-    const xpGain =
-      BASE_XP_PER_WIN + XP_PER_ATTEMPT_LEFT * round.attemptsLeft;
-    const coinsGain =
-      BASE_COINS_PER_WIN +
-      COINS_PER_ATTEMPT_LEFT * round.attemptsLeft +
-      (rankBefore.level - 1) * 5;
-    const scoreGain = 1;
-
-    user.xp += xpGain;
-    user.coins += coinsGain;
-    user.score += scoreGain;
-
     saveUsers(users);
-
-    const rankAfter = getRank(user.xp);
-
-    rewards = {
-      xpGain,
-      coinsGain,
-      scoreGain,
-      newXp: user.xp,
-      newCoins: user.coins,
-      newScore: user.score,
-      rankTitle: rankAfter.title,
-      rankLevel: rankAfter.level,
-    };
-
-    // Dopamīna casino win-event uz visiem
-    io.emit("playerWin", {
-      username,
-      xpGain,
-      coinsGain,
-      rankTitle: rankAfter.title,
-      rankLevel: rankAfter.level,
-      wordLen: round.word.length,
-    });
   }
 
   if (finished) {
