@@ -165,8 +165,8 @@ function calcRankFromXp(xp) {
 }
 
 function getTokenPrice(user) {
-  const tokens = user.tokens || 0;
-  return BASE_TOKEN_PRICE + tokens * 50;
+  // Žetons vienmēr maksā 150 coins
+  return 150;
 }
 
 // ======== Anti-AFK + pasīvie coini ========
@@ -1010,12 +1010,22 @@ io.on("connection", (socket) => {
     });
   }
 });
-// ===== OVERRIDE: žetona cena fiksēta 150 coins =====
-// Šis pārraksta iepriekš definēto getTokenPrice,
-// lai žetons VIENMĒR maksātu 150 coins.
-function getTokenPrice(user) {
-  return 150;
-}
+// Papildu Socket.IO "connection" handleris – strādā kopā ar esošo
+io.on("connection", (socket) => {
+  const user = socket.data.user;
+  if (!user) return;
+
+  const bonus = grantDailyLoginBonus(user);
+  if (bonus > 0) {
+    // Ziņa tikai šim spēlētājam
+    socket.emit("chatMessage", {
+      username: "SYSTEM",
+      text: `Dienas ienākšanas bonuss: +${bonus} coins!`,
+      ts: Date.now(),
+    });
+  }
+});
+
 // ======== Start ========
 httpServer.listen(PORT, () => {
   console.log("VĀRDU ZONA serveris klausās portā", PORT);
