@@ -1010,7 +1010,12 @@ io.on("connection", (socket) => {
     });
   }
 });
-
+// ===== OVERRIDE: žetona cena fiksēta 150 coins =====
+// Šis pārraksta iepriekš definēto getTokenPrice,
+// lai žetons VIENMĒR maksātu 150 coins.
+function getTokenPrice(user) {
+  return 150;
+}
 // ======== Start ========
 httpServer.listen(PORT, () => {
   console.log("VĀRDU ZONA serveris klausās portā", PORT);
