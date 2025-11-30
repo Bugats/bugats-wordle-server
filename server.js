@@ -965,6 +965,51 @@ io.on("connection", (socket) => {
     console.log("Atvienojās:", user.username, "socket:", socket.id);
   });
 });
+// ===== DIENAS LOGIN BONUSS (coins par katru dienu) =====
+
+// Cik coins par vienu pieslēgšanās dienu
+const DAILY_LOGIN_COINS = 10;
+
+/**
+ * Piešķir dienas login bonusu, ja lietotājs šodien vēl nav saņēmis.
+ * Atgriež piešķirto coins daudzumu vai 0.
+ */
+function grantDailyLoginBonus(user) {
+  if (!user) return 0;
+
+  // todayKey() jau ir definēta augstāk (tiek lietota misijām)
+  const today = todayKey();
+
+  // Ja jau šodien bonuss piešķirts – neko nedodam
+  if (user.dailyLoginDate === today) {
+    return 0;
+  }
+
+  // Saglabājam, ka šodien bonuss saņemts
+  user.dailyLoginDate = today;
+
+  const bonus = DAILY_LOGIN_COINS;
+  user.coins = (user.coins || 0) + bonus;
+
+  saveUsers(USERS);
+  return bonus;
+}
+
+// Papildu Socket.IO "connection" handleris – strādā kopā ar esošo
+io.on("connection", (socket) => {
+  const user = socket.data.user;
+  if (!user) return;
+
+  const bonus = grantDailyLoginBonus(user);
+  if (bonus > 0) {
+    // Ziņa tikai šim spēlētājam
+    socket.emit("chatMessage", {
+      username: "SYSTEM",
+      text: `Dienas ienākšanas bonuss: +${bonus} coins!`,
+      ts: Date.now(),
+    });
+  }
+});
 
 // ======== Start ========
 httpServer.listen(PORT, () => {
