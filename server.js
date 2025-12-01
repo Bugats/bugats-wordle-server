@@ -594,7 +594,35 @@ app.get("/me", authMiddleware, (req, res) => {
   res.json(buildMePayload(u));
 });
 
-// Publiska profila API
+// ======== Publiska profila API (player + profile) ========
+function buildPublicProfilePayload(targetUser, requester) {
+  const rankInfo = calcRankFromXp(targetUser.xp || 0);
+  targetUser.rankLevel = rankInfo.level;
+  targetUser.rankTitle = rankInfo.title;
+
+  const isAdmin = requester && ADMIN_USERNAMES.includes(requester.username);
+
+  const payload = {
+    username: targetUser.username,
+    xp: targetUser.xp || 0,
+    score: targetUser.score || 0,
+    coins: targetUser.coins || 0,
+    tokens: targetUser.tokens || 0,
+    streak: targetUser.streak || 0,
+    bestStreak: targetUser.bestStreak || 0,
+    rankTitle: targetUser.rankTitle,
+    rankLevel: targetUser.rankLevel,
+  };
+
+  if (isAdmin) {
+    payload.isBanned = !!targetUser.isBanned;
+    payload.mutedUntil = targetUser.mutedUntil || 0;
+  }
+
+  return payload;
+}
+
+// Oriģinālais maršruts
 app.get("/player/:username", authMiddleware, (req, res) => {
   const requester = req.user;
   const name = String(req.params.username || "").trim();
@@ -604,30 +632,20 @@ app.get("/player/:username", authMiddleware, (req, res) => {
     return res.status(404).json({ message: "Lietotājs nav atrasts" });
   }
 
-  const isAdmin = ADMIN_USERNAMES.includes(requester.username);
+  res.json(buildPublicProfilePayload(user, requester));
+});
 
-  const rankInfo = calcRankFromXp(user.xp || 0);
-  user.rankLevel = rankInfo.level;
-  user.rankTitle = rankInfo.title;
+// Jaunais maršruts, ko izmanto game.js ( /profile/:username )
+app.get("/profile/:username", authMiddleware, (req, res) => {
+  const requester = req.user;
+  const name = String(req.params.username || "").trim();
+  const user = USERS[name];
 
-  const payload = {
-    username: user.username,
-    xp: user.xp || 0,
-    score: user.score || 0,
-    coins: user.coins || 0,
-    tokens: user.tokens || 0,
-    streak: user.streak || 0,
-    bestStreak: user.bestStreak || 0,
-    rankTitle: user.rankTitle,
-    rankLevel: user.rankLevel,
-  };
-
-  if (isAdmin) {
-    payload.isBanned = !!user.isBanned;
-    payload.mutedUntil = user.mutedUntil || 0;
+  if (!user) {
+    return res.status(404).json({ message: "Lietotājs nav atrasts" });
   }
 
-  res.json(payload);
+  res.json(buildPublicProfilePayload(user, requester));
 });
 
 // ======== MISIJU ENDPOINTI ========
@@ -965,32 +983,19 @@ io.on("connection", (socket) => {
     console.log("Atvienojās:", user.username, "socket:", socket.id);
   });
 });
-// ===== DIENAS LOGIN BONUSS (coins par katru dienu) =====
 
-// Cik coins par vienu pieslēgšanās dienu
+// ===== DIENAS LOGIN BONUSS (coins par katru dienu) =====
 const DAILY_LOGIN_COINS = 10;
 
-/**
- * Piešķir dienas login bonusu, ja lietotājs šodien vēl nav saņēmis.
- * Atgriež piešķirto coins daudzumu vai 0.
- */
 function grantDailyLoginBonus(user) {
   if (!user) return 0;
-
-  // todayKey() jau ir definēta augstāk (tiek lietota misijām)
   const today = todayKey();
-
-  // Ja jau šodien bonuss piešķirts – neko nedodam
   if (user.dailyLoginDate === today) {
     return 0;
   }
-
-  // Saglabājam, ka šodien bonuss saņemts
   user.dailyLoginDate = today;
-
   const bonus = DAILY_LOGIN_COINS;
   user.coins = (user.coins || 0) + bonus;
-
   saveUsers(USERS);
   return bonus;
 }
@@ -1002,7 +1007,6 @@ io.on("connection", (socket) => {
 
   const bonus = grantDailyLoginBonus(user);
   if (bonus > 0) {
-    // Ziņa tikai šim spēlētājam
     socket.emit("chatMessage", {
       username: "SYSTEM",
       text: `Dienas ienākšanas bonuss: +${bonus} coins!`,
@@ -1010,21 +1014,8 @@ io.on("connection", (socket) => {
     });
   }
 });
-// Papildu Socket.IO "connection" handleris – strādā kopā ar esošo
-io.on("connection", (socket) => {
-  const user = socket.data.user;
-  if (!user) return;
 
-  const bonus = grantDailyLoginBonus(user);
-  if (bonus > 0) {
-    // Ziņa tikai šim spēlētājam
-    socket.emit("chatMessage", {
-      username: "SYSTEM",
-      text: `Dienas ienākšanas bonuss: +${bonus} coins!`,
-      ts: Date.now(),
-    });
-  }
-});
+// (Tev jau bija šis bloks dublēts, es to vairs NEdublēju, lai nav x2 bonuss)
 
 // ======== Start ========
 httpServer.listen(PORT, () => {
