@@ -165,8 +165,91 @@ function calcRankFromXp(xp) {
 }
 
 function getTokenPrice(user) {
-  // Žetons vienmēr maksā 150 coins
-  return 150;
+  // Žetons vienmēr maksā 150 coins (varēsi mainīt vēlāk)
+  return BASE_TOKEN_PRICE;
+}
+
+// ======== Medaļu loģika (globālie līderi) ========
+// Medaļas tikai tad, ja IR viens konkrēts līderis (bez neizšķirta).
+function computeMedalsForUser(targetUser) {
+  if (!targetUser) return [];
+  const all = Object.values(USERS || {});
+  if (!all.length) return [];
+
+  function getMaxInfo(field) {
+    let max = 0;
+    for (const u of all) {
+      const v = u[field] || 0;
+      if (v > max) max = v;
+    }
+    if (max <= 0) {
+      return { max: 0, winners: [] };
+    }
+    const winners = all
+      .filter((u) => (u[field] || 0) === max)
+      .map((u) => u.username);
+    return { max, winners };
+  }
+
+  const medals = [];
+
+  // 1) TOP punktos (score)
+  const topScore = getMaxInfo("score");
+  if (
+    topScore.max > 0 &&
+    topScore.winners.length === 1 &&
+    topScore.winners[0] === targetUser.username
+  ) {
+    medals.push({
+      code: "TOP_SCORE",
+      icon: "🏆",
+      label: "TOP punktos",
+    });
+  }
+
+  // 2) Garākais bestStreak
+  const topBestStreak = getMaxInfo("bestStreak");
+  if (
+    topBestStreak.max > 0 &&
+    topBestStreak.winners.length === 1 &&
+    topBestStreak.winners[0] === targetUser.username
+  ) {
+    medals.push({
+      code: "BEST_STREAK",
+      icon: "🔥",
+      label: "Garākais streak",
+    });
+  }
+
+  // 3) Visvairāk XP
+  const topXp = getMaxInfo("xp");
+  if (
+    topXp.max > 0 &&
+    topXp.winners.length === 1 &&
+    topXp.winners[0] === targetUser.username
+  ) {
+    medals.push({
+      code: "XP_KING",
+      icon: "🧠",
+      label: "XP līderis",
+    });
+  }
+
+  // 4) Visvairāk žetonu
+  const topTokens = getMaxInfo("tokens");
+  if (
+    topTokens.max > 0 &&
+    topTokens.winners.length === 1 &&
+    topTokens.winners[0] === targetUser.username
+  ) {
+    medals.push({
+      code: "TOKEN_KING",
+      icon: "🎟️",
+      label: "Žetonu karalis",
+    });
+  }
+
+  return medals;
 }
 
 // ======== Anti-AFK + pasīvie coini ========
@@ -182,6 +265,7 @@ function markActivity(user) {
     user.lastPassiveTickAt = user.lastActionAt;
   }
 
+  // ja AFK pārtraukums – restartējam pasīvos
   if (now - user.lastActionAt > AFK_BREAK_MS) {
     user.lastActionAt = now;
     user.lastPassiveTickAt = now;
@@ -281,6 +365,9 @@ function buildMePayload(u) {
   const rankInfo = calcRankFromXp(u.xp || 0);
   u.rankLevel = rankInfo.level;
   u.rankTitle = rankInfo.title;
+
+  const medals = computeMedalsForUser(u);
+
   return {
     username: u.username,
     xp: u.xp || 0,
@@ -292,6 +379,7 @@ function buildMePayload(u) {
     rankTitle: u.rankTitle,
     rankLevel: u.rankLevel,
     tokenPriceCoins: getTokenPrice(u),
+    medals,
   };
 }
 
@@ -586,17 +674,14 @@ async function loginHandler(req, res) {
 app.post("/login", loginHandler);
 app.post("/signin", loginHandler);
 
+// ======== /me (profilam + medaļām) ========
 app.get("/me", authMiddleware, (req, res) => {
   const u = req.user;
   markActivity(u);
   ensureDailyMissions(u);
   saveUsers(USERS);
-    // TESTA medaļas – tikai lai redzētu frontā
-  payload.medals = [
-    { code: "TOP1", icon: "🏆" },
-    { code: "FAST", icon: "⚡" },
-  ];
 
+  const payload = buildMePayload(u);
   res.json(payload);
 });
 
@@ -618,6 +703,7 @@ function buildPublicProfilePayload(targetUser, requester) {
     bestStreak: targetUser.bestStreak || 0,
     rankTitle: targetUser.rankTitle,
     rankLevel: targetUser.rankLevel,
+    medals: computeMedalsForUser(targetUser),
   };
 
   if (isAdmin) {
@@ -628,7 +714,7 @@ function buildPublicProfilePayload(targetUser, requester) {
   return payload;
 }
 
-// Oriģinālais maršruts
+// Vecais maršruts (ja kaut kur vēl izmanto /player/:username)
 app.get("/player/:username", authMiddleware, (req, res) => {
   const requester = req.user;
   const name = String(req.params.username || "").trim();
@@ -901,7 +987,7 @@ app.get("/leaderboard", (req, res) => {
   res.json(top);
 });
 
-// ======== Socket.IO ========
+// ======== Socket.IO pamat-connection (online + čats + admin) ========
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
   if (!token) return next(new Error("Nav token"));
@@ -1020,8 +1106,6 @@ io.on("connection", (socket) => {
     });
   }
 });
-
-// (Tev jau bija šis bloks dublēts, es to vairs NEdublēju, lai nav x2 bonuss)
 
 // ======== Start ========
 httpServer.listen(PORT, () => {
