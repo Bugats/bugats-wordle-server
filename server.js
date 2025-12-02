@@ -591,7 +591,13 @@ app.get("/me", authMiddleware, (req, res) => {
   markActivity(u);
   ensureDailyMissions(u);
   saveUsers(USERS);
-  res.json(buildMePayload(u));
+    // TESTA medaļas – tikai lai redzētu frontā
+  payload.medals = [
+    { code: "TOP1", icon: "🏆" },
+    { code: "FAST", icon: "⚡" },
+  ];
+
+  res.json(payload);
 });
 
 // ======== Publiska profila API (player + profile) ========
