@@ -1,7 +1,7 @@
 // ======== VĀRDU ZONA — Bugats edition ========
 // Serveris ar login/signup, JWT, XP, RANKIEM (25 līmeņi),
 // streak, coins, žetoniem, pasīvajiem coiniem ar Anti-AFK,
-// TOP10, online sarakstu un čatu + ADMIN komandām + MISIJĀM.
+// TOP10, online sarakstu un čatu + ADMIN komandām + MISIJĀM + MEDAĻĀM.
 
 import express from "express";
 import { createServer } from "http";
@@ -94,6 +94,13 @@ function loadUsers() {
       if (typeof u.missionsDate !== "string") u.missionsDate = "";
       if (!Array.isArray(u.missions)) u.missions = [];
 
+      // Statistika medaļām
+      if (typeof u.totalGuesses !== "number") u.totalGuesses = 0;
+      if (typeof u.bestWinTimeMs !== "number") u.bestWinTimeMs = 0;
+      if (typeof u.winsToday !== "number") u.winsToday = 0;
+      if (typeof u.winsTodayDate !== "string") u.winsTodayDate = "";
+      if (typeof u.dailyLoginDate !== "string") u.dailyLoginDate = "";
+
       out[u.username] = u;
     }
     return out;
@@ -167,89 +174,6 @@ function calcRankFromXp(xp) {
 function getTokenPrice(user) {
   // Žetons vienmēr maksā 150 coins (varēsi mainīt vēlāk)
   return BASE_TOKEN_PRICE;
-}
-
-// ======== Medaļu loģika (globālie līderi) ========
-// Medaļas tikai tad, ja IR viens konkrēts līderis (bez neizšķirta).
-function computeMedalsForUser(targetUser) {
-  if (!targetUser) return [];
-  const all = Object.values(USERS || {});
-  if (!all.length) return [];
-
-  function getMaxInfo(field) {
-    let max = 0;
-    for (const u of all) {
-      const v = u[field] || 0;
-      if (v > max) max = v;
-    }
-    if (max <= 0) {
-      return { max: 0, winners: [] };
-    }
-    const winners = all
-      .filter((u) => (u[field] || 0) === max)
-      .map((u) => u.username);
-    return { max, winners };
-  }
-
-  const medals = [];
-
-  // 1) TOP punktos (score)
-  const topScore = getMaxInfo("score");
-  if (
-    topScore.max > 0 &&
-    topScore.winners.length === 1 &&
-    topScore.winners[0] === targetUser.username
-  ) {
-    medals.push({
-      code: "TOP_SCORE",
-      icon: "🏆",
-      label: "TOP punktos",
-    });
-  }
-
-  // 2) Garākais bestStreak
-  const topBestStreak = getMaxInfo("bestStreak");
-  if (
-    topBestStreak.max > 0 &&
-    topBestStreak.winners.length === 1 &&
-    topBestStreak.winners[0] === targetUser.username
-  ) {
-    medals.push({
-      code: "BEST_STREAK",
-      icon: "🔥",
-      label: "Garākais streak",
-    });
-  }
-
-  // 3) Visvairāk XP
-  const topXp = getMaxInfo("xp");
-  if (
-    topXp.max > 0 &&
-    topXp.winners.length === 1 &&
-    topXp.winners[0] === targetUser.username
-  ) {
-    medals.push({
-      code: "XP_KING",
-      icon: "🧠",
-      label: "XP līderis",
-    });
-  }
-
-  // 4) Visvairāk žetonu
-  const topTokens = getMaxInfo("tokens");
-  if (
-    topTokens.max > 0 &&
-    topTokens.winners.length === 1 &&
-    topTokens.winners[0] === targetUser.username
-  ) {
-    medals.push({
-      code: "TOKEN_KING",
-      icon: "🎟️",
-      label: "Žetonu karalis",
-    });
-  }
-
-  return medals;
 }
 
 // ======== Anti-AFK + pasīvie coini ========
@@ -358,6 +282,178 @@ function updateMissionsOnGuess(user, { isWin, xpGain }) {
   }
 
   if (changed) saveUsers(USERS);
+}
+
+// Resets "winsToday" on new calendar day
+function resetWinsTodayIfNeeded(user) {
+  const today = todayKey();
+  if (user.winsTodayDate !== today) {
+    user.winsTodayDate = today;
+    user.winsToday = 0;
+  }
+}
+
+// ======== Medaļu loģika (8 globālie līderi) ========
+// Medaļas tikai tad, ja IR viens konkrēts līderis (bez neizšķirta).
+function computeMedalsForUser(targetUser) {
+  if (!targetUser) return [];
+  const all = Object.values(USERS || {});
+  if (!all.length) return [];
+
+  const today = todayKey();
+
+  function bestByField(field, filterFn) {
+    let max = 0;
+    let winners = [];
+    for (const u of all) {
+      if (filterFn && !filterFn(u)) continue;
+      const raw = u[field] || 0;
+      const v = raw || 0;
+      if (v <= 0) continue;
+      if (v > max) {
+        max = v;
+        winners = [u.username];
+      } else if (v === max) {
+        winners.push(u.username);
+      }
+    }
+    return { max, winners };
+  }
+
+  function bestMinTime(field) {
+    let best = Infinity;
+    let winners = [];
+    for (const u of all) {
+      const v = u[field] || 0;
+      if (!v || v <= 0) continue;
+      if (v < best) {
+        best = v;
+        winners = [u.username];
+      } else if (v === best) {
+        winners.push(u.username);
+      }
+    }
+    return { best, winners };
+  }
+
+  const medals = [];
+
+  // 1) TOP_SCORE – lielākais score
+  const topScore = bestByField("score");
+  if (
+    topScore.max > 0 &&
+    topScore.winners.length === 1 &&
+    topScore.winners[0] === targetUser.username
+  ) {
+    medals.push({
+      code: "TOP_SCORE",
+      icon: "🏆",
+      label: "TOP punktos",
+    });
+  }
+
+  // 2) BEST_STREAK – labākais bestStreak
+  const topBestStreak = bestByField("bestStreak");
+  if (
+    topBestStreak.max > 0 &&
+    topBestStreak.winners.length === 1 &&
+    topBestStreak.winners[0] === targetUser.username
+  ) {
+    medals.push({
+      code: "BEST_STREAK",
+      icon: "🔥",
+      label: "Garākais streak",
+    });
+  }
+
+  // 3) FAST_WIN – mazākais bestWinTimeMs
+  const fastWin = bestMinTime("bestWinTimeMs");
+  if (
+    fastWin.best < Infinity &&
+    fastWin.winners.length === 1 &&
+    fastWin.winners[0] === targetUser.username
+  ) {
+    medals.push({
+      code: "FAST_WIN",
+      icon: "⚡",
+      label: "Ātrākais vārds",
+    });
+  }
+
+  // 4) MARATHON – visvairāk minējumu kopā
+  const marathon = bestByField("totalGuesses");
+  if (
+    marathon.max > 0 &&
+    marathon.winners.length === 1 &&
+    marathon.winners[0] === targetUser.username
+  ) {
+    medals.push({
+      code: "MARATHON",
+      icon: "⏱️",
+      label: "Maratona spēlētājs",
+    });
+  }
+
+  // 5) DAILY_CHAMP – visvairāk uzvaru šodien
+  const dailyChamp = bestByField(
+    "winsToday",
+    (u) => u.winsTodayDate === today
+  );
+  if (
+    dailyChamp.max > 0 &&
+    dailyChamp.winners.length === 1 &&
+    dailyChamp.winners[0] === targetUser.username
+  ) {
+    medals.push({
+      code: "DAILY_CHAMP",
+      icon: "👑",
+      label: "Šodienas čempions",
+    });
+  }
+
+  // 6) XP_KING – visvairāk XP
+  const topXp = bestByField("xp");
+  if (
+    topXp.max > 0 &&
+    topXp.winners.length === 1 &&
+    topXp.winners[0] === targetUser.username
+  ) {
+    medals.push({
+      code: "XP_KING",
+      icon: "🧠",
+      label: "XP līderis",
+    });
+  }
+
+  // 7) COIN_KING – visvairāk coins
+  const coinKing = bestByField("coins");
+  if (
+    coinKing.max > 0 &&
+    coinKing.winners.length === 1 &&
+    coinKing.winners[0] === targetUser.username
+  ) {
+    medals.push({
+      code: "COIN_KING",
+      icon: "💰",
+      label: "Naudas maiss",
+    });
+  }
+
+  // 8) TOKEN_KING – visvairāk žetonu
+  const tokenKing = bestByField("tokens");
+  if (
+    tokenKing.max > 0 &&
+    tokenKing.winners.length === 1 &&
+    tokenKing.winners[0] === targetUser.username
+  ) {
+    medals.push({
+      code: "TOKEN_KING",
+      icon: "🎟️",
+      label: "Žetonu karalis",
+    });
+  }
+
+  return medals;
 }
 
 // ======== JWT helperi ========
@@ -615,6 +711,12 @@ async function signupHandler(req, res) {
     mutedUntil: 0,
     missionsDate: "",
     missions: [],
+    // Statistika medaļām
+    totalGuesses: 0,
+    bestWinTimeMs: 0,
+    winsToday: 0,
+    winsTodayDate: "",
+    dailyLoginDate: "",
   };
 
   const rankInfo = calcRankFromXp(user.xp);
@@ -662,6 +764,7 @@ async function loginHandler(req, res) {
 
   markActivity(user);
   ensureDailyMissions(user);
+  resetWinsTodayIfNeeded(user);
   saveUsers(USERS);
 
   const token = jwt.sign({ username: name }, JWT_SECRET, { expiresIn: "30d" });
@@ -679,6 +782,7 @@ app.get("/me", authMiddleware, (req, res) => {
   const u = req.user;
   markActivity(u);
   ensureDailyMissions(u);
+  resetWinsTodayIfNeeded(u);
   saveUsers(USERS);
 
   const payload = buildMePayload(u);
@@ -745,6 +849,7 @@ app.get("/missions", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
   ensureDailyMissions(user);
+  resetWinsTodayIfNeeded(user);
   saveUsers(USERS);
   res.json(getPublicMissions(user));
 });
@@ -814,6 +919,7 @@ app.get("/start-round", authMiddleware, (req, res) => {
     len,
     attemptsLeft: MAX_ATTEMPTS,
     finished: false,
+    startedAt: Date.now(),
   };
 
   saveUsers(USERS);
@@ -873,6 +979,9 @@ app.post("/guess", authMiddleware, (req, res) => {
     });
   }
 
+  // Kopējais minējumu skaits
+  user.totalGuesses = (user.totalGuesses || 0) + 1;
+
   const pattern = buildPattern(round.word, guessRaw);
   round.attemptsLeft -= 1;
 
@@ -886,6 +995,18 @@ app.post("/guess", authMiddleware, (req, res) => {
   if (isWin) {
     const prevStreak = user.streak || 0;
     user.streak = prevStreak + 1;
+
+    // Uzvaras šodien + ātrākais win laiks
+    resetWinsTodayIfNeeded(user);
+    user.winsToday = (user.winsToday || 0) + 1;
+
+    if (round.startedAt) {
+      const nowTs = Date.now();
+      const winTime = nowTs - round.startedAt;
+      if (!user.bestWinTimeMs || winTime < user.bestWinTimeMs) {
+        user.bestWinTimeMs = winTime;
+      }
+    }
 
     xpGain = XP_PER_WIN_BASE;
     const extraLetters = Math.max(0, len - MIN_WORD_LEN);
