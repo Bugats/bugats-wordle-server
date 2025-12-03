@@ -12,6 +12,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import crypto from "crypto"; // ← drošāka random izvēle
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -101,6 +102,9 @@ function loadUsers() {
       if (typeof u.winsTodayDate !== "string") u.winsTodayDate = "";
       if (typeof u.dailyLoginDate !== "string") u.dailyLoginDate = "";
 
+      // Aktīvais raunds (ja nav – būs null)
+      if (!u.currentRound) u.currentRound = null;
+
       out[u.username] = u;
     }
     return out;
@@ -123,7 +127,7 @@ try {
   const raw = fs.readFileSync(WORDS_FILE, "utf8");
   WORDS = raw
     .split(/\r?\n/)
-    .map((w) => w.trim())
+    .map((w) => w.trim().toUpperCase())
     .filter((w) => w.length >= MIN_WORD_LEN && w.length <= MAX_WORD_LEN);
   console.log("Ielādēti vārdi:", WORDS.length);
 } catch (err) {
@@ -899,20 +903,19 @@ app.post("/missions/claim", authMiddleware, (req, res) => {
 });
 
 // ======== Spēles loģika ========
+
+// Droša random izvēle ar crypto.randomInt
 function pickRandomWord() {
   if (!WORDS.length) {
     return { word: "BUGAT", len: 5 };
   }
-  const idx = Math.floor(Math.random() * WORDS.length);
-  const w = WORDS[idx].trim();
+  const idx = crypto.randomInt(0, WORDS.length);
+  const w = WORDS[idx];
   return { word: w.toUpperCase(), len: w.length };
 }
 
-app.get("/start-round", authMiddleware, (req, res) => {
-  const user = req.user;
-  markActivity(user);
-  ensureDailyMissions(user);
-
+// Sāk jaunu raundu konkrētam lietotājam
+function startNewRoundForUser(user) {
   const { word, len } = pickRandomWord();
   user.currentRound = {
     word,
@@ -921,9 +924,24 @@ app.get("/start-round", authMiddleware, (req, res) => {
     finished: false,
     startedAt: Date.now(),
   };
+  return user.currentRound;
+}
 
+// /start-round – NEMAINA vārdu, ja raunds nav pabeigts
+app.get("/start-round", authMiddleware, (req, res) => {
+  const user = req.user;
+  markActivity(user);
+  ensureDailyMissions(user);
+
+  if (user.currentRound && !user.currentRound.finished) {
+    // jau ir aktīvs raunds – neatjaunojam vārdu
+    saveUsers(USERS);
+    return res.json({ len: user.currentRound.len });
+  }
+
+  const round = startNewRoundForUser(user);
   saveUsers(USERS);
-  res.json({ len });
+  res.json({ len: round.len });
 });
 
 function buildPattern(secret, guess) {
@@ -969,6 +987,7 @@ app.post("/guess", authMiddleware, (req, res) => {
   }
 
   if (round.attemptsLeft <= 0) {
+    // mēģinājumi beigušies – atzīmējam kā pabeigtu
     round.finished = true;
     saveUsers(USERS);
     return res.json({
@@ -1031,8 +1050,6 @@ app.post("/guess", authMiddleware, (req, res) => {
 
     user.bestStreak = Math.max(user.bestStreak || 0, user.streak || 0);
 
-    round.finished = true;
-
     const rankInfo = calcRankFromXp(user.xp);
     user.rankLevel = rankInfo.level;
     user.rankTitle = rankInfo.title;
@@ -1049,6 +1066,9 @@ app.post("/guess", authMiddleware, (req, res) => {
       user.streak = 0;
     }
   }
+
+  // atzīmējam raunda beigšanos (gan uzvarai, gan zaudējumam)
+  round.finished = finished;
 
   updateMissionsOnGuess(user, { isWin, xpGain });
 
