@@ -1,7 +1,7 @@
 // ======== VĀRDU ZONA — Bugats edition ========
 // Serveris ar login/signup, JWT, XP, RANKIEM (25 līmeņi),
 // streak, coins, žetoniem, pasīvajiem coiniem ar Anti-AFK,
-// TOP10, online sarakstu un čatu + ADMIN komandām + MISIJĀM + MEDAĻĀM.
+// TOP10, online sarakstu un čatu + ADMIN komandām + MISIJĀM + MEDAĻĀM + 1v1 DUEĻIEM.
 
 import express from "express";
 import { createServer } from "http";
@@ -12,7 +12,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import crypto from "crypto"; // ← drošāka random izvēle
+import crypto from "crypto"; // drošāka random izvēle
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,6 +75,16 @@ const DAILY_MISSIONS_CONFIG = [
   },
 ];
 
+// ======== DUEĻI (1v1) ==========
+const DUEL_MAX_ATTEMPTS = 6;
+const DUEL_REWARD_XP = 3;
+const DUEL_REWARD_COINS = 3;
+
+// duelId -> duel objekts
+const duels = new Map();
+// username -> duelId
+const userToDuel = new Map();
+
 // ======== Failu helperi ========
 function loadUsers() {
   if (!fs.existsSync(USERS_FILE)) return {};
@@ -101,6 +111,10 @@ function loadUsers() {
       if (typeof u.winsToday !== "number") u.winsToday = 0;
       if (typeof u.winsTodayDate !== "string") u.winsTodayDate = "";
       if (typeof u.dailyLoginDate !== "string") u.dailyLoginDate = "";
+
+      // Duēļu statistika
+      if (typeof u.duelsWon !== "number") u.duelsWon = 0;
+      if (typeof u.duelsLost !== "number") u.duelsLost = 0;
 
       // Aktīvais raunds (ja nav – būs null)
       if (!u.currentRound) u.currentRound = null;
@@ -721,6 +735,9 @@ async function signupHandler(req, res) {
     winsToday: 0,
     winsTodayDate: "",
     dailyLoginDate: "",
+    // Duēļu statistika
+    duelsWon: 0,
+    duelsLost: 0,
   };
 
   const rankInfo = calcRankFromXp(user.xp);
@@ -812,6 +829,8 @@ function buildPublicProfilePayload(targetUser, requester) {
     rankTitle: targetUser.rankTitle,
     rankLevel: targetUser.rankLevel,
     medals: computeMedalsForUser(targetUser),
+    duelsWon: targetUser.duelsWon || 0,
+    duelsLost: targetUser.duelsLost || 0,
   };
 
   if (isAdmin) {
@@ -1128,7 +1147,113 @@ app.get("/leaderboard", (req, res) => {
   res.json(top);
 });
 
-// ======== Socket.IO pamat-connection (online + čats + admin) ========
+// ===== DUEĻU HELPERI (Socket.IO pusē) =====
+
+function getSocketByUsername(username) {
+  for (const [sid, uname] of onlineBySocket.entries()) {
+    if (uname === username) {
+      const s = io.sockets.sockets.get(sid);
+      if (s) return s;
+    }
+  }
+  return null;
+}
+
+function finishDuel(duel, winnerName, reason) {
+  if (!duel || duel.status === "finished") return;
+
+  duel.status = "finished";
+  duel.finishedReason = reason || "finished";
+  duel.winner = winnerName || null;
+
+  const [p1, p2] = duel.players;
+  const s1 = getSocketByUsername(p1);
+  const s2 = getSocketByUsername(p2);
+
+  const u1 = USERS[p1];
+  const u2 = USERS[p2];
+
+  if (winnerName && u1 && u2) {
+    const winner = USERS[winnerName];
+    const loser = winnerName === p1 ? u2 : u1;
+
+    if (winner) {
+      winner.duelsWon = (winner.duelsWon || 0) + 1;
+      winner.xp = (winner.xp || 0) + DUEL_REWARD_XP;
+      winner.coins = (winner.coins || 0) + DUEL_REWARD_COINS;
+      const info = calcRankFromXp(winner.xp);
+      winner.rankLevel = info.level;
+      winner.rankTitle = info.title;
+    }
+    if (loser) {
+      loser.duelsLost = (loser.duelsLost || 0) + 1;
+    }
+
+    saveUsers(USERS);
+
+    if (s1) {
+      s1.emit("duel.end", {
+        duelId: duel.id,
+        winner: winnerName,
+        youWin: winnerName === p1,
+        reason,
+      });
+    }
+    if (s2) {
+      s2.emit("duel.end", {
+        duelId: duel.id,
+        winner: winnerName,
+        youWin: winnerName === p2,
+        reason,
+      });
+    }
+
+    const other = winnerName === p1 ? p2 : p1;
+    broadcastSystemMessage(
+      `⚔️ ${winnerName} uzvarēja dueli pret ${other}!`
+    );
+  } else {
+    // neizšķirts / atteikts
+    if (s1) {
+      s1.emit("duel.end", {
+        duelId: duel.id,
+        winner: null,
+        youWin: false,
+        reason,
+      });
+    }
+    if (s2) {
+      s2.emit("duel.end", {
+        duelId: duel.id,
+        winner: null,
+        youWin: false,
+        reason,
+      });
+    }
+  }
+
+  userToDuel.delete(p1);
+  userToDuel.delete(p2);
+  duels.delete(duel.id);
+}
+
+// ===== DIENAS LOGIN BONUSS (coins par katru dienu) =====
+const DAILY_LOGIN_COINS = 10;
+
+function grantDailyLoginBonus(user) {
+  if (!user) return 0;
+  const today = todayKey();
+  if (user.dailyLoginDate === today) {
+    return 0;
+  }
+  user.dailyLoginDate = today;
+  const bonus = DAILY_LOGIN_COINS;
+  user.coins = (user.coins || 0) + bonus;
+  saveUsers(USERS);
+  return bonus;
+}
+
+// ======== Socket.IO pamat-connection (online + čats + admin + dueļi) ========
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
   if (!token) return next(new Error("Nav token"));
@@ -1156,11 +1281,23 @@ io.on("connection", (socket) => {
 
   markActivity(user);
   ensureDailyMissions(user);
+
+  // Dienas login bonuss
+  const bonus = grantDailyLoginBonus(user);
+  if (bonus > 0) {
+    socket.emit("chatMessage", {
+      username: "SYSTEM",
+      text: `Dienas ienākšanas bonuss: +${bonus} coins!`,
+      ts: Date.now(),
+    });
+  }
+
   saveUsers(USERS);
 
   onlineBySocket.set(socket.id, user.username);
   broadcastOnlineList();
 
+  // ========== ČATS ==========
   socket.on("chatMessage", (text) => {
     if (typeof text !== "string") return;
     const msg = text.trim();
@@ -1210,42 +1347,254 @@ io.on("connection", (socket) => {
     io.emit("chatMessage", payload);
   });
 
+  // ========== DUEĻI (1v1) ==========
+
+  socket.on("duel.challenge", (targetNameRaw) => {
+    const challenger = socket.data.user;
+    const challengerName = challenger.username;
+    const targetName = String(targetNameRaw || "").trim();
+
+    if (!targetName) {
+      socket.emit("duel.error", { message: "Nav norādīts pretinieks." });
+      return;
+    }
+    if (targetName === challengerName) {
+      socket.emit("duel.error", { message: "Nevari izaicināt sevi." });
+      return;
+    }
+
+    const targetUser = USERS[targetName];
+    if (!targetUser) {
+      socket.emit("duel.error", { message: "Lietotājs nav atrasts." });
+      return;
+    }
+
+    if (userToDuel.has(challengerName)) {
+      socket.emit("duel.error", {
+        message: "Tu jau esi citā duelī.",
+      });
+      return;
+    }
+    if (userToDuel.has(targetName)) {
+      socket.emit("duel.error", {
+        message: "Pretinieks jau ir citā duelī.",
+      });
+      return;
+    }
+
+    const targetSocket = getSocketByUsername(targetName);
+    if (!targetSocket) {
+      socket.emit("duel.error", { message: "Pretinieks nav tiešsaistē." });
+      return;
+    }
+
+    const { word, len } = pickRandomWord();
+    const duelId = crypto.randomBytes(8).toString("hex");
+
+    const duel = {
+      id: duelId,
+      players: [challengerName, targetName],
+      word,
+      len,
+      status: "pending",
+      createdAt: Date.now(),
+      startedAt: null,
+      attemptsLeft: {
+        [challengerName]: DUEL_MAX_ATTEMPTS,
+        [targetName]: DUEL_MAX_ATTEMPTS,
+      },
+      rowsUsed: {
+        [challengerName]: 0,
+        [targetName]: 0,
+      },
+      winner: null,
+      finishedReason: null,
+    };
+
+    duels.set(duelId, duel);
+    userToDuel.set(challengerName, duelId);
+    userToDuel.set(targetName, duelId);
+
+    socket.emit("duel.waiting", {
+      duelId,
+      opponent: targetName,
+      len,
+    });
+
+    targetSocket.emit("duel.invite", {
+      duelId,
+      from: challengerName,
+      len,
+    });
+  });
+
+  socket.on("duel.accept", (payload) => {
+    const duelId = payload?.duelId;
+    const userName = socket.data.user.username;
+    const duel = duels.get(duelId);
+    if (!duel) {
+      socket.emit("duel.error", { message: "Duēlis nav atrasts." });
+      return;
+    }
+    if (!duel.players.includes(userName)) {
+      socket.emit("duel.error", { message: "Tu neesi šajā duelī." });
+      return;
+    }
+    if (duel.status !== "pending") {
+      socket.emit("duel.error", { message: "Duēlis jau ir sācies." });
+      return;
+    }
+
+    duel.status = "active";
+    duel.startedAt = Date.now();
+
+    const [p1, p2] = duel.players;
+    const s1 = getSocketByUsername(p1);
+    const s2 = getSocketByUsername(p2);
+
+    if (s1) {
+      s1.emit("duel.start", {
+        duelId: duel.id,
+        len: duel.len,
+        opponent: p2,
+      });
+    }
+    if (s2) {
+      s2.emit("duel.start", {
+        duelId: duel.id,
+        len: duel.len,
+        opponent: p1,
+      });
+    }
+
+    broadcastSystemMessage(
+      `⚔️ Duēlis sākas: ${p1} vs ${p2}! Kurš pirmais atminēs vārdu?`
+    );
+  });
+
+  socket.on("duel.decline", (payload) => {
+    const duelId = payload?.duelId;
+    const userName = socket.data.user.username;
+    const duel = duels.get(duelId);
+    if (!duel) return;
+    if (!duel.players.includes(userName)) return;
+    if (duel.status !== "pending") return;
+
+    const [p1, p2] = duel.players;
+    const other = p1 === userName ? p2 : p1;
+
+    const sOther = getSocketByUsername(other);
+
+    if (sOther) {
+      sOther.emit("duel.end", {
+        duelId: duel.id,
+        winner: null,
+        youWin: false,
+        reason: "declined",
+      });
+    }
+    socket.emit("duel.end", {
+      duelId: duel.id,
+      winner: null,
+      youWin: false,
+      reason: "declined",
+    });
+
+    userToDuel.delete(p1);
+    userToDuel.delete(p2);
+    duels.delete(duel.id);
+  });
+
+  socket.on("duel.guess", (payload) => {
+    const duelId = payload?.duelId;
+    const rawGuess = (payload?.guess || "").toString().trim().toUpperCase();
+    const userName = socket.data.user.username;
+
+    const duel = duels.get(duelId);
+    if (!duel) {
+      socket.emit("duel.error", { message: "Duēlis nav atrasts." });
+      return;
+    }
+    if (duel.status !== "active") {
+      socket.emit("duel.error", { message: "Duēlis nav aktīvs." });
+      return;
+    }
+    if (!duel.players.includes(userName)) {
+      socket.emit("duel.error", { message: "Tu neesi šajā duelī." });
+      return;
+    }
+
+    if (rawGuess.length !== duel.len) {
+      socket.emit("duel.error", {
+        message: `Vārdam duelī jābūt ${duel.len} burtiem.`,
+      });
+      return;
+    }
+
+    if (duel.attemptsLeft[userName] <= 0) {
+      socket.emit("duel.error", {
+        message: "Tev vairs nav mēģinājumu duelī.",
+      });
+      return;
+    }
+
+    duel.rowsUsed[userName] = (duel.rowsUsed[userName] || 0) + 1;
+    duel.attemptsLeft[userName] -= 1;
+
+    const pattern = buildPattern(duel.word, rawGuess);
+    const isWin = rawGuess === duel.word;
+    let finishedForPlayer = false;
+
+    if (isWin) {
+      finishedForPlayer = true;
+      socket.emit("duel.guessResult", {
+        duelId: duel.id,
+        pattern,
+        win: true,
+        finished: true,
+      });
+      finishDuel(duel, userName, "win");
+      return;
+    }
+
+    if (duel.attemptsLeft[userName] <= 0) {
+      finishedForPlayer = true;
+    }
+
+    socket.emit("duel.guessResult", {
+      duelId: duel.id,
+      pattern,
+      win: false,
+      finished: finishedForPlayer,
+    });
+
+    const [p1, p2] = duel.players;
+    if (
+      !duel.winner &&
+      duel.attemptsLeft[p1] <= 0 &&
+      duel.attemptsLeft[p2] <= 0
+    ) {
+      finishDuel(duel, null, "no_winner");
+    }
+  });
+
   socket.on("disconnect", () => {
+    const username = user.username;
+
+    // ja lietotājs bija duelī – pretiniekam auto uzvara
+    const duelId = userToDuel.get(username);
+    if (duelId) {
+      const duel = duels.get(duelId);
+      if (duel && duel.status !== "finished") {
+        const other = duel.players.find((p) => p !== username);
+        finishDuel(duel, other, "opponent_disconnect");
+      }
+    }
+
     onlineBySocket.delete(socket.id);
     broadcastOnlineList();
     console.log("Atvienojās:", user.username, "socket:", socket.id);
   });
-});
-
-// ===== DIENAS LOGIN BONUSS (coins par katru dienu) =====
-const DAILY_LOGIN_COINS = 10;
-
-function grantDailyLoginBonus(user) {
-  if (!user) return 0;
-  const today = todayKey();
-  if (user.dailyLoginDate === today) {
-    return 0;
-  }
-  user.dailyLoginDate = today;
-  const bonus = DAILY_LOGIN_COINS;
-  user.coins = (user.coins || 0) + bonus;
-  saveUsers(USERS);
-  return bonus;
-}
-
-// Papildu Socket.IO "connection" handleris – strādā kopā ar esošo
-io.on("connection", (socket) => {
-  const user = socket.data.user;
-  if (!user) return;
-
-  const bonus = grantDailyLoginBonus(user);
-  if (bonus > 0) {
-    socket.emit("chatMessage", {
-      username: "SYSTEM",
-      text: `Dienas ienākšanas bonuss: +${bonus} coins!`,
-      ts: Date.now(),
-    });
-  }
 });
 
 // ======== Start ========
