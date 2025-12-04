@@ -694,6 +694,41 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       );
       break;
 
+    case "seasonstart": {
+      if (!ADMIN_USERNAMES.includes(adminUser.username)) {
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: "Tikai admins var startēt sezonu.",
+          ts: Date.now(),
+        });
+        return;
+      }
+
+      if (seasonState.active) {
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: `${seasonState.name} jau ir aktīva.`,
+          ts: Date.now(),
+        });
+        return;
+      }
+
+      seasonState.active = true;
+      seasonState.startedAt = Date.now();
+
+      broadcastSystemMessage(
+        `📢 ${seasonState.name} ir sākusies! Līdz 26. decembrim krāj žetonus laimes ratam.`
+      );
+      io.emit("seasonUpdate", seasonState);
+
+      adminSocket.emit("chatMessage", {
+        username: "SYSTEM",
+        text: `${seasonState.name} ir startēta.`,
+        ts: Date.now(),
+      });
+      break;
+    }
+
     case "seasononline": {
       const now = Date.now();
       const endTs = seasonState.endAt || 0;
@@ -744,7 +779,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       adminSocket.emit("chatMessage", {
         username: "SYSTEM",
         text:
-          "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute, /seasononline.",
+          "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute, /seasonstart, /seasononline.",
         ts: Date.now(),
       });
   }
