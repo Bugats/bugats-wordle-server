@@ -31,6 +31,9 @@ const MAX_ATTEMPTS = 6;
 
 const BASE_TOKEN_PRICE = 150;
 
+// ======== SEZONA 1 (žetonu krāšana līdz 26.12.2025) ========
+const SEASON1_END_ISO = "2025-12-26T23:59:59+02:00"; // Sezonas 1 beigas (LV laiks)
+
 // Admin lietotāji
 const ADMIN_USERNAMES = ["BugatsLV"];
 
@@ -683,11 +686,65 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       );
       break;
 
+    case "seasononline": {
+      // Sezonas žetonu atskaite tikai ONLINE spēlētājiem
+      const onlineNames = Array.from(new Set(onlineBySocket.values()));
+
+      if (!onlineNames.length) {
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: "Šobrīd neviens nav online VĀRDU ZONĀ.",
+          ts: Date.now(),
+        });
+        return;
+      }
+
+      const partsLine = onlineNames.map((name) => {
+        const u = USERS[name];
+        const tokens = u?.tokens || 0;
+        return `${name} (${tokens} žetoni)`;
+      });
+
+      const line =
+        "Sezonas žetoni (tikai online spēlētāji): " + partsLine.join(", ");
+
+      // Lai REDZ VISI – izmantojam SYSTEM ziņu
+      broadcastSystemMessage(line);
+      break;
+    }
+
+    case "season1": {
+      // Sezona 1 – laika atskaite līdz 26.12.2025
+      const now = new Date();
+      const seasonEnd = new Date(SEASON1_END_ISO);
+      const diffMs = seasonEnd.getTime() - now.getTime();
+
+      let msg;
+      if (diffMs <= 0) {
+        msg =
+          "SEZONA 1 ir noslēgusies (žetoni vairs nekrājas, notiek fināla laimes rats).";
+      } else {
+        const totalSec = Math.floor(diffMs / 1000);
+        const days = Math.floor(totalSec / 86400);
+        const hours = Math.floor((totalSec % 86400) / 3600);
+        const mins = Math.floor((totalSec % 3600) / 60);
+
+        msg =
+          "SEZONA 1 – žetonu krāšana līdz 26.12.2025. Atlikušais laiks: " +
+          `${days}d ${hours}h ${mins}min. ` +
+          "Visi sezonas žetoni dod vietas fināla laimes ratā.";
+      }
+
+      // Arī šo lai redz visi
+      broadcastSystemMessage(msg);
+      break;
+    }
+
     default:
       adminSocket.emit("chatMessage", {
         username: "SYSTEM",
         text:
-          "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute.",
+          "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute, !seasononline, !season1.",
         ts: Date.now(),
       });
   }
@@ -1349,7 +1406,7 @@ io.on("connection", (socket) => {
     }
 
     const isAdmin = ADMIN_USERNAMES.includes(u.username);
-    if (isAdmin && msg.startsWith("/")) {
+    if (isAdmin && (msg.startsWith("/") || msg.startsWith("!"))) {
       handleAdminCommand(msg, u, socket);
       return;
     }
