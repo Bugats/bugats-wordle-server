@@ -32,7 +32,7 @@ const MAX_ATTEMPTS = 6;
 const BASE_TOKEN_PRICE = 150;
 
 // Admin lietotāji
-const ADMIN_USERNAMES = ["BugatsLV"];
+const ADMIN_USERNAMES = ["Bugats", "BugatsLV"];
 
 // ======== SEZONA 1 – servera stāvoklis ========
 const SEASON1_END_AT = new Date("2025-12-26T23:59:59+02:00").getTime();
