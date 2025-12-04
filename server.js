@@ -79,6 +79,8 @@ const DAILY_MISSIONS_CONFIG = [
 const DUEL_MAX_ATTEMPTS = 6;
 const DUEL_REWARD_XP = 3;
 const DUEL_REWARD_COINS = 3;
+// Maksimālais duēļa ilgums (piemērs: 2 minūtes)
+const DUEL_MAX_DURATION_MS = 2 * 60 * 1000;
 
 // duelId -> duel objekts
 const duels = new Map();
@@ -1213,7 +1215,7 @@ function finishDuel(duel, winnerName, reason) {
       `⚔️ ${winnerName} uzvarēja dueli pret ${other}!`
     );
   } else {
-    // neizšķirts / atteikts
+    // neizšķirts / atteikts / timeout
     if (s1) {
       s1.emit("duel.end", {
         duelId: duel.id,
@@ -1236,6 +1238,21 @@ function finishDuel(duel, winnerName, reason) {
   userToDuel.delete(p2);
   duels.delete(duel.id);
 }
+
+// Servera “watchdog” – pārbauda duēļu timeoutus
+setInterval(() => {
+  const now = Date.now();
+  for (const duel of duels.values()) {
+    if (
+      duel.status === "active" &&
+      duel.expiresAt &&
+      now >= duel.expiresAt
+    ) {
+      // laiks beidzies – neizšķirts
+      finishDuel(duel, null, "timeout");
+    }
+  }
+}, 1000);
 
 // ===== DIENAS LOGIN BONUSS (coins par katru dienu) =====
 const DAILY_LOGIN_COINS = 10;
@@ -1399,6 +1416,7 @@ io.on("connection", (socket) => {
       status: "pending",
       createdAt: Date.now(),
       startedAt: null,
+      expiresAt: null, // tiks iestatīts, kad duelis tiek akceptēts
       attemptsLeft: {
         [challengerName]: DUEL_MAX_ATTEMPTS,
         [targetName]: DUEL_MAX_ATTEMPTS,
@@ -1447,6 +1465,7 @@ io.on("connection", (socket) => {
 
     duel.status = "active";
     duel.startedAt = Date.now();
+    duel.expiresAt = duel.startedAt + DUEL_MAX_DURATION_MS;
 
     const [p1, p2] = duel.players;
     const s1 = getSocketByUsername(p1);
@@ -1457,6 +1476,7 @@ io.on("connection", (socket) => {
         duelId: duel.id,
         len: duel.len,
         opponent: p2,
+        expiresAt: duel.expiresAt,
       });
     }
     if (s2) {
@@ -1464,6 +1484,7 @@ io.on("connection", (socket) => {
         duelId: duel.id,
         len: duel.len,
         opponent: p1,
+        expiresAt: duel.expiresAt,
       });
     }
 
@@ -1519,6 +1540,17 @@ io.on("connection", (socket) => {
       socket.emit("duel.error", { message: "Duēlis nav aktīvs." });
       return;
     }
+
+    // pārbaudām timeout arī uzreiz pie minējuma
+    const now = Date.now();
+    if (duel.expiresAt && now >= duel.expiresAt) {
+      finishDuel(duel, null, "timeout");
+      socket.emit("duel.error", {
+        message: "Duēļa laiks ir beidzies.",
+      });
+      return;
+    }
+
     if (!duel.players.includes(userName)) {
       socket.emit("duel.error", { message: "Tu neesi šajā duelī." });
       return;
