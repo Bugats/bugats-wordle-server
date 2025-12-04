@@ -45,6 +45,19 @@ let seasonState = {
   endAt: SEASON1_END_AT,
 };
 
+// Helperis, lai čatā parādītu sezonas beigu laiku LV laikā
+function formatSeasonEndForChat() {
+  const ms = seasonState.endAt || SEASON1_END_AT;
+  // Rīgas laiks ziemā ir UTC+2 – pievienojam +2h un tad ņemam UTC komponentes
+  const local = new Date(ms + 2 * 60 * 60 * 1000);
+  const year = local.getUTCFullYear();
+  const month = String(local.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(local.getUTCDate()).padStart(2, "0");
+  const hours = String(local.getUTCHours()).padStart(2, "0");
+  const minutes = String(local.getUTCMinutes()).padStart(2, "0");
+  return `${day}.${month}.${year}. ${hours}:${minutes}`;
+}
+
 // ========== XP / COINS EKONOMIKA ==========
 const XP_PER_WIN_BASE = 8;
 const SCORE_PER_WIN = 1;
@@ -648,7 +661,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         adminSocket.emit("chatMessage", {
           username: "SYSTEM",
           text: `Lietotājs '${targetName}' nav atrasts.`,
-          ts: Date.Now(),
+          ts: Date.now(),
         });
         return;
       }
@@ -694,11 +707,25 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       );
       break;
 
+    // /seasononline – tas pats, kas !seasononline, tikai ar slash
+    case "seasononline": {
+      if (!seasonState.active) {
+        seasonState.active = true;
+        seasonState.startedAt = Date.now();
+      }
+      const endStr = formatSeasonEndForChat();
+      broadcastSystemMessage(
+        `💠 ${seasonState.name} ir AKTĪVA līdz ${endStr} (LV laiks). Krāj žetonus laimes ratam!`
+      );
+      io.emit("seasonUpdate", seasonState);
+      break;
+    }
+
     default:
       adminSocket.emit("chatMessage", {
         username: "SYSTEM",
         text:
-          "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute.",
+          "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute, /seasononline.",
         ts: Date.now(),
       });
   }
@@ -941,7 +968,7 @@ app.get("/season", authMiddleware, (req, res) => {
   res.json(seasonState);
 });
 
-// Tikai admin: startē SEZONU 1
+// Tikai admin: startē SEZONU 1 (HTTP)
 app.post("/season/start", authMiddleware, (req, res) => {
   const user = req.user;
   if (!ADMIN_USERNAMES.includes(user.username)) {
@@ -954,8 +981,9 @@ app.post("/season/start", authMiddleware, (req, res) => {
     seasonState.active = true;
     seasonState.startedAt = Date.now();
 
+    const endStr = formatSeasonEndForChat();
     broadcastSystemMessage(
-      `📢 ${seasonState.name} ir sākusies! Līdz 26. decembrim krāj žetonus laimes ratam.`
+      `📢 ${seasonState.name} ir sākusies! Aktīva līdz ${endStr} (LV laiks). Krāj žetonus laimes ratam.`
     );
 
     io.emit("seasonUpdate", seasonState);
@@ -1385,6 +1413,21 @@ io.on("connection", (socket) => {
     }
 
     const isAdmin = ADMIN_USERNAMES.includes(u.username);
+
+    // Speciālā admin komanda čatā: !seasononline
+    if (isAdmin && msg === "!seasononline") {
+      if (!seasonState.active) {
+        seasonState.active = true;
+        seasonState.startedAt = Date.now();
+      }
+      const endStr = formatSeasonEndForChat();
+      broadcastSystemMessage(
+        `💠 ${seasonState.name} ir AKTĪVA līdz ${endStr} (LV laiks). Krāj žetonus laimes ratam!`
+      );
+      io.emit("seasonUpdate", seasonState);
+      return;
+    }
+
     if (isAdmin && msg.startsWith("/")) {
       handleAdminCommand(msg, u, socket);
       return;
