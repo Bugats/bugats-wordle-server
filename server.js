@@ -31,11 +31,19 @@ const MAX_ATTEMPTS = 6;
 
 const BASE_TOKEN_PRICE = 150;
 
-// ======== SEZONA 1 (žetonu krāšana līdz 26.12.2025) ========
-const SEASON1_END_ISO = "2025-12-26T23:59:59+02:00"; // Sezonas 1 beigas (LV laiks)
-
 // Admin lietotāji
 const ADMIN_USERNAMES = ["BugatsLV"];
+
+// ======== SEZONA 1 – servera stāvoklis ========
+const SEASON1_END_AT = new Date("2025-12-26T23:59:59+02:00").getTime();
+
+let seasonState = {
+  id: 1,
+  name: "SEZONA 1",
+  active: false,
+  startedAt: 0,
+  endAt: SEASON1_END_AT,
+};
 
 // ========== XP / COINS EKONOMIKA ==========
 const XP_PER_WIN_BASE = 8;
@@ -640,7 +648,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         adminSocket.emit("chatMessage", {
           username: "SYSTEM",
           text: `Lietotājs '${targetName}' nav atrasts.`,
-          ts: Date.now(),
+          ts: Date.Now(),
         });
         return;
       }
@@ -686,65 +694,11 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       );
       break;
 
-    case "seasononline": {
-      // Sezonas žetonu atskaite tikai ONLINE spēlētājiem
-      const onlineNames = Array.from(new Set(onlineBySocket.values()));
-
-      if (!onlineNames.length) {
-        adminSocket.emit("chatMessage", {
-          username: "SYSTEM",
-          text: "Šobrīd neviens nav online VĀRDU ZONĀ.",
-          ts: Date.now(),
-        });
-        return;
-      }
-
-      const partsLine = onlineNames.map((name) => {
-        const u = USERS[name];
-        const tokens = u?.tokens || 0;
-        return `${name} (${tokens} žetoni)`;
-      });
-
-      const line =
-        "Sezonas žetoni (tikai online spēlētāji): " + partsLine.join(", ");
-
-      // Lai REDZ VISI – izmantojam SYSTEM ziņu
-      broadcastSystemMessage(line);
-      break;
-    }
-
-    case "season1": {
-      // Sezona 1 – laika atskaite līdz 26.12.2025
-      const now = new Date();
-      const seasonEnd = new Date(SEASON1_END_ISO);
-      const diffMs = seasonEnd.getTime() - now.getTime();
-
-      let msg;
-      if (diffMs <= 0) {
-        msg =
-          "SEZONA 1 ir noslēgusies (žetoni vairs nekrājas, notiek fināla laimes rats).";
-      } else {
-        const totalSec = Math.floor(diffMs / 1000);
-        const days = Math.floor(totalSec / 86400);
-        const hours = Math.floor((totalSec % 86400) / 3600);
-        const mins = Math.floor((totalSec % 3600) / 60);
-
-        msg =
-          "SEZONA 1 – žetonu krāšana līdz 26.12.2025. Atlikušais laiks: " +
-          `${days}d ${hours}h ${mins}min. ` +
-          "Visi sezonas žetoni dod vietas fināla laimes ratā.";
-      }
-
-      // Arī šo lai redz visi
-      broadcastSystemMessage(msg);
-      break;
-    }
-
     default:
       adminSocket.emit("chatMessage", {
         username: "SYSTEM",
         text:
-          "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute, !seasononline, !season1.",
+          "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute.",
         ts: Date.now(),
       });
   }
@@ -980,6 +934,36 @@ app.post("/missions/claim", authMiddleware, (req, res) => {
   });
 });
 
+// ======== SEZONA API ========
+
+// Visi spēlētāji: nolasa sezona statusu (vai aktīva, līdz kuram datumam)
+app.get("/season", authMiddleware, (req, res) => {
+  res.json(seasonState);
+});
+
+// Tikai admin: startē SEZONU 1
+app.post("/season/start", authMiddleware, (req, res) => {
+  const user = req.user;
+  if (!ADMIN_USERNAMES.includes(user.username)) {
+    return res
+      .status(403)
+      .json({ message: "Tikai admins var startēt sezonu." });
+  }
+
+  if (!seasonState.active) {
+    seasonState.active = true;
+    seasonState.startedAt = Date.now();
+
+    broadcastSystemMessage(
+      `📢 ${seasonState.name} ir sākusies! Līdz 26. decembrim krāj žetonus laimes ratam.`
+    );
+
+    io.emit("seasonUpdate", seasonState);
+  }
+
+  res.json(seasonState);
+});
+
 // ======== Spēles loģika ========
 
 // Droša random izvēle ar crypto.randomInt
@@ -1012,7 +996,6 @@ app.get("/start-round", authMiddleware, (req, res) => {
   ensureDailyMissions(user);
 
   if (user.currentRound && !user.currentRound.finished) {
-    // jau ir aktīvs raunds – neatjaunojam vārdu
     saveUsers(USERS);
     return res.json({ len: user.currentRound.len });
   }
@@ -1065,7 +1048,6 @@ app.post("/guess", authMiddleware, (req, res) => {
   }
 
   if (round.attemptsLeft <= 0) {
-    // mēģinājumi beigušies – atzīmējam kā pabeigtu
     round.finished = true;
     saveUsers(USERS);
     return res.json({
@@ -1076,7 +1058,6 @@ app.post("/guess", authMiddleware, (req, res) => {
     });
   }
 
-  // Kopējais minējumu skaits
   user.totalGuesses = (user.totalGuesses || 0) + 1;
 
   const pattern = buildPattern(round.word, guessRaw);
@@ -1093,7 +1074,6 @@ app.post("/guess", authMiddleware, (req, res) => {
     const prevStreak = user.streak || 0;
     user.streak = prevStreak + 1;
 
-    // Uzvaras šodien + ātrākais win laiks
     resetWinsTodayIfNeeded(user);
     user.winsToday = (user.winsToday || 0) + 1;
 
@@ -1145,7 +1125,6 @@ app.post("/guess", authMiddleware, (req, res) => {
     }
   }
 
-  // atzīmējam raunda beigšanos (gan uzvarai, gan zaudējumam)
   round.finished = finished;
 
   updateMissionsOnGuess(user, { isWin, xpGain });
@@ -1272,7 +1251,6 @@ function finishDuel(duel, winnerName, reason) {
       `⚔️ ${winnerName} uzvarēja dueli pret ${other}!`
     );
   } else {
-    // neizšķirts / atteikts / timeout
     if (s1) {
       s1.emit("duel.end", {
         duelId: duel.id,
@@ -1305,7 +1283,6 @@ setInterval(() => {
       duel.expiresAt &&
       now >= duel.expiresAt
     ) {
-      // laiks beidzies – neizšķirts
       finishDuel(duel, null, "timeout");
     }
   }
@@ -1356,7 +1333,6 @@ io.on("connection", (socket) => {
   markActivity(user);
   ensureDailyMissions(user);
 
-  // Dienas login bonuss
   const bonus = grantDailyLoginBonus(user);
   if (bonus > 0) {
     socket.emit("chatMessage", {
@@ -1370,6 +1346,9 @@ io.on("connection", (socket) => {
 
   onlineBySocket.set(socket.id, user.username);
   broadcastOnlineList();
+
+  // Nosūtam klientam pašreizējo sezonas stāvokli
+  socket.emit("seasonUpdate", seasonState);
 
   // ========== ČATS ==========
   socket.on("chatMessage", (text) => {
@@ -1406,7 +1385,7 @@ io.on("connection", (socket) => {
     }
 
     const isAdmin = ADMIN_USERNAMES.includes(u.username);
-    if (isAdmin && (msg.startsWith("/") || msg.startsWith("!"))) {
+    if (isAdmin && msg.startsWith("/")) {
       handleAdminCommand(msg, u, socket);
       return;
     }
@@ -1473,7 +1452,7 @@ io.on("connection", (socket) => {
       status: "pending",
       createdAt: Date.now(),
       startedAt: null,
-      expiresAt: null, // tiks iestatīts, kad duelis tiek akceptēts
+      expiresAt: null,
       attemptsLeft: {
         [challengerName]: DUEL_MAX_ATTEMPTS,
         [targetName]: DUEL_MAX_ATTEMPTS,
@@ -1598,7 +1577,6 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // pārbaudām timeout arī uzreiz pie minējuma
     const now = Date.now();
     if (duel.expiresAt && now >= duel.expiresAt) {
       finishDuel(duel, null, "timeout");
@@ -1670,7 +1648,6 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     const username = user.username;
 
-    // ja lietotājs bija duelī – pretiniekam auto uzvara
     const duelId = userToDuel.get(username);
     if (duelId) {
       const duel = duels.get(duelId);
