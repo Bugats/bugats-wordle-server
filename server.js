@@ -132,6 +132,9 @@ function loadUsers() {
       // Aktīvais raunds (ja nav – būs null)
       if (!u.currentRound) u.currentRound = null;
 
+      // Avatārs (dataURL vai URL); veciem useriem var nebūt
+      if (typeof u.avatarUrl !== "string") u.avatarUrl = null;
+
       out[u.username] = u;
     }
     return out;
@@ -507,6 +510,7 @@ function buildMePayload(u) {
     rankLevel: u.rankLevel,
     tokenPriceCoins: getTokenPrice(u),
     medals,
+    avatarUrl: u.avatarUrl || null,
   };
 }
 
@@ -832,6 +836,8 @@ async function signupHandler(req, res) {
     // Duēļu statistika
     duelsWon: 0,
     duelsLost: 0,
+    // Avatārs
+    avatarUrl: null,
   };
 
   const rankInfo = calcRankFromXp(user.xp);
@@ -904,6 +910,45 @@ app.get("/me", authMiddleware, (req, res) => {
   res.json(payload);
 });
 
+// ======== AVATĀRA ENDPOINTS (SYNC starp ierīcēm) ========
+// POST /avatar  { avatar: "data:image/png;base64,..." }
+app.post("/avatar", authMiddleware, (req, res) => {
+  try {
+    const user = req.user;
+    const { avatar } = req.body || {};
+
+    if (!avatar || typeof avatar !== "string") {
+      return res.status(400).json({ message: "Nav avatāra dati." });
+    }
+
+    // Vienkārša validācija – jābūt data URL ar bildi
+    if (!avatar.startsWith("data:image/")) {
+      return res.status(400).json({ message: "Nekorekts avatāra formāts." });
+    }
+
+    // (brīvprātīgi) izmēra limits, lai users.json neuzsprāgst (~3MB)
+    const MAX_LEN = 3 * 1024 * 1024;
+    if (avatar.length > MAX_LEN) {
+      return res.status(400).json({
+        message: "Avatārs ir par lielu (samazini bildi līdz ~2MB).",
+      });
+    }
+
+    user.avatarUrl = avatar;
+    saveUsers(USERS);
+
+    return res.json({
+      ok: true,
+      avatarUrl: user.avatarUrl,
+    });
+  } catch (err) {
+    console.error("POST /avatar kļūda:", err);
+    return res
+      .status(500)
+      .json({ message: "Servera kļūda avatāra saglabāšanā." });
+  }
+});
+
 // ======== Publiska profila API (player + profile) ========
 function buildPublicProfilePayload(targetUser, requester) {
   const rankInfo = calcRankFromXp(targetUser.xp || 0);
@@ -925,6 +970,7 @@ function buildPublicProfilePayload(targetUser, requester) {
     medals: computeMedalsForUser(targetUser),
     duelsWon: targetUser.duelsWon || 0,
     duelsLost: targetUser.duelsLost || 0,
+    avatarUrl: targetUser.avatarUrl || null,
   };
 
   if (isAdmin) {
