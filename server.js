@@ -31,6 +31,10 @@ const MAX_ATTEMPTS = 6;
 
 const BASE_TOKEN_PRICE = 150;
 
+// BOSS vārds – ELEKTROSTACIJA (ļoti reti parādās pamata spēlē)
+const BOSS_WORD = "ELEKTROSTACIJA";
+const BOSS_WORD_PROB = 0.01; // ~1% jauna raunda iespēja, vari vēlāk samazināt/palielināt
+
 // Admin lietotāji
 const ADMIN_USERNAMES = ["Bugats", "BugatsLV"];
 
@@ -128,6 +132,11 @@ function loadUsers() {
       // Duēļu statistika
       if (typeof u.duelsWon !== "number") u.duelsWon = 0;
       if (typeof u.duelsLost !== "number") u.duelsLost = 0;
+
+      // Boss vārda statistika
+      if (typeof u.bossElectroWins !== "number") u.bossElectroWins = 0;
+      if (typeof u.bossElectroFirst !== "boolean")
+        u.bossElectroFirst = false;
 
       // Aktīvais raunds (ja nav – būs null)
       if (!u.currentRound) u.currentRound = null;
@@ -327,7 +336,7 @@ function resetWinsTodayIfNeeded(user) {
   }
 }
 
-// ======== Medaļu loģika (8 globālie līderi) ========
+// ======== Medaļu loģika (8 globālie līderi + boss medaļas) ========
 // Medaļas tikai tad, ja IR viens konkrēts līderis (bez neizšķirta).
 function computeMedalsForUser(targetUser) {
   if (!targetUser) return [];
@@ -487,7 +496,35 @@ function computeMedalsForUser(targetUser) {
     });
   }
 
+  // 9) BOSS_ELEKTRO – jebkurš, kas jebkad atminējis boss vārdu
+  if ((targetUser.bossElectroWins || 0) > 0) {
+    medals.push({
+      code: "BOSS_ELEKTRO",
+      icon: "⚡",
+      label: "ELEKTROSTACIJAS boss vārds",
+    });
+  }
+
+  // 10) BOSS_ELEKTRO_FIRST – pirmais serverī, kas atminējis ELEKTROSTACIJU
+  if (targetUser.bossElectroFirst) {
+    medals.push({
+      code: "BOSS_ELEKTRO_FIRST",
+      icon: "👑",
+      label: "Pirmais, kas atminēja ELEKTROSTACIJU",
+    });
+  }
+
   return medals;
+}
+
+// Vienreizēja “pirmā” boss medaļas īpašnieka atzīmēšana
+function ensureBossFirstMedal(winnerUser) {
+  if (!winnerUser) return;
+  const all = Object.values(USERS || {});
+  const alreadyHas = all.some((u) => u.bossElectroFirst);
+  if (!alreadyHas) {
+    winnerUser.bossElectroFirst = true;
+  }
 }
 
 // ======== JWT helperi ========
@@ -836,6 +873,9 @@ async function signupHandler(req, res) {
     // Duēļu statistika
     duelsWon: 0,
     duelsLost: 0,
+    // Boss vārda statistika
+    bossElectroWins: 0,
+    bossElectroFirst: false,
     // Avatārs
     avatarUrl: null,
   };
@@ -1094,25 +1134,45 @@ app.post("/season/start", authMiddleware, (req, res) => {
 // ======== Spēles loģika ========
 
 // Droša random izvēle ar crypto.randomInt
-function pickRandomWord() {
+// Pamata spēlei atļaujam reti iemest BOSS vārdu ELEKTROSTACIJA
+function pickRandomWord(options = {}) {
+  const allowBoss = options.allowBoss || false;
+
+  if (allowBoss) {
+    const roll = Math.random();
+    if (roll < BOSS_WORD_PROB) {
+      return {
+        word: BOSS_WORD,
+        len: BOSS_WORD.length,
+        isBoss: true,
+      };
+    }
+  }
+
   if (!WORDS.length) {
-    return { word: "BUGAT", len: 5 };
+    return { word: "BUGAT", len: 5, isBoss: false };
   }
   const idx = crypto.randomInt(0, WORDS.length);
   const w = WORDS[idx];
-  return { word: w.toUpperCase(), len: w.length };
+  return { word: w.toUpperCase(), len: w.length, isBoss: false };
 }
 
 // Sāk jaunu raundu konkrētam lietotājam
 function startNewRoundForUser(user) {
-  const { word, len } = pickRandomWord();
+  const { word, len, isBoss } = pickRandomWord({ allowBoss: true });
   user.currentRound = {
     word,
     len,
+    isBoss: !!isBoss,
     attemptsLeft: MAX_ATTEMPTS,
     finished: false,
     startedAt: Date.now(),
   };
+  if (isBoss) {
+    console.log(
+      `[BOSS] Jauns boss raunds lietotājam ${user.username} – ELEKTROSTACIJA`
+    );
+  }
   return user.currentRound;
 }
 
@@ -1238,6 +1298,26 @@ app.post("/guess", authMiddleware, (req, res) => {
     const rankInfo = calcRankFromXp(user.xp);
     user.rankLevel = rankInfo.level;
     user.rankTitle = rankInfo.title;
+
+    // === BOSS vārda (ELEKTROSTACIJA) medaļas un paziņojums ===
+    if (round.isBoss && round.word === BOSS_WORD) {
+      user.bossElectroWins = (user.bossElectroWins || 0) + 1;
+
+      // Ja vēl nav neviena "pirmā", piešķiram šo titulu šim lietotājam
+      const beforeFirst = user.bossElectroFirst;
+      ensureBossFirstMedal(user);
+      const isFirst = !beforeFirst && user.bossElectroFirst;
+
+      if (isFirst) {
+        broadcastSystemMessage(
+          `⚡ BOSS vārds ELEKTROSTACIJA PIRMOREIZ atminēts! ${user.username} iegūst īpašo boss medaļu.`
+        );
+      } else {
+        broadcastSystemMessage(
+          `⚡ BOSS vārds ELEKTROSTACIJA atminēts! ${user.username} iegūst boss medaļu.`
+        );
+      }
+    }
 
     io.emit("playerWin", {
       username: user.username,
@@ -1569,7 +1649,8 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const { word, len } = pickRandomWord();
+    // Duelim izmantojam tikai “parastu” vārdu no words.txt (bez boss vārda)
+    const { word, len } = pickRandomWord({ allowBoss: false });
     const duelId = crypto.randomBytes(8).toString("hex");
 
     const duel = {
