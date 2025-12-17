@@ -819,7 +819,7 @@ eva
 alisa
 evelīna
 odrija
-milana
+milāna
 madara
 nikola
 hanna
@@ -835,7 +835,7 @@ adelīna
 karlīna
 rebeka
 šarlote
-arina
+marina
 adele
 annija
 polina
@@ -856,7 +856,7 @@ jasmīna
 adriana
 ariana
 daniela
-amelija
+amēlija
 justīne
 linda
 agata
@@ -931,7 +931,6 @@ tēvzeme
 latvietis
 ainava
 aizsaule
-aloties
 atkala
 austra
 avots
