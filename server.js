@@ -372,42 +372,74 @@ function computeMedalsForUser(targetUser) {
   const medals = [];
 
   const topScore = bestByField("score");
-  if (topScore.max > 0 && topScore.winners.length === 1 && topScore.winners[0] === targetUser.username) {
+  if (
+    topScore.max > 0 &&
+    topScore.winners.length === 1 &&
+    topScore.winners[0] === targetUser.username
+  ) {
     medals.push({ code: "TOP_SCORE", icon: "🏆", label: "TOP punktos" });
   }
 
   const topBestStreak = bestByField("bestStreak");
-  if (topBestStreak.max > 0 && topBestStreak.winners.length === 1 && topBestStreak.winners[0] === targetUser.username) {
+  if (
+    topBestStreak.max > 0 &&
+    topBestStreak.winners.length === 1 &&
+    topBestStreak.winners[0] === targetUser.username
+  ) {
     medals.push({ code: "BEST_STREAK", icon: "🔥", label: "Garākais streak" });
   }
 
   const fastWin = bestMinTime("bestWinTimeMs");
-  if (fastWin.best < Infinity && fastWin.winners.length === 1 && fastWin.winners[0] === targetUser.username) {
+  if (
+    fastWin.best < Infinity &&
+    fastWin.winners.length === 1 &&
+    fastWin.winners[0] === targetUser.username
+  ) {
     medals.push({ code: "FAST_WIN", icon: "⚡", label: "Ātrākais vārds" });
   }
 
   const marathon = bestByField("totalGuesses");
-  if (marathon.max > 0 && marathon.winners.length === 1 && marathon.winners[0] === targetUser.username) {
+  if (
+    marathon.max > 0 &&
+    marathon.winners.length === 1 &&
+    marathon.winners[0] === targetUser.username
+  ) {
     medals.push({ code: "MARATHON", icon: "⏱️", label: "Maratona spēlētājs" });
   }
 
   const dailyChamp = bestByField("winsToday", (u) => u.winsTodayDate === today);
-  if (dailyChamp.max > 0 && dailyChamp.winners.length === 1 && dailyChamp.winners[0] === targetUser.username) {
+  if (
+    dailyChamp.max > 0 &&
+    dailyChamp.winners.length === 1 &&
+    dailyChamp.winners[0] === targetUser.username
+  ) {
     medals.push({ code: "DAILY_CHAMP", icon: "👑", label: "Šodienas čempions" });
   }
 
   const topXp = bestByField("xp");
-  if (topXp.max > 0 && topXp.winners.length === 1 && topXp.winners[0] === targetUser.username) {
+  if (
+    topXp.max > 0 &&
+    topXp.winners.length === 1 &&
+    topXp.winners[0] === targetUser.username
+  ) {
     medals.push({ code: "XP_KING", icon: "🧠", label: "XP līderis" });
   }
 
   const coinKing = bestByField("coins");
-  if (coinKing.max > 0 && coinKing.winners.length === 1 && coinKing.winners[0] === targetUser.username) {
+  if (
+    coinKing.max > 0 &&
+    coinKing.winners.length === 1 &&
+    coinKing.winners[0] === targetUser.username
+  ) {
     medals.push({ code: "COIN_KING", icon: "💰", label: "Naudas maiss" });
   }
 
   const tokenKing = bestByField("tokens");
-  if (tokenKing.max > 0 && tokenKing.winners.length === 1 && tokenKing.winners[0] === targetUser.username) {
+  if (
+    tokenKing.max > 0 &&
+    tokenKing.winners.length === 1 &&
+    tokenKing.winners[0] === targetUser.username
+  ) {
     medals.push({ code: "TOKEN_KING", icon: "🎟️", label: "Žetonu karalis" });
   }
 
@@ -448,7 +480,9 @@ function authMiddleware(req, res, next) {
     const user = USERS[payload.username];
     if (!user) return res.status(401).json({ message: "Lietotājs nav atrasts" });
     if (user.isBanned) {
-      return res.status(403).json({ message: "Lietotājs ir nobanots no VĀRDU ZONAS." });
+      return res
+        .status(403)
+        .json({ message: "Lietotājs ir nobanots no VĀRDU ZONAS." });
     }
     req.user = user;
     next();
@@ -523,12 +557,23 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
   const arg = parts[2];
 
   if (!cmd) {
-    adminSocket.emit("chatMessage", { username: "SYSTEM", text: "Komanda nav norādīta.", ts: Date.now() });
+    adminSocket.emit("chatMessage", {
+      username: "SYSTEM",
+      text: "Komanda nav norādīta.",
+      ts: Date.now(),
+    });
     return;
   }
 
-  if (["ban", "unban", "kick", "mute", "unmute"].includes(cmd) && !targetName) {
-    adminSocket.emit("chatMessage", { username: "SYSTEM", text: "Norādi lietotājvārdu. Piem.: /kick Nick", ts: Date.now() });
+  if (
+    ["ban", "unban", "kick", "mute", "unmute"].includes(cmd) &&
+    !targetName
+  ) {
+    adminSocket.emit("chatMessage", {
+      username: "SYSTEM",
+      text: "Norādi lietotājvārdu. Piem.: /kick Nick",
+      ts: Date.now(),
+    });
     return;
   }
 
@@ -537,82 +582,132 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
   switch (cmd) {
     case "kick":
       if (!target) {
-        adminSocket.emit("chatMessage", { username: "SYSTEM", text: `Lietotājs '${targetName}' nav atrasts.`, ts: Date.now() });
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: `Lietotājs '${targetName}' nav atrasts.`,
+          ts: Date.now(),
+        });
         return;
       }
       kickUserByName(targetName, "kick");
-      broadcastSystemMessage(`Admin ${adminUser.username} izmeta lietotāju ${targetName}.`);
+      broadcastSystemMessage(
+        `Admin ${adminUser.username} izmeta lietotāju ${targetName}.`
+      );
       break;
 
     case "ban":
       if (!target) {
-        adminSocket.emit("chatMessage", { username: "SYSTEM", text: `Lietotājs '${targetName}' nav atrasts.`, ts: Date.now() });
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: `Lietotājs '${targetName}' nav atrasts.`,
+          ts: Date.now(),
+        });
         return;
       }
       target.isBanned = true;
       saveUsers(USERS);
       kickUserByName(targetName, "ban");
-      broadcastSystemMessage(`Admin ${adminUser.username} nobanoja lietotāju ${targetName}.`);
+      broadcastSystemMessage(
+        `Admin ${adminUser.username} nobanoja lietotāju ${targetName}.`
+      );
       break;
 
     case "unban":
       if (!target) {
-        adminSocket.emit("chatMessage", { username: "SYSTEM", text: `Lietotājs '${targetName}' nav atrasts.`, ts: Date.now() });
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: `Lietotājs '${targetName}' nav atrasts.`,
+          ts: Date.now(),
+        });
         return;
       }
       target.isBanned = false;
       saveUsers(USERS);
-      broadcastSystemMessage(`Admin ${adminUser.username} atbanoja lietotāju ${targetName}.`);
+      broadcastSystemMessage(
+        `Admin ${adminUser.username} atbanoja lietotāju ${targetName}.`
+      );
       break;
 
     case "mute": {
       if (!target) {
-        adminSocket.emit("chatMessage", { username: "SYSTEM", text: `Lietotājs '${targetName}' nav atrasts.`, ts: Date.now() });
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: `Lietotājs '${targetName}' nav atrasts.`,
+          ts: Date.now(),
+        });
         return;
       }
       const minutes = parseInt(arg || "5", 10);
       const mins = Number.isNaN(minutes) ? 5 : Math.max(1, minutes);
       target.mutedUntil = Date.now() + mins * 60 * 1000;
       saveUsers(USERS);
-      broadcastSystemMessage(`Admin ${adminUser.username} uzlika mute lietotājam ${targetName} uz ${mins} min.`);
+      broadcastSystemMessage(
+        `Admin ${adminUser.username} uzlika mute lietotājam ${targetName} uz ${mins} min.`
+      );
       break;
     }
 
     case "unmute":
       if (!target) {
-        adminSocket.emit("chatMessage", { username: "SYSTEM", text: `Lietotājs '${targetName}' nav atrasts.`, ts: Date.now() });
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: `Lietotājs '${targetName}' nav atrasts.`,
+          ts: Date.now(),
+        });
         return;
       }
       target.mutedUntil = 0;
       saveUsers(USERS);
-      broadcastSystemMessage(`Admin ${adminUser.username} noņēma mute lietotājam ${targetName}.`);
+      broadcastSystemMessage(
+        `Admin ${adminUser.username} noņēma mute lietotājam ${targetName}.`
+      );
       break;
 
     case "seasonstart": {
       if (!ADMIN_USERNAMES.includes(adminUser.username)) {
-        adminSocket.emit("chatMessage", { username: "SYSTEM", text: "Tikai admins var startēt sezonu.", ts: Date.now() });
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: "Tikai admins var startēt sezonu.",
+          ts: Date.now(),
+        });
         return;
       }
 
       const now = Date.now();
       if (seasonState.endAt && now >= seasonState.endAt) {
-        const endStr = new Date(seasonState.endAt).toLocaleString("lv-LV", { timeZone: "Europe/Riga" });
-        adminSocket.emit("chatMessage", { username: "SYSTEM", text: `${seasonState.name} vairs nevar startēt — sezona beidzās ${endStr}.`, ts: Date.now() });
+        const endStr = new Date(seasonState.endAt).toLocaleString("lv-LV", {
+          timeZone: "Europe/Riga",
+        });
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: `${seasonState.name} vairs nevar startēt — sezona beidzās ${endStr}.`,
+          ts: Date.now(),
+        });
         return;
       }
 
       if (seasonState.active) {
-        adminSocket.emit("chatMessage", { username: "SYSTEM", text: `${seasonState.name} jau ir aktīva.`, ts: Date.now() });
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: `${seasonState.name} jau ir aktīva.`,
+          ts: Date.now(),
+        });
         return;
       }
 
       seasonState.active = true;
       seasonState.startedAt = Date.now();
 
-      broadcastSystemMessage(`📢 ${seasonState.name} ir sākusies! Līdz 26. decembrim krāj žetonus laimes ratam.`);
+      broadcastSystemMessage(
+        `📢 ${seasonState.name} ir sākusies! Līdz 26. decembrim krāj žetonus laimes ratam.`
+      );
       io.emit("seasonUpdate", seasonState);
 
-      adminSocket.emit("chatMessage", { username: "SYSTEM", text: `${seasonState.name} ir startēta.`, ts: Date.now() });
+      adminSocket.emit("chatMessage", {
+        username: "SYSTEM",
+        text: `${seasonState.name} ir startēta.`,
+        ts: Date.now(),
+      });
       break;
     }
 
@@ -625,13 +720,17 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         if (!endTs) {
           text = `${seasonState.name} vēl nav sākusies. Beigu datums nav iestatīts.`;
         } else {
-          const endStr = new Date(endTs).toLocaleString("lv-LV", { timeZone: "Europe/Riga" });
+          const endStr = new Date(endTs).toLocaleString("lv-LV", {
+            timeZone: "Europe/Riga",
+          });
           text = `${seasonState.name} vēl nav sākusies. Plānotās beigas: ${endStr}.`;
         }
       } else if (!endTs) {
         text = `${seasonState.name} ir aktīva, bet beigu datums nav iestatīts.`;
       } else if (now >= endTs) {
-        const endStr = new Date(endTs).toLocaleString("lv-LV", { timeZone: "Europe/Riga" });
+        const endStr = new Date(endTs).toLocaleString("lv-LV", {
+          timeZone: "Europe/Riga",
+        });
         text = `${seasonState.name} jau ir beigusies (beidzās ${endStr}).`;
       } else {
         const diffMs = endTs - now;
@@ -641,12 +740,18 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         const mins = Math.floor((totalSec % 3600) / 60);
         const secs = totalSec % 60;
 
-        const endStr = new Date(endTs).toLocaleString("lv-LV", { timeZone: "Europe/Riga" });
+        const endStr = new Date(endTs).toLocaleString("lv-LV", {
+          timeZone: "Europe/Riga",
+        });
 
         text = `${seasonState.name} ir aktīva. Līdz sezonas beigām: ${days}d ${hours}h ${mins}m ${secs}s (līdz ${endStr}).`;
       }
 
-      adminSocket.emit("chatMessage", { username: "SYSTEM", text, ts: Date.now() });
+      adminSocket.emit("chatMessage", {
+        username: "SYSTEM",
+        text,
+        ts: Date.now(),
+      });
       break;
     }
 
@@ -663,12 +768,16 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
 async function signupHandler(req, res) {
   const { username, password } = req.body || {};
   if (!username || !password) {
-    return res.status(400).json({ message: "Nepieciešams username un password" });
+    return res
+      .status(400)
+      .json({ message: "Nepieciešams username un password" });
   }
 
   const name = String(username).trim();
   if (!/^[a-zA-Z0-9_\-]{3,20}$/.test(name)) {
-    return res.status(400).json({ message: "Nickname: 3-20 simboli, tikai burti/cipari/ - _" });
+    return res.status(400).json({
+      message: "Nickname: 3-20 simboli, tikai burti/cipari/ - _",
+    });
   }
   if (USERS[name]) {
     return res.status(400).json({ message: "Šāds lietotājs jau eksistē" });
@@ -721,7 +830,9 @@ app.post("/signup", signupHandler);
 async function loginHandler(req, res) {
   const { username, password } = req.body || {};
   if (!username || !password) {
-    return res.status(400).json({ message: "Nepieciešams username un password" });
+    return res
+      .status(400)
+      .json({ message: "Nepieciešams username un password" });
   }
 
   const name = String(username).trim();
@@ -731,7 +842,9 @@ async function loginHandler(req, res) {
   }
 
   if (user.isBanned) {
-    return res.status(403).json({ message: "Šis lietotājs ir nobanots no VĀRDU ZONAS. Sazinies ar Bugats." });
+    return res.status(403).json({
+      message: "Šis lietotājs ir nobanots no VĀRDU ZONAS. Sazinies ar Bugats.",
+    });
   }
 
   const ok = await bcrypt.compare(password, user.passwordHash || "");
@@ -777,7 +890,9 @@ app.post("/avatar", authMiddleware, (req, res) => {
 
     const MAX_LEN = 3 * 1024 * 1024;
     if (avatar.length > MAX_LEN) {
-      return res.status(400).json({ message: "Avatārs ir par lielu (samazini bildi līdz ~2MB)." });
+      return res.status(400).json({
+        message: "Avatārs ir par lielu (samazini bildi līdz ~2MB).",
+      });
     }
 
     user.avatarUrl = avatar;
@@ -789,7 +904,9 @@ app.post("/avatar", authMiddleware, (req, res) => {
     return res.json({ ok: true, avatarUrl: user.avatarUrl });
   } catch (err) {
     console.error("POST /avatar kļūda:", err);
-    return res.status(500).json({ message: "Servera kļūda avatāra saglabāšanā." });
+    return res
+      .status(500)
+      .json({ message: "Servera kļūda avatāra saglabāšanā." });
   }
 });
 
@@ -860,8 +977,10 @@ app.post("/missions/claim", authMiddleware, (req, res) => {
 
   const mission = (user.missions || []).find((m) => m.id === id);
   if (!mission) return res.status(404).json({ message: "Misija nav atrasta" });
-  if (!mission.isCompleted) return res.status(400).json({ message: "Misija vēl nav pabeigta" });
-  if (mission.isClaimed) return res.status(400).json({ message: "Balva jau saņemta" });
+  if (!mission.isCompleted)
+    return res.status(400).json({ message: "Misija vēl nav pabeigta" });
+  if (mission.isClaimed)
+    return res.status(400).json({ message: "Balva jau saņemta" });
 
   const rw = mission.rewards || {};
   const addXp = rw.xp || 0;
@@ -896,15 +1015,21 @@ app.post("/season/start", authMiddleware, (req, res) => {
 
   const now = Date.now();
   if (seasonState.endAt && now >= seasonState.endAt) {
-    const endStr = new Date(seasonState.endAt).toLocaleString("lv-LV", { timeZone: "Europe/Riga" });
-    return res.status(400).json({ message: `${seasonState.name} vairs nevar startēt — sezona beidzās ${endStr}.` });
+    const endStr = new Date(seasonState.endAt).toLocaleString("lv-LV", {
+      timeZone: "Europe/Riga",
+    });
+    return res.status(400).json({
+      message: `${seasonState.name} vairs nevar startēt — sezona beidzās ${endStr}.`,
+    });
   }
 
   if (!seasonState.active) {
     seasonState.active = true;
     seasonState.startedAt = Date.now();
 
-    broadcastSystemMessage(`📢 ${seasonState.name} ir sākusies! Līdz 26. decembrim krāj žetonus laimes ratam.`);
+    broadcastSystemMessage(
+      `📢 ${seasonState.name} ir sākusies! Līdz 26. decembrim krāj žetonus laimes ratam.`
+    );
     io.emit("seasonUpdate", seasonState);
   }
 
@@ -912,7 +1037,6 @@ app.post("/season/start", authMiddleware, (req, res) => {
 });
 
 // ======== Spēles loģika ========
-
 function pickRandomWord() {
   if (!WORDS.length) return { word: "BUGAT", len: 5 };
   const idx = crypto.randomInt(0, WORDS.length);
@@ -984,7 +1108,9 @@ app.post("/guess", authMiddleware, (req, res) => {
 
   const round = user.currentRound;
   if (guessRaw.length !== round.len) {
-    return res.status(400).json({ message: `Vārdam jābūt ${round.len} burtiem` });
+    return res
+      .status(400)
+      .json({ message: `Vārdam jābūt ${round.len} burtiem` });
   }
 
   if (round.attemptsLeft <= 0) {
@@ -1162,14 +1288,38 @@ function finishDuel(duel, winnerName, reason) {
 
     saveUsers(USERS);
 
-    if (s1) s1.emit("duel.end", { duelId: duel.id, winner: winnerName, youWin: winnerName === p1, reason });
-    if (s2) s2.emit("duel.end", { duelId: duel.id, winner: winnerName, youWin: winnerName === p2, reason });
+    if (s1)
+      s1.emit("duel.end", {
+        duelId: duel.id,
+        winner: winnerName,
+        youWin: winnerName === p1,
+        reason,
+      });
+    if (s2)
+      s2.emit("duel.end", {
+        duelId: duel.id,
+        winner: winnerName,
+        youWin: winnerName === p2,
+        reason,
+      });
 
     const other = winnerName === p1 ? p2 : p1;
     broadcastSystemMessage(`⚔️ ${winnerName} uzvarēja dueli pret ${other}!`);
   } else {
-    if (s1) s1.emit("duel.end", { duelId: duel.id, winner: null, youWin: false, reason });
-    if (s2) s2.emit("duel.end", { duelId: duel.id, winner: null, youWin: false, reason });
+    if (s1)
+      s1.emit("duel.end", {
+        duelId: duel.id,
+        winner: null,
+        youWin: false,
+        reason,
+      });
+    if (s2)
+      s2.emit("duel.end", {
+        duelId: duel.id,
+        winner: null,
+        youWin: false,
+        reason,
+      });
   }
 
   userToDuel.delete(p1);
@@ -1212,7 +1362,9 @@ setInterval(() => {
       io.emit("seasonUpdate", seasonState);
     }
     if (!seasonEndedBroadcasted) {
-      const endStr = new Date(seasonState.endAt).toLocaleString("lv-LV", { timeZone: "Europe/Riga" });
+      const endStr = new Date(seasonState.endAt).toLocaleString("lv-LV", {
+        timeZone: "Europe/Riga",
+      });
       broadcastSystemMessage(`⏳ ${seasonState.name} ir beigusies (${endStr}).`);
       io.emit("seasonUpdate", seasonState);
       seasonEndedBroadcasted = true;
@@ -1278,13 +1430,24 @@ io.on("connection", (socket) => {
     const now = Date.now();
 
     if (u.isBanned) {
-      socket.emit("chatMessage", { username: "SYSTEM", text: "Tu esi nobanots no VĀRDU ZONAS.", ts: Date.now() });
+      socket.emit("chatMessage", {
+        username: "SYSTEM",
+        text: "Tu esi nobanots no VĀRDU ZONAS.",
+        ts: Date.now(),
+      });
       return;
     }
 
     if (u.mutedUntil && u.mutedUntil > now) {
-      const until = new Date(u.mutedUntil).toLocaleTimeString("lv-LV", { hour: "2-digit", minute: "2-digit" });
-      socket.emit("chatMessage", { username: "SYSTEM", text: `Tev ir mute līdz ${until}.`, ts: Date.now() });
+      const until = new Date(u.mutedUntil).toLocaleTimeString("lv-LV", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      socket.emit("chatMessage", {
+        username: "SYSTEM",
+        text: `Tev ir mute līdz ${until}.`,
+        ts: Date.now(),
+      });
       return;
     }
 
@@ -1310,17 +1473,25 @@ io.on("connection", (socket) => {
     const challengerName = challenger.username;
     const targetName = String(targetNameRaw || "").trim();
 
-    if (!targetName) return socket.emit("duel.error", { message: "Nav norādīts pretinieks." });
-    if (targetName === challengerName) return socket.emit("duel.error", { message: "Nevari izaicināt sevi." });
+    if (!targetName)
+      return socket.emit("duel.error", { message: "Nav norādīts pretinieks." });
+    if (targetName === challengerName)
+      return socket.emit("duel.error", { message: "Nevari izaicināt sevi." });
 
     const targetUser = USERS[targetName];
-    if (!targetUser) return socket.emit("duel.error", { message: "Lietotājs nav atrasts." });
+    if (!targetUser)
+      return socket.emit("duel.error", { message: "Lietotājs nav atrasts." });
 
-    if (userToDuel.has(challengerName)) return socket.emit("duel.error", { message: "Tu jau esi citā duelī." });
-    if (userToDuel.has(targetName)) return socket.emit("duel.error", { message: "Pretinieks jau ir citā duelī." });
+    if (userToDuel.has(challengerName))
+      return socket.emit("duel.error", { message: "Tu jau esi citā duelī." });
+    if (userToDuel.has(targetName))
+      return socket.emit("duel.error", {
+        message: "Pretinieks jau ir citā duelī.",
+      });
 
     const targetSocket = getSocketByUsername(targetName);
-    if (!targetSocket) return socket.emit("duel.error", { message: "Pretinieks nav tiešsaistē." });
+    if (!targetSocket)
+      return socket.emit("duel.error", { message: "Pretinieks nav tiešsaistē." });
 
     const { word, len } = pickRandomWord();
     const duelId = crypto.randomBytes(8).toString("hex");
@@ -1334,7 +1505,10 @@ io.on("connection", (socket) => {
       createdAt: Date.now(),
       startedAt: null,
       expiresAt: null,
-      attemptsLeft: { [challengerName]: DUEL_MAX_ATTEMPTS, [targetName]: DUEL_MAX_ATTEMPTS },
+      attemptsLeft: {
+        [challengerName]: DUEL_MAX_ATTEMPTS,
+        [targetName]: DUEL_MAX_ATTEMPTS,
+      },
       rowsUsed: { [challengerName]: 0, [targetName]: 0 },
       winner: null,
       finishedReason: null,
@@ -1345,7 +1519,6 @@ io.on("connection", (socket) => {
     userToDuel.set(targetName, duelId);
 
     socket.emit("duel.waiting", { duelId, opponent: targetName, len });
-
     targetSocket.emit("duel.invite", { duelId, from: challengerName, len });
   });
 
@@ -1354,8 +1527,10 @@ io.on("connection", (socket) => {
     const userName = socket.data.user.username;
     const duel = duels.get(duelId);
     if (!duel) return socket.emit("duel.error", { message: "Duēlis nav atrasts." });
-    if (!duel.players.includes(userName)) return socket.emit("duel.error", { message: "Tu neesi šajā duelī." });
-    if (duel.status !== "pending") return socket.emit("duel.error", { message: "Duēlis jau ir sācies." });
+    if (!duel.players.includes(userName))
+      return socket.emit("duel.error", { message: "Tu neesi šajā duelī." });
+    if (duel.status !== "pending")
+      return socket.emit("duel.error", { message: "Duēlis jau ir sācies." });
 
     duel.status = "active";
     duel.startedAt = Date.now();
@@ -1365,10 +1540,24 @@ io.on("connection", (socket) => {
     const s1 = getSocketByUsername(p1);
     const s2 = getSocketByUsername(p2);
 
-    if (s1) s1.emit("duel.start", { duelId: duel.id, len: duel.len, opponent: p2, expiresAt: duel.expiresAt });
-    if (s2) s2.emit("duel.start", { duelId: duel.id, len: duel.len, opponent: p1, expiresAt: duel.expiresAt });
+    if (s1)
+      s1.emit("duel.start", {
+        duelId: duel.id,
+        len: duel.len,
+        opponent: p2,
+        expiresAt: duel.expiresAt,
+      });
+    if (s2)
+      s2.emit("duel.start", {
+        duelId: duel.id,
+        len: duel.len,
+        opponent: p1,
+        expiresAt: duel.expiresAt,
+      });
 
-    broadcastSystemMessage(`⚔️ Duēlis sākas: ${p1} vs ${p2}! Kurš pirmais atminēs vārdu?`);
+    broadcastSystemMessage(
+      `⚔️ Duēlis sākas: ${p1} vs ${p2}! Kurš pirmais atminēs vārdu?`
+    );
   });
 
   socket.on("duel.decline", (payload) => {
@@ -1383,8 +1572,19 @@ io.on("connection", (socket) => {
     const other = p1 === userName ? p2 : p1;
 
     const sOther = getSocketByUsername(other);
-    if (sOther) sOther.emit("duel.end", { duelId: duel.id, winner: null, youWin: false, reason: "declined" });
-    socket.emit("duel.end", { duelId: duel.id, winner: null, youWin: false, reason: "declined" });
+    if (sOther)
+      sOther.emit("duel.end", {
+        duelId: duel.id,
+        winner: null,
+        youWin: false,
+        reason: "declined",
+      });
+    socket.emit("duel.end", {
+      duelId: duel.id,
+      winner: null,
+      youWin: false,
+      reason: "declined",
+    });
 
     userToDuel.delete(p1);
     userToDuel.delete(p2);
@@ -1398,7 +1598,8 @@ io.on("connection", (socket) => {
 
     const duel = duels.get(duelId);
     if (!duel) return socket.emit("duel.error", { message: "Duēlis nav atrasts." });
-    if (duel.status !== "active") return socket.emit("duel.error", { message: "Duēlis nav aktīvs." });
+    if (duel.status !== "active")
+      return socket.emit("duel.error", { message: "Duēlis nav aktīvs." });
 
     const now = Date.now();
     if (duel.expiresAt && now >= duel.expiresAt) {
@@ -1407,9 +1608,16 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (!duel.players.includes(userName)) return socket.emit("duel.error", { message: "Tu neesi šajā duelī." });
-    if (rawGuess.length !== duel.len) return socket.emit("duel.error", { message: `Vārdam duelī jābūt ${duel.len} burtiem.` });
-    if (duel.attemptsLeft[userName] <= 0) return socket.emit("duel.error", { message: "Tev vairs nav mēģinājumu duelī." });
+    if (!duel.players.includes(userName))
+      return socket.emit("duel.error", { message: "Tu neesi šajā duelī." });
+    if (rawGuess.length !== duel.len)
+      return socket.emit("duel.error", {
+        message: `Vārdam duelī jābūt ${duel.len} burtiem.`,
+      });
+    if (duel.attemptsLeft[userName] <= 0)
+      return socket.emit("duel.error", {
+        message: "Tev vairs nav mēģinājumu duelī.",
+      });
 
     duel.rowsUsed[userName] = (duel.rowsUsed[userName] || 0) + 1;
     duel.attemptsLeft[userName] -= 1;
@@ -1418,14 +1626,24 @@ io.on("connection", (socket) => {
     const isWin = rawGuess === duel.word;
 
     if (isWin) {
-      socket.emit("duel.guessResult", { duelId: duel.id, pattern, win: true, finished: true });
+      socket.emit("duel.guessResult", {
+        duelId: duel.id,
+        pattern,
+        win: true,
+        finished: true,
+      });
       finishDuel(duel, userName, "win");
       return;
     }
 
     const finishedForPlayer = duel.attemptsLeft[userName] <= 0;
 
-    socket.emit("duel.guessResult", { duelId: duel.id, pattern, win: false, finished: finishedForPlayer });
+    socket.emit("duel.guessResult", {
+      duelId: duel.id,
+      pattern,
+      win: false,
+      finished: finishedForPlayer,
+    });
 
     const [p1, p2] = duel.players;
     if (!duel.winner && duel.attemptsLeft[p1] <= 0 && duel.attemptsLeft[p2] <= 0) {
@@ -1433,35 +1651,44 @@ io.on("connection", (socket) => {
     }
   });
 
-socket.on("disconnect", () => {
-  const username = user.username;
+  // ======== DISCONNECT FIX (pret exploit pending duelī) ========
+  socket.on("disconnect", () => {
+    const username = user.username;
 
-  const duelId = userToDuel.get(username);
-  if (duelId) {
-    const duel = duels.get(duelId);
-    if (duel && duel.status !== "finished") {
-      const other = duel.players.find((p) => p !== username);
+    const duelId = userToDuel.get(username);
+    if (duelId) {
+      const duel = duels.get(duelId);
+      if (duel && duel.status !== "finished") {
+        const other = duel.players.find((p) => p !== username);
 
-      // Ja duelis vēl nav sācies — vienkārši atceļam, bez uzvaras/reward
-      if (duel.status === "pending") {
-        const sOther = getSocketByUsername(other);
-        if (sOther) sOther.emit("duel.end", { duelId: duel.id, winner: null, youWin: false, reason: "opponent_disconnect_pending" });
+        // Ja duelis vēl nav sācies — atceļam bez uzvaras/reward
+        if (duel.status === "pending") {
+          const sOther = getSocketByUsername(other);
+          if (sOther) {
+            sOther.emit("duel.end", {
+              duelId: duel.id,
+              winner: null,
+              youWin: false,
+              reason: "opponent_disconnect_pending",
+            });
+          }
 
-        userToDuel.delete(duel.players[0]);
-        userToDuel.delete(duel.players[1]);
-        duels.delete(duel.id);
-      } else {
-        // Ja duelis ir active — otrs uzvar pēc atvienošanās
-        finishDuel(duel, other, "opponent_disconnect");
+          userToDuel.delete(duel.players[0]);
+          userToDuel.delete(duel.players[1]);
+          duels.delete(duel.id);
+        } else {
+          // Ja duelis ir active — otrs uzvar pēc atvienošanās
+          finishDuel(duel, other, "opponent_disconnect");
+        }
       }
     }
-  }
 
-  onlineBySocket.delete(socket.id);
-  broadcastOnlineList();
-  console.log("Atvienojās:", user.username, "socket:", socket.id);
+    onlineBySocket.delete(socket.id);
+    broadcastOnlineList();
+    console.log("Atvienojās:", user.username, "socket:", socket.id);
+  });
 });
-  
+
 // ======== Start ========
 httpServer.listen(PORT, () => {
   console.log("VĀRDU ZONA serveris klausās portā", PORT);
