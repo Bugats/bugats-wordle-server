@@ -34,8 +34,11 @@ const BASE_TOKEN_PRICE = 150;
 // Admin lietotāji
 const ADMIN_USERNAMES = ["Bugats", "BugatsLV"];
 
+// ======== Laika zona ========
+const TZ = "Europe/Riga";
+
 // ======== SEZONA 1 – servera stāvoklis ========
-// Latvia ziemā ir UTC+2, tāpēc +02:00 ir korekti.
+// 2025-12-26 ir ziemā, tāpēc +02:00 ir ok.
 const SEASON1_END_AT = new Date("2025-12-26T23:59:59+02:00").getTime();
 
 let seasonState = {
@@ -139,6 +142,12 @@ function loadUsers() {
       // Avatārs
       if (typeof u.avatarUrl !== "string") u.avatarUrl = null;
 
+      // Daily Chest
+      if (!u.dailyChest || typeof u.dailyChest !== "object") u.dailyChest = {};
+      if (typeof u.dailyChest.lastDate !== "string") u.dailyChest.lastDate = "";
+      if (typeof u.dailyChest.streak !== "number") u.dailyChest.streak = 0;
+      if (typeof u.dailyChest.totalOpens !== "number") u.dailyChest.totalOpens = 0;
+
       out[u.username] = u;
     }
     return out;
@@ -212,6 +221,58 @@ function getTokenPrice() {
   return BASE_TOKEN_PRICE;
 }
 
+// ======== Dienas atslēga pēc LV laika ========
+function todayKey(date = new Date()) {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return fmt.format(date); // YYYY-MM-DD
+}
+
+// ======== Daily Chest helperi ========
+function ensureDailyChest(user) {
+  if (!user.dailyChest || typeof user.dailyChest !== "object") user.dailyChest = {};
+  if (typeof user.dailyChest.lastDate !== "string") user.dailyChest.lastDate = "";
+  if (typeof user.dailyChest.streak !== "number") user.dailyChest.streak = 0;
+  if (typeof user.dailyChest.totalOpens !== "number") user.dailyChest.totalOpens = 0;
+}
+
+function getTzOffsetMinutes(timeZone, date = new Date()) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "shortOffset",
+      hour: "2-digit",
+    }).formatToParts(date);
+
+    const tz = parts.find((p) => p.type === "timeZoneName")?.value || "GMT+0";
+    const m = tz.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/);
+    if (!m) return 0;
+    const sign = m[1] === "-" ? -1 : 1;
+    const hh = parseInt(m[2], 10) || 0;
+    const mm = parseInt(m[3] || "0", 10) || 0;
+    return sign * (hh * 60 + mm);
+  } catch {
+    return 0;
+  }
+}
+
+function nextMidnightRigaTs(now = new Date()) {
+  // Aprēķinam “rītdienas 00:00” pēc LV laika
+  const key = todayKey(now);
+  const [y, mo, d] = key.split("-").map((x) => parseInt(x, 10));
+
+  // offsetu ņemam ap pusdienlaiku rītdienā (drošāk DST gadījumos)
+  const probe = new Date(Date.UTC(y, mo - 1, d + 1, 12, 0, 0));
+  const offsetMin = getTzOffsetMinutes(TZ, probe);
+
+  const utcMidnight = Date.UTC(y, mo - 1, d + 1, 0, 0, 0);
+  return utcMidnight - offsetMin * 60 * 1000;
+}
+
 // ======== Anti-AFK + pasīvie coini ========
 function markActivity(user) {
   const now = Date.now();
@@ -247,10 +308,6 @@ function markActivity(user) {
 }
 
 // ======== MISIJU HELPERI ========
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function ensureDailyMissions(user) {
   const key = todayKey();
   if (
@@ -676,7 +733,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       const now = Date.now();
       if (seasonState.endAt && now >= seasonState.endAt) {
         const endStr = new Date(seasonState.endAt).toLocaleString("lv-LV", {
-          timeZone: "Europe/Riga",
+          timeZone: TZ,
         });
         adminSocket.emit("chatMessage", {
           username: "SYSTEM",
@@ -721,7 +778,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
           text = `${seasonState.name} vēl nav sākusies. Beigu datums nav iestatīts.`;
         } else {
           const endStr = new Date(endTs).toLocaleString("lv-LV", {
-            timeZone: "Europe/Riga",
+            timeZone: TZ,
           });
           text = `${seasonState.name} vēl nav sākusies. Plānotās beigas: ${endStr}.`;
         }
@@ -729,7 +786,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         text = `${seasonState.name} ir aktīva, bet beigu datums nav iestatīts.`;
       } else if (now >= endTs) {
         const endStr = new Date(endTs).toLocaleString("lv-LV", {
-          timeZone: "Europe/Riga",
+          timeZone: TZ,
         });
         text = `${seasonState.name} jau ir beigusies (beidzās ${endStr}).`;
       } else {
@@ -741,7 +798,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         const secs = totalSec % 60;
 
         const endStr = new Date(endTs).toLocaleString("lv-LV", {
-          timeZone: "Europe/Riga",
+          timeZone: TZ,
         });
 
         text = `${seasonState.name} ir aktīva. Līdz sezonas beigām: ${days}d ${hours}h ${mins}m ${secs}s (līdz ${endStr}).`;
@@ -810,6 +867,7 @@ async function signupHandler(req, res) {
     duelsWon: 0,
     duelsLost: 0,
     avatarUrl: null,
+    dailyChest: { lastDate: "", streak: 0, totalOpens: 0 },
   };
 
   const rankInfo = calcRankFromXp(user.xp);
@@ -817,6 +875,7 @@ async function signupHandler(req, res) {
   user.rankTitle = rankInfo.title;
 
   ensureDailyMissions(user);
+  ensureDailyChest(user);
 
   USERS[name] = user;
   saveUsers(USERS);
@@ -855,6 +914,7 @@ async function loginHandler(req, res) {
   markActivity(user);
   ensureDailyMissions(user);
   resetWinsTodayIfNeeded(user);
+  ensureDailyChest(user);
   saveUsers(USERS);
 
   const token = jwt.sign({ username: name }, JWT_SECRET, { expiresIn: "30d" });
@@ -870,6 +930,7 @@ app.get("/me", authMiddleware, (req, res) => {
   markActivity(u);
   ensureDailyMissions(u);
   resetWinsTodayIfNeeded(u);
+  ensureDailyChest(u);
   saveUsers(USERS);
 
   res.json(buildMePayload(u));
@@ -963,6 +1024,7 @@ app.get("/missions", authMiddleware, (req, res) => {
   markActivity(user);
   ensureDailyMissions(user);
   resetWinsTodayIfNeeded(user);
+  ensureDailyChest(user);
   saveUsers(USERS);
   res.json(getPublicMissions(user));
 });
@@ -974,6 +1036,7 @@ app.post("/missions/claim", authMiddleware, (req, res) => {
 
   markActivity(user);
   ensureDailyMissions(user);
+  ensureDailyChest(user);
 
   const mission = (user.missions || []).find((m) => m.id === id);
   if (!mission) return res.status(404).json({ message: "Misija nav atrasta" });
@@ -1002,6 +1065,91 @@ app.post("/missions/claim", authMiddleware, (req, res) => {
   res.json({ me: buildMePayload(user), missions: getPublicMissions(user) });
 });
 
+// ======== DAILY CHEST ENDPOINTI (SALABO "Cannot GET /chest/status") ========
+// GET /chest/status
+app.get("/chest/status", authMiddleware, (req, res) => {
+  const user = req.user;
+  markActivity(user);
+  ensureDailyChest(user);
+  saveUsers(USERS);
+
+  const today = todayKey();
+  const available = user.dailyChest.lastDate !== today;
+
+  res.json({
+    available,
+    today,
+    lastDate: user.dailyChest.lastDate || null,
+    streak: user.dailyChest.streak || 0,
+    nextAt: nextMidnightRigaTs(),
+  });
+});
+
+// POST /chest/open
+app.post("/chest/open", authMiddleware, (req, res) => {
+  const user = req.user;
+  markActivity(user);
+  ensureDailyChest(user);
+
+  const today = todayKey();
+  const available = user.dailyChest.lastDate !== today;
+
+  if (!available) {
+    return res.status(409).json({
+      message: "Daily Chest jau ir atvērts šodien. Nāc rīt!",
+      nextAt: nextMidnightRigaTs(),
+    });
+  }
+
+  // streak: ja vakar atvērts -> +1, citādi -> 1
+  const yesterdayKey = todayKey(new Date(Date.now() - 24 * 3600 * 1000));
+  if (user.dailyChest.lastDate === yesterdayKey) user.dailyChest.streak += 1;
+  else user.dailyChest.streak = 1;
+
+  user.dailyChest.lastDate = today;
+  user.dailyChest.totalOpens = (user.dailyChest.totalOpens || 0) + 1;
+
+  // Balvas (vari mainīt skaitļus, bet šie ir adiktīvi/taisnīgi)
+  const streak = user.dailyChest.streak;
+
+  const coinsBase = 40 + crypto.randomInt(0, 81); // 40..120
+  const xpBase = 10 + crypto.randomInt(0, 21); // 10..30
+
+  const streakBonusCoins = Math.min(90, (streak - 1) * 12);
+  const streakBonusXp = Math.min(35, (streak - 1) * 4);
+
+  const coinsGain = coinsBase + streakBonusCoins;
+  const xpGain = xpBase + streakBonusXp;
+
+  const tokenChance = Math.min(0.25, 0.06 + streak * 0.01); // līdz 25%
+  const tokensGain = Math.random() < tokenChance ? 1 : 0;
+
+  user.coins = (user.coins || 0) + coinsGain;
+  user.xp = (user.xp || 0) + xpGain;
+  user.tokens = (user.tokens || 0) + tokensGain;
+
+  const rankInfo = calcRankFromXp(user.xp);
+  user.rankLevel = rankInfo.level;
+  user.rankTitle = rankInfo.title;
+
+  saveUsers(USERS);
+
+  // (nav obligāti, bet forši) paziņojums čatā
+  io.emit("chatMessage", {
+    username: "SYSTEM",
+    text: `🎁 ${user.username} atvēra Daily Chest: +${coinsGain} coins, +${xpGain} XP${tokensGain ? `, +${tokensGain} žetons` : ""} (streak ${user.dailyChest.streak})`,
+    ts: Date.now(),
+  });
+
+  return res.json({
+    ok: true,
+    rewards: { coins: coinsGain, xp: xpGain, tokens: tokensGain },
+    streak: user.dailyChest.streak,
+    nextAt: nextMidnightRigaTs(),
+    me: buildMePayload(user),
+  });
+});
+
 // ======== SEZONA API ========
 app.get("/season", authMiddleware, (req, res) => {
   res.json(seasonState);
@@ -1016,7 +1164,7 @@ app.post("/season/start", authMiddleware, (req, res) => {
   const now = Date.now();
   if (seasonState.endAt && now >= seasonState.endAt) {
     const endStr = new Date(seasonState.endAt).toLocaleString("lv-LV", {
-      timeZone: "Europe/Riga",
+      timeZone: TZ,
     });
     return res.status(400).json({
       message: `${seasonState.name} vairs nevar startēt — sezona beidzās ${endStr}.`,
@@ -1060,6 +1208,7 @@ app.get("/start-round", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
   ensureDailyMissions(user);
+  ensureDailyChest(user);
 
   if (user.currentRound && !user.currentRound.finished) {
     saveUsers(USERS);
@@ -1100,6 +1249,7 @@ app.post("/guess", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
   ensureDailyMissions(user);
+  ensureDailyChest(user);
 
   const guessRaw = (req.body?.guess || "").toString().trim().toUpperCase();
   if (!user.currentRound || user.currentRound.finished) {
@@ -1202,6 +1352,7 @@ app.post("/buy-token", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
   ensureDailyMissions(user);
+  ensureDailyChest(user);
 
   const price = getTokenPrice(user);
   if ((user.coins || 0) < price) {
@@ -1363,7 +1514,7 @@ setInterval(() => {
     }
     if (!seasonEndedBroadcasted) {
       const endStr = new Date(seasonState.endAt).toLocaleString("lv-LV", {
-        timeZone: "Europe/Riga",
+        timeZone: TZ,
       });
       broadcastSystemMessage(`⏳ ${seasonState.name} ir beigusies (${endStr}).`);
       io.emit("seasonUpdate", seasonState);
@@ -1400,6 +1551,7 @@ io.on("connection", (socket) => {
 
   markActivity(user);
   ensureDailyMissions(user);
+  ensureDailyChest(user);
 
   const bonus = grantDailyLoginBonus(user);
   if (bonus > 0) {
@@ -1426,6 +1578,7 @@ io.on("connection", (socket) => {
     const u = USERS[user.username] || user;
     markActivity(u);
     ensureDailyMissions(u);
+    ensureDailyChest(u);
 
     const now = Date.now();
 
