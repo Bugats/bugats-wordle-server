@@ -31,10 +31,6 @@ const MAX_ATTEMPTS = 6;
 
 const BASE_TOKEN_PRICE = 150;
 
-// BOSS vārds – ELEKTROSTACIJA (ļoti reti parādās pamata spēlē)
-const BOSS_WORD = "ELEKTROSTACIJA";
-const BOSS_WORD_PROB = 0.01; // ~1% jauna raunda iespēja, vari vēlāk samazināt/palielināt
-
 // Admin lietotāji
 const ADMIN_USERNAMES = ["Bugats", "BugatsLV"];
 
@@ -108,10 +104,7 @@ function loadUsers() {
   try {
     const raw = fs.readFileSync(USERS_FILE, "utf8");
     if (!raw.trim()) return {};
-
-    const parsed = JSON.parse(raw);
-    const arr = Array.isArray(parsed) ? parsed : Object.values(parsed || {});
-
+    const arr = JSON.parse(raw);
     const out = {};
     for (const u of arr) {
       if (!u || !u.username) continue;
@@ -136,10 +129,6 @@ function loadUsers() {
       if (typeof u.duelsWon !== "number") u.duelsWon = 0;
       if (typeof u.duelsLost !== "number") u.duelsLost = 0;
 
-      // Boss vārda statistika
-      if (typeof u.bossElectroWins !== "number") u.bossElectroWins = 0;
-      if (typeof u.bossElectroFirst !== "boolean") u.bossElectroFirst = false;
-
       // Aktīvais raunds (ja nav – būs null)
       if (!u.currentRound) u.currentRound = null;
 
@@ -155,33 +144,9 @@ function loadUsers() {
   }
 }
 
-// Atomic write (mazāks risks sabojāt users.json)
 function saveUsers(users) {
   const arr = Object.values(users);
-  const tmp = `${USERS_FILE}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(arr, null, 2), "utf8");
-  fs.renameSync(tmp, USERS_FILE);
-}
-
-// Debounced save (lai čats neuzkār event loop)
-let saveTimer = null;
-function scheduleSave() {
-  if (saveTimer) return;
-  saveTimer = setTimeout(() => {
-    saveTimer = null;
-    try {
-      saveUsers(USERS);
-    } catch (e) {
-      console.error("scheduleSave -> saveUsers kļūda:", e);
-    }
-  }, 750);
-}
-function saveUsersNow() {
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-  }
-  saveUsers(USERS);
+  fs.writeFileSync(USERS_FILE, JSON.stringify(arr, null, 2), "utf8");
 }
 
 let USERS = loadUsers();
@@ -280,15 +245,8 @@ function markActivity(user) {
 }
 
 // ======== MISIJU HELPERI ========
-// Latvijai pareiza “diena” (Europe/Riga), nevis UTC
 function todayKey() {
-  // YYYY-MM-DD (sv-SE formāts dod tieši šo)
-  return new Intl.DateTimeFormat("sv-SE", {
-    timeZone: "Europe/Riga",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
+  return new Date().toISOString().slice(0, 10);
 }
 
 function ensureDailyMissions(user) {
@@ -357,7 +315,7 @@ function updateMissionsOnGuess(user, { isWin, xpGain }) {
     }
   }
 
-  if (changed) scheduleSave();
+  if (changed) saveUsers(USERS);
 }
 
 // Resets "winsToday" on new calendar day
@@ -369,7 +327,7 @@ function resetWinsTodayIfNeeded(user) {
   }
 }
 
-// ======== Medaļu loģika (8 globālie līderi + boss medaļas) ========
+// ======== Medaļu loģika (8 globālie līderi) ========
 // Medaļas tikai tad, ja IR viens konkrēts līderis (bez neizšķirta).
 function computeMedalsForUser(targetUser) {
   if (!targetUser) return [];
@@ -421,7 +379,11 @@ function computeMedalsForUser(targetUser) {
     topScore.winners.length === 1 &&
     topScore.winners[0] === targetUser.username
   ) {
-    medals.push({ code: "TOP_SCORE", icon: "🏆", label: "TOP punktos" });
+    medals.push({
+      code: "TOP_SCORE",
+      icon: "🏆",
+      label: "TOP punktos",
+    });
   }
 
   // 2) BEST_STREAK – labākais bestStreak
@@ -431,7 +393,11 @@ function computeMedalsForUser(targetUser) {
     topBestStreak.winners.length === 1 &&
     topBestStreak.winners[0] === targetUser.username
   ) {
-    medals.push({ code: "BEST_STREAK", icon: "🔥", label: "Garākais streak" });
+    medals.push({
+      code: "BEST_STREAK",
+      icon: "🔥",
+      label: "Garākais streak",
+    });
   }
 
   // 3) FAST_WIN – mazākais bestWinTimeMs
@@ -441,7 +407,11 @@ function computeMedalsForUser(targetUser) {
     fastWin.winners.length === 1 &&
     fastWin.winners[0] === targetUser.username
   ) {
-    medals.push({ code: "FAST_WIN", icon: "⚡", label: "Ātrākais vārds" });
+    medals.push({
+      code: "FAST_WIN",
+      icon: "⚡",
+      label: "Ātrākais vārds",
+    });
   }
 
   // 4) MARATHON – visvairāk minējumu kopā
@@ -482,7 +452,11 @@ function computeMedalsForUser(targetUser) {
     topXp.winners.length === 1 &&
     topXp.winners[0] === targetUser.username
   ) {
-    medals.push({ code: "XP_KING", icon: "🧠", label: "XP līderis" });
+    medals.push({
+      code: "XP_KING",
+      icon: "🧠",
+      label: "XP līderis",
+    });
   }
 
   // 7) COIN_KING – visvairāk coins
@@ -492,7 +466,11 @@ function computeMedalsForUser(targetUser) {
     coinKing.winners.length === 1 &&
     coinKing.winners[0] === targetUser.username
   ) {
-    medals.push({ code: "COIN_KING", icon: "💰", label: "Naudas maiss" });
+    medals.push({
+      code: "COIN_KING",
+      icon: "💰",
+      label: "Naudas maiss",
+    });
   }
 
   // 8) TOKEN_KING – visvairāk žetonu
@@ -509,35 +487,7 @@ function computeMedalsForUser(targetUser) {
     });
   }
 
-  // 9) BOSS_ELEKTRO – jebkurš, kas jebkad atminējis boss vārdu
-  if ((targetUser.bossElectroWins || 0) > 0) {
-    medals.push({
-      code: "BOSS_ELEKTRO",
-      icon: "⚡",
-      label: "ELEKTROSTACIJAS boss vārds",
-    });
-  }
-
-  // 10) BOSS_ELEKTRO_FIRST – pirmais serverī, kas atminējis ELEKTROSTACIJU
-  if (targetUser.bossElectroFirst) {
-    medals.push({
-      code: "BOSS_ELEKTRO_FIRST",
-      icon: "👑",
-      label: "Pirmais, kas atminēja ELEKTROSTACIJU",
-    });
-  }
-
   return medals;
-}
-
-// Vienreizēja “pirmā” boss medaļas īpašnieka atzīmēšana
-function ensureBossFirstMedal(winnerUser) {
-  if (!winnerUser) return;
-  const all = Object.values(USERS || {});
-  const alreadyHas = all.some((u) => u.bossElectroFirst);
-  if (!alreadyHas) {
-    winnerUser.bossElectroFirst = true;
-  }
 }
 
 // ======== JWT helperi ========
@@ -588,8 +538,7 @@ function authMiddleware(req, res, next) {
 // ======== Express + Socket.IO ========
 const app = express();
 app.use(cors());
-// FIX: jāpalielina JSON limits, citādi /avatar kritīs ar 413
-app.use(express.json({ limit: "4mb" }));
+app.use(express.json());
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -691,7 +640,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         return;
       }
       target.isBanned = true;
-      saveUsersNow();
+      saveUsers(USERS);
       kickUserByName(targetName, "ban");
       broadcastSystemMessage(
         `Admin ${adminUser.username} nobanoja lietotāju ${targetName}.`
@@ -703,12 +652,12 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         adminSocket.emit("chatMessage", {
           username: "SYSTEM",
           text: `Lietotājs '${targetName}' nav atrasts.`,
-          ts: Date.now(),
+          ts: Date.now(), // FIX: bija Date.Now()
         });
         return;
       }
       target.isBanned = false;
-      saveUsersNow();
+      saveUsers(USERS);
       broadcastSystemMessage(
         `Admin ${adminUser.username} atbanoja lietotāju ${targetName}.`
       );
@@ -726,7 +675,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       const minutes = parseInt(arg || "5", 10);
       const mins = Number.isNaN(minutes) ? 5 : Math.max(1, minutes);
       target.mutedUntil = Date.now() + mins * 60 * 1000;
-      saveUsersNow();
+      saveUsers(USERS);
       broadcastSystemMessage(
         `Admin ${adminUser.username} uzlika mute lietotājam ${targetName} uz ${mins} min.`
       );
@@ -743,7 +692,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         return;
       }
       target.mutedUntil = 0;
-      saveUsersNow();
+      saveUsers(USERS);
       broadcastSystemMessage(
         `Admin ${adminUser.username} noņēma mute lietotājam ${targetName}.`
       );
@@ -887,9 +836,6 @@ async function signupHandler(req, res) {
     // Duēļu statistika
     duelsWon: 0,
     duelsLost: 0,
-    // Boss vārda statistika
-    bossElectroWins: 0,
-    bossElectroFirst: false,
     // Avatārs
     avatarUrl: null,
   };
@@ -901,7 +847,7 @@ async function signupHandler(req, res) {
   ensureDailyMissions(user);
 
   USERS[name] = user;
-  saveUsersNow();
+  saveUsers(USERS);
 
   const token = jwt.sign({ username: name }, JWT_SECRET, { expiresIn: "30d" });
   return res.json({
@@ -940,7 +886,7 @@ async function loginHandler(req, res) {
   markActivity(user);
   ensureDailyMissions(user);
   resetWinsTodayIfNeeded(user);
-  saveUsersNow();
+  saveUsers(USERS);
 
   const token = jwt.sign({ username: name }, JWT_SECRET, { expiresIn: "30d" });
   return res.json({
@@ -958,7 +904,7 @@ app.get("/me", authMiddleware, (req, res) => {
   markActivity(u);
   ensureDailyMissions(u);
   resetWinsTodayIfNeeded(u);
-  scheduleSave();
+  saveUsers(USERS);
 
   const payload = buildMePayload(u);
   res.json(payload);
@@ -980,7 +926,7 @@ app.post("/avatar", authMiddleware, (req, res) => {
       return res.status(400).json({ message: "Nekorekts avatāra formāts." });
     }
 
-    // izmēra limits, lai users.json neuzsprāgst (~3MB)
+    // (brīvprātīgi) izmēra limits, lai users.json neuzsprāgst (~3MB)
     const MAX_LEN = 3 * 1024 * 1024;
     if (avatar.length > MAX_LEN) {
       return res.status(400).json({
@@ -989,7 +935,7 @@ app.post("/avatar", authMiddleware, (req, res) => {
     }
 
     user.avatarUrl = avatar;
-    saveUsersNow();
+    saveUsers(USERS);
 
     return res.json({
       ok: true,
@@ -1067,7 +1013,7 @@ app.get("/missions", authMiddleware, (req, res) => {
   markActivity(user);
   ensureDailyMissions(user);
   resetWinsTodayIfNeeded(user);
-  scheduleSave();
+  saveUsers(USERS);
   res.json(getPublicMissions(user));
 });
 
@@ -1107,7 +1053,7 @@ app.post("/missions/claim", authMiddleware, (req, res) => {
   user.rankLevel = rankInfo.level;
   user.rankTitle = rankInfo.title;
 
-  saveUsersNow();
+  saveUsers(USERS);
 
   res.json({
     me: buildMePayload(user),
@@ -1148,45 +1094,25 @@ app.post("/season/start", authMiddleware, (req, res) => {
 // ======== Spēles loģika ========
 
 // Droša random izvēle ar crypto.randomInt
-// Pamata spēlei atļaujam reti iemest BOSS vārdu ELEKTROSTACIJA
-function pickRandomWord(options = {}) {
-  const allowBoss = options.allowBoss || false;
-
-  if (allowBoss) {
-    const roll = Math.random();
-    if (roll < BOSS_WORD_PROB) {
-      return {
-        word: BOSS_WORD,
-        len: BOSS_WORD.length,
-        isBoss: true,
-      };
-    }
-  }
-
+function pickRandomWord() {
   if (!WORDS.length) {
-    return { word: "BUGAT", len: 5, isBoss: false };
+    return { word: "BUGAT", len: 5 };
   }
   const idx = crypto.randomInt(0, WORDS.length);
   const w = WORDS[idx];
-  return { word: w.toUpperCase(), len: w.length, isBoss: false };
+  return { word: w.toUpperCase(), len: w.length };
 }
 
 // Sāk jaunu raundu konkrētam lietotājam
 function startNewRoundForUser(user) {
-  const { word, len, isBoss } = pickRandomWord({ allowBoss: true });
+  const { word, len } = pickRandomWord();
   user.currentRound = {
     word,
     len,
-    isBoss: !!isBoss,
     attemptsLeft: MAX_ATTEMPTS,
     finished: false,
     startedAt: Date.now(),
   };
-  if (isBoss) {
-    console.log(
-      `[BOSS] Jauns boss raunds lietotājam ${user.username} – ELEKTROSTACIJA`
-    );
-  }
   return user.currentRound;
 }
 
@@ -1197,12 +1123,12 @@ app.get("/start-round", authMiddleware, (req, res) => {
   ensureDailyMissions(user);
 
   if (user.currentRound && !user.currentRound.finished) {
-    scheduleSave();
+    saveUsers(USERS);
     return res.json({ len: user.currentRound.len });
   }
 
   const round = startNewRoundForUser(user);
-  saveUsersNow();
+  saveUsers(USERS);
   res.json({ len: round.len });
 });
 
@@ -1250,7 +1176,7 @@ app.post("/guess", authMiddleware, (req, res) => {
 
   if (round.attemptsLeft <= 0) {
     round.finished = true;
-    saveUsersNow();
+    saveUsers(USERS);
     return res.json({
       pattern: buildPattern(round.word, guessRaw),
       win: false,
@@ -1313,26 +1239,6 @@ app.post("/guess", authMiddleware, (req, res) => {
     user.rankLevel = rankInfo.level;
     user.rankTitle = rankInfo.title;
 
-    // === BOSS vārda (ELEKTROSTACIJA) medaļas un paziņojums ===
-    if (round.isBoss && round.word === BOSS_WORD) {
-      user.bossElectroWins = (user.bossElectroWins || 0) + 1;
-
-      // Ja vēl nav neviena "pirmā", piešķiram šo titulu šim lietotājam
-      const beforeFirst = user.bossElectroFirst;
-      ensureBossFirstMedal(user);
-      const isFirst = !beforeFirst && user.bossElectroFirst;
-
-      if (isFirst) {
-        broadcastSystemMessage(
-          `⚡ BOSS vārds ELEKTROSTACIJA PIRMOREIZ atminēts! ${user.username} iegūst īpašo boss medaļu.`
-        );
-      } else {
-        broadcastSystemMessage(
-          `⚡ BOSS vārds ELEKTROSTACIJA atminēts! ${user.username} iegūst boss medaļu.`
-        );
-      }
-    }
-
     io.emit("playerWin", {
       username: user.username,
       xpGain,
@@ -1350,7 +1256,7 @@ app.post("/guess", authMiddleware, (req, res) => {
 
   updateMissionsOnGuess(user, { isWin, xpGain });
 
-  saveUsersNow();
+  saveUsers(USERS);
 
   res.json({
     pattern,
@@ -1374,7 +1280,7 @@ app.post("/buy-token", authMiddleware, (req, res) => {
   user.coins = (user.coins || 0) - price;
   user.tokens = (user.tokens || 0) + 1;
 
-  saveUsersNow();
+  saveUsers(USERS);
 
   io.emit("tokenBuy", {
     username: user.username,
@@ -1448,7 +1354,7 @@ function finishDuel(duel, winnerName, reason) {
       loser.duelsLost = (loser.duelsLost || 0) + 1;
     }
 
-    saveUsersNow();
+    saveUsers(USERS);
 
     if (s1) {
       s1.emit("duel.end", {
@@ -1468,7 +1374,9 @@ function finishDuel(duel, winnerName, reason) {
     }
 
     const other = winnerName === p1 ? p2 : p1;
-    broadcastSystemMessage(`⚔️ ${winnerName} uzvarēja dueli pret ${other}!`);
+    broadcastSystemMessage(
+      `⚔️ ${winnerName} uzvarēja dueli pret ${other}!`
+    );
   } else {
     if (s1) {
       s1.emit("duel.end", {
@@ -1497,7 +1405,11 @@ function finishDuel(duel, winnerName, reason) {
 setInterval(() => {
   const now = Date.now();
   for (const duel of duels.values()) {
-    if (duel.status === "active" && duel.expiresAt && now >= duel.expiresAt) {
+    if (
+      duel.status === "active" &&
+      duel.expiresAt &&
+      now >= duel.expiresAt
+    ) {
       finishDuel(duel, null, "timeout");
     }
   }
@@ -1515,7 +1427,7 @@ function grantDailyLoginBonus(user) {
   user.dailyLoginDate = today;
   const bonus = DAILY_LOGIN_COINS;
   user.coins = (user.coins || 0) + bonus;
-  saveUsersNow();
+  saveUsers(USERS);
   return bonus;
 }
 
@@ -1557,7 +1469,7 @@ io.on("connection", (socket) => {
     });
   }
 
-  scheduleSave();
+  saveUsers(USERS);
 
   onlineBySocket.set(socket.id, user.username);
   broadcastOnlineList();
@@ -1606,8 +1518,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // FIX: čatā vairs nesitām writeFileSync uz katru ziņu
-    scheduleSave();
+    saveUsers(USERS);
 
     const payload = {
       username: u.username,
@@ -1658,14 +1569,12 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // Duelim izmantojam tikai “parastu” vārdu no words.txt (bez boss vārda)
-    const { word, len } = pickRandomWord({ allowBoss: false });
+    const { word, len } = pickRandomWord();
     const duelId = crypto.randomBytes(8).toString("hex");
 
     const duel = {
       id: duelId,
       players: [challengerName, targetName],
-      invited: targetName, // FIX: tikai uzaicinātais var pieņemt
       word,
       len,
       status: "pending",
@@ -1711,13 +1620,6 @@ io.on("connection", (socket) => {
     }
     if (!duel.players.includes(userName)) {
       socket.emit("duel.error", { message: "Tu neesi šajā duelī." });
-      return;
-    }
-    // FIX: pieņemt drīkst tikai uzaicinātais (nevis izaicinātājs)
-    if (duel.invited && duel.invited !== userName) {
-      socket.emit("duel.error", {
-        message: "Tikai uzaicinātais spēlētājs var pieņemt dueli.",
-      });
       return;
     }
     if (duel.status !== "pending") {
@@ -1836,8 +1738,10 @@ io.on("connection", (socket) => {
 
     const pattern = buildPattern(duel.word, rawGuess);
     const isWin = rawGuess === duel.word;
+    let finishedForPlayer = false;
 
     if (isWin) {
+      finishedForPlayer = true;
       socket.emit("duel.guessResult", {
         duelId: duel.id,
         pattern,
@@ -1848,7 +1752,9 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const finishedForPlayer = duel.attemptsLeft[userName] <= 0;
+    if (duel.attemptsLeft[userName] <= 0) {
+      finishedForPlayer = true;
+    }
 
     socket.emit("duel.guessResult", {
       duelId: duel.id,
