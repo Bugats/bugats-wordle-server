@@ -1433,24 +1433,35 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("disconnect", () => {
-    const username = user.username;
+socket.on("disconnect", () => {
+  const username = user.username;
 
-    const duelId = userToDuel.get(username);
-    if (duelId) {
-      const duel = duels.get(duelId);
-      if (duel && duel.status !== "finished") {
-        const other = duel.players.find((p) => p !== username);
+  const duelId = userToDuel.get(username);
+  if (duelId) {
+    const duel = duels.get(duelId);
+    if (duel && duel.status !== "finished") {
+      const other = duel.players.find((p) => p !== username);
+
+      // Ja duelis vēl nav sācies — vienkārši atceļam, bez uzvaras/reward
+      if (duel.status === "pending") {
+        const sOther = getSocketByUsername(other);
+        if (sOther) sOther.emit("duel.end", { duelId: duel.id, winner: null, youWin: false, reason: "opponent_disconnect_pending" });
+
+        userToDuel.delete(duel.players[0]);
+        userToDuel.delete(duel.players[1]);
+        duels.delete(duel.id);
+      } else {
+        // Ja duelis ir active — otrs uzvar pēc atvienošanās
         finishDuel(duel, other, "opponent_disconnect");
       }
     }
+  }
 
-    onlineBySocket.delete(socket.id);
-    broadcastOnlineList();
-    console.log("Atvienojās:", user.username, "socket:", socket.id);
-  });
+  onlineBySocket.delete(socket.id);
+  broadcastOnlineList();
+  console.log("Atvienojās:", user.username, "socket:", socket.id);
 });
-
+  
 // ======== Start ========
 httpServer.listen(PORT, () => {
   console.log("VĀRDU ZONA serveris klausās portā", PORT);
