@@ -31,6 +31,21 @@ const MAX_ATTEMPTS = 6;
 
 const BASE_TOKEN_PRICE = 150;
 
+// ======== Lielie request body limiti (FIX 413 Payload Too Large) ========
+// Ja vajag vēl vairāk, vari Render iestatījumos pielikt env:
+// BODY_JSON_LIMIT="25mb" un BODY_URLENC_LIMIT="25mb"
+const BODY_JSON_LIMIT = process.env.BODY_JSON_LIMIT || "25mb";
+const BODY_URLENC_LIMIT = process.env.BODY_URLENC_LIMIT || BODY_JSON_LIMIT;
+
+// Avatāra max garums (base64 string). 2.4MB bilde -> ~3.2MB base64,
+// tāpēc paceļam ievērojami, bet ne bezgalīgi.
+// Ja vajag, vari iestatīt env: AVATAR_MAX_CHARS="8000000"
+const AVATAR_MAX_CHARS = (() => {
+  const v = parseInt(process.env.AVATAR_MAX_CHARS || "", 10);
+  if (Number.isFinite(v) && v > 200000) return v;
+  return 6 * 1024 * 1024; // ~6.29M chars
+})();
+
 // Admin lietotāji
 const ADMIN_USERNAMES = ["Bugats", "BugatsLV"];
 
@@ -146,7 +161,8 @@ function loadUsers() {
       if (!u.dailyChest || typeof u.dailyChest !== "object") u.dailyChest = {};
       if (typeof u.dailyChest.lastDate !== "string") u.dailyChest.lastDate = "";
       if (typeof u.dailyChest.streak !== "number") u.dailyChest.streak = 0;
-      if (typeof u.dailyChest.totalOpens !== "number") u.dailyChest.totalOpens = 0;
+      if (typeof u.dailyChest.totalOpens !== "number")
+        u.dailyChest.totalOpens = 0;
 
       out[u.username] = u;
     }
@@ -234,10 +250,13 @@ function todayKey(date = new Date()) {
 
 // ======== Daily Chest helperi ========
 function ensureDailyChest(user) {
-  if (!user.dailyChest || typeof user.dailyChest !== "object") user.dailyChest = {};
-  if (typeof user.dailyChest.lastDate !== "string") user.dailyChest.lastDate = "";
+  if (!user.dailyChest || typeof user.dailyChest !== "object")
+    user.dailyChest = {};
+  if (typeof user.dailyChest.lastDate !== "string")
+    user.dailyChest.lastDate = "";
   if (typeof user.dailyChest.streak !== "number") user.dailyChest.streak = 0;
-  if (typeof user.dailyChest.totalOpens !== "number") user.dailyChest.totalOpens = 0;
+  if (typeof user.dailyChest.totalOpens !== "number")
+    user.dailyChest.totalOpens = 0;
 }
 
 function getTzOffsetMinutes(timeZone, date = new Date()) {
@@ -248,7 +267,8 @@ function getTzOffsetMinutes(timeZone, date = new Date()) {
       hour: "2-digit",
     }).formatToParts(date);
 
-    const tz = parts.find((p) => p.type === "timeZoneName")?.value || "GMT+0";
+    const tz =
+      parts.find((p) => p.type === "timeZoneName")?.value || "GMT+0";
     const m = tz.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/);
     if (!m) return 0;
     const sign = m[1] === "-" ? -1 : 1;
@@ -551,7 +571,21 @@ function authMiddleware(req, res, next) {
 // ======== Express + Socket.IO ========
 const app = express();
 app.use(cors());
-app.use(express.json());
+
+// ======== BODY PARSER LIMITI (TE IR FIX) ========
+app.use(express.json({ limit: BODY_JSON_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: BODY_URLENC_LIMIT }));
+
+// Lai 413 vienmēr atgriežas kā JSON (nevis HTML), citādi clientā ir "Non-JSON response"
+app.use((err, req, res, next) => {
+  if (err && (err.type === "entity.too.large" || err.status === 413)) {
+    return res.status(413).json({
+      message:
+        "Payload Too Large: pieprasījums ir par lielu. Samazini failu vai palielini BODY_JSON_LIMIT serverī.",
+    });
+  }
+  return next(err);
+});
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -949,10 +983,13 @@ app.post("/avatar", authMiddleware, (req, res) => {
       return res.status(400).json({ message: "Nekorekts avatāra formāts." });
     }
 
-    const MAX_LEN = 3 * 1024 * 1024;
-    if (avatar.length > MAX_LEN) {
+    // FIX: agrāk bija 3MB un bieži krita ārā (2.4MB bilde -> ~3.2MB base64).
+    // Tagad: ievērojami pacelts un kontrolējams ar AVATAR_MAX_CHARS.
+    if (avatar.length > AVATAR_MAX_CHARS) {
       return res.status(400).json({
-        message: "Avatārs ir par lielu (samazini bildi līdz ~2MB).",
+        message: `Avatārs ir par lielu. Max: ~${Math.round(
+          AVATAR_MAX_CHARS / (1024 * 1024)
+        )}MB base64. Ieteikums: samazini bildi (piem. 512x512) un saglabā WEBP/JPG.`,
       });
     }
 
@@ -1137,7 +1174,9 @@ app.post("/chest/open", authMiddleware, (req, res) => {
   // (nav obligāti, bet forši) paziņojums čatā
   io.emit("chatMessage", {
     username: "SYSTEM",
-    text: `🎁 ${user.username} atvēra Daily Chest: +${coinsGain} coins, +${xpGain} XP${tokensGain ? `, +${tokensGain} žetons` : ""} (streak ${user.dailyChest.streak})`,
+    text: `🎁 ${user.username} atvēra Daily Chest: +${coinsGain} coins, +${xpGain} XP${
+      tokensGain ? `, +${tokensGain} žetons` : ""
+    } (streak ${user.dailyChest.streak})`,
     ts: Date.now(),
   });
 
@@ -1258,9 +1297,7 @@ app.post("/guess", authMiddleware, (req, res) => {
 
   const round = user.currentRound;
   if (guessRaw.length !== round.len) {
-    return res
-      .status(400)
-      .json({ message: `Vārdam jābūt ${round.len} burtiem` });
+    return res.status(400).json({ message: `Vārdam jābūt ${round.len} burtiem` });
   }
 
   if (round.attemptsLeft <= 0) {
@@ -1644,7 +1681,9 @@ io.on("connection", (socket) => {
 
     const targetSocket = getSocketByUsername(targetName);
     if (!targetSocket)
-      return socket.emit("duel.error", { message: "Pretinieks nav tiešsaistē." });
+      return socket.emit("duel.error", {
+        message: "Pretinieks nav tiešsaistē.",
+      });
 
     const { word, len } = pickRandomWord();
     const duelId = crypto.randomBytes(8).toString("hex");
@@ -1679,7 +1718,8 @@ io.on("connection", (socket) => {
     const duelId = payload?.duelId;
     const userName = socket.data.user.username;
     const duel = duels.get(duelId);
-    if (!duel) return socket.emit("duel.error", { message: "Duēlis nav atrasts." });
+    if (!duel)
+      return socket.emit("duel.error", { message: "Duēlis nav atrasts." });
     if (!duel.players.includes(userName))
       return socket.emit("duel.error", { message: "Tu neesi šajā duelī." });
     if (duel.status !== "pending")
@@ -1750,7 +1790,8 @@ io.on("connection", (socket) => {
     const userName = socket.data.user.username;
 
     const duel = duels.get(duelId);
-    if (!duel) return socket.emit("duel.error", { message: "Duēlis nav atrasts." });
+    if (!duel)
+      return socket.emit("duel.error", { message: "Duēlis nav atrasts." });
     if (duel.status !== "active")
       return socket.emit("duel.error", { message: "Duēlis nav aktīvs." });
 
@@ -1799,7 +1840,11 @@ io.on("connection", (socket) => {
     });
 
     const [p1, p2] = duel.players;
-    if (!duel.winner && duel.attemptsLeft[p1] <= 0 && duel.attemptsLeft[p2] <= 0) {
+    if (
+      !duel.winner &&
+      duel.attemptsLeft[p1] <= 0 &&
+      duel.attemptsLeft[p2] <= 0
+    ) {
       finishDuel(duel, null, "no_winner");
     }
   });
@@ -1840,6 +1885,22 @@ io.on("connection", (socket) => {
     broadcastOnlineList();
     console.log("Atvienojās:", user.username, "socket:", socket.id);
   });
+});
+
+// ======== Globāls error handler (lai nekad nekrīt HTML Error page) ========
+app.use((err, req, res, next) => {
+  if (!err) return next();
+  if (res.headersSent) return next(err);
+
+  if (err.type === "entity.too.large" || err.status === 413) {
+    return res.status(413).json({
+      message:
+        "Payload Too Large: pieprasījums ir par lielu. Samazini failu vai palielini limitus serverī.",
+    });
+  }
+
+  console.error("UNHANDLED ERROR:", err);
+  return res.status(500).json({ message: "Servera kļūda." });
 });
 
 // ======== Start ========
