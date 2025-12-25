@@ -342,7 +342,7 @@ laiks
 lakta
 laosa
 lapkritis
-ledajs
+ledājs
 kauss
 kauja
 kauls
@@ -409,7 +409,7 @@ mētra
 nabags
 naids
 nakts
-metals
+metāls
 līvāni
 metrs
 mezgls
