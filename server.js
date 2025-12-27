@@ -25,6 +25,10 @@ const JWT_SECRET =
 const USERS_FILE = process.env.USERS_FILE || path.join(__dirname, "users.json");
 const WORDS_FILE = path.join(__dirname, "words.txt");
 
+// Seasons storage (JAUNS)
+const SEASONS_FILE =
+  process.env.SEASONS_FILE || path.join(__dirname, "seasons.json");
+
 const MIN_WORD_LEN = 5;
 const MAX_WORD_LEN = 7;
 const MAX_ATTEMPTS = 6;
@@ -52,17 +56,16 @@ const ADMIN_USERNAMES = ["Bugats", "BugatsLV"];
 // ======== Laika zona ========
 const TZ = "Europe/Riga";
 
-// ======== SEZONA 1 – servera stāvoklis ========
+// ======== SEZONA 1 – beigu datums (vēsturiskais) ========
 // 2025-12-26 ir ziemā, tāpēc +02:00 ir ok.
 const SEASON1_END_AT = new Date("2025-12-26T23:59:59+02:00").getTime();
 
-let seasonState = {
-  id: 1,
-  name: "SEZONA 1",
-  active: false,
-  startedAt: 0,
-  endAt: SEASON1_END_AT,
-};
+// ======== SEASON CONFIG ========
+// Cik dienas ilgst jaunā sezona, ja nav endAt (default 30)
+const SEASON_DAYS = (() => {
+  const v = parseInt(process.env.SEASON_DAYS || "30", 10);
+  return Number.isFinite(v) && v >= 1 && v <= 365 ? v : 30;
+})();
 
 // ========== XP / COINS EKONOMIKA ==========
 const XP_PER_WIN_BASE = 8;
@@ -117,6 +120,26 @@ const duels = new Map();
 const userToDuel = new Map();
 
 // ======== Failu helperi ========
+
+function loadJsonSafe(file, fallback) {
+  try {
+    if (!fs.existsSync(file)) return fallback;
+    const raw = fs.readFileSync(file, "utf8");
+    if (!raw.trim()) return fallback;
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error("Kļūda lasot JSON:", file, err);
+    return fallback;
+  }
+}
+
+// atomic save (pret bojātu JSON, ja process nokrīt rakstīšanas laikā)
+function saveJsonAtomic(file, data) {
+  const tmp = file + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
+  fs.renameSync(tmp, file);
+}
+
 function loadUsers() {
   if (!fs.existsSync(USERS_FILE)) return {};
   try {
@@ -164,6 +187,9 @@ function loadUsers() {
       if (typeof u.dailyChest.totalOpens !== "number")
         u.dailyChest.totalOpens = 0;
 
+      // (JAUNS) Pastāvīgās medaļas (piem., Sezonas čempions)
+      if (!Array.isArray(u.specialMedals)) u.specialMedals = [];
+
       out[u.username] = u;
     }
     return out;
@@ -175,10 +201,47 @@ function loadUsers() {
 
 function saveUsers(users) {
   const arr = Object.values(users);
-  fs.writeFileSync(USERS_FILE, JSON.stringify(arr, null, 2), "utf8");
+  // (UPGRADE) atomic write
+  saveJsonAtomic(USERS_FILE, arr);
 }
 
 let USERS = loadUsers();
+
+// ======== SEASON STORE (persistents) ========
+function buildInitialSeasonStore() {
+  return {
+    current: {
+      id: 1,
+      name: "SEZONA 1",
+      active: false,
+      startedAt: 0,
+      endAt: SEASON1_END_AT,
+    },
+    hallOfFame: [], // [{ seasonId, username, score, xp, rankTitle, rankLevel, avatarUrl, finishedAt }]
+  };
+}
+
+let seasonStore = loadJsonSafe(SEASONS_FILE, null);
+if (!seasonStore || typeof seasonStore !== "object") {
+  seasonStore = buildInitialSeasonStore();
+  saveJsonAtomic(SEASONS_FILE, seasonStore);
+} else {
+  if (!seasonStore.current) seasonStore.current = buildInitialSeasonStore().current;
+  if (!Array.isArray(seasonStore.hallOfFame)) seasonStore.hallOfFame = [];
+}
+
+// “seasonState” saglabājam, lai neko nesalauztu frontā (tas pats shape kā līdz šim)
+let seasonState = seasonStore.current;
+
+// Ja serveris restartējas pēc sezonas beigām — korekti atslēdzam active
+(() => {
+  const now = Date.now();
+  if (seasonState?.endAt && now >= seasonState.endAt && seasonState.active) {
+    seasonState.active = false;
+    seasonStore.current = seasonState;
+    saveJsonAtomic(SEASONS_FILE, seasonStore);
+  }
+})();
 
 // ======== Vārdu saraksts ========
 let WORDS = [];
@@ -523,13 +586,202 @@ function computeMedalsForUser(targetUser) {
   return medals;
 }
 
+// (JAUNS) apvieno dinamiskās + pastāvīgās medaļas (bez dublikātiem pēc code)
+function mergeMedals(dynamicMedals, userSpecialMedals) {
+  const out = [];
+  const seen = new Set();
+
+  const add = (m) => {
+    if (!m) return;
+    const code = String(m.code || "").trim();
+    if (!code) return;
+    if (seen.has(code)) return;
+    seen.add(code);
+    out.push({ code, icon: m.icon || "🏅", label: m.label || code });
+  };
+
+  (Array.isArray(userSpecialMedals) ? userSpecialMedals : []).forEach(add);
+  (Array.isArray(dynamicMedals) ? dynamicMedals : []).forEach(add);
+
+  return out;
+}
+
+// ======== SEASON 2 / HALL OF FAME loģika ========
+function getTop1UserByScore() {
+  const all = Object.values(USERS || {});
+  if (!all.length) return null;
+
+  // TOP1 = score desc; ja vienāds -> xp desc; ja vienāds -> username asc
+  const sorted = all
+    .filter((u) => u && u.username && !u.isBanned)
+    .slice()
+    .sort((a, b) => {
+      const ds = (b.score || 0) - (a.score || 0);
+      if (ds !== 0) return ds;
+      const dx = (b.xp || 0) - (a.xp || 0);
+      if (dx !== 0) return dx;
+      return String(a.username).localeCompare(String(b.username));
+    });
+
+  return sorted[0] || null;
+}
+
+function ensureSpecialMedals(user) {
+  if (!user) return;
+  if (!Array.isArray(user.specialMedals)) user.specialMedals = [];
+}
+
+function addSpecialMedalOnce(user, medal) {
+  if (!user || !medal) return false;
+  ensureSpecialMedals(user);
+  const code = String(medal.code || "").trim();
+  if (!code) return false;
+  if (user.specialMedals.some((m) => m && m.code === code)) return false;
+  user.specialMedals.push({
+    code,
+    icon: medal.icon || "🏅",
+    label: medal.label || code,
+    ts: typeof medal.ts === "number" ? medal.ts : Date.now(),
+  });
+  return true;
+}
+
+function finalizeSeasonIfNeeded(seasonId) {
+  if (!seasonId) return null;
+  const sid = Number(seasonId) || 0;
+  if (sid <= 0) return null;
+
+  // Idempotence: ja jau ir HoF ieraksts šai sezonai — nedublējam
+  if (seasonStore.hallOfFame.some((x) => x && x.seasonId === sid)) {
+    return null;
+  }
+
+  const champ = getTop1UserByScore();
+  if (!champ) return null;
+
+  const rankInfo = calcRankFromXp(champ.xp || 0);
+  champ.rankLevel = rankInfo.level;
+  champ.rankTitle = rankInfo.title;
+
+  const finishedAt = Date.now();
+
+  const hofEntry = {
+    seasonId: sid,
+    username: champ.username,
+    score: champ.score || 0,
+    xp: champ.xp || 0,
+    rankTitle: champ.rankTitle || "",
+    rankLevel: champ.rankLevel || 1,
+    avatarUrl: champ.avatarUrl || null,
+    finishedAt,
+  };
+
+  seasonStore.hallOfFame.unshift(hofEntry);
+  seasonStore.hallOfFame = seasonStore.hallOfFame.slice(0, 20);
+
+  // Sezonas čempiona medaļa (pastāvīgā)
+  if (sid === 1) {
+    addSpecialMedalOnce(champ, {
+      code: "SEASON1_CHAMPION",
+      icon: "🏆",
+      label: "Sezona 1 čempions",
+      ts: finishedAt,
+    });
+  } else {
+    addSpecialMedalOnce(champ, {
+      code: `SEASON${sid}_CHAMPION`,
+      icon: "🏆",
+      label: `Sezona ${sid} čempions`,
+      ts: finishedAt,
+    });
+  }
+
+  saveUsers(USERS);
+  saveJsonAtomic(SEASONS_FILE, seasonStore);
+  return hofEntry;
+}
+
+function resetCoinsAndTokensForAllUsers() {
+  for (const u of Object.values(USERS || {})) {
+    if (!u || !u.username) continue;
+    u.coins = 0;
+    u.tokens = 0;
+  }
+  saveUsers(USERS);
+}
+
+function computeNextSeasonEndAt(startAt) {
+  // Ja gribi fiksētu endAt, vari ielikt env: SEASON_END_AT="2026-01-31T23:59:59+02:00"
+  const envEnd = process.env.SEASON_END_AT;
+  if (envEnd) {
+    const ts = new Date(envEnd).getTime();
+    if (Number.isFinite(ts) && ts > startAt) return ts;
+  }
+  return startAt + SEASON_DAYS * 24 * 60 * 60 * 1000;
+}
+
+// Galvenais: startē sezonu vai pārslēdz uz nākamo, ja iepriekšējā beigusies
+function startSeasonFlow({ byAdminUsername } = {}) {
+  const now = Date.now();
+  const cur = seasonState || seasonStore.current;
+
+  const curId = Number(cur?.id || 1) || 1;
+  const curEnded = !!(cur?.endAt && now >= cur.endAt);
+
+  // Ja current sezona vēl nav beigusies un nav aktīva — vienkārši aktivizējam to
+  if (!curEnded && cur && !cur.active) {
+    cur.active = true;
+    cur.startedAt = cur.startedAt || now;
+
+    seasonStore.current = cur;
+    seasonState = seasonStore.current;
+    saveJsonAtomic(SEASONS_FILE, seasonStore);
+
+    return { mode: "started_current", season: seasonState, hofEntry: null };
+  }
+
+  // Ja current sezona ir aktīva un nav beigusies — neko nedaram
+  if (!curEnded && cur && cur.active) {
+    return { mode: "already_active", season: cur, hofEntry: null };
+  }
+
+  // Ja current sezona ir beigusies — finalizējam + pārslēdzam uz nākamo
+  const hofEntry = finalizeSeasonIfNeeded(curId);
+
+  const nextId = curId + 1;
+  const nextStart = now;
+  const nextEnd = computeNextSeasonEndAt(nextStart);
+
+  seasonState = {
+    id: nextId,
+    name: `SEZONA ${nextId}`,
+    active: true,
+    startedAt: nextStart,
+    endAt: nextEnd,
+  };
+
+  seasonStore.current = seasonState;
+  saveJsonAtomic(SEASONS_FILE, seasonStore);
+
+  // reset coins + tokens visiem (prasība)
+  resetCoinsAndTokensForAllUsers();
+
+  // (drošībai) ja šis tiek saukts no admin, varam ielogot
+  if (byAdminUsername) {
+    console.log(`SEASON rollover by ${byAdminUsername}: now ${seasonState.name}`);
+  }
+
+  return { mode: "rolled_next", season: seasonState, hofEntry };
+}
+
 // ======== JWT helperi ========
 function buildMePayload(u) {
   const rankInfo = calcRankFromXp(u.xp || 0);
   u.rankLevel = rankInfo.level;
   u.rankTitle = rankInfo.title;
 
-  const medals = computeMedalsForUser(u);
+  const dynamicMedals = computeMedalsForUser(u);
+  const medals = mergeMedals(dynamicMedals, u.specialMedals);
 
   return {
     username: u.username,
@@ -764,39 +1016,47 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         return;
       }
 
-      const now = Date.now();
-      if (seasonState.endAt && now >= seasonState.endAt) {
-        const endStr = new Date(seasonState.endAt).toLocaleString("lv-LV", {
-          timeZone: TZ,
-        });
+      const result = startSeasonFlow({ byAdminUsername: adminUser.username });
+
+      // ziņas + emit
+      if (result.mode === "already_active") {
         adminSocket.emit("chatMessage", {
           username: "SYSTEM",
-          text: `${seasonState.name} vairs nevar startēt — sezona beidzās ${endStr}.`,
+          text: `${result.season.name} jau ir aktīva.`,
           ts: Date.now(),
         });
         return;
       }
 
-      if (seasonState.active) {
-        adminSocket.emit("chatMessage", {
-          username: "SYSTEM",
-          text: `${seasonState.name} jau ir aktīva.`,
-          ts: Date.now(),
-        });
-        return;
+      // paziņojums par sezonas maiņu / startu
+      const endStr = result.season.endAt
+        ? new Date(result.season.endAt).toLocaleString("lv-LV", { timeZone: TZ })
+        : "—";
+
+      if (result.mode === "rolled_next") {
+        // ja izveidojās HoF — pasakām
+        if (result.hofEntry) {
+          broadcastSystemMessage(
+            `🏆 Sezona ${result.hofEntry.seasonId} čempions: ${result.hofEntry.username} (score ${result.hofEntry.score}). Ierakstīts Hall of Fame!`
+          );
+          io.emit("seasonHofUpdate", {
+            top: seasonStore.hallOfFame[0] || null,
+          });
+        }
+        broadcastSystemMessage(
+          `📢 ${result.season.name} ir sākusies! (beigsies: ${endStr}) Coins + žetoni visiem ir resetoti.`
+        );
+      } else {
+        broadcastSystemMessage(
+          `📢 ${result.season.name} ir sākusies! (beigsies: ${endStr})`
+        );
       }
 
-      seasonState.active = true;
-      seasonState.startedAt = Date.now();
-
-      broadcastSystemMessage(
-        `📢 ${seasonState.name} ir sākusies! Līdz 26. decembrim krāj žetonus laimes ratam.`
-      );
-      io.emit("seasonUpdate", seasonState);
+      io.emit("seasonUpdate", result.season);
 
       adminSocket.emit("chatMessage", {
         username: "SYSTEM",
-        text: `${seasonState.name} ir startēta.`,
+        text: `${result.season.name} ir aktīva.`,
         ts: Date.now(),
       });
       break;
@@ -804,17 +1064,17 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
 
     case "seasononline": {
       const now = Date.now();
-      const endTs = seasonState.endAt || 0;
+      const endTs = seasonState?.endAt || 0;
       let text;
 
-      if (!seasonState.active) {
+      if (!seasonState?.active) {
         if (!endTs) {
-          text = `${seasonState.name} vēl nav sākusies. Beigu datums nav iestatīts.`;
+          text = `${seasonState?.name || "SEZONA"} vēl nav sākusies. Beigu datums nav iestatīts.`;
         } else {
           const endStr = new Date(endTs).toLocaleString("lv-LV", {
             timeZone: TZ,
           });
-          text = `${seasonState.name} vēl nav sākusies. Plānotās beigas: ${endStr}.`;
+          text = `${seasonState.name} nav aktīva. Plānotās beigas: ${endStr}.`;
         }
       } else if (!endTs) {
         text = `${seasonState.name} ir aktīva, bet beigu datums nav iestatīts.`;
@@ -902,6 +1162,8 @@ async function signupHandler(req, res) {
     duelsLost: 0,
     avatarUrl: null,
     dailyChest: { lastDate: "", streak: 0, totalOpens: 0 },
+    // (JAUNS) pastāvīgās medaļas (piem., sezonu čempions)
+    specialMedals: [],
   };
 
   const rankInfo = calcRankFromXp(user.xp);
@@ -949,6 +1211,7 @@ async function loginHandler(req, res) {
   ensureDailyMissions(user);
   resetWinsTodayIfNeeded(user);
   ensureDailyChest(user);
+  ensureSpecialMedals(user);
   saveUsers(USERS);
 
   const token = jwt.sign({ username: name }, JWT_SECRET, { expiresIn: "30d" });
@@ -965,6 +1228,7 @@ app.get("/me", authMiddleware, (req, res) => {
   ensureDailyMissions(u);
   resetWinsTodayIfNeeded(u);
   ensureDailyChest(u);
+  ensureSpecialMedals(u);
   saveUsers(USERS);
 
   res.json(buildMePayload(u));
@@ -1016,6 +1280,9 @@ function buildPublicProfilePayload(targetUser, requester) {
 
   const isAdmin = requester && ADMIN_USERNAMES.includes(requester.username);
 
+  const dynamicMedals = computeMedalsForUser(targetUser);
+  const medals = mergeMedals(dynamicMedals, targetUser.specialMedals);
+
   const payload = {
     username: targetUser.username,
     xp: targetUser.xp || 0,
@@ -1026,7 +1293,7 @@ function buildPublicProfilePayload(targetUser, requester) {
     bestStreak: targetUser.bestStreak || 0,
     rankTitle: targetUser.rankTitle,
     rankLevel: targetUser.rankLevel,
-    medals: computeMedalsForUser(targetUser),
+    medals,
     duelsWon: targetUser.duelsWon || 0,
     duelsLost: targetUser.duelsLost || 0,
     avatarUrl: targetUser.avatarUrl || null,
@@ -1062,6 +1329,7 @@ app.get("/missions", authMiddleware, (req, res) => {
   ensureDailyMissions(user);
   resetWinsTodayIfNeeded(user);
   ensureDailyChest(user);
+  ensureSpecialMedals(user);
   saveUsers(USERS);
   res.json(getPublicMissions(user));
 });
@@ -1074,6 +1342,7 @@ app.post("/missions/claim", authMiddleware, (req, res) => {
   markActivity(user);
   ensureDailyMissions(user);
   ensureDailyChest(user);
+  ensureSpecialMedals(user);
 
   const mission = (user.missions || []).find((m) => m.id === id);
   if (!mission) return res.status(404).json({ message: "Misija nav atrasta" });
@@ -1191,7 +1460,16 @@ app.post("/chest/open", authMiddleware, (req, res) => {
 
 // ======== SEZONA API ========
 app.get("/season", authMiddleware, (req, res) => {
-  res.json(seasonState);
+  // (UPGRADE) atgriežam arī HoF TOP1, lai var UI uzreiz paņemt
+  res.json({
+    ...seasonState,
+    hallOfFameTop: seasonStore.hallOfFame[0] || null,
+  });
+});
+
+// (JAUNS) Hall of Fame endpoint (speciālais TOP)
+app.get("/season/hof", authMiddleware, (req, res) => {
+  res.json(seasonStore.hallOfFame || []);
 });
 
 app.post("/season/start", authMiddleware, (req, res) => {
@@ -1200,27 +1478,19 @@ app.post("/season/start", authMiddleware, (req, res) => {
     return res.status(403).json({ message: "Tikai admins var startēt sezonu." });
   }
 
-  const now = Date.now();
-  if (seasonState.endAt && now >= seasonState.endAt) {
-    const endStr = new Date(seasonState.endAt).toLocaleString("lv-LV", {
-      timeZone: TZ,
-    });
-    return res.status(400).json({
-      message: `${seasonState.name} vairs nevar startēt — sezona beidzās ${endStr}.`,
-    });
+  const result = startSeasonFlow({ byAdminUsername: user.username });
+
+  // broadcast (lai visi klienti atjaunojas)
+  io.emit("seasonUpdate", result.season);
+  if (result.mode === "rolled_next" && result.hofEntry) {
+    io.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
   }
 
-  if (!seasonState.active) {
-    seasonState.active = true;
-    seasonState.startedAt = Date.now();
-
-    broadcastSystemMessage(
-      `📢 ${seasonState.name} ir sākusies! Līdz 26. decembrim krāj žetonus laimes ratam.`
-    );
-    io.emit("seasonUpdate", seasonState);
-  }
-
-  res.json(seasonState);
+  res.json({
+    ...result.season,
+    mode: result.mode,
+    hofEntry: result.hofEntry || null,
+  });
 });
 
 // ======== Spēles loģika ========
@@ -1542,11 +1812,13 @@ function grantDailyLoginBonus(user) {
 let seasonEndedBroadcasted = false;
 setInterval(() => {
   const now = Date.now();
-  if (seasonState.endAt && now >= seasonState.endAt) {
+  if (seasonState?.endAt && now >= seasonState.endAt) {
     if (seasonState.active) {
       seasonState.active = false;
       seasonState.startedAt = seasonState.startedAt || 0;
       seasonEndedBroadcasted = false; // ļaujam vienu paziņojumu
+      seasonStore.current = seasonState;
+      saveJsonAtomic(SEASONS_FILE, seasonStore);
       io.emit("seasonUpdate", seasonState);
     }
     if (!seasonEndedBroadcasted) {
@@ -1589,6 +1861,7 @@ io.on("connection", (socket) => {
   markActivity(user);
   ensureDailyMissions(user);
   ensureDailyChest(user);
+  ensureSpecialMedals(user);
 
   const bonus = grantDailyLoginBonus(user);
   if (bonus > 0) {
@@ -1605,6 +1878,7 @@ io.on("connection", (socket) => {
   broadcastOnlineList();
 
   socket.emit("seasonUpdate", seasonState);
+  socket.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
 
   // ========== ČATS ==========
   socket.on("chatMessage", (text) => {
