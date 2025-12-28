@@ -36,10 +36,14 @@ const MAX_ATTEMPTS = 6;
 const BASE_TOKEN_PRICE = 150;
 
 // ======== Lielie request body limiti (FIX 413 Payload Too Large) ========
+// Ja vajag vēl vairāk, vari Render iestatījumos pielikt env:
+// BODY_JSON_LIMIT="25mb" un BODY_URLENC_LIMIT="25mb"
 const BODY_JSON_LIMIT = process.env.BODY_JSON_LIMIT || "25mb";
 const BODY_URLENC_LIMIT = process.env.BODY_URLENC_LIMIT || BODY_JSON_LIMIT;
 
-// Avatāra max garums (base64 string).
+// Avatāra max garums (base64 string). 2.4MB bilde -> ~3.2MB base64,
+// tāpēc paceļam ievērojami, bet ne bezgalīgi.
+// Ja vajag, vari iestatīt env: AVATAR_MAX_CHARS="8000000"
 const AVATAR_MAX_CHARS = (() => {
   const v = parseInt(process.env.AVATAR_MAX_CHARS || "", 10);
   if (Number.isFinite(v) && v > 200000) return v;
@@ -53,9 +57,11 @@ const ADMIN_USERNAMES = ["Bugats", "BugatsLV"];
 const TZ = "Europe/Riga";
 
 // ======== SEZONA 1 – beigu datums (vēsturiskais) ========
+// 2025-12-26 ir ziemā, tāpēc +02:00 ir ok.
 const SEASON1_END_AT = new Date("2025-12-26T23:59:59+02:00").getTime();
 
 // ======== SEASON CONFIG ========
+// Cik dienas ilgst jaunā sezona, ja nav endAt (default 30)
 const SEASON_DAYS = (() => {
   const v = parseInt(process.env.SEASON_DAYS || "30", 10);
   return Number.isFinite(v) && v >= 1 && v <= 365 ? v : 30;
@@ -113,40 +119,8 @@ const duels = new Map();
 // username -> duelId
 const userToDuel = new Map();
 
-// ======== ČATS (ANTI-SPAM + HISTORY + ID) ========
-const CHAT_MAX_LEN = (() => {
-  const v = parseInt(process.env.CHAT_MAX_LEN || "240", 10);
-  return Number.isFinite(v) && v >= 40 && v <= 2000 ? v : 240;
-})();
-const CHAT_COOLDOWN_MS = (() => {
-  const v = parseInt(process.env.CHAT_COOLDOWN_MS || "900", 10);
-  return Number.isFinite(v) && v >= 200 && v <= 10000 ? v : 900;
-})();
-const CHAT_HISTORY_MAX = (() => {
-  const v = parseInt(process.env.CHAT_HISTORY_MAX || "80", 10);
-  return Number.isFinite(v) && v >= 10 && v <= 500 ? v : 80;
-})();
-let CHAT_HISTORY = []; // [{id, username, text, ts, avatarUrl}]
-
-// ======== Guess anti-spam (1 guess/sec) ========
-const GUESS_COOLDOWN_MS = (() => {
-  const v = parseInt(process.env.GUESS_COOLDOWN_MS || "950", 10);
-  return Number.isFinite(v) && v >= 200 && v <= 10000 ? v : 950;
-})();
-
-// ======== Per-user runtime (NAV jāsaglabā users.json) ========
-const runtime = new Map(); // username -> { lastChatAt, lastGuessAt, lastChatWarnAt }
-function rt(username) {
-  const key = String(username || "");
-  let r = runtime.get(key);
-  if (!r) {
-    r = { lastChatAt: 0, lastGuessAt: 0, lastChatWarnAt: 0 };
-    runtime.set(key, r);
-  }
-  return r;
-}
-
 // ======== Failu helperi ========
+
 function loadJsonSafe(file, fallback) {
   try {
     if (!fs.existsSync(file)) return fallback;
@@ -227,6 +201,7 @@ function loadUsers() {
 
 function saveUsers(users) {
   const arr = Object.values(users);
+  // (UPGRADE) atomic write
   saveJsonAtomic(USERS_FILE, arr);
 }
 
@@ -255,20 +230,16 @@ if (!seasonStore || typeof seasonStore !== "object") {
   if (!Array.isArray(seasonStore.hallOfFame)) seasonStore.hallOfFame = [];
 }
 
-// “seasonState” saglabājam, lai neko nesalauztu frontā
+// “seasonState” saglabājam, lai neko nesalauztu frontā (tas pats shape kā līdz šim)
 let seasonState = seasonStore.current;
 
-// Ja serveris restartējas pēc sezonas beigām — korekti atslēdzam active + nofiksējam HoF (ja vajag)
+// Ja serveris restartējas pēc sezonas beigām — korekti atslēdzam active
 (() => {
   const now = Date.now();
   if (seasonState?.endAt && now >= seasonState.endAt && seasonState.active) {
     seasonState.active = false;
     seasonStore.current = seasonState;
     saveJsonAtomic(SEASONS_FILE, seasonStore);
-  }
-  if (seasonState?.endAt && now >= seasonState.endAt) {
-    // auto-finalize (idempotenti)
-    finalizeSeasonIfNeeded(Number(seasonState.id || 1));
   }
 })();
 
@@ -373,10 +344,14 @@ function getTzOffsetMinutes(timeZone, date = new Date()) {
 }
 
 function nextMidnightRigaTs(now = new Date()) {
+  // Aprēķinam “rītdienas 00:00” pēc LV laika
   const key = todayKey(now);
   const [y, mo, d] = key.split("-").map((x) => parseInt(x, 10));
+
+  // offsetu ņemam ap pusdienlaiku rītdienā (drošāk DST gadījumos)
   const probe = new Date(Date.UTC(y, mo - 1, d + 1, 12, 0, 0));
   const offsetMin = getTzOffsetMinutes(TZ, probe);
+
   const utcMidnight = Date.UTC(y, mo - 1, d + 1, 0, 0, 0);
   return utcMidnight - offsetMin * 60 * 1000;
 }
@@ -394,6 +369,7 @@ function markActivity(user) {
     user.lastPassiveTickAt = user.lastActionAt;
   }
 
+  // ja AFK pārtraukums – restartējam pasīvos
   if (now - user.lastActionAt > AFK_BREAK_MS) {
     user.lastActionAt = now;
     user.lastPassiveTickAt = now;
@@ -735,6 +711,7 @@ function resetCoinsAndTokensForAllUsers() {
 }
 
 function computeNextSeasonEndAt(startAt) {
+  // Ja gribi fiksētu endAt, vari ielikt env: SEASON_END_AT="2026-01-31T23:59:59+02:00"
   const envEnd = process.env.SEASON_END_AT;
   if (envEnd) {
     const ts = new Date(envEnd).getTime();
@@ -789,6 +766,7 @@ function startSeasonFlow({ byAdminUsername } = {}) {
   // reset coins + tokens visiem (prasība)
   resetCoinsAndTokensForAllUsers();
 
+  // (drošībai) ja šis tiek saukts no admin, varam ielogot
   if (byAdminUsername) {
     console.log(`SEASON rollover by ${byAdminUsername}: now ${seasonState.name}`);
   }
@@ -846,11 +824,11 @@ function authMiddleware(req, res, next) {
 const app = express();
 app.use(cors());
 
-// ======== BODY PARSER LIMITI ========
+// ======== BODY PARSER LIMITI (TE IR FIX) ========
 app.use(express.json({ limit: BODY_JSON_LIMIT }));
 app.use(express.urlencoded({ extended: true, limit: BODY_URLENC_LIMIT }));
 
-// Lai 413 vienmēr atgriežas kā JSON
+// Lai 413 vienmēr atgriežas kā JSON (nevis HTML), citādi clientā ir "Non-JSON response"
 app.use((err, req, res, next) => {
   if (err && (err.type === "entity.too.large" || err.status === 413)) {
     return res.status(413).json({
@@ -861,9 +839,6 @@ app.use((err, req, res, next) => {
   return next(err);
 });
 
-// (mazs health)
-app.get("/", (_req, res) => res.send("VĀRDU ZONA serveris strādā."));
-
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: "*", methods: ["GET", "POST"] },
@@ -872,8 +847,6 @@ const io = new Server(httpServer, {
 // ======== ONLINE saraksts ========
 // socket.id -> username
 const onlineBySocket = new Map();
-// username -> socket.id (lai nebūtu 2 socketi vienam userim)
-const socketByUser = new Map();
 
 function getAvatarByUsername(username) {
   return USERS[username]?.avatarUrl || null;
@@ -881,21 +854,10 @@ function getAvatarByUsername(username) {
 
 function broadcastOnlineList() {
   const uniq = Array.from(new Set(onlineBySocket.values()));
-  const users = uniq
-    .map((username) => {
-      const u = USERS[username];
-      if (!u) return null;
-      const info = calcRankFromXp(u.xp || 0);
-      return {
-        username,
-        avatarUrl: u.avatarUrl || null,
-        rankLevel: info.level,
-        rankTitle: info.title,
-        isAdmin: ADMIN_USERNAMES.includes(username),
-      };
-    })
-    .filter(Boolean);
-
+  const users = uniq.map((username) => ({
+    username,
+    avatarUrl: getAvatarByUsername(username),
+  }));
   io.emit("onlineList", { count: users.length, users });
 }
 
@@ -903,51 +865,17 @@ setInterval(() => {
   broadcastOnlineList();
 }, 30 * 1000);
 
-// ======== ČATA helperi (vienota emit + history) ========
-function cleanChatText(s) {
-  const t = String(s || "")
-    .replace(/\s+/g, " ")
-    .replace(/[\u0000-\u001F\u007F]/g, "") // control chars ārā
-    .trim();
-  if (!t) return "";
-  return t.length > CHAT_MAX_LEN ? t.slice(0, CHAT_MAX_LEN) : t;
-}
-
-function makeMsgId() {
-  return crypto.randomBytes(9).toString("base64url");
-}
-
-function pushChatHistory(msg) {
-  CHAT_HISTORY.push(msg);
-  if (CHAT_HISTORY.length > CHAT_HISTORY_MAX) {
-    CHAT_HISTORY = CHAT_HISTORY.slice(CHAT_HISTORY.length - CHAT_HISTORY_MAX);
-  }
-}
-
-function emitChat(payload, { store = true } = {}) {
-  const msg = {
-    id: payload?.id || makeMsgId(),
-    username: payload?.username || "SYSTEM",
-    text: payload?.text || "",
-    ts: typeof payload?.ts === "number" ? payload.ts : Date.now(),
-    avatarUrl: payload?.avatarUrl ?? null,
-  };
-  if (store) pushChatHistory(msg);
-  io.emit("chatMessage", msg);
-  return msg;
-}
-
 // === Admin & čata helperi ===
 function broadcastSystemMessage(text) {
-  const msgText = cleanChatText(text);
-  if (!msgText) return;
-  emitChat({ username: "SYSTEM", text: msgText, avatarUrl: null });
+  const payload = {
+    username: "SYSTEM",
+    text,
+    ts: Date.now(),
+  };
+  io.emit("chatMessage", payload);
 }
 
 function kickUserByName(username, reason) {
-  // noņemam arī socketByUser, ja atbilst
-  const currentSid = socketByUser.get(username);
-
   for (const [sid, uname] of onlineBySocket.entries()) {
     if (uname === username) {
       const s = io.sockets.sockets.get(sid);
@@ -962,9 +890,6 @@ function kickUserByName(username, reason) {
       onlineBySocket.delete(sid);
     }
   }
-
-  if (currentSid) socketByUser.delete(username);
-
   broadcastOnlineList();
 }
 
@@ -975,7 +900,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
   const arg = parts[2];
 
   if (!cmd) {
-    emitChat({
+    adminSocket.emit("chatMessage", {
       username: "SYSTEM",
       text: "Komanda nav norādīta.",
       ts: Date.now(),
@@ -988,11 +913,9 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
     !targetName
   ) {
     adminSocket.emit("chatMessage", {
-      id: makeMsgId(),
       username: "SYSTEM",
       text: "Norādi lietotājvārdu. Piem.: /kick Nick",
       ts: Date.now(),
-      avatarUrl: null,
     });
     return;
   }
@@ -1003,11 +926,9 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
     case "kick":
       if (!target) {
         adminSocket.emit("chatMessage", {
-          id: makeMsgId(),
           username: "SYSTEM",
           text: `Lietotājs '${targetName}' nav atrasts.`,
           ts: Date.now(),
-          avatarUrl: null,
         });
         return;
       }
@@ -1020,11 +941,9 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
     case "ban":
       if (!target) {
         adminSocket.emit("chatMessage", {
-          id: makeMsgId(),
           username: "SYSTEM",
           text: `Lietotājs '${targetName}' nav atrasts.`,
           ts: Date.now(),
-          avatarUrl: null,
         });
         return;
       }
@@ -1039,11 +958,9 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
     case "unban":
       if (!target) {
         adminSocket.emit("chatMessage", {
-          id: makeMsgId(),
           username: "SYSTEM",
           text: `Lietotājs '${targetName}' nav atrasts.`,
           ts: Date.now(),
-          avatarUrl: null,
         });
         return;
       }
@@ -1057,11 +974,9 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
     case "mute": {
       if (!target) {
         adminSocket.emit("chatMessage", {
-          id: makeMsgId(),
           username: "SYSTEM",
           text: `Lietotājs '${targetName}' nav atrasts.`,
           ts: Date.now(),
-          avatarUrl: null,
         });
         return;
       }
@@ -1078,11 +993,9 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
     case "unmute":
       if (!target) {
         adminSocket.emit("chatMessage", {
-          id: makeMsgId(),
           username: "SYSTEM",
           text: `Lietotājs '${targetName}' nav atrasts.`,
           ts: Date.now(),
-          avatarUrl: null,
         });
         return;
       }
@@ -1096,33 +1009,32 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
     case "seasonstart": {
       if (!ADMIN_USERNAMES.includes(adminUser.username)) {
         adminSocket.emit("chatMessage", {
-          id: makeMsgId(),
           username: "SYSTEM",
           text: "Tikai admins var startēt sezonu.",
           ts: Date.now(),
-          avatarUrl: null,
         });
         return;
       }
 
       const result = startSeasonFlow({ byAdminUsername: adminUser.username });
 
+      // ziņas + emit
       if (result.mode === "already_active") {
         adminSocket.emit("chatMessage", {
-          id: makeMsgId(),
           username: "SYSTEM",
           text: `${result.season.name} jau ir aktīva.`,
           ts: Date.now(),
-          avatarUrl: null,
         });
         return;
       }
 
+      // paziņojums par sezonas maiņu / startu
       const endStr = result.season.endAt
         ? new Date(result.season.endAt).toLocaleString("lv-LV", { timeZone: TZ })
         : "—";
 
       if (result.mode === "rolled_next") {
+        // ja izveidojās HoF — pasakām
         if (result.hofEntry) {
           broadcastSystemMessage(
             `🏆 Sezona ${result.hofEntry.seasonId} čempions: ${result.hofEntry.username} (score ${result.hofEntry.score}). Ierakstīts Hall of Fame!`
@@ -1143,11 +1055,9 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       io.emit("seasonUpdate", result.season);
 
       adminSocket.emit("chatMessage", {
-        id: makeMsgId(),
         username: "SYSTEM",
         text: `${result.season.name} ir aktīva.`,
         ts: Date.now(),
-        avatarUrl: null,
       });
       break;
     }
@@ -1159,7 +1069,9 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
 
       if (!seasonState?.active) {
         if (!endTs) {
-          text = `${seasonState?.name || "SEZONA"} vēl nav sākusies. Beigu datums nav iestatīts.`;
+          text = `${
+            seasonState?.name || "SEZONA"
+          } vēl nav sākusies. Beigu datums nav iestatīts.`;
         } else {
           const endStr = new Date(endTs).toLocaleString("lv-LV", {
             timeZone: TZ,
@@ -1189,22 +1101,18 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       }
 
       adminSocket.emit("chatMessage", {
-        id: makeMsgId(),
         username: "SYSTEM",
         text,
         ts: Date.now(),
-        avatarUrl: null,
       });
       break;
     }
 
     default:
       adminSocket.emit("chatMessage", {
-        id: makeMsgId(),
         username: "SYSTEM",
         text: "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute, /seasonstart, /seasononline.",
         ts: Date.now(),
-        avatarUrl: null,
       });
   }
 }
@@ -1256,6 +1164,7 @@ async function signupHandler(req, res) {
     duelsLost: 0,
     avatarUrl: null,
     dailyChest: { lastDate: "", streak: 0, totalOpens: 0 },
+    // (JAUNS) pastāvīgās medaļas (piem., sezonu čempions)
     specialMedals: [],
   };
 
@@ -1340,6 +1249,8 @@ app.post("/avatar", authMiddleware, (req, res) => {
       return res.status(400).json({ message: "Nekorekts avatāra formāts." });
     }
 
+    // FIX: agrāk bija 3MB un bieži krita ārā (2.4MB bilde -> ~3.2MB base64).
+    // Tagad: ievērojami pacelts un kontrolējams ar AVATAR_MAX_CHARS.
     if (avatar.length > AVATAR_MAX_CHARS) {
       return res.status(400).json({
         message: `Avatārs ir par lielu. Max: ~${Math.round(
@@ -1351,6 +1262,7 @@ app.post("/avatar", authMiddleware, (req, res) => {
     user.avatarUrl = avatar;
     saveUsers(USERS);
 
+    // uzreiz atjaunojam online listu, lai citi redz jauno avataru
     broadcastOnlineList();
 
     return res.json({ ok: true, avatarUrl: user.avatarUrl });
@@ -1461,7 +1373,8 @@ app.post("/missions/claim", authMiddleware, (req, res) => {
   res.json({ me: buildMePayload(user), missions: getPublicMissions(user) });
 });
 
-// ======== DAILY CHEST ENDPOINTI ========
+// ======== DAILY CHEST ENDPOINTI (SALABO "Cannot GET /chest/status") ========
+// GET /chest/status
 app.get("/chest/status", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
@@ -1480,6 +1393,7 @@ app.get("/chest/status", authMiddleware, (req, res) => {
   });
 });
 
+// POST /chest/open
 app.post("/chest/open", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
@@ -1495,6 +1409,7 @@ app.post("/chest/open", authMiddleware, (req, res) => {
     });
   }
 
+  // streak: ja vakar atvērts -> +1, citādi -> 1
   const yesterdayKey = todayKey(new Date(Date.now() - 24 * 3600 * 1000));
   if (user.dailyChest.lastDate === yesterdayKey) user.dailyChest.streak += 1;
   else user.dailyChest.streak = 1;
@@ -1502,6 +1417,7 @@ app.post("/chest/open", authMiddleware, (req, res) => {
   user.dailyChest.lastDate = today;
   user.dailyChest.totalOpens = (user.dailyChest.totalOpens || 0) + 1;
 
+  // Balvas (vari mainīt skaitļus, bet šie ir adiktīvi/taisnīgi)
   const streak = user.dailyChest.streak;
 
   const coinsBase = 40 + crypto.randomInt(0, 81); // 40..120
@@ -1526,13 +1442,13 @@ app.post("/chest/open", authMiddleware, (req, res) => {
 
   saveUsers(USERS);
 
-  emitChat({
+  // (nav obligāti, bet forši) paziņojums čatā
+  io.emit("chatMessage", {
     username: "SYSTEM",
     text: `🎁 ${user.username} atvēra Daily Chest: +${coinsGain} coins, +${xpGain} XP${
       tokensGain ? `, +${tokensGain} žetons` : ""
     } (streak ${user.dailyChest.streak})`,
     ts: Date.now(),
-    avatarUrl: null,
   });
 
   return res.json({
@@ -1546,12 +1462,14 @@ app.post("/chest/open", authMiddleware, (req, res) => {
 
 // ======== SEZONA API ========
 app.get("/season", authMiddleware, (req, res) => {
+  // (UPGRADE) atgriežam arī HoF TOP1, lai var UI uzreiz paņemt
   res.json({
     ...seasonState,
     hallOfFameTop: seasonStore.hallOfFame[0] || null,
   });
 });
 
+// (JAUNS) Hall of Fame endpoint (speciālais TOP)
 app.get("/season/hof", authMiddleware, (req, res) => {
   res.json(seasonStore.hallOfFame || []);
 });
@@ -1564,6 +1482,7 @@ app.post("/season/start", authMiddleware, (req, res) => {
 
   const result = startSeasonFlow({ byAdminUsername: user.username });
 
+  // broadcast (lai visi klienti atjaunojas)
   io.emit("seasonUpdate", result.season);
   if (result.mode === "rolled_next" && result.hofEntry) {
     io.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
@@ -1642,15 +1561,6 @@ app.post("/guess", authMiddleware, (req, res) => {
   markActivity(user);
   ensureDailyMissions(user);
   ensureDailyChest(user);
-
-  // anti-spam (1 guess/sec)
-  const r = rt(user.username);
-  const now = Date.now();
-  if (now - (r.lastGuessAt || 0) < GUESS_COOLDOWN_MS) {
-    res.setHeader("Retry-After", "1");
-    return res.status(429).json({ message: "Par ātru. 1 minējums apmēram sekundē." });
-  }
-  r.lastGuessAt = now;
 
   const guessRaw = (req.body?.guess || "").toString().trim().toUpperCase();
   if (!user.currentRound || user.currentRound.finished) {
@@ -1773,24 +1683,15 @@ app.post("/buy-token", authMiddleware, (req, res) => {
 });
 
 // ===== Leaderboard (ar avatarUrl) =====
-app.get("/leaderboard", (_req, res) => {
-  const arr = Object.values(USERS)
-    .filter((u) => u && u.username && !u.isBanned);
-
+app.get("/leaderboard", (req, res) => {
+  const arr = Object.values(USERS);
   arr.forEach((u) => {
     const info = calcRankFromXp(u.xp || 0);
     u.rankLevel = info.level;
     u.rankTitle = info.title;
   });
 
-  // stabilāk: score desc, xp desc, username asc
-  arr.sort((a, b) => {
-    const ds = (b.score || 0) - (a.score || 0);
-    if (ds !== 0) return ds;
-    const dx = (b.xp || 0) - (a.xp || 0);
-    if (dx !== 0) return dx;
-    return String(a.username).localeCompare(String(b.username));
-  });
+  arr.sort((a, b) => (b.score || 0) - (a.score || 0));
 
   const top = arr.slice(0, 10).map((u, idx) => ({
     place: idx + 1,
@@ -1798,7 +1699,6 @@ app.get("/leaderboard", (_req, res) => {
     score: u.score || 0,
     xp: u.xp || 0,
     rankTitle: u.rankTitle,
-    rankLevel: u.rankLevel,
     avatarUrl: u.avatarUrl || null,
   }));
 
@@ -1807,15 +1707,9 @@ app.get("/leaderboard", (_req, res) => {
 
 // ===== DUEĻU HELPERI (Socket.IO pusē) =====
 function getSocketByUsername(username) {
-  const sid = socketByUser.get(username);
-  if (sid) {
-    const s = io.sockets.sockets.get(sid);
-    if (s) return s;
-  }
-  // fallback (ja kaut kur nav sakritis)
-  for (const [sid2, uname] of onlineBySocket.entries()) {
+  for (const [sid, uname] of onlineBySocket.entries()) {
     if (uname === username) {
-      const s = io.sockets.sockets.get(sid2);
+      const s = io.sockets.sockets.get(sid);
       if (s) return s;
     }
   }
@@ -1916,41 +1810,41 @@ function grantDailyLoginBonus(user) {
   return DAILY_LOGIN_COINS;
 }
 
-// ===== SEZONAS AUTO-BEIGAS (auto finalize HoF) =====
+// ===== SEZONAS AUTO-BEIGAS + AUTO-HOF (TOP1 freeze) =====
 let seasonEndedBroadcasted = false;
-let seasonFinalizedBroadcasted = false;
 
 setInterval(() => {
   const now = Date.now();
-  if (seasonState?.endAt && now >= seasonState.endAt) {
-    if (seasonState.active) {
-      seasonState.active = false;
-      seasonState.startedAt = seasonState.startedAt || 0;
-      seasonEndedBroadcasted = false;
-      seasonFinalizedBroadcasted = false;
-      seasonStore.current = seasonState;
-      saveJsonAtomic(SEASONS_FILE, seasonStore);
-      io.emit("seasonUpdate", seasonState);
-    }
+  if (!(seasonState?.endAt && now >= seasonState.endAt)) return;
 
-    // finalize HoF tieši pie sezonas beigām (idempotenti)
-    const hofEntry = finalizeSeasonIfNeeded(Number(seasonState.id || 1));
-    if (hofEntry && !seasonFinalizedBroadcasted) {
-      seasonFinalizedBroadcasted = true;
-      io.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
-      broadcastSystemMessage(
-        `🏆 ${seasonState.name} čempions: ${hofEntry.username} (score ${hofEntry.score}). Ierakstīts Hall of Fame!`
-      );
-    }
+  // 1) izslēdzam sezonu
+  if (seasonState.active) {
+    seasonState.active = false;
+    seasonStore.current = seasonState;
+    saveJsonAtomic(SEASONS_FILE, seasonStore);
+    io.emit("seasonUpdate", seasonState);
 
-    if (!seasonEndedBroadcasted) {
-      const endStr = new Date(seasonState.endAt).toLocaleString("lv-LV", {
-        timeZone: TZ,
-      });
-      broadcastSystemMessage(`⏳ ${seasonState.name} ir beigusies (${endStr}).`);
-      io.emit("seasonUpdate", seasonState);
-      seasonEndedBroadcasted = true;
-    }
+    // ļaujam izsūtīt vienu "beigusies" paziņojumu
+    seasonEndedBroadcasted = false;
+  }
+
+  // 2) freeze TOP1 -> Hall of Fame (izpildās tikai 1x uz sezonu)
+  const hofEntry = finalizeSeasonIfNeeded(seasonState.id);
+  if (hofEntry) {
+    io.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
+    broadcastSystemMessage(
+      `🏆 ${seasonState.name} čempions: ${hofEntry.username} (score ${hofEntry.score}). Ierakstīts Hall of Fame!`
+    );
+  }
+
+  // 3) paziņojums, ka sezona beigusies (1x)
+  if (!seasonEndedBroadcasted) {
+    const endStr = new Date(seasonState.endAt).toLocaleString("lv-LV", {
+      timeZone: TZ,
+    });
+    broadcastSystemMessage(`⏳ ${seasonState.name} ir beigusies (${endStr}).`);
+    io.emit("seasonUpdate", seasonState);
+    seasonEndedBroadcasted = true;
   }
 }, 1500);
 
@@ -1978,20 +1872,6 @@ io.on("connection", (socket) => {
     return;
   }
 
-  // ====== 1 SOCKET PER USER FIX (pret chat dublikātiem) ======
-  const prevSid = socketByUser.get(user.username);
-  if (prevSid && prevSid !== socket.id) {
-    const prevSocket = io.sockets.sockets.get(prevSid);
-    if (prevSocket) {
-      try {
-        prevSocket.emit("forceDisconnect", { reason: "new_session" });
-      } catch {}
-      prevSocket.disconnect(true);
-    }
-    onlineBySocket.delete(prevSid);
-  }
-  socketByUser.set(user.username, socket.id);
-
   console.log("Pieslēdzās:", user.username, "socket:", socket.id);
 
   markActivity(user);
@@ -2002,11 +1882,9 @@ io.on("connection", (socket) => {
   const bonus = grantDailyLoginBonus(user);
   if (bonus > 0) {
     socket.emit("chatMessage", {
-      id: makeMsgId(),
       username: "SYSTEM",
       text: `Dienas ienākšanas bonuss: +${bonus} coins!`,
       ts: Date.now(),
-      avatarUrl: null,
     });
   }
 
@@ -2018,24 +1896,10 @@ io.on("connection", (socket) => {
   socket.emit("seasonUpdate", seasonState);
   socket.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
 
-  // chat history (ja frontā nav listenera — nekas nesalūzīs)
-  socket.emit("chatHistory", { messages: CHAT_HISTORY.slice(-CHAT_HISTORY_MAX) });
-
   // ========== ČATS ==========
-  socket.on("chatMessage", (incoming) => {
-    let msg = "";
-    let clientId = null;
-
-    if (typeof incoming === "string") {
-      msg = incoming;
-    } else if (incoming && typeof incoming === "object") {
-      msg = incoming.text || "";
-      clientId = incoming.clientId ? String(incoming.clientId).slice(0, 80) : null;
-    } else {
-      return;
-    }
-
-    msg = cleanChatText(msg);
+  socket.on("chatMessage", (text) => {
+    if (typeof text !== "string") return;
+    const msg = text.trim();
     if (!msg) return;
 
     const u = USERS[user.username] || user;
@@ -2045,31 +1909,11 @@ io.on("connection", (socket) => {
 
     const now = Date.now();
 
-    // anti-spam chat
-    const r = rt(u.username);
-    if (now - (r.lastChatAt || 0) < CHAT_COOLDOWN_MS) {
-      // ne-spamojam “pagaidi” katru reizi — max 1x/2s
-      if (now - (r.lastChatWarnAt || 0) > 2000) {
-        r.lastChatWarnAt = now;
-        socket.emit("chatMessage", {
-          id: makeMsgId(),
-          username: "SYSTEM",
-          text: "Par ātru. Pagaidi mazliet pirms nākamās ziņas.",
-          ts: Date.now(),
-          avatarUrl: null,
-        });
-      }
-      return;
-    }
-    r.lastChatAt = now;
-
     if (u.isBanned) {
       socket.emit("chatMessage", {
-        id: makeMsgId(),
         username: "SYSTEM",
         text: "Tu esi nobanots no VĀRDU ZONAS.",
         ts: Date.now(),
-        avatarUrl: null,
       });
       return;
     }
@@ -2080,11 +1924,9 @@ io.on("connection", (socket) => {
         minute: "2-digit",
       });
       socket.emit("chatMessage", {
-        id: makeMsgId(),
         username: "SYSTEM",
         text: `Tev ir mute līdz ${until}.`,
         ts: Date.now(),
-        avatarUrl: null,
       });
       return;
     }
@@ -2097,17 +1939,7 @@ io.on("connection", (socket) => {
 
     saveUsers(USERS);
 
-    // ja klients iedod clientId, varam taisīt deterministisku msg id (lai vēlāk var dedupe)
-    const id = clientId
-      ? crypto
-          .createHash("sha1")
-          .update(`${u.username}|${clientId}`)
-          .digest("hex")
-          .slice(0, 16)
-      : makeMsgId();
-
-    emitChat({
-      id,
+    io.emit("chatMessage", {
       username: u.username,
       text: msg,
       ts: Date.now(),
@@ -2307,14 +2139,9 @@ io.on("connection", (socket) => {
     }
   });
 
-  // ======== DISCONNECT FIX ========
+  // ======== DISCONNECT FIX (pret exploit pending duelī) ========
   socket.on("disconnect", () => {
     const username = user.username;
-
-    // ja šis socket ir aktuālais — noņemam map
-    if (socketByUser.get(username) === socket.id) {
-      socketByUser.delete(username);
-    }
 
     const duelId = userToDuel.get(username);
     if (duelId) {
@@ -2322,6 +2149,7 @@ io.on("connection", (socket) => {
       if (duel && duel.status !== "finished") {
         const other = duel.players.find((p) => p !== username);
 
+        // Ja duelis vēl nav sācies — atceļam bez uzvaras/reward
         if (duel.status === "pending") {
           const sOther = getSocketByUsername(other);
           if (sOther) {
@@ -2337,6 +2165,7 @@ io.on("connection", (socket) => {
           userToDuel.delete(duel.players[1]);
           duels.delete(duel.id);
         } else {
+          // Ja duelis ir active — otrs uzvar pēc atvienošanās
           finishDuel(duel, other, "opponent_disconnect");
         }
       }
@@ -2348,7 +2177,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// ======== Globāls error handler ========
+// ======== Globāls error handler (lai nekad nekrīt HTML Error page) ========
 app.use((err, req, res, next) => {
   if (!err) return next();
   if (res.headersSent) return next(err);
