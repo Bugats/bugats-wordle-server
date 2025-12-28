@@ -326,6 +326,16 @@ function calcRankFromXp(xp) {
   return { level, title: current.title };
 }
 
+// (UPGRADE) vienots helperis rank lauku uzturēšanai
+function ensureRankFields(u) {
+  const info = calcRankFromXp(u?.xp || 0);
+  if (u) {
+    u.rankLevel = info.level;
+    u.rankTitle = info.title;
+  }
+  return info;
+}
+
 function getTokenPrice() {
   return BASE_TOKEN_PRICE;
 }
@@ -689,9 +699,7 @@ function finalizeSeasonIfNeeded(seasonId) {
   const champ = getTop1UserByScore();
   if (!champ) return null;
 
-  const rankInfo = calcRankFromXp(champ.xp || 0);
-  champ.rankLevel = rankInfo.level;
-  champ.rankTitle = rankInfo.title;
+  const rankInfo = ensureRankFields(champ);
 
   const finishedAt = Date.now();
 
@@ -700,8 +708,8 @@ function finalizeSeasonIfNeeded(seasonId) {
     username: champ.username,
     score: champ.score || 0,
     xp: champ.xp || 0,
-    rankTitle: champ.rankTitle || "",
-    rankLevel: champ.rankLevel || 1,
+    rankTitle: champ.rankTitle || rankInfo.title || "",
+    rankLevel: champ.rankLevel || rankInfo.level || 1,
     avatarUrl: champ.avatarUrl || null,
     finishedAt,
   };
@@ -813,9 +821,7 @@ function startSeasonFlow({ byAdminUsername } = {}) {
 
 // ======== JWT helperi ========
 function buildMePayload(u) {
-  const rankInfo = calcRankFromXp(u.xp || 0);
-  u.rankLevel = rankInfo.level;
-  u.rankTitle = rankInfo.title;
+  const rankInfo = ensureRankFields(u);
 
   const dynamicMedals = computeMedalsForUser(u);
   const medals = mergeMedals(dynamicMedals, u.specialMedals);
@@ -828,8 +834,8 @@ function buildMePayload(u) {
     tokens: u.tokens || 0,
     streak: u.streak || 0,
     bestStreak: u.bestStreak || 0,
-    rankTitle: u.rankTitle,
-    rankLevel: u.rankLevel,
+    rankTitle: u.rankTitle || rankInfo.title,
+    rankLevel: u.rankLevel || rankInfo.level,
     tokenPriceCoins: getTokenPrice(u),
     medals,
     avatarUrl: u.avatarUrl || null,
@@ -889,17 +895,50 @@ function getAvatarByUsername(username) {
   return USERS[username]?.avatarUrl || null;
 }
 
-function broadcastOnlineList() {
-  const uniq = Array.from(new Set(onlineBySocket.values()));
-  const users = uniq.map((username) => ({
+// (UPGRADE) mini profila dati online listam + TOP/krāsām (bez /profile)
+function getMiniUserPayload(username) {
+  const u = USERS[username];
+  if (!u) {
+    return { username, avatarUrl: null, rankLevel: 1, rankTitle: "—" };
+  }
+  const info = ensureRankFields(u);
+  return {
     username,
-    avatarUrl: getAvatarByUsername(username),
-  }));
+    avatarUrl: u.avatarUrl || null,
+    rankLevel: u.rankLevel || info.level || 1,
+    rankTitle: u.rankTitle || info.title || "—",
+    supporter: !!u.supporter, // droši, ja nākotnē ieliksi
+  };
+}
+
+// (UPGRADE) neemitējam onlineList, ja nav izmaiņu (mazāk traffic, ātrāks UI)
+let lastOnlineSig = "";
+
+function broadcastOnlineList(force = false) {
+  const uniq = Array.from(new Set(onlineBySocket.values()))
+    .map((x) => String(x || "").trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+
+  const users = uniq.map((username) => getMiniUserPayload(username));
+
+  const sig = users
+    .map(
+      (u) =>
+        `${u.username}|${u.avatarUrl || ""}|${u.rankLevel || 0}|${u.rankTitle || ""}|${
+          u.supporter ? 1 : 0
+        }`
+    )
+    .join(";");
+
+  if (!force && sig === lastOnlineSig) return;
+  lastOnlineSig = sig;
+
   io.emit("onlineList", { count: users.length, users });
 }
 
 setInterval(() => {
-  broadcastOnlineList();
+  broadcastOnlineList(false);
 }, 30 * 1000);
 
 // === Admin & čata helperi ===
@@ -931,7 +970,7 @@ function kickUserByName(username, reason) {
     onlineBySocket.delete(sid);
   }
 
-  broadcastOnlineList();
+  broadcastOnlineList(true);
 }
 
 function handleAdminCommand(raw, adminUser, adminSocket) {
@@ -1210,9 +1249,7 @@ async function signupHandler(req, res) {
     lastChatTextAt: 0,
   };
 
-  const rankInfo = calcRankFromXp(user.xp);
-  user.rankLevel = rankInfo.level;
-  user.rankTitle = rankInfo.title;
+  ensureRankFields(user);
 
   ensureDailyMissions(user);
   ensureDailyChest(user);
@@ -1256,6 +1293,7 @@ async function loginHandler(req, res) {
   resetWinsTodayIfNeeded(user);
   ensureDailyChest(user);
   ensureSpecialMedals(user);
+  ensureRankFields(user);
   saveUsers(USERS);
 
   const token = jwt.sign({ username: name }, JWT_SECRET, { expiresIn: "30d" });
@@ -1273,6 +1311,7 @@ app.get("/me", authMiddleware, (req, res) => {
   resetWinsTodayIfNeeded(u);
   ensureDailyChest(u);
   ensureSpecialMedals(u);
+  ensureRankFields(u);
   saveUsers(USERS);
 
   res.json(buildMePayload(u));
@@ -1302,7 +1341,7 @@ app.post("/avatar", authMiddleware, (req, res) => {
     user.avatarUrl = avatar;
     saveUsers(USERS);
 
-    broadcastOnlineList();
+    broadcastOnlineList(true);
 
     return res.json({ ok: true, avatarUrl: user.avatarUrl });
   } catch (err) {
@@ -1315,9 +1354,7 @@ app.post("/avatar", authMiddleware, (req, res) => {
 
 // ======== Publiska profila API ========
 function buildPublicProfilePayload(targetUser, requester) {
-  const rankInfo = calcRankFromXp(targetUser.xp || 0);
-  targetUser.rankLevel = rankInfo.level;
-  targetUser.rankTitle = rankInfo.title;
+  const rankInfo = ensureRankFields(targetUser);
 
   const isAdmin = requester && ADMIN_USERNAMES.includes(requester.username);
 
@@ -1332,8 +1369,8 @@ function buildPublicProfilePayload(targetUser, requester) {
     tokens: targetUser.tokens || 0,
     streak: targetUser.streak || 0,
     bestStreak: targetUser.bestStreak || 0,
-    rankTitle: targetUser.rankTitle,
-    rankLevel: targetUser.rankLevel,
+    rankTitle: targetUser.rankTitle || rankInfo.title,
+    rankLevel: targetUser.rankLevel || rankInfo.level,
     medals,
     duelsWon: targetUser.duelsWon || 0,
     duelsLost: targetUser.duelsLost || 0,
@@ -1371,6 +1408,7 @@ app.get("/missions", authMiddleware, (req, res) => {
   resetWinsTodayIfNeeded(user);
   ensureDailyChest(user);
   ensureSpecialMedals(user);
+  ensureRankFields(user);
   saveUsers(USERS);
   res.json(getPublicMissions(user));
 });
@@ -1403,9 +1441,7 @@ app.post("/missions/claim", authMiddleware, (req, res) => {
 
   mission.isClaimed = true;
 
-  const rankInfo = calcRankFromXp(user.xp);
-  user.rankLevel = rankInfo.level;
-  user.rankTitle = rankInfo.title;
+  ensureRankFields(user);
 
   saveUsers(USERS);
 
@@ -1471,9 +1507,7 @@ app.post("/chest/open", authMiddleware, (req, res) => {
   user.xp = (user.xp || 0) + xpGain;
   user.tokens = (user.tokens || 0) + tokensGain;
 
-  const rankInfo = calcRankFromXp(user.xp);
-  user.rankLevel = rankInfo.level;
-  user.rankTitle = rankInfo.title;
+  ensureRankFields(user);
 
   saveUsers(USERS);
 
@@ -1668,15 +1702,15 @@ app.post("/guess", authMiddleware, (req, res) => {
 
     user.bestStreak = Math.max(user.bestStreak || 0, user.streak || 0);
 
-    const rankInfo = calcRankFromXp(user.xp);
-    user.rankLevel = rankInfo.level;
-    user.rankTitle = rankInfo.title;
+    ensureRankFields(user);
 
     io.emit("playerWin", {
       username: user.username,
       xpGain,
       coinsGain,
       rankTitle: user.rankTitle,
+      rankLevel: user.rankLevel, // (UPGRADE) krāsām uzreiz
+      avatarUrl: user.avatarUrl || null, // (UPGRADE) bez fetch
       streak: user.streak || 0,
     });
   } else {
@@ -1722,24 +1756,33 @@ app.post("/buy-token", authMiddleware, (req, res) => {
   });
 });
 
-// ===== Leaderboard (ar avatarUrl) =====
-app.get("/leaderboard", (req, res) => {
-  const arr = Object.values(USERS);
-  arr.forEach((u) => {
-    const info = calcRankFromXp(u.xp || 0);
-    u.rankLevel = info.level;
-    u.rankTitle = info.title;
-  });
+// ===== Leaderboard (ar avatarUrl + rankLevel TOP krāsām) =====
+app.get("/leaderboard", (_req, res) => {
+  const arr = Object.values(USERS || {})
+    .filter((u) => u && u.username && !u.isBanned)
+    .slice();
 
-  arr.sort((a, b) => (b.score || 0) - (a.score || 0));
+  // sakārtojam rank laukus
+  arr.forEach((u) => ensureRankFields(u));
+
+  // stabils sort: score desc, xp desc, username asc
+  arr.sort((a, b) => {
+    const ds = (b.score || 0) - (a.score || 0);
+    if (ds !== 0) return ds;
+    const dx = (b.xp || 0) - (a.xp || 0);
+    if (dx !== 0) return dx;
+    return String(a.username).localeCompare(String(b.username));
+  });
 
   const top = arr.slice(0, 10).map((u, idx) => ({
     place: idx + 1,
     username: u.username,
     score: u.score || 0,
     xp: u.xp || 0,
-    rankTitle: u.rankTitle,
+    rankTitle: u.rankTitle || "—",
+    rankLevel: u.rankLevel || 1, // (UPGRADE) TOP10 krāsām
     avatarUrl: u.avatarUrl || null,
+    supporter: !!u.supporter,
   }));
 
   res.json(top);
@@ -1778,9 +1821,7 @@ function finishDuel(duel, winnerName, reason) {
       winner.duelsWon = (winner.duelsWon || 0) + 1;
       winner.xp = (winner.xp || 0) + DUEL_REWARD_XP;
       winner.coins = (winner.coins || 0) + DUEL_REWARD_COINS;
-      const info = calcRankFromXp(winner.xp);
-      winner.rankLevel = info.level;
-      winner.rankTitle = info.title;
+      ensureRankFields(winner);
     }
     if (loser) {
       loser.duelsLost = (loser.duelsLost || 0) + 1;
@@ -1918,6 +1959,7 @@ io.on("connection", (socket) => {
   ensureDailyMissions(user);
   ensureDailyChest(user);
   ensureSpecialMedals(user);
+  ensureRankFields(user);
 
   const bonus = grantDailyLoginBonus(user);
   if (bonus > 0) {
@@ -1931,7 +1973,7 @@ io.on("connection", (socket) => {
   saveUsers(USERS);
 
   onlineBySocket.set(socket.id, user.username);
-  broadcastOnlineList();
+  broadcastOnlineList(true);
 
   socket.emit("seasonUpdate", seasonState);
   socket.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
@@ -1949,6 +1991,7 @@ io.on("connection", (socket) => {
     markActivity(u);
     ensureDailyMissions(u);
     ensureDailyChest(u);
+    ensureRankFields(u);
 
     const now = Date.now();
 
@@ -2002,6 +2045,8 @@ io.on("connection", (socket) => {
       text: msg,
       ts: Date.now(),
       avatarUrl: u.avatarUrl || null,
+      rankTitle: u.rankTitle || "—", // (UPGRADE) var krāsot bez /profile
+      rankLevel: u.rankLevel || 1,   // (UPGRADE) var krāsot bez /profile
     });
   });
 
@@ -2228,7 +2273,7 @@ io.on("connection", (socket) => {
     }
 
     onlineBySocket.delete(socket.id);
-    broadcastOnlineList();
+    broadcastOnlineList(true);
     console.log("Atvienojās:", user.username, "socket:", socket.id);
   });
 });
