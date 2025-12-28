@@ -1,1 +1,11 @@
+{
+  "version": 1,
+  "slots": [],
+  "settings": {
+    "spinMs": 9000,
+    "removeOnWin": true
+  },
+  "lastSpin": null,
+  "updatedAt": 0
+}
 
