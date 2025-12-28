@@ -35,6 +35,20 @@ const MAX_ATTEMPTS = 6;
 
 const BASE_TOKEN_PRICE = 150;
 
+// ======== Server-side anti-spam (droši, lai čats/guess neglitcho) ========
+const GUESS_RATE_LIMIT_MS = (() => {
+  const v = parseInt(process.env.GUESS_RATE_LIMIT_MS || "900", 10);
+  return Number.isFinite(v) && v >= 200 && v <= 5000 ? v : 900;
+})();
+const CHAT_RATE_LIMIT_MS = (() => {
+  const v = parseInt(process.env.CHAT_RATE_LIMIT_MS || "650", 10);
+  return Number.isFinite(v) && v >= 0 && v <= 5000 ? v : 650;
+})();
+const CHAT_DEDUPE_WINDOW_MS = (() => {
+  const v = parseInt(process.env.CHAT_DEDUPE_WINDOW_MS || "1200", 10);
+  return Number.isFinite(v) && v >= 0 && v <= 10000 ? v : 1200;
+})();
+
 // ======== Lielie request body limiti (FIX 413 Payload Too Large) ========
 // Ja vajag vēl vairāk, vari Render iestatījumos pielikt env:
 // BODY_JSON_LIMIT="25mb" un BODY_URLENC_LIMIT="25mb"
@@ -59,6 +73,17 @@ const TZ = "Europe/Riga";
 // ======== SEZONA 1 – beigu datums (vēsturiskais) ========
 // 2025-12-26 ir ziemā, tāpēc +02:00 ir ok.
 const SEASON1_END_AT = new Date("2025-12-26T23:59:59+02:00").getTime();
+
+// ======== SEZONA 2 – fiksēts beigu datums (februāra vidus) ========
+// Vari pārrakstīt ar env: SEASON2_END_AT="2026-02-15T23:59:59+02:00"
+const SEASON2_END_AT = (() => {
+  const env = process.env.SEASON2_END_AT;
+  if (env) {
+    const ts = new Date(env).getTime();
+    if (Number.isFinite(ts)) return ts;
+  }
+  return new Date("2026-02-15T23:59:59+02:00").getTime();
+})();
 
 // ======== SEASON CONFIG ========
 // Cik dienas ilgst jaunā sezona, ja nav endAt (default 30)
@@ -190,6 +215,11 @@ function loadUsers() {
       // (JAUNS) Pastāvīgās medaļas (piem., Sezonas čempions)
       if (!Array.isArray(u.specialMedals)) u.specialMedals = [];
 
+      // (JAUNS) server-side anti-spam stāvokļi
+      if (typeof u.lastGuessAt !== "number") u.lastGuessAt = 0;
+      if (typeof u.lastChatAt !== "number") u.lastChatAt = 0;
+      if (typeof u.lastChatText !== "string") u.lastChatText = "";
+
       out[u.username] = u;
     }
     return out;
@@ -240,6 +270,28 @@ let seasonState = seasonStore.current;
     seasonState.active = false;
     seasonStore.current = seasonState;
     saveJsonAtomic(SEASONS_FILE, seasonStore);
+  }
+})();
+
+// (JAUNS) ja current ir Sezona 2 — piespiežam beigu datumu uz februāra vidu (ja nav pārrakstīts ar env)
+(() => {
+  try {
+    const curId = Number(seasonState?.id || 0);
+    if (curId !== 2) return;
+    const startedAt = Number(seasonState?.startedAt || 0);
+    const fixed = SEASON2_END_AT;
+
+    // ja fixed jau ir pagātnē attiecībā pret startu, tad NEpiespiežam (lai neizveidojas endAt < startedAt)
+    if (startedAt && fixed <= startedAt) return;
+
+    if (seasonState.endAt !== fixed) {
+      seasonState.endAt = fixed;
+      seasonStore.current = seasonState;
+      saveJsonAtomic(SEASONS_FILE, seasonStore);
+      console.log("Sezona 2 endAt uzlikts:", new Date(fixed).toISOString());
+    }
+  } catch (e) {
+    console.error("Season2 endAt enforce error:", e);
   }
 })();
 
@@ -733,6 +785,16 @@ function startSeasonFlow({ byAdminUsername } = {}) {
     cur.active = true;
     cur.startedAt = cur.startedAt || now;
 
+    // ja šī ir sezona 2, piespiežam endAt (ja tas nav loģisks)
+    if (Number(cur.id) === 2) {
+      if (!cur.endAt || (cur.startedAt && cur.endAt <= cur.startedAt)) {
+        cur.endAt = SEASON2_END_AT > cur.startedAt ? SEASON2_END_AT : computeNextSeasonEndAt(cur.startedAt);
+      } else {
+        // ja endAt ir citāds, bet tu gribi fixed — atstājam kā ir, jo admins/SEASONS_FILE var būt apzināti mainīts
+        // (ja gribi piespiest vienmēr, noņem šo komentāru un uzliec cur.endAt = SEASON2_END_AT)
+      }
+    }
+
     seasonStore.current = cur;
     seasonState = seasonStore.current;
     saveJsonAtomic(SEASONS_FILE, seasonStore);
@@ -750,7 +812,16 @@ function startSeasonFlow({ byAdminUsername } = {}) {
 
   const nextId = curId + 1;
   const nextStart = now;
-  const nextEnd = computeNextSeasonEndAt(nextStart);
+
+  let nextEnd;
+  if (nextId === 2) {
+    nextEnd = SEASON2_END_AT;
+    if (!Number.isFinite(nextEnd) || nextEnd <= nextStart) {
+      nextEnd = computeNextSeasonEndAt(nextStart);
+    }
+  } else {
+    nextEnd = computeNextSeasonEndAt(nextStart);
+  }
 
   seasonState = {
     id: nextId,
@@ -823,6 +894,9 @@ function authMiddleware(req, res, next) {
 // ======== Express + Socket.IO ========
 const app = express();
 app.use(cors());
+
+// vienkāršs healthcheck
+app.get("/", (_req, res) => res.send("VĀRDU ZONA serveris strādā."));
 
 // ======== BODY PARSER LIMITI (TE IR FIX) ========
 app.use(express.json({ limit: BODY_JSON_LIMIT }));
@@ -1166,6 +1240,10 @@ async function signupHandler(req, res) {
     dailyChest: { lastDate: "", streak: 0, totalOpens: 0 },
     // (JAUNS) pastāvīgās medaļas (piem., sezonu čempions)
     specialMedals: [],
+    // anti-spam
+    lastGuessAt: 0,
+    lastChatAt: 0,
+    lastChatText: "",
   };
 
   const rankInfo = calcRankFromXp(user.xp);
@@ -1461,6 +1539,15 @@ app.post("/chest/open", authMiddleware, (req, res) => {
 });
 
 // ======== SEZONA API ========
+
+// (JAUNS) publisks endpoints, lai TAVS game.html skripts ar /season/state nestrēbj 401
+app.get("/season/state", (_req, res) => {
+  res.json({
+    ...seasonState,
+    hallOfFameTop: seasonStore.hallOfFame[0] || null,
+  });
+});
+
 app.get("/season", authMiddleware, (req, res) => {
   // (UPGRADE) atgriežam arī HoF TOP1, lai var UI uzreiz paņemt
   res.json({
@@ -1472,6 +1559,11 @@ app.get("/season", authMiddleware, (req, res) => {
 // (JAUNS) Hall of Fame endpoint (speciālais TOP)
 app.get("/season/hof", authMiddleware, (req, res) => {
   res.json(seasonStore.hallOfFame || []);
+});
+
+// (JAUNS) publisks “TOP1 HoF” (ērti UI)
+app.get("/season/hof/top", (_req, res) => {
+  res.json(seasonStore.hallOfFame[0] || null);
 });
 
 app.post("/season/start", authMiddleware, (req, res) => {
@@ -1571,6 +1663,14 @@ app.post("/guess", authMiddleware, (req, res) => {
   if (guessRaw.length !== round.len) {
     return res.status(400).json({ message: `Vārdam jābūt ${round.len} burtiem` });
   }
+
+  // server-side rate limit (anti-spam 1 guess/sec)
+  const now = Date.now();
+  const last = user.lastGuessAt || 0;
+  if (GUESS_RATE_LIMIT_MS > 0 && now - last < GUESS_RATE_LIMIT_MS) {
+    return res.status(429).json({ message: "Nesteidzies — 1 minējums ~ 1 sekundē." });
+  }
+  user.lastGuessAt = now;
 
   if (round.attemptsLeft <= 0) {
     round.finished = true;
@@ -1932,10 +2032,28 @@ io.on("connection", (socket) => {
     }
 
     const isAdmin = ADMIN_USERNAMES.includes(u.username);
+
+    // admin komandas atļaujam bez dedupe/cooldown (lai nav “kāpēc nestrādā?”)
     if (isAdmin && (msg.startsWith("/") || msg.startsWith("!"))) {
       handleAdminCommand(msg, u, socket);
       return;
     }
+
+    // server-side anti-spam + dedupe (palīdz pret dubultiem eventiem/lag)
+    const lastChatAt = u.lastChatAt || 0;
+    const lastChatText = u.lastChatText || "";
+    if (CHAT_RATE_LIMIT_MS > 0 && now - lastChatAt < CHAT_RATE_LIMIT_MS) {
+      return; // klusām ignorējam, lai čats nepludo
+    }
+    if (
+      CHAT_DEDUPE_WINDOW_MS > 0 &&
+      msg === lastChatText &&
+      now - lastChatAt < CHAT_DEDUPE_WINDOW_MS
+    ) {
+      return; // identisks dublikāts
+    }
+    u.lastChatAt = now;
+    u.lastChatText = msg;
 
     saveUsers(USERS);
 
