@@ -310,7 +310,7 @@ let seasonState = seasonStore.current;
   }
 })();
 
-// ======== WHEEL (Laimes rats) — persistents store ========
+// ======== WHEEL (Laimes rats) — tokens => slots (no VĀRDU ZONAS) ========
 const WHEEL_FILE = process.env.WHEEL_FILE || path.join(__dirname, "wheel.json");
 const WHEEL_MAX_SLOTS = (() => {
   const v = parseInt(process.env.WHEEL_MAX_SLOTS || "5000", 10);
@@ -323,26 +323,21 @@ const WHEEL_DEFAULT_SPIN_MS = (() => {
 const WHEEL_ANNOUNCE_TO_CHAT =
   String(process.env.WHEEL_ANNOUNCE_TO_CHAT ?? "0") === "1";
 
+// šis ir tikai SETTINGS/LASTSPIN/LOCK, slots vairs netiek glabāts wheel.json
 function buildInitialWheelStore() {
   return {
-    slots: [],
     settings: { spinMs: WHEEL_DEFAULT_SPIN_MS, removeOnWin: true },
-    lastSpin: null, // { winnerName, winnerIndex, by, at, spinMs, slotsCount }
+    lastSpin: null, // { winnerName, winnerIndex, by, at, spinMs, slotsCount, winnerTokensBefore, winnerTokensAfter }
     spinning: false,
     spinEndsAt: 0,
     spinId: null,
+    orderSalt: crypto.randomBytes(8).toString("hex"), // deterministiska "shuffle" kārtība no tokens
   };
 }
 
 function normalizeWheelStore(x) {
   const base = buildInitialWheelStore();
   const out = x && typeof x === "object" ? x : base;
-
-  if (!Array.isArray(out.slots)) out.slots = [];
-  out.slots = out.slots
-    .map((s) => String(s || "").trim())
-    .filter(Boolean)
-    .slice(0, WHEEL_MAX_SLOTS);
 
   if (!out.settings || typeof out.settings !== "object") out.settings = {};
   const spinMs = parseInt(out.settings.spinMs ?? base.settings.spinMs, 10);
@@ -361,7 +356,12 @@ function normalizeWheelStore(x) {
   out.spinEndsAt = Number.isFinite(out.spinEndsAt) ? out.spinEndsAt : 0;
   out.spinId = typeof out.spinId === "string" ? out.spinId : null;
 
-  // ja server restartējas spin laikā — vienkārši noresetojam spin flag
+  out.orderSalt =
+    typeof out.orderSalt === "string" && out.orderSalt.trim()
+      ? out.orderSalt.trim()
+      : base.orderSalt;
+
+  // ja server restartējas pēc spin beigām — noresetojam
   const now = Date.now();
   if (out.spinning && out.spinEndsAt && now >= out.spinEndsAt) {
     out.spinning = false;
@@ -375,30 +375,178 @@ function normalizeWheelStore(x) {
 let wheelStore = normalizeWheelStore(loadJsonSafe(WHEEL_FILE, null));
 if (!fs.existsSync(WHEEL_FILE)) {
   saveJsonAtomic(WHEEL_FILE, wheelStore);
+} else {
+  // ja vecais wheel.json bija ar citu struktūru — normalizējam un saglabājam
+  saveJsonAtomic(WHEEL_FILE, wheelStore);
 }
 
 function saveWheelStore() {
   saveJsonAtomic(WHEEL_FILE, wheelStore);
 }
 
-function publicWheelState() {
-  return {
-    slots: wheelStore.slots || [],
-    settings: wheelStore.settings || { spinMs: WHEEL_DEFAULT_SPIN_MS, removeOnWin: true },
-    lastSpin: wheelStore.lastSpin || null,
-    spinning: !!wheelStore.spinning,
-    spinEndsAt: wheelStore.spinEndsAt || 0,
-    maxSlots: WHEEL_MAX_SLOTS,
-  };
-}
+// spin laikā turam snapshot (lai UI nesajūk, ja tokens mainās spēlē)
+let wheelSpinSlots = null;
+
+// wheel namespace ref (iestatās pēc io init)
+let wheelNsp = null;
 
 function wheelIsSpinningNow() {
   const now = Date.now();
   return !!(wheelStore.spinning && wheelStore.spinEndsAt && now < wheelStore.spinEndsAt);
 }
 
-// wheel namespace ref (iestatās pēc io init)
-let wheelNsp = null;
+// ======== USERNAME resolve (case-insensitive) ========
+function resolveUsernameKey(nameRaw) {
+  const name = String(nameRaw || "").trim();
+  if (!name) return null;
+  if (USERS[name]) return name;
+  const lc = name.toLowerCase();
+  const keys = Object.keys(USERS || {});
+  for (const k of keys) {
+    if (String(k).toLowerCase() === lc) return k;
+  }
+  return null;
+}
+
+// deterministiska ticket "shuffle" pēc salt (stabila kārtība)
+function wheelTicketKey(salt, username, i) {
+  return crypto
+    .createHash("sha256")
+    .update(`${salt}|${username}|${i}`)
+    .digest("hex")
+    .slice(0, 16);
+}
+
+// ======== galvenais: tokens => slots ========
+function wheelComputeSlotsFromTokens() {
+  const weights = {};
+  const entries = [];
+  let totalTokens = 0;
+
+  for (const u of Object.values(USERS || {})) {
+    if (!u || !u.username) continue;
+    if (u.isBanned) continue;
+
+    const t = Math.max(0, Math.floor(Number(u.tokens || 0)));
+    if (!t) continue;
+
+    weights[u.username] = t;
+    entries.push({ username: u.username, tokens: t });
+    totalTokens += t;
+  }
+
+  // ja nav žetonu — nav slotu
+  if (!entries.length) {
+    return {
+      slots: [],
+      weights,
+      totalTokens: 0,
+      usersWithTokens: 0,
+      scaled: false,
+    };
+  }
+
+  // ja lietotāju skaits ar tokens > maxSlots, tad mēs varam ielikt tikai maxSlots lietotājus pa 1 ticket
+  let scaled = false;
+  let alloc = [];
+
+  if (entries.length > WHEEL_MAX_SLOTS) {
+    scaled = true;
+    entries.sort((a, b) => (b.tokens || 0) - (a.tokens || 0));
+    alloc = entries.slice(0, WHEEL_MAX_SLOTS).map((e) => ({
+      username: e.username,
+      tickets: 1,
+    }));
+  } else if (totalTokens <= WHEEL_MAX_SLOTS) {
+    alloc = entries.map((e) => ({ username: e.username, tickets: e.tokens }));
+  } else {
+    // totalTokens > maxSlots -> proporcionala samazināšana
+    scaled = true;
+    const factor = totalTokens / WHEEL_MAX_SLOTS;
+
+    alloc = entries.map((e) => ({
+      username: e.username,
+      tickets: Math.max(1, Math.floor(e.tokens / factor)),
+    }));
+
+    // ja tomēr pārsniedzam maxSlots, noņemam pa 1 no lielākajiem līdz ietilpst
+    let sum = alloc.reduce((s, x) => s + (x.tickets || 0), 0);
+    if (sum > WHEEL_MAX_SLOTS) {
+      alloc.sort((a, b) => (b.tickets || 0) - (a.tickets || 0));
+      let guard = 0;
+      while (sum > WHEEL_MAX_SLOTS && guard < 200000) {
+        guard++;
+        let changed = false;
+        for (let i = 0; i < alloc.length && sum > WHEEL_MAX_SLOTS; i++) {
+          if (alloc[i].tickets > 1) {
+            alloc[i].tickets -= 1;
+            sum -= 1;
+            changed = true;
+          }
+        }
+        if (!changed) break;
+      }
+    }
+
+    // ja esam zem maxSlots, nav kritiski “piepildīt” līdz galam
+  }
+
+  // uzbūvējam tickets ar deterministisku “shuffle”
+  const salt = wheelStore.orderSalt || "salt";
+  const ticketObjs = [];
+  for (const a of alloc) {
+    const n = Math.max(0, Math.floor(Number(a.tickets || 0)));
+    for (let i = 0; i < n; i++) {
+      ticketObjs.push({
+        username: a.username,
+        key: wheelTicketKey(salt, a.username, i),
+      });
+      if (ticketObjs.length >= WHEEL_MAX_SLOTS) break;
+    }
+    if (ticketObjs.length >= WHEEL_MAX_SLOTS) break;
+  }
+
+  ticketObjs.sort((x, y) => x.key.localeCompare(y.key));
+  const slots = ticketObjs.map((x) => x.username);
+
+  return {
+    slots,
+    weights, // īstie tokens
+    totalTokens,
+    usersWithTokens: Object.keys(weights).length,
+    scaled,
+  };
+}
+
+function publicWheelState() {
+  // ja notiek spin — atdodam snapshot
+  const computed = wheelSpinSlots
+    ? {
+        slots: wheelSpinSlots,
+        weights: null,
+        totalTokens: null,
+        usersWithTokens: null,
+        scaled: null,
+      }
+    : wheelComputeSlotsFromTokens();
+
+  return {
+    slots: computed.slots || [],
+    weights: computed.weights, // {username: tokens} (null spin laikā)
+    totalTokens: computed.totalTokens,
+    usersWithTokens: computed.usersWithTokens,
+    scaled: computed.scaled,
+
+    settings: wheelStore.settings || {
+      spinMs: WHEEL_DEFAULT_SPIN_MS,
+      removeOnWin: true,
+    },
+    lastSpin: wheelStore.lastSpin || null,
+    spinning: !!wheelStore.spinning,
+    spinEndsAt: wheelStore.spinEndsAt || 0,
+    maxSlots: WHEEL_MAX_SLOTS,
+  };
+}
 
 function wheelEmitUpdate(force = true) {
   if (!wheelNsp) return;
@@ -432,61 +580,90 @@ function wheelBlockIfSpinning(socket) {
   return false;
 }
 
-function wheelAdd(nameRaw, countRaw) {
-  const name = String(nameRaw || "").trim();
-  if (!name) return { ok: false, message: "Nav vārda." };
-
-  let count = parseInt(countRaw ?? 1, 10);
-  if (!Number.isFinite(count) || count <= 0) count = 1;
-  count = Math.max(1, Math.min(1000, count));
-
-  if (wheelStore.slots.length + count > WHEEL_MAX_SLOTS) {
-    return { ok: false, message: `Par daudz ierakstu (max ${WHEEL_MAX_SLOTS}).` };
-  }
-
-  for (let i = 0; i < count; i++) wheelStore.slots.push(name);
-  saveWheelStore();
-  return { ok: true, name, count };
-}
-
-function wheelRemoveAllByName(nameRaw) {
-  const name = String(nameRaw || "").trim();
-  if (!name) return { ok: false, message: "Nav vārda." };
-  const before = wheelStore.slots.length;
-  wheelStore.slots = wheelStore.slots.filter((x) => x !== name);
-  const removed = before - wheelStore.slots.length;
-  saveWheelStore();
-  return { ok: true, name, removed };
-}
-
-function wheelRemoveOneByIndex(indexRaw) {
-  const idx = parseInt(indexRaw, 10);
-  if (!Number.isFinite(idx)) return { ok: false, message: "Nederīgs index." };
-  if (idx < 0 || idx >= wheelStore.slots.length)
-    return { ok: false, message: "Index ārpus robežām." };
-  const removedName = wheelStore.slots[idx];
-  wheelStore.slots.splice(idx, 1);
-  saveWheelStore();
-  return { ok: true, index: idx, name: removedName };
-}
-
-function wheelShuffle() {
-  const arr = wheelStore.slots;
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = crypto.randomInt(0, i + 1);
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  saveWheelStore();
-}
-
 function wheelApplySettings({ spinMs, removeOnWin }) {
-  const ms = parseInt(spinMs ?? wheelStore.settings.spinMs ?? WHEEL_DEFAULT_SPIN_MS, 10);
+  const ms = parseInt(
+    spinMs ?? wheelStore.settings.spinMs ?? WHEEL_DEFAULT_SPIN_MS,
+    10
+  );
   wheelStore.settings.spinMs =
     Number.isFinite(ms) && ms >= 3000 && ms <= 60000 ? ms : WHEEL_DEFAULT_SPIN_MS;
   if (typeof removeOnWin === "boolean") wheelStore.settings.removeOnWin = removeOnWin;
   saveWheelStore();
 }
 
+// shuffle tagad maina tikai ORDER SALT (slots tiek ģenerēti no tokens)
+function wheelShuffle() {
+  wheelStore.orderSalt = crypto.randomBytes(8).toString("hex");
+  saveWheelStore();
+}
+
+// ======== ADMIN ACTIONS: tokens ========
+function wheelTokensAdd(nameRaw, countRaw) {
+  const key = resolveUsernameKey(nameRaw);
+  if (!key) return { ok: false, message: "Lietotājs nav atrasts (jābūt reģistrētam VĀRDU ZONĀ)." };
+
+  let count = parseInt(countRaw ?? 1, 10);
+  if (!Number.isFinite(count) || count <= 0) count = 1;
+  count = Math.max(1, Math.min(1000, count));
+
+  const u = USERS[key];
+  u.tokens = (u.tokens || 0) + count;
+  saveUsers(USERS);
+
+  // lai rats uzreiz redz
+  wheelEmitUpdate(true);
+
+  return { ok: true, username: u.username, tokens: u.tokens, added: count };
+}
+
+function wheelTokensSet(nameRaw, tokensRaw) {
+  const key = resolveUsernameKey(nameRaw);
+  if (!key) return { ok: false, message: "Lietotājs nav atrasts." };
+
+  let t = parseInt(tokensRaw ?? 0, 10);
+  if (!Number.isFinite(t) || t < 0) t = 0;
+  t = Math.min(1000000, t);
+
+  const u = USERS[key];
+  u.tokens = t;
+  saveUsers(USERS);
+
+  wheelEmitUpdate(true);
+
+  return { ok: true, username: u.username, tokens: u.tokens };
+}
+
+function wheelTokensDec(nameRaw, countRaw) {
+  const key = resolveUsernameKey(nameRaw);
+  if (!key) return { ok: false, message: "Lietotājs nav atrasts." };
+
+  let count = parseInt(countRaw ?? 1, 10);
+  if (!Number.isFinite(count) || count <= 0) count = 1;
+  count = Math.max(1, Math.min(1000, count));
+
+  const u = USERS[key];
+  const cur = Math.max(0, Math.floor(Number(u.tokens || 0)));
+  u.tokens = Math.max(0, cur - count);
+  saveUsers(USERS);
+
+  wheelEmitUpdate(true);
+
+  return { ok: true, username: u.username, tokens: u.tokens, removed: count };
+}
+
+function wheelRemoveOneByIndex(indexRaw) {
+  const idx = parseInt(indexRaw, 10);
+  if (!Number.isFinite(idx)) return { ok: false, message: "Nederīgs index." };
+
+  const state = publicWheelState();
+  const slots = state.slots || [];
+  if (idx < 0 || idx >= slots.length) return { ok: false, message: "Index ārpus robežām." };
+
+  const name = slots[idx];
+  return wheelTokensDec(name, 1);
+}
+
+// ======== SPIN (winner no tokens-slot list) ========
 function wheelFinishSpin(spinId) {
   if (!wheelStore.spinning) return;
   if (wheelStore.spinId !== spinId) return;
@@ -494,15 +671,18 @@ function wheelFinishSpin(spinId) {
   const last = wheelStore.lastSpin;
   const removeOnWin = !!wheelStore.settings?.removeOnWin;
 
-  if (removeOnWin && last && typeof last.winnerIndex === "number") {
-    const idx = last.winnerIndex;
-    const winName = String(last.winnerName || "").trim();
+  if (removeOnWin && last?.winnerName) {
+    const key = resolveUsernameKey(last.winnerName) || last.winnerName;
+    const u = USERS[key];
+    if (u) {
+      const before = Math.max(0, Math.floor(Number(u.tokens || 0)));
+      u.tokens = Math.max(0, before - 1);
+      saveUsers(USERS);
 
-    if (idx >= 0 && idx < wheelStore.slots.length && wheelStore.slots[idx] === winName) {
-      wheelStore.slots.splice(idx, 1);
-    } else if (winName) {
-      const j = wheelStore.slots.findIndex((x) => x === winName);
-      if (j >= 0) wheelStore.slots.splice(j, 1);
+      // papild-info lastSpin (pēc noņemšanas)
+      last.winnerTokensAfter = u.tokens;
+      wheelStore.lastSpin = last;
+      saveWheelStore();
     }
   }
 
@@ -510,11 +690,13 @@ function wheelFinishSpin(spinId) {
   wheelStore.spinEndsAt = 0;
   wheelStore.spinId = null;
 
+  // atslēdzam snapshot
+  wheelSpinSlots = null;
+
   saveWheelStore();
   wheelEmitUpdate(true);
 
   if (WHEEL_ANNOUNCE_TO_CHAT && last?.winnerName) {
-    // Paziņojums spēles čatā (optional)
     io.emit("chatMessage", {
       username: "SYSTEM",
       text: `🎡 Laimes rats: uzvarēja ${last.winnerName}!`,
@@ -525,17 +707,26 @@ function wheelFinishSpin(spinId) {
 
 function wheelStartSpin(byUsername) {
   if (wheelIsSpinningNow()) return { ok: false, message: "Spin jau notiek." };
-  const n = wheelStore.slots.length;
-  if (!n) return { ok: false, message: "Nav neviena ieraksta ratā." };
 
-  const spinMs = parseInt(wheelStore.settings?.spinMs ?? WHEEL_DEFAULT_SPIN_MS, 10);
+  // snapshot slots grieziena brīdī (lai UI nesajūk)
+  const computed = wheelComputeSlotsFromTokens();
+  const slots = computed.slots || [];
+  const n = slots.length;
+
+  if (!n) return { ok: false, message: "Nav neviena ieraksta ratā (nav žetonu)." };
+
+  const spinMsRaw = parseInt(wheelStore.settings?.spinMs ?? WHEEL_DEFAULT_SPIN_MS, 10);
   const ms =
-    Number.isFinite(spinMs) && spinMs >= 3000 && spinMs <= 60000
-      ? spinMs
+    Number.isFinite(spinMsRaw) && spinMsRaw >= 3000 && spinMsRaw <= 60000
+      ? spinMsRaw
       : WHEEL_DEFAULT_SPIN_MS;
 
   const winnerIndex = crypto.randomInt(0, n);
-  const winnerName = wheelStore.slots[winnerIndex];
+  const winnerName = slots[winnerIndex];
+
+  const winnerKey = resolveUsernameKey(winnerName) || winnerName;
+  const u = USERS[winnerKey];
+  const winnerTokensBefore = u ? Math.max(0, Math.floor(Number(u.tokens || 0))) : 0;
 
   const spinId = crypto.randomBytes(8).toString("hex");
   const now = Date.now();
@@ -547,10 +738,16 @@ function wheelStartSpin(byUsername) {
     at: now,
     spinMs: ms,
     slotsCount: n,
+    winnerTokensBefore,
+    winnerTokensAfter: winnerTokensBefore, // īstā after ieliksies finish laikā, ja removeOnWin
   };
+
   wheelStore.spinning = true;
   wheelStore.spinEndsAt = now + ms;
   wheelStore.spinId = spinId;
+
+  // ieslēdzam snapshot
+  wheelSpinSlots = slots.slice();
 
   saveWheelStore();
   wheelEmitUpdate(true);
@@ -573,7 +770,6 @@ function wheelStartSpin(byUsername) {
 
   return { ok: true, ...spinPayload };
 }
-
 // ======== Vārdu saraksts ========
 let WORDS = [];
 try {
