@@ -75,8 +75,17 @@ const AVATAR_MAX_CHARS = (() => {
   return 6 * 1024 * 1024; // ~6.29M chars
 })();
 
-// Admin lietotāji
+// Admin lietotāji (case-insensitive)
 const ADMIN_USERNAMES = ["Bugats", "BugatsLV"];
+const ADMIN_USERNAMES_LC = new Set(
+  ADMIN_USERNAMES.map((x) => String(x || "").toLowerCase())
+);
+function isAdminName(name) {
+  return ADMIN_USERNAMES_LC.has(String(name || "").toLowerCase());
+}
+function isAdminUser(u) {
+  return !!u && isAdminName(u.username);
+}
 
 // ======== Laika zona ========
 const TZ = "Europe/Riga";
@@ -300,6 +309,270 @@ let seasonState = seasonStore.current;
     console.log("Season 2 endAt adjusted to mid-Feb (default).");
   }
 })();
+
+// ======== WHEEL (Laimes rats) — persistents store ========
+const WHEEL_FILE = process.env.WHEEL_FILE || path.join(__dirname, "wheel.json");
+const WHEEL_MAX_SLOTS = (() => {
+  const v = parseInt(process.env.WHEEL_MAX_SLOTS || "5000", 10);
+  return Number.isFinite(v) && v >= 50 && v <= 50000 ? v : 5000;
+})();
+const WHEEL_DEFAULT_SPIN_MS = (() => {
+  const v = parseInt(process.env.WHEEL_DEFAULT_SPIN_MS || "9000", 10);
+  return Number.isFinite(v) && v >= 3000 && v <= 60000 ? v : 9000;
+})();
+const WHEEL_ANNOUNCE_TO_CHAT =
+  String(process.env.WHEEL_ANNOUNCE_TO_CHAT ?? "0") === "1";
+
+function buildInitialWheelStore() {
+  return {
+    slots: [],
+    settings: { spinMs: WHEEL_DEFAULT_SPIN_MS, removeOnWin: true },
+    lastSpin: null, // { winnerName, winnerIndex, by, at, spinMs, slotsCount }
+    spinning: false,
+    spinEndsAt: 0,
+    spinId: null,
+  };
+}
+
+function normalizeWheelStore(x) {
+  const base = buildInitialWheelStore();
+  const out = x && typeof x === "object" ? x : base;
+
+  if (!Array.isArray(out.slots)) out.slots = [];
+  out.slots = out.slots
+    .map((s) => String(s || "").trim())
+    .filter(Boolean)
+    .slice(0, WHEEL_MAX_SLOTS);
+
+  if (!out.settings || typeof out.settings !== "object") out.settings = {};
+  const spinMs = parseInt(out.settings.spinMs ?? base.settings.spinMs, 10);
+  out.settings.spinMs =
+    Number.isFinite(spinMs) && spinMs >= 3000 && spinMs <= 60000
+      ? spinMs
+      : base.settings.spinMs;
+  out.settings.removeOnWin =
+    typeof out.settings.removeOnWin === "boolean"
+      ? out.settings.removeOnWin
+      : base.settings.removeOnWin;
+
+  if (!out.lastSpin || typeof out.lastSpin !== "object") out.lastSpin = null;
+
+  out.spinning = !!out.spinning;
+  out.spinEndsAt = Number.isFinite(out.spinEndsAt) ? out.spinEndsAt : 0;
+  out.spinId = typeof out.spinId === "string" ? out.spinId : null;
+
+  // ja server restartējas spin laikā — vienkārši noresetojam spin flag
+  const now = Date.now();
+  if (out.spinning && out.spinEndsAt && now >= out.spinEndsAt) {
+    out.spinning = false;
+    out.spinEndsAt = 0;
+    out.spinId = null;
+  }
+
+  return out;
+}
+
+let wheelStore = normalizeWheelStore(loadJsonSafe(WHEEL_FILE, null));
+if (!fs.existsSync(WHEEL_FILE)) {
+  saveJsonAtomic(WHEEL_FILE, wheelStore);
+}
+
+function saveWheelStore() {
+  saveJsonAtomic(WHEEL_FILE, wheelStore);
+}
+
+function publicWheelState() {
+  return {
+    slots: wheelStore.slots || [],
+    settings: wheelStore.settings || { spinMs: WHEEL_DEFAULT_SPIN_MS, removeOnWin: true },
+    lastSpin: wheelStore.lastSpin || null,
+    spinning: !!wheelStore.spinning,
+    spinEndsAt: wheelStore.spinEndsAt || 0,
+    maxSlots: WHEEL_MAX_SLOTS,
+  };
+}
+
+function wheelIsSpinningNow() {
+  const now = Date.now();
+  return !!(wheelStore.spinning && wheelStore.spinEndsAt && now < wheelStore.spinEndsAt);
+}
+
+// wheel namespace ref (iestatās pēc io init)
+let wheelNsp = null;
+
+function wheelEmitUpdate(force = true) {
+  if (!wheelNsp) return;
+  wheelNsp.emit("wheel:update", publicWheelState());
+  if (force) wheelNsp.emit("update", publicWheelState());
+}
+
+function wheelEmitError(socket, msg) {
+  try {
+    socket.emit("wheel:error", msg);
+    socket.emit("error", msg);
+  } catch {
+    // ignore
+  }
+}
+
+function wheelRequireAdmin(socket) {
+  const u = socket?.data?.user;
+  if (!u || !isAdminUser(u)) {
+    wheelEmitError(socket, "Nav ADMIN.");
+    return null;
+  }
+  return u;
+}
+
+function wheelBlockIfSpinning(socket) {
+  if (wheelIsSpinningNow()) {
+    wheelEmitError(socket, "Spin notiek — pagaidi, kamēr beidzas.");
+    return true;
+  }
+  return false;
+}
+
+function wheelAdd(nameRaw, countRaw) {
+  const name = String(nameRaw || "").trim();
+  if (!name) return { ok: false, message: "Nav vārda." };
+
+  let count = parseInt(countRaw ?? 1, 10);
+  if (!Number.isFinite(count) || count <= 0) count = 1;
+  count = Math.max(1, Math.min(1000, count));
+
+  if (wheelStore.slots.length + count > WHEEL_MAX_SLOTS) {
+    return { ok: false, message: `Par daudz ierakstu (max ${WHEEL_MAX_SLOTS}).` };
+  }
+
+  for (let i = 0; i < count; i++) wheelStore.slots.push(name);
+  saveWheelStore();
+  return { ok: true, name, count };
+}
+
+function wheelRemoveAllByName(nameRaw) {
+  const name = String(nameRaw || "").trim();
+  if (!name) return { ok: false, message: "Nav vārda." };
+  const before = wheelStore.slots.length;
+  wheelStore.slots = wheelStore.slots.filter((x) => x !== name);
+  const removed = before - wheelStore.slots.length;
+  saveWheelStore();
+  return { ok: true, name, removed };
+}
+
+function wheelRemoveOneByIndex(indexRaw) {
+  const idx = parseInt(indexRaw, 10);
+  if (!Number.isFinite(idx)) return { ok: false, message: "Nederīgs index." };
+  if (idx < 0 || idx >= wheelStore.slots.length)
+    return { ok: false, message: "Index ārpus robežām." };
+  const removedName = wheelStore.slots[idx];
+  wheelStore.slots.splice(idx, 1);
+  saveWheelStore();
+  return { ok: true, index: idx, name: removedName };
+}
+
+function wheelShuffle() {
+  const arr = wheelStore.slots;
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(0, i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  saveWheelStore();
+}
+
+function wheelApplySettings({ spinMs, removeOnWin }) {
+  const ms = parseInt(spinMs ?? wheelStore.settings.spinMs ?? WHEEL_DEFAULT_SPIN_MS, 10);
+  wheelStore.settings.spinMs =
+    Number.isFinite(ms) && ms >= 3000 && ms <= 60000 ? ms : WHEEL_DEFAULT_SPIN_MS;
+  if (typeof removeOnWin === "boolean") wheelStore.settings.removeOnWin = removeOnWin;
+  saveWheelStore();
+}
+
+function wheelFinishSpin(spinId) {
+  if (!wheelStore.spinning) return;
+  if (wheelStore.spinId !== spinId) return;
+
+  const last = wheelStore.lastSpin;
+  const removeOnWin = !!wheelStore.settings?.removeOnWin;
+
+  if (removeOnWin && last && typeof last.winnerIndex === "number") {
+    const idx = last.winnerIndex;
+    const winName = String(last.winnerName || "").trim();
+
+    if (idx >= 0 && idx < wheelStore.slots.length && wheelStore.slots[idx] === winName) {
+      wheelStore.slots.splice(idx, 1);
+    } else if (winName) {
+      const j = wheelStore.slots.findIndex((x) => x === winName);
+      if (j >= 0) wheelStore.slots.splice(j, 1);
+    }
+  }
+
+  wheelStore.spinning = false;
+  wheelStore.spinEndsAt = 0;
+  wheelStore.spinId = null;
+
+  saveWheelStore();
+  wheelEmitUpdate(true);
+
+  if (WHEEL_ANNOUNCE_TO_CHAT && last?.winnerName) {
+    // Paziņojums spēles čatā (optional)
+    io.emit("chatMessage", {
+      username: "SYSTEM",
+      text: `🎡 Laimes rats: uzvarēja ${last.winnerName}!`,
+      ts: Date.now(),
+    });
+  }
+}
+
+function wheelStartSpin(byUsername) {
+  if (wheelIsSpinningNow()) return { ok: false, message: "Spin jau notiek." };
+  const n = wheelStore.slots.length;
+  if (!n) return { ok: false, message: "Nav neviena ieraksta ratā." };
+
+  const spinMs = parseInt(wheelStore.settings?.spinMs ?? WHEEL_DEFAULT_SPIN_MS, 10);
+  const ms =
+    Number.isFinite(spinMs) && spinMs >= 3000 && spinMs <= 60000
+      ? spinMs
+      : WHEEL_DEFAULT_SPIN_MS;
+
+  const winnerIndex = crypto.randomInt(0, n);
+  const winnerName = wheelStore.slots[winnerIndex];
+
+  const spinId = crypto.randomBytes(8).toString("hex");
+  const now = Date.now();
+
+  wheelStore.lastSpin = {
+    winnerName,
+    winnerIndex,
+    by: String(byUsername || "ADMIN"),
+    at: now,
+    spinMs: ms,
+    slotsCount: n,
+  };
+  wheelStore.spinning = true;
+  wheelStore.spinEndsAt = now + ms;
+  wheelStore.spinId = spinId;
+
+  saveWheelStore();
+  wheelEmitUpdate(true);
+
+  const spinPayload = {
+    winnerIndex,
+    winnerName,
+    slotsCount: n,
+    spinMs: ms,
+    by: String(byUsername || "ADMIN"),
+    at: now,
+  };
+
+  if (wheelNsp) {
+    wheelNsp.emit("wheel:spin", spinPayload);
+    wheelNsp.emit("spin", spinPayload);
+  }
+
+  setTimeout(() => wheelFinishSpin(spinId), ms + 30);
+
+  return { ok: true, ...spinPayload };
+}
 
 // ======== Vārdu saraksts ========
 let WORDS = [];
@@ -917,6 +1190,11 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 // (UZLABOJUMS) vienkāršs logout (ja nelieto — neko nesalauž)
 app.post("/logout", (_req, res) => res.json({ ok: true }));
 
+// (bonus) wheel state (debug / integrācijām)
+app.get("/wheel/state", (_req, res) => {
+  res.json(publicWheelState());
+});
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors:
@@ -1163,7 +1441,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       break;
 
     case "seasonstart": {
-      if (!ADMIN_USERNAMES.includes(adminUser.username)) {
+      if (!isAdminUser(adminUser)) {
         adminSocket.emit("chatMessage", {
           username: "SYSTEM",
           text: "Tikai admins var startēt sezonu.",
@@ -1433,7 +1711,7 @@ app.post("/avatar", authMiddleware, (req, res) => {
 // ======== Publiska profila API ========
 function buildPublicProfilePayload(targetUser, requester) {
   const rankInfo = ensureRankFields(targetUser);
-  const isAdmin = requester && ADMIN_USERNAMES.includes(requester.username);
+  const isAdmin = requester && isAdminUser(requester);
 
   const dynamicMedals = computeMedalsForUser(targetUser);
   const medals = mergeMedals(dynamicMedals, targetUser.specialMedals);
@@ -1620,7 +1898,7 @@ app.get("/season/hof", authMiddleware, (_req, res) => {
 
 app.post("/season/start", authMiddleware, (req, res) => {
   const user = req.user;
-  if (!ADMIN_USERNAMES.includes(user.username)) {
+  if (!isAdminUser(user)) {
     return res.status(403).json({ message: "Tikai admins var startēt sezonu." });
   }
 
@@ -2029,16 +2307,38 @@ setInterval(() => {
   }
 }, 1500);
 
-// ======== Socket.IO pamat-connection ========
-io.use((socket, next) => {
-  // (UZLABOJUMS) fallback: atbalsts arī token query parametrā
-  const token =
+// ======== Socket.IO auth middleware (atšķiras /wheel) ========
+function extractSocketToken(socket) {
+  const t =
     socket.handshake.auth?.token ||
     socket.handshake.query?.token ||
-    socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, "").trim();
+    socket.handshake.headers?.authorization
+      ?.replace(/^Bearer\s+/i, "")
+      .trim();
+  return t ? String(t).trim() : "";
+}
 
+io.use((socket, next) => {
+  const nsp = socket.nsp?.name || "/";
+
+  const token = extractSocketToken(socket);
+
+  // /wheel: atļaujam arī bez token (read-only)
+  if (nsp === "/wheel") {
+    if (!token) return next();
+    try {
+      const payload = jwt.verify(token, JWT_SECRET);
+      const user = USERS[payload.username];
+      if (user && !user.isBanned) socket.data.user = user;
+      return next();
+    } catch {
+      // nederīgs token — joprojām ļaujam pieslēgties (read-only)
+      return next();
+    }
+  }
+
+  // pārējais (spēle): token obligāts
   if (!token) return next(new Error("Nav token"));
-
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     const user = USERS[payload.username];
@@ -2046,11 +2346,109 @@ io.use((socket, next) => {
     if (user.isBanned) return next(new Error("Lietotājs ir nobanots"));
     socket.data.user = user;
     return next();
-  } catch (err) {
+  } catch {
     return next(new Error("Nederīgs token"));
   }
 });
 
+// ======== WHEEL namespace (/wheel) ========
+wheelNsp = io.of("/wheel");
+
+wheelNsp.on("connection", (socket) => {
+  const u = socket.data.user || null;
+  const me = {
+    username: u?.username || null,
+    isAdmin: u ? isAdminUser(u) : false,
+  };
+
+  // initial state
+  socket.emit("wheel:me", me);
+  socket.emit("wheel:update", publicWheelState());
+  socket.emit("update", publicWheelState());
+
+  // helper: bind both event names
+  const bind = (action, fn) => {
+    socket.on(`wheel:${action}`, fn);
+    socket.on(action, fn);
+  };
+
+  bind("join", () => {
+    socket.emit("wheel:update", publicWheelState());
+    socket.emit("update", publicWheelState());
+  });
+
+  bind("add", (payload = {}) => {
+    const admin = wheelRequireAdmin(socket);
+    if (!admin) return;
+    if (wheelBlockIfSpinning(socket)) return;
+
+    const name =
+      payload.name ?? payload.username ?? payload.nick ?? payload.player ?? "";
+    const count =
+      payload.count ?? payload.tickets ?? payload.qty ?? payload.amount ?? 1;
+
+    const r = wheelAdd(name, count);
+    if (!r.ok) return wheelEmitError(socket, r.message);
+    wheelEmitUpdate(true);
+  });
+
+  bind("remove", (payload = {}) => {
+    const admin = wheelRequireAdmin(socket);
+    if (!admin) return;
+    if (wheelBlockIfSpinning(socket)) return;
+
+    // remove one by index OR remove all by name
+    if (payload && (payload.index || payload.index === 0)) {
+      const r = wheelRemoveOneByIndex(payload.index);
+      if (!r.ok) return wheelEmitError(socket, r.message);
+      wheelEmitUpdate(true);
+      return;
+    }
+
+    const name = payload.name ?? payload.username ?? payload.nick ?? "";
+    const r = wheelRemoveAllByName(name);
+    if (!r.ok) return wheelEmitError(socket, r.message);
+    wheelEmitUpdate(true);
+  });
+
+  bind("settings", (payload = {}) => {
+    const admin = wheelRequireAdmin(socket);
+    if (!admin) return;
+    if (wheelBlockIfSpinning(socket)) return;
+
+    wheelApplySettings({
+      spinMs: payload.spinMs ?? payload.spin_ms ?? payload.ms ?? payload.durationMs,
+      removeOnWin:
+        typeof payload.removeOnWin === "boolean"
+          ? payload.removeOnWin
+          : typeof payload.remove_on_win === "boolean"
+          ? payload.remove_on_win
+          : undefined,
+    });
+
+    wheelEmitUpdate(true);
+  });
+
+  bind("shuffle", () => {
+    const admin = wheelRequireAdmin(socket);
+    if (!admin) return;
+    if (wheelBlockIfSpinning(socket)) return;
+
+    wheelShuffle();
+    wheelEmitUpdate(true);
+  });
+
+  bind("spin", (payload = {}) => {
+    const admin = wheelRequireAdmin(socket);
+    if (!admin) return;
+
+    // spinMs var nākt no payload, bet drošībai ļaujam tikai caur settings
+    const r = wheelStartSpin(admin.username);
+    if (!r.ok) return wheelEmitError(socket, r.message);
+  });
+});
+
+// ======== Socket.IO pamat-connection (spēle) ========
 io.on("connection", (socket) => {
   const user = socket.data.user;
   if (!user) {
@@ -2147,7 +2545,7 @@ io.on("connection", (socket) => {
     u.lastChatText = msg;
     u.lastChatTextAt = now;
 
-    const isAdmin = ADMIN_USERNAMES.includes(u.username);
+    const isAdmin = isAdminUser(u);
     if (isAdmin && (msg.startsWith("/") || msg.startsWith("!"))) {
       handleAdminCommand(msg, u, socket);
       if (passiveChanged) saveUsers(USERS);
