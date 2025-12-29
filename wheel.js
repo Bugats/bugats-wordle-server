@@ -37,13 +37,13 @@ const toastEl = $("#toast");
 
 function setConn(on) {
   if (on) {
-    connDot.classList.remove("vz-dot-off");
-    connDot.classList.add("vz-dot-on");
-    connLabel.textContent = "online";
+    connDot?.classList.remove("vz-dot-off");
+    connDot?.classList.add("vz-dot-on");
+    if (connLabel) connLabel.textContent = "online";
   } else {
-    connDot.classList.remove("vz-dot-on");
-    connDot.classList.add("vz-dot-off");
-    connLabel.textContent = "offline";
+    connDot?.classList.remove("vz-dot-on");
+    connDot?.classList.add("vz-dot-off");
+    if (connLabel) connLabel.textContent = "offline";
   }
 }
 
@@ -92,6 +92,10 @@ function colorForName(name) {
   return `hsl(${h} ${s}% ${l}%)`;
 }
 
+function normalizeName(s) {
+  return String(s || "").trim().replace(/\s+/g, " ").slice(0, 48);
+}
+
 // ======== STATE ========
 let socket = null;
 
@@ -106,6 +110,9 @@ let removeOnWinState = true;
 let spinMsState = 9000;
 
 let lastSpin = null;
+
+// ja serveris atsūta wheel:state griešanās laikā, noliekam “pending” un uzliekam pēc animācijas
+let pendingServerState = null;
 
 // ======== UI ENABLE/DISABLE ========
 function setAdminUi(enabled) {
@@ -132,6 +139,15 @@ function setAdminUi(enabled) {
 }
 
 // ======== RENDER LIST ========
+function escapeHtml(s) {
+  return String(s || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 function renderList() {
   const map = new Map();
   for (const n of slots) map.set(n, (map.get(n) || 0) + 1);
@@ -163,23 +179,12 @@ function renderList() {
     .join("");
 }
 
-function escapeHtml(s) {
-  return String(s || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
 // ======== DRAW WHEEL ========
 function resizeCanvasForDevice() {
-  // canvas ir 900x900 HTMLā; pielāgojam DPR, lai ir ass
   const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
   const cssW = canvas.clientWidth || 900;
   const cssH = canvas.clientHeight || 900;
 
-  // saglabājam kvadrātu
   const size = Math.min(cssW, cssH);
   canvas.style.width = `${size}px`;
   canvas.style.height = `${size}px`;
@@ -187,6 +192,22 @@ function resizeCanvasForDevice() {
   canvas.width = Math.floor(size * dpr);
   canvas.height = Math.floor(size * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function drawPointer(cx, cy, r) {
+  // vienkāršs “trijstūris” augšā
+  const y = cy - r - 10;
+  ctx.beginPath();
+  ctx.moveTo(cx, y);
+  ctx.lineTo(cx - 14, y - 22);
+  ctx.lineTo(cx + 14, y - 22);
+  ctx.closePath();
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
 }
 
 function drawWheel() {
@@ -206,7 +227,6 @@ function drawWheel() {
 
   const n = slots.length;
   if (!n) {
-    // empty
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(255,255,255,0.08)";
@@ -217,10 +237,15 @@ function drawWheel() {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("NAV BIĻEŠU", cx, cy);
+
+    drawPointer(cx, cy, r);
     return;
   }
 
   const seg = (Math.PI * 2) / n;
+
+  // font size atkarīgs no segmentu skaita
+  const fontSize = clamp(18 - Math.floor(n / 12), 12, 16);
 
   for (let i = 0; i < n; i++) {
     const a0 = rotation + i * seg;
@@ -234,12 +259,10 @@ function drawWheel() {
     ctx.fillStyle = colorForName(slots[i]);
     ctx.fill();
 
-    // divider
     ctx.strokeStyle = "rgba(0,0,0,0.35)";
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // text
     const mid = (a0 + a1) / 2;
     ctx.save();
     ctx.translate(cx, cy);
@@ -247,7 +270,7 @@ function drawWheel() {
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillStyle = "rgba(255,255,255,0.92)";
-    ctx.font = "700 16px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.font = `700 ${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
 
     const name = slots[i];
     const label = name.length > 18 ? name.slice(0, 18) + "…" : name;
@@ -266,19 +289,41 @@ function drawWheel() {
   ctx.strokeStyle = "rgba(255,255,255,0.20)";
   ctx.lineWidth = 2;
   ctx.stroke();
+
+  drawPointer(cx, cy, r);
 }
 
 function tickHud() {
   safeText(slotsCountEl, slots.length);
   safeText(removeOnWinLabel, removeOnWinState ? "ON" : "OFF");
   safeText(spinMsLabel, String(spinMsState));
-  safeText(lastSpinEl, lastSpin ? lastSpin.text || "—" : "—");
+  safeText(lastSpinEl, lastSpin ? lastSpin.text || lastSpin.winner || "—" : "—");
 }
 
 function renderAll() {
   tickHud();
   renderList();
   drawWheel();
+}
+
+function applyServerState(st) {
+  if (!st || typeof st !== "object") return;
+
+  slots = Array.isArray(st.slots) ? st.slots.slice() : [];
+  removeOnWinState = !!st.removeOnWin;
+  spinMsState = clamp(st.spinMs || 9000, 3000, 20000);
+  lastSpin = st.lastSpin || lastSpin || null;
+
+  // sinhronizē UI kontrolēm
+  if (removeOnWin) removeOnWin.checked = removeOnWinState;
+
+  if (spinSec) {
+    const v = clamp(Math.round(spinMsState / 1000), 3, 20);
+    spinSec.value = String(v);
+    safeText(spinSecLabel, `${v}s`);
+  }
+
+  renderAll();
 }
 
 // ======== SPIN ANIMATION ========
@@ -293,7 +338,7 @@ function normalizeAngle(a) {
   return a;
 }
 
-function spinToIndex(stopIndex, durationMs) {
+function spinToIndex(stopIndex, durationMs, onDone) {
   if (!slots.length) return;
 
   const n = slots.length;
@@ -303,10 +348,8 @@ function spinToIndex(stopIndex, durationMs) {
   const pointer = -Math.PI / 2;
 
   // segmenta centrs: rotation + (i+0.5)*seg
-  // vēlamies: rotationEnd + (i+0.5)*seg == pointer (mod 2PI)
   const targetRotBase = pointer - (stopIndex + 0.5) * seg;
 
-  // pieliekam vairākas pilnas rotācijas, lai izskatās kā spin
   const extraTurns = 6 + (hashStr(String(Date.now())) % 4); // 6..9
   const targetRot = targetRotBase + extraTurns * Math.PI * 2;
 
@@ -315,7 +358,7 @@ function spinToIndex(stopIndex, durationMs) {
 
   const start = performance.now();
   isSpinning = true;
-  setAdminUi(isAdmin && false);
+  setAdminUi(false);
 
   function frame(now) {
     const t = clamp((now - start) / durationMs, 0, 1);
@@ -329,7 +372,17 @@ function spinToIndex(stopIndex, durationMs) {
       rotation = normalizeAngle(rotation);
       isSpinning = false;
       setAdminUi(isAdmin);
-      renderAll();
+
+      // ja pa vidu atnāca server state — uzliekam tagad
+      if (pendingServerState) {
+        const st = pendingServerState;
+        pendingServerState = null;
+        applyServerState(st);
+      } else {
+        renderAll();
+      }
+
+      if (typeof onDone === "function") onDone();
     }
   }
   requestAnimationFrame(frame);
@@ -366,14 +419,12 @@ function connect() {
     showToast(e?.message || "Savienojuma kļūda", 3500);
   });
 
-  // state no servera
   socket.on("wheel:state", (st) => {
-    if (!st || typeof st !== "object") return;
-    slots = Array.isArray(st.slots) ? st.slots.slice() : [];
-    removeOnWinState = !!st.removeOnWin;
-    spinMsState = clamp(st.spinMs || 9000, 3000, 20000);
-    lastSpin = st.lastSpin || null;
-    renderAll();
+    if (isSpinning) {
+      pendingServerState = st;
+      return;
+    }
+    applyServerState(st);
   });
 
   socket.on("wheel:lastSpin", (ls) => {
@@ -385,7 +436,6 @@ function connect() {
     showToast(p?.message || "Wheel error");
   });
 
-  // pieprasām state
   socket.emit("wheel:getState");
 }
 
@@ -396,7 +446,7 @@ async function init() {
     renderAll();
   });
 
-  // slider
+  // slider init (lokāli; server state vēlāk pārslēgs, ja vajag)
   const sec = clamp(spinSec?.value || 9, 3, 20);
   safeText(spinSecLabel, `${sec}s`);
 
@@ -437,24 +487,24 @@ async function init() {
 
   btnAdd?.addEventListener("click", () => {
     if (!socket || !isAdmin) return;
-    const name = String(addName.value || "").trim();
-    const cnt = clamp(addCount.value || 1, 1, 100);
+    const name = normalizeName(addName?.value || "");
+    const cnt = clamp(addCount?.value || 1, 1, 100);
     if (!name) return showToast("Ievadi vārdu.");
     socket.emit("wheel:add", { name, count: cnt });
-    addName.value = "";
-    addCount.value = "1";
+    if (addName) addName.value = "";
+    if (addCount) addCount.value = "1";
   });
 
   btnRemoveAll?.addEventListener("click", () => {
     if (!socket || !isAdmin) return;
-    const name = String(rmName.value || "").trim();
+    const name = normalizeName(rmName?.value || "");
     if (!name) return showToast("Ievadi vārdu noņemšanai.");
     socket.emit("wheel:removeAll", { name });
   });
 
   btnRemoveOne?.addEventListener("click", () => {
     if (!socket || !isAdmin) return;
-    const name = String(rmName.value || "").trim();
+    const name = normalizeName(rmName?.value || "");
     if (!name) return showToast("Ievadi vārdu noņemšanai.");
     socket.emit("wheel:removeOne", { name });
   });
@@ -464,39 +514,41 @@ async function init() {
     if (!slots.length) return showToast("Nav ko griezt (0 biļetes).");
 
     const ms = clamp(spinMsState, 3000, 20000);
-    const row = {
-      spinMs: ms,
-      removeOnWin: !!removeOnWinState,
-    };
 
-    // serveris atgriež stopIndex + winner; mēs tikai animējam
-    socket.emit("wheel:spin", row, (resp) => {
-      if (!resp || resp.ok !== true) {
-        showToast(resp?.message || "Spin error");
-        return;
-      }
-      // resp: { ok:true, stopIndex, winner, state }
-      const stopIndex = clamp(resp.stopIndex, 0, Math.max(0, slots.length - 1));
-      lastSpin = resp.lastSpin || null;
-      tickHud();
+    socket.emit(
+      "wheel:spin",
+      { spinMs: ms, removeOnWin: !!removeOnWinState },
+      (resp) => {
+        if (!resp || resp.ok !== true) {
+          showToast(resp?.message || "Spin error");
+          return;
+        }
 
-      spinToIndex(stopIndex, ms);
-
-      // ja serveris atmeta state pēc removeOnWin, atjaunosim pēc delay
-      if (resp.state) {
-        // neliels delay, lai animācija paspēj “aiziet”
-        setTimeout(() => {
-          slots = Array.isArray(resp.state.slots) ? resp.state.slots.slice() : slots;
-          removeOnWinState = !!resp.state.removeOnWin;
-          spinMsState = clamp(resp.state.spinMs || spinMsState, 3000, 20000);
-          lastSpin = resp.state.lastSpin || lastSpin;
+        // Svarīgi: animējam tieši “servera snapshot” (lai stopIndex sakrīt)
+        if (Array.isArray(resp.slotsAtSpin)) {
+          slots = resp.slotsAtSpin.slice();
           renderAll();
-        }, Math.min(900, ms - 200));
+        }
+
+        const stopIndex = clamp(
+          resp.stopIndex,
+          0,
+          Math.max(0, slots.length - 1)
+        );
+
+        lastSpin = resp.lastSpin || lastSpin;
+        tickHud();
+
+        spinToIndex(stopIndex, ms, () => {
+          // pēc animācijas uzliekam final state (pēc removeOnWin)
+          if (resp.state && typeof resp.state === "object") {
+            applyServerState(resp.state);
+          }
+        });
       }
-    });
+    );
   });
 
-  // initial draw
   renderAll();
   connect();
 }
