@@ -18,6 +18,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ======== Konstantes ========
+const RESET_COINS_TOKENS_ON_ROLLOVER =
+  /^(1|true|yes|on)$/i.test(String(process.env.RESET_COINS_TOKENS_ON_ROLLOVER || ""));
 const PORT = process.env.PORT || 10080;
 const JWT_SECRET =
   process.env.JWT_SECRET || "BUGATS_VARDU_ZONA_SUPER_SLEPENS_JWT";
