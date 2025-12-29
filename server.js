@@ -758,7 +758,10 @@ function computeNextSeasonEndAt(startAt, nextSeasonId) {
 
   // Sezona 2 – fiksēts “februāra vidus”
   if (Number(nextSeasonId) === 2) {
-    if (Number.isFinite(SEASON2_END_AT_DEFAULT) && SEASON2_END_AT_DEFAULT > startAt) {
+    if (
+      Number.isFinite(SEASON2_END_AT_DEFAULT) &&
+      SEASON2_END_AT_DEFAULT > startAt
+    ) {
       return SEASON2_END_AT_DEFAULT;
     }
   }
@@ -1643,7 +1646,9 @@ app.post("/guess", authMiddleware, (req, res) => {
 
   const round = user.currentRound;
   if (guessRaw.length !== round.len) {
-    return res.status(400).json({ message: `Vārdam jābūt ${round.len} burtiem` });
+    return res
+      .status(400)
+      .json({ message: `Vārdam jābūt ${round.len} burtiem` });
   }
 
   if (round.attemptsLeft <= 0) {
