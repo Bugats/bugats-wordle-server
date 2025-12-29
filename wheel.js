@@ -53,7 +53,6 @@ export function initWheel({
       if (typeof state.settings.spinMs !== "number") state.settings.spinMs = 9000;
       if (typeof state.settings.removeOnWin !== "boolean") state.settings.removeOnWin = true;
     } catch {
-      // ja nav faila — izveidojam
       await save();
     }
   }
@@ -92,6 +91,14 @@ export function initWheel({
     } catch {
       return null;
     }
+  }
+
+  // Primāri: izmanto socket.data.user (jo server.js jau autentificē socketu)
+  // Backwards: ja kāds vecs klients vēl sūta token payloadā.
+  function getSocketUsername(socket, tokenFromPayload) {
+    const u = socket?.data?.user?.username;
+    if (u) return String(u);
+    return getUserFromToken(tokenFromPayload);
   }
 
   function publicState() {
@@ -143,7 +150,6 @@ export function initWheel({
   }
 
   async function shuffle() {
-    // Fisher-Yates
     for (let i = state.slots.length - 1; i > 0; i--) {
       const j = crypto.randomInt(0, i + 1);
       [state.slots[i], state.slots[j]] = [state.slots[j], state.slots[i]];
@@ -171,10 +177,8 @@ export function initWheel({
     const spinMs = state.settings.spinMs || 9000;
     const winnerIndex = crypto.randomInt(0, state.slots.length);
     const winnerName = state.slots[winnerIndex];
-
     const snapCount = state.slots.length;
 
-    // broadcast “spin” start so skatītāji redz animāciju
     io.emit("wheel:spin", {
       winnerIndex,
       winnerName,
@@ -225,25 +229,25 @@ export function initWheel({
     });
 
     socket.on("wheel:shuffle", async ({ token } = {}) => {
-      const u = getUserFromToken(token);
+      const u = getSocketUsername(socket, token);
       if (!u || !isAdminUsername(u)) return;
       await shuffle();
     });
 
     socket.on("wheel:settings", async ({ token, spinMs, removeOnWin } = {}) => {
-      const u = getUserFromToken(token);
+      const u = getSocketUsername(socket, token);
       if (!u || !isAdminUsername(u)) return;
       await setSettings({ spinMs, removeOnWin });
     });
 
     socket.on("wheel:add", async ({ token, name, count } = {}) => {
-      const u = getUserFromToken(token);
+      const u = getSocketUsername(socket, token);
       if (!u || !isAdminUsername(u)) return;
       await addSlots(name, count);
     });
 
     socket.on("wheel:remove", async ({ token, name, index } = {}) => {
-      const u = getUserFromToken(token);
+      const u = getSocketUsername(socket, token);
       if (!u || !isAdminUsername(u)) return;
 
       if (name) await removeByName(name);
@@ -251,13 +255,12 @@ export function initWheel({
     });
 
     socket.on("wheel:spin", async ({ token } = {}) => {
-      const u = getUserFromToken(token);
+      const u = getSocketUsername(socket, token);
       if (!u || !isAdminUsername(u)) return;
       await spin(u);
     });
   });
 
-  // init
   load().then(broadcastUpdate).catch(() => {});
 
   return {
@@ -271,4 +274,3 @@ export function initWheel({
     spin,
   };
 }
-
