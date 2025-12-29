@@ -35,6 +35,11 @@ const MAX_ATTEMPTS = 6;
 
 const BASE_TOKEN_PRICE = 150;
 
+// ======== Season rollover: coins/tokens reset (ENV slēdzis) ========
+// Default: ON (1). Lai izslēgtu: RESET_COINS_TOKENS_ON_ROLLOVER=0
+const RESET_COINS_TOKENS_ON_ROLLOVER =
+  String(process.env.RESET_COINS_TOKENS_ON_ROLLOVER ?? "1") === "1";
+
 // ======== Lielie request body limiti (FIX 413 Payload Too Large) ========
 const BODY_JSON_LIMIT = process.env.BODY_JSON_LIMIT || "25mb";
 const BODY_URLENC_LIMIT = process.env.BODY_URLENC_LIMIT || BODY_JSON_LIMIT;
@@ -264,7 +269,8 @@ if (!seasonStore || typeof seasonStore !== "object") {
   seasonStore = buildInitialSeasonStore();
   saveJsonAtomic(SEASONS_FILE, seasonStore);
 } else {
-  if (!seasonStore.current) seasonStore.current = buildInitialSeasonStore().current;
+  if (!seasonStore.current)
+    seasonStore.current = buildInitialSeasonStore().current;
   if (!Array.isArray(seasonStore.hallOfFame)) seasonStore.hallOfFame = [];
 }
 
@@ -795,11 +801,11 @@ function startSeasonFlow({ byAdminUsername } = {}) {
     seasonStore.current = cur;
     seasonState = seasonStore.current;
     saveJsonAtomic(SEASONS_FILE, seasonStore);
-    return { mode: "started_current", season: seasonState, hofEntry: null };
+    return { mode: "started_current", season: seasonState, hofEntry: null, didReset: false };
   }
 
   if (!curEnded && cur && cur.active) {
-    return { mode: "already_active", season: cur, hofEntry: null };
+    return { mode: "already_active", season: cur, hofEntry: null, didReset: false };
   }
 
   const hofEntry = finalizeSeasonIfNeeded(curId);
@@ -819,13 +825,20 @@ function startSeasonFlow({ byAdminUsername } = {}) {
   seasonStore.current = seasonState;
   saveJsonAtomic(SEASONS_FILE, seasonStore);
 
-  resetCoinsAndTokensForAllUsers();
-
-  if (byAdminUsername) {
-    console.log(`SEASON rollover by ${byAdminUsername}: now ${seasonState.name}`);
+  // reset coins + tokens visiem (optional, caur ENV)
+  let didReset = false;
+  if (RESET_COINS_TOKENS_ON_ROLLOVER) {
+    resetCoinsAndTokensForAllUsers();
+    didReset = true;
   }
 
-  return { mode: "rolled_next", season: seasonState, hofEntry };
+  if (byAdminUsername) {
+    console.log(
+      `SEASON rollover by ${byAdminUsername}: now ${seasonState.name}`
+    );
+  }
+
+  return { mode: "rolled_next", season: seasonState, hofEntry, didReset };
 }
 
 // ======== JWT helperi ========
@@ -858,7 +871,8 @@ function authMiddleware(req, res, next) {
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     const user = USERS[payload.username];
-    if (!user) return res.status(401).json({ message: "Lietotājs nav atrasts" });
+    if (!user)
+      return res.status(401).json({ message: "Lietotājs nav atrasts" });
     if (user.isBanned) {
       return res
         .status(403)
@@ -933,9 +947,9 @@ function broadcastOnlineList(force = false) {
   const sig = users
     .map(
       (u) =>
-        `${u.username}|${u.avatarUrl || ""}|${u.rankLevel || 0}|${u.rankTitle || ""}|${
-          u.supporter ? 1 : 0
-        }`
+        `${u.username}|${u.avatarUrl || ""}|${u.rankLevel || 0}|${
+          u.rankTitle || ""
+        }|${u.supporter ? 1 : 0}`
     )
     .join(";");
 
@@ -1061,7 +1075,9 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         return;
       }
       const minutesRaw = parseInt(arg || "5", 10);
-      const mins = Number.isNaN(minutesRaw) ? 5 : Math.max(1, Math.min(1440, minutesRaw));
+      const mins = Number.isNaN(minutesRaw)
+        ? 5
+        : Math.max(1, Math.min(1440, minutesRaw));
       target.mutedUntil = Date.now() + mins * 60 * 1000;
       saveUsers(USERS);
       broadcastSystemMessage(
@@ -1118,11 +1134,16 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
           );
           io.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
         }
+
         broadcastSystemMessage(
-          `📢 ${result.season.name} ir sākusies! (beigsies: ${endStr}) Coins + žetoni visiem ir resetoti.`
+          `📢 ${result.season.name} ir sākusies! (beigsies: ${endStr})${
+            result.didReset ? " Coins + žetoni visiem ir resetoti." : ""
+          }`
         );
       } else {
-        broadcastSystemMessage(`📢 ${result.season.name} ir sākusies! (beigsies: ${endStr})`);
+        broadcastSystemMessage(
+          `📢 ${result.season.name} ir sākusies! (beigsies: ${endStr})`
+        );
       }
 
       io.emit("seasonUpdate", result.season);
@@ -1142,15 +1163,21 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
 
       if (!seasonState?.active) {
         if (!endTs) {
-          text = `${seasonState?.name || "SEZONA"} vēl nav sākusies. Beigu datums nav iestatīts.`;
+          text = `${
+            seasonState?.name || "SEZONA"
+          } vēl nav sākusies. Beigu datums nav iestatīts.`;
         } else {
-          const endStr = new Date(endTs).toLocaleString("lv-LV", { timeZone: TZ });
+          const endStr = new Date(endTs).toLocaleString("lv-LV", {
+            timeZone: TZ,
+          });
           text = `${seasonState.name} nav aktīva. Plānotās beigas: ${endStr}.`;
         }
       } else if (!endTs) {
         text = `${seasonState.name} ir aktīva, bet beigu datums nav iestatīts.`;
       } else if (now >= endTs) {
-        const endStr = new Date(endTs).toLocaleString("lv-LV", { timeZone: TZ });
+        const endStr = new Date(endTs).toLocaleString("lv-LV", {
+          timeZone: TZ,
+        });
         text = `${seasonState.name} jau ir beigusies (beidzās ${endStr}).`;
       } else {
         const diffMs = endTs - now;
@@ -1165,7 +1192,11 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         text = `${seasonState.name} ir aktīva. Līdz sezonas beigām: ${days}d ${hours}h ${mins}m ${secs}s (līdz ${endStr}).`;
       }
 
-      adminSocket.emit("chatMessage", { username: "SYSTEM", text, ts: Date.now() });
+      adminSocket.emit("chatMessage", {
+        username: "SYSTEM",
+        text,
+        ts: Date.now(),
+      });
       break;
     }
 
@@ -1182,7 +1213,9 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
 async function signupHandler(req, res) {
   const { username, password } = req.body || {};
   if (!username || !password) {
-    return res.status(400).json({ message: "Nepieciešams username un password" });
+    return res
+      .status(400)
+      .json({ message: "Nepieciešams username un password" });
   }
 
   const name = String(username).trim();
@@ -1249,7 +1282,9 @@ app.post("/signup", signupHandler);
 async function loginHandler(req, res) {
   const { username, password } = req.body || {};
   if (!username || !password) {
-    return res.status(400).json({ message: "Nepieciešams username un password" });
+    return res
+      .status(400)
+      .json({ message: "Nepieciešams username un password" });
   }
 
   const name = String(username).trim();
@@ -1258,7 +1293,8 @@ async function loginHandler(req, res) {
 
   if (user.isBanned) {
     return res.status(403).json({
-      message: "Šis lietotājs ir nobanots no VĀRDU ZONAS. Sazinies ar Bugats.",
+      message:
+        "Šis lietotājs ir nobanots no VĀRDU ZONAS. Sazinies ar Bugats.",
     });
   }
 
@@ -1271,8 +1307,7 @@ async function loginHandler(req, res) {
   ensureDailyChest(user);
   ensureSpecialMedals(user);
   ensureRankFields(user);
-  if (passiveChanged) saveUsers(USERS);
-  else saveUsers(USERS); // login vienmēr saglabājam (droši)
+  saveUsers(USERS);
 
   const token = jwt.sign({ username: name }, JWT_SECRET, { expiresIn: "30d" });
   return res.json({ ...buildMePayload(user), token });
@@ -1324,7 +1359,9 @@ app.post("/avatar", authMiddleware, (req, res) => {
     return res.json({ ok: true, avatarUrl: user.avatarUrl });
   } catch (err) {
     console.error("POST /avatar kļūda:", err);
-    return res.status(500).json({ message: "Servera kļūda avatāra saglabāšanā." });
+    return res
+      .status(500)
+      .json({ message: "Servera kļūda avatāra saglabāšanā." });
   }
 });
 
@@ -1527,7 +1564,12 @@ app.post("/season/start", authMiddleware, (req, res) => {
     io.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
   }
 
-  res.json({ ...result.season, mode: result.mode, hofEntry: result.hofEntry || null });
+  res.json({
+    ...result.season,
+    mode: result.mode,
+    hofEntry: result.hofEntry || null,
+    didReset: !!result.didReset,
+  });
 });
 
 // ======== Spēles loģika ========
@@ -1540,7 +1582,13 @@ function pickRandomWord() {
 
 function startNewRoundForUser(user) {
   const { word, len } = pickRandomWord();
-  user.currentRound = { word, len, attemptsLeft: MAX_ATTEMPTS, finished: false, startedAt: Date.now() };
+  user.currentRound = {
+    word,
+    len,
+    attemptsLeft: MAX_ATTEMPTS,
+    finished: false,
+    startedAt: Date.now(),
+  };
   return user.currentRound;
 }
 
@@ -1589,11 +1637,19 @@ function enforceGuessRate(user) {
   const now = Date.now();
 
   if (user.guessBlockedUntil && now < user.guessBlockedUntil) {
-    return { ok: false, status: 429, message: "Tu min pārāk haotiski. Pamēģini pēc dažām sekundēm." };
+    return {
+      ok: false,
+      status: 429,
+      message: "Tu min pārāk haotiski. Pamēģini pēc dažām sekundēm.",
+    };
   }
 
   if (user.lastGuessAt && now - user.lastGuessAt < GUESS_RATE_MS) {
-    return { ok: false, status: 429, message: "Pārāk ātri. Mēģini vēlreiz pēc ~1s." };
+    return {
+      ok: false,
+      status: 429,
+      message: "Pārāk ātri. Mēģini vēlreiz pēc ~1s.",
+    };
   }
 
   user.lastGuessAt = now;
@@ -1826,14 +1882,38 @@ function finishDuel(duel, winnerName, reason) {
 
     saveUsers(USERS);
 
-    if (s1) s1.emit("duel.end", { duelId: duel.id, winner: winnerName, youWin: winnerName === p1, reason });
-    if (s2) s2.emit("duel.end", { duelId: duel.id, winner: winnerName, youWin: winnerName === p2, reason });
+    if (s1)
+      s1.emit("duel.end", {
+        duelId: duel.id,
+        winner: winnerName,
+        youWin: winnerName === p1,
+        reason,
+      });
+    if (s2)
+      s2.emit("duel.end", {
+        duelId: duel.id,
+        winner: winnerName,
+        youWin: winnerName === p2,
+        reason,
+      });
 
     const other = winnerName === p1 ? p2 : p1;
     broadcastSystemMessage(`⚔️ ${winnerName} uzvarēja dueli pret ${other}!`);
   } else {
-    if (s1) s1.emit("duel.end", { duelId: duel.id, winner: null, youWin: false, reason });
-    if (s2) s2.emit("duel.end", { duelId: duel.id, winner: null, youWin: false, reason });
+    if (s1)
+      s1.emit("duel.end", {
+        duelId: duel.id,
+        winner: null,
+        youWin: false,
+        reason,
+      });
+    if (s2)
+      s2.emit("duel.end", {
+        duelId: duel.id,
+        winner: null,
+        youWin: false,
+        reason,
+      });
   }
 
   userToDuel.delete(p1);
@@ -1888,7 +1968,9 @@ setInterval(() => {
   }
 
   if (!seasonEndedBroadcasted) {
-    const endStr = new Date(seasonState.endAt).toLocaleString("lv-LV", { timeZone: TZ });
+    const endStr = new Date(seasonState.endAt).toLocaleString("lv-LV", {
+      timeZone: TZ,
+    });
     broadcastSystemMessage(`⏳ ${seasonState.name} ir beigusies (${endStr}).`);
     io.emit("seasonUpdate", seasonState);
     seasonEndedBroadcasted = true;
@@ -2039,7 +2121,9 @@ io.on("connection", (socket) => {
     if (userToDuel.has(challengerName))
       return socket.emit("duel.error", { message: "Tu jau esi citā duelī." });
     if (userToDuel.has(targetName))
-      return socket.emit("duel.error", { message: "Pretinieks jau ir citā duelī." });
+      return socket.emit("duel.error", {
+        message: "Pretinieks jau ir citā duelī.",
+      });
 
     const targetSocket = getSocketByUsername(targetName);
     if (!targetSocket)
@@ -2057,7 +2141,10 @@ io.on("connection", (socket) => {
       createdAt: Date.now(),
       startedAt: null,
       expiresAt: null,
-      attemptsLeft: { [challengerName]: DUEL_MAX_ATTEMPTS, [targetName]: DUEL_MAX_ATTEMPTS },
+      attemptsLeft: {
+        [challengerName]: DUEL_MAX_ATTEMPTS,
+        [targetName]: DUEL_MAX_ATTEMPTS,
+      },
       rowsUsed: { [challengerName]: 0, [targetName]: 0 },
       winner: null,
       finishedReason: null,
@@ -2075,9 +2162,12 @@ io.on("connection", (socket) => {
     const duelId = payload?.duelId;
     const userName = socket.data.user.username;
     const duel = duels.get(duelId);
-    if (!duel) return socket.emit("duel.error", { message: "Duēlis nav atrasts." });
-    if (!duel.players.includes(userName)) return socket.emit("duel.error", { message: "Tu neesi šajā duelī." });
-    if (duel.status !== "pending") return socket.emit("duel.error", { message: "Duēlis jau ir sācies." });
+    if (!duel)
+      return socket.emit("duel.error", { message: "Duēlis nav atrasts." });
+    if (!duel.players.includes(userName))
+      return socket.emit("duel.error", { message: "Tu neesi šajā duelī." });
+    if (duel.status !== "pending")
+      return socket.emit("duel.error", { message: "Duēlis jau ir sācies." });
 
     duel.status = "active";
     duel.startedAt = Date.now();
@@ -2087,10 +2177,24 @@ io.on("connection", (socket) => {
     const s1 = getSocketByUsername(p1);
     const s2 = getSocketByUsername(p2);
 
-    if (s1) s1.emit("duel.start", { duelId: duel.id, len: duel.len, opponent: p2, expiresAt: duel.expiresAt });
-    if (s2) s2.emit("duel.start", { duelId: duel.id, len: duel.len, opponent: p1, expiresAt: duel.expiresAt });
+    if (s1)
+      s1.emit("duel.start", {
+        duelId: duel.id,
+        len: duel.len,
+        opponent: p2,
+        expiresAt: duel.expiresAt,
+      });
+    if (s2)
+      s2.emit("duel.start", {
+        duelId: duel.id,
+        len: duel.len,
+        opponent: p1,
+        expiresAt: duel.expiresAt,
+      });
 
-    broadcastSystemMessage(`⚔️ Duēlis sākas: ${p1} vs ${p2}! Kurš pirmais atminēs vārdu?`);
+    broadcastSystemMessage(
+      `⚔️ Duēlis sākas: ${p1} vs ${p2}! Kurš pirmais atminēs vārdu?`
+    );
   });
 
   socket.on("duel.decline", (payload) => {
@@ -2105,8 +2209,19 @@ io.on("connection", (socket) => {
     const other = p1 === userName ? p2 : p1;
 
     const sOther = getSocketByUsername(other);
-    if (sOther) sOther.emit("duel.end", { duelId: duel.id, winner: null, youWin: false, reason: "declined" });
-    socket.emit("duel.end", { duelId: duel.id, winner: null, youWin: false, reason: "declined" });
+    if (sOther)
+      sOther.emit("duel.end", {
+        duelId: duel.id,
+        winner: null,
+        youWin: false,
+        reason: "declined",
+      });
+    socket.emit("duel.end", {
+      duelId: duel.id,
+      winner: null,
+      youWin: false,
+      reason: "declined",
+    });
 
     userToDuel.delete(p1);
     userToDuel.delete(p2);
@@ -2119,8 +2234,10 @@ io.on("connection", (socket) => {
     const userName = socket.data.user.username;
 
     const duel = duels.get(duelId);
-    if (!duel) return socket.emit("duel.error", { message: "Duēlis nav atrasts." });
-    if (duel.status !== "active") return socket.emit("duel.error", { message: "Duēlis nav aktīvs." });
+    if (!duel)
+      return socket.emit("duel.error", { message: "Duēlis nav atrasts." });
+    if (duel.status !== "active")
+      return socket.emit("duel.error", { message: "Duēlis nav aktīvs." });
 
     const now = Date.now();
     if (duel.expiresAt && now >= duel.expiresAt) {
@@ -2132,9 +2249,13 @@ io.on("connection", (socket) => {
     if (!duel.players.includes(userName))
       return socket.emit("duel.error", { message: "Tu neesi šajā duelī." });
     if (rawGuess.length !== duel.len)
-      return socket.emit("duel.error", { message: `Vārdam duelī jābūt ${duel.len} burtiem.` });
+      return socket.emit("duel.error", {
+        message: `Vārdam duelī jābūt ${duel.len} burtiem.`,
+      });
     if (duel.attemptsLeft[userName] <= 0)
-      return socket.emit("duel.error", { message: "Tev vairs nav mēģinājumu duelī." });
+      return socket.emit("duel.error", {
+        message: "Tev vairs nav mēģinājumu duelī.",
+      });
 
     duel.rowsUsed[userName] = (duel.rowsUsed[userName] || 0) + 1;
     duel.attemptsLeft[userName] -= 1;
@@ -2143,17 +2264,31 @@ io.on("connection", (socket) => {
     const isWin = rawGuess === duel.word;
 
     if (isWin) {
-      socket.emit("duel.guessResult", { duelId: duel.id, pattern, win: true, finished: true });
+      socket.emit("duel.guessResult", {
+        duelId: duel.id,
+        pattern,
+        win: true,
+        finished: true,
+      });
       finishDuel(duel, userName, "win");
       return;
     }
 
     const finishedForPlayer = duel.attemptsLeft[userName] <= 0;
 
-    socket.emit("duel.guessResult", { duelId: duel.id, pattern, win: false, finished: finishedForPlayer });
+    socket.emit("duel.guessResult", {
+      duelId: duel.id,
+      pattern,
+      win: false,
+      finished: finishedForPlayer,
+    });
 
     const [p1, p2] = duel.players;
-    if (!duel.winner && duel.attemptsLeft[p1] <= 0 && duel.attemptsLeft[p2] <= 0) {
+    if (
+      !duel.winner &&
+      duel.attemptsLeft[p1] <= 0 &&
+      duel.attemptsLeft[p2] <= 0
+    ) {
       finishDuel(duel, null, "no_winner");
     }
   });
@@ -2201,7 +2336,8 @@ app.use((err, req, res, next) => {
 
   if (err.type === "entity.too.large" || err.status === 413) {
     return res.status(413).json({
-      message: "Payload Too Large: pieprasījums ir par lielu. Samazini failu vai palielini limitus serverī.",
+      message:
+        "Payload Too Large: pieprasījums ir par lielu. Samazini failu vai palielini limitus serverī.",
     });
   }
 
