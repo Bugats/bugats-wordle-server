@@ -491,6 +491,7 @@ function getPublicMissions(user) {
   }));
 }
 
+// (UZLABOJUMS) vairs nesaglabā pati; atgriež changed
 function updateMissionsOnGuess(user, { isWin, xpGain }) {
   ensureDailyMissions(user);
   let changed = false;
@@ -523,7 +524,7 @@ function updateMissionsOnGuess(user, { isWin, xpGain }) {
     }
   }
 
-  if (changed) saveUsers(USERS);
+  return changed;
 }
 
 function resetWinsTodayIfNeeded(user) {
@@ -801,7 +802,12 @@ function startSeasonFlow({ byAdminUsername } = {}) {
     seasonStore.current = cur;
     seasonState = seasonStore.current;
     saveJsonAtomic(SEASONS_FILE, seasonStore);
-    return { mode: "started_current", season: seasonState, hofEntry: null, didReset: false };
+    return {
+      mode: "started_current",
+      season: seasonState,
+      hofEntry: null,
+      didReset: false,
+    };
   }
 
   if (!curEnded && cur && cur.active) {
@@ -908,6 +914,9 @@ app.use((err, req, res, next) => {
 app.get("/", (_req, res) => res.send("VĀRDU ZONA OK"));
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
+// (UZLABOJUMS) vienkāršs logout (ja nelieto — neko nesalauž)
+app.post("/logout", (_req, res) => res.json({ ok: true }));
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors:
@@ -962,6 +971,57 @@ function broadcastOnlineList(force = false) {
 setInterval(() => {
   broadcastOnlineList(false);
 }, 30 * 1000);
+
+// ======== LEADERBOARD (TOP10) ========
+function computeTop10Leaderboard() {
+  const arr = Object.values(USERS || {})
+    .filter((u) => u && u.username && !u.isBanned)
+    .slice();
+
+  arr.forEach((u) => ensureRankFields(u));
+
+  arr.sort((a, b) => {
+    const ds = (b.score || 0) - (a.score || 0);
+    if (ds !== 0) return ds;
+    const dx = (b.xp || 0) - (a.xp || 0);
+    if (dx !== 0) return dx;
+    return String(a.username).localeCompare(String(b.username));
+  });
+
+  return arr.slice(0, 10).map((u, idx) => ({
+    place: idx + 1,
+    username: u.username,
+    score: u.score || 0,
+    xp: u.xp || 0,
+    rankTitle: u.rankTitle || "—",
+    rankLevel: u.rankLevel || 1,
+    avatarUrl: u.avatarUrl || null,
+    supporter: !!u.supporter,
+  }));
+}
+
+let lastLbSig = "";
+function broadcastLeaderboard(force = false) {
+  const top = computeTop10Leaderboard();
+  const sig = top
+    .map(
+      (u) =>
+        `${u.place}|${u.username}|${u.score}|${u.xp}|${u.rankLevel}|${
+          u.avatarUrl || ""
+        }|${u.supporter ? 1 : 0}`
+    )
+    .join(";");
+
+  if (!force && sig === lastLbSig) return;
+  lastLbSig = sig;
+
+  io.emit("leaderboard:update", top);
+}
+
+// periodiski (drošībai)
+setInterval(() => {
+  broadcastLeaderboard(false);
+}, 45 * 1000);
 
 // === Admin & čata helperi ===
 function broadcastSystemMessage(text) {
@@ -1273,6 +1333,9 @@ async function signupHandler(req, res) {
   USERS[name] = user;
   saveUsers(USERS);
 
+  // leaderboard var mainīties (jaunie lietotāji parasti ar 0, bet nav kaitīgi)
+  broadcastLeaderboard(false);
+
   const token = jwt.sign({ username: name }, JWT_SECRET, { expiresIn: "30d" });
   return res.json({ ...buildMePayload(user), token });
 }
@@ -1301,7 +1364,7 @@ async function loginHandler(req, res) {
   const ok = await bcrypt.compare(password, user.passwordHash || "");
   if (!ok) return res.status(400).json({ message: "Nepareiza parole" });
 
-  const passiveChanged = markActivity(user);
+  markActivity(user);
   ensureDailyMissions(user);
   resetWinsTodayIfNeeded(user);
   ensureDailyChest(user);
@@ -1356,6 +1419,8 @@ app.post("/avatar", authMiddleware, (req, res) => {
     saveUsers(USERS);
 
     broadcastOnlineList(true);
+    broadcastLeaderboard(false);
+
     return res.json({ ok: true, avatarUrl: user.avatarUrl });
   } catch (err) {
     console.error("POST /avatar kļūda:", err);
@@ -1455,6 +1520,7 @@ app.post("/missions/claim", authMiddleware, (req, res) => {
   ensureRankFields(user);
 
   saveUsers(USERS);
+  broadcastLeaderboard(false);
 
   res.json({ me: buildMePayload(user), missions: getPublicMissions(user) });
 });
@@ -1520,6 +1586,7 @@ app.post("/chest/open", authMiddleware, (req, res) => {
 
   ensureRankFields(user);
   saveUsers(USERS);
+  broadcastLeaderboard(false);
 
   io.emit("chatMessage", {
     username: "SYSTEM",
@@ -1658,7 +1725,10 @@ function enforceGuessRate(user) {
 
 function trackBadLength(user) {
   const now = Date.now();
-  if (!user.badLenWindowStart || now - user.badLenWindowStart > BAD_LEN_WINDOW_MS) {
+  if (
+    !user.badLenWindowStart ||
+    now - user.badLenWindowStart > BAD_LEN_WINDOW_MS
+  ) {
     user.badLenWindowStart = now;
     user.badLenCount = 0;
   }
@@ -1773,8 +1843,13 @@ app.post("/guess", authMiddleware, (req, res) => {
 
   round.finished = finished;
 
+  // misijas (tagad bez dubult-save)
   updateMissionsOnGuess(user, { isWin, xpGain });
+
   saveUsers(USERS);
+
+  // (UZLABOJUMS) push leaderboard, ja mainījās
+  if (isWin) broadcastLeaderboard(false);
 
   res.json({
     pattern,
@@ -1801,6 +1876,7 @@ app.post("/buy-token", authMiddleware, (req, res) => {
   user.tokens = (user.tokens || 0) + 1;
 
   saveUsers(USERS);
+  broadcastLeaderboard(false);
 
   io.emit("tokenBuy", { username: user.username, tokens: user.tokens || 0 });
 
@@ -1813,32 +1889,7 @@ app.post("/buy-token", authMiddleware, (req, res) => {
 
 // ===== Leaderboard =====
 app.get("/leaderboard", (_req, res) => {
-  const arr = Object.values(USERS || {})
-    .filter((u) => u && u.username && !u.isBanned)
-    .slice();
-
-  arr.forEach((u) => ensureRankFields(u));
-
-  arr.sort((a, b) => {
-    const ds = (b.score || 0) - (a.score || 0);
-    if (ds !== 0) return ds;
-    const dx = (b.xp || 0) - (a.xp || 0);
-    if (dx !== 0) return dx;
-    return String(a.username).localeCompare(String(b.username));
-  });
-
-  const top = arr.slice(0, 10).map((u, idx) => ({
-    place: idx + 1,
-    username: u.username,
-    score: u.score || 0,
-    xp: u.xp || 0,
-    rankTitle: u.rankTitle || "—",
-    rankLevel: u.rankLevel || 1,
-    avatarUrl: u.avatarUrl || null,
-    supporter: !!u.supporter,
-  }));
-
-  res.json(top);
+  res.json(computeTop10Leaderboard());
 });
 
 // ===== DUEĻU HELPERI (Socket.IO pusē) =====
@@ -1881,6 +1932,7 @@ function finishDuel(duel, winnerName, reason) {
     }
 
     saveUsers(USERS);
+    broadcastLeaderboard(false);
 
     if (s1)
       s1.emit("duel.end", {
@@ -1979,7 +2031,12 @@ setInterval(() => {
 
 // ======== Socket.IO pamat-connection ========
 io.use((socket, next) => {
-  const token = socket.handshake.auth?.token;
+  // (UZLABOJUMS) fallback: atbalsts arī token query parametrā
+  const token =
+    socket.handshake.auth?.token ||
+    socket.handshake.query?.token ||
+    socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, "").trim();
+
   if (!token) return next(new Error("Nav token"));
 
   try {
@@ -2022,9 +2079,15 @@ io.on("connection", (socket) => {
 
   onlineBySocket.set(socket.id, user.username);
   broadcastOnlineList(true);
+  broadcastLeaderboard(false);
 
   socket.emit("seasonUpdate", seasonState);
   socket.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
+
+  // Leaderboard pull
+  socket.on("leaderboard:top10", () => {
+    socket.emit("leaderboard:update", computeTop10Leaderboard());
+  });
 
   // ========== ČATS ==========
   socket.on("chatMessage", (text) => {
