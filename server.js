@@ -79,7 +79,7 @@ const AVATAR_MAX_CHARS = (() => {
 // (bonus) vari paplašināt ar ENV: ADMIN_USERNAMES="Bugats,BugatsLV,AnotherNick"
 const ADMIN_USERNAMES = (() => {
   const raw = String(process.env.ADMIN_USERNAMES || "").trim();
-  const defaults = ["Bugats", "BugatsLV"];
+  const defaults = ["BugatsLV"]; // ADMINI tikai BugatsLV
   if (!raw) return defaults;
   const extra = raw
     .split(",")
@@ -486,7 +486,9 @@ function wheelSyncTokenSlots(force = false) {
 function wheelGetCombinedSlots() {
   wheelSyncTokenSlots(false);
 
-  const manual = Array.isArray(wheelStore.manualSlots) ? wheelStore.manualSlots : [];
+  const manual = Array.isArray(wheelStore.manualSlots)
+    ? wheelStore.manualSlots
+    : [];
   const token = Array.isArray(wheelTokenSlots) ? wheelTokenSlots : [];
 
   const slots = manual.concat(token).slice(0, WHEEL_MAX_SLOTS);
@@ -572,7 +574,10 @@ function wheelAdd(nameRaw, countRaw) {
 
   const manual = wheelStore.manualSlots;
   if (manual.length + count > WHEEL_MAX_SLOTS) {
-    return { ok: false, message: `Par daudz ierakstu (max ${WHEEL_MAX_SLOTS}).` };
+    return {
+      ok: false,
+      message: `Par daudz ierakstu (max ${WHEEL_MAX_SLOTS}).`,
+    };
   }
 
   for (let i = 0; i < count; i++) manual.push(name);
@@ -625,7 +630,13 @@ function wheelRemoveOneByIndex(indexRaw) {
     u.tokens = Math.max(0, prev - 1);
     saveUsers(USERS);
     wheelSyncTokenSlots(true);
-    return { ok: true, index: idx, name: removedName, source: "token", tokensNow: u.tokens };
+    return {
+      ok: true,
+      index: idx,
+      name: removedName,
+      source: "token",
+      tokensNow: u.tokens,
+    };
   }
 
   wheelSyncTokenSlots(true);
@@ -649,7 +660,9 @@ function wheelApplySettings({ spinMs, removeOnWin }) {
     10
   );
   wheelStore.settings.spinMs =
-    Number.isFinite(ms) && ms >= 3000 && ms <= 60000 ? ms : WHEEL_DEFAULT_SPIN_MS;
+    Number.isFinite(ms) && ms >= 3000 && ms <= 60000
+      ? ms
+      : WHEEL_DEFAULT_SPIN_MS;
   if (typeof removeOnWin === "boolean") wheelStore.settings.removeOnWin = removeOnWin;
   saveWheelStore();
 }
@@ -1738,8 +1751,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         const totalSec = Math.floor(diffMs / 1000);
         const days = Math.floor(totalSec / (24 * 3600));
         const hours = Math.floor((totalSec % (24 * 3600)) / 3600);
-        const mins = Math.floor((totalSec % 3600)) / 60;
-        const minsInt = Math.floor(mins);
+        const minsInt = Math.floor((totalSec % 3600) / 60);
         const secs = totalSec % 60;
 
         const endStr = new Date(endTs).toLocaleString("lv-LV", { timeZone: TZ });
