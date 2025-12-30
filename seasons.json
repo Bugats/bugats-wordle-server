@@ -1,11 +1,10 @@
 {
-  "current": {
-    "id": 1,
-    "name": "SEZONA 1",
-    "active": false,
-    "startedAt": 0,
-    "endAt": 1766786399000
-  },
-  "hallOfFame": []
+  "seasonId": 1,
+  "username": "SantaEva13",
+  "score": 957,
+  "xp": 0,
+  "rankTitle": "",
+  "rankLevel": 1,
+  "avatarUrl": null,
+  "finishedAt": 0
 }
-
