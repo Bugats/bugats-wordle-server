@@ -1859,7 +1859,42 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       });
       break;
     }
+case "hofset": {
+  // lietošana:
+  // /hofset 1 SantaEva13 957
+  const sid = parseInt(parts[1] || "", 10);
+  const uname = String(parts[2] || "").trim();
+  const scoreOverride = parts[3]; // optional
 
+  if (!Number.isFinite(sid) || sid <= 0 || !uname) {
+    adminSocket.emit("chatMessage", {
+      username: "SYSTEM",
+      text: "Lietošana: /hofset <seasonId> <username> [score]",
+      ts: Date.now(),
+    });
+    return;
+  }
+
+  const r = upsertHallOfFameWinner(sid, uname, scoreOverride, null);
+  if (!r.ok) {
+    adminSocket.emit("chatMessage", {
+      username: "SYSTEM",
+      text: `HOF error: ${r.message}`,
+      ts: Date.now(),
+    });
+    return;
+  }
+
+  io.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
+
+  adminSocket.emit("chatMessage", {
+    username: "SYSTEM",
+    text: `OK: Sezona ${sid} čempions = ${r.hofEntry.username} (score ${r.hofEntry.score}).`,
+    ts: Date.now(),
+  });
+  break;
+}
+      
     default:
       adminSocket.emit("chatMessage", {
         username: "SYSTEM",
