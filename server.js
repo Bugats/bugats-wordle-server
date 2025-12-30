@@ -2679,7 +2679,54 @@ wheelNsp.on("connection", (socket) => {
     wheelSyncTokenSlots(true);
     wheelEmitUpdate(true);
   });
+  // ===== (NEW) ADMIN: koreģēt žetonus (+/- vai set) =====
+  bind("adjustTokens", (payload = {}) => {
+    const admin = wheelRequireAdmin(socket);
+    if (!admin) return;
+    if (wheelBlockIfSpinning(socket)) return;
 
+    const username = String(
+      payload.username ?? payload.user ?? payload.name ?? payload.nick ?? ""
+    )
+      .trim()
+      .slice(0, 30);
+
+    if (!username) return wheelEmitError(socket, "Nav username.");
+
+    const target = USERS[username];
+    if (!target) return wheelEmitError(socket, "Lietotājs nav atrasts.");
+
+    const hasSet = payload.set !== undefined && payload.set !== null && payload.set !== "";
+    const hasDelta = payload.delta !== undefined && payload.delta !== null && payload.delta !== "";
+
+    if (!hasSet && !hasDelta) {
+      return wheelEmitError(socket, "Norādi set vai delta.");
+    }
+
+    let nextTokens = Math.max(0, Math.floor(target.tokens || 0));
+
+    if (hasSet) {
+      const v = parseInt(payload.set, 10);
+      if (!Number.isFinite(v) || v < 0) return wheelEmitError(socket, "Nederīgs set.");
+      nextTokens = v;
+    } else {
+      const d = parseInt(payload.delta, 10);
+      if (!Number.isFinite(d) || d === 0) return wheelEmitError(socket, "Nederīgs delta.");
+      nextTokens = Math.max(0, nextTokens + d);
+    }
+
+    target.tokens = nextTokens;
+    saveUsers(USERS);
+
+    // uzreiz atjaunojam ratu
+    wheelSyncTokenSlots(true);
+    wheelEmitUpdate(true);
+
+    socket.emit("wheel:tokensUpdated", { username, tokens: nextTokens });
+  });
+
+  // alias (ja gribi)
+  bind("tokens", (payload = {}) => socket.emit("wheel:adjustTokens", payload));
   bind("add", (payload = {}) => {
     const admin = wheelRequireAdmin(socket);
     if (!admin) return;
