@@ -173,6 +173,9 @@ const BAD_LEN_WINDOW_MS = 10 * 1000;
 const BAD_LEN_MAX = 5;
 const BAD_LEN_BLOCK_MS = 10 * 1000;
 
+// (NEW) Guess allowed chars (A-Z + LV diakritikas)
+const GUESS_ALLOWED_RE = /^[A-ZĀČĒĢĪĶĻŅŠŪŽ]+$/;
+
 // ======== Failu helperi ========
 function loadJsonSafe(file, fallback) {
   try {
@@ -231,6 +234,9 @@ function loadUsers() {
 
       // Avatārs
       if (typeof u.avatarUrl !== "string") u.avatarUrl = null;
+
+      // Supporter flag (NEW: default boolean)
+      if (typeof u.supporter !== "boolean") u.supporter = false;
 
       // Daily Chest
       if (!u.dailyChest || typeof u.dailyChest !== "object") u.dailyChest = {};
@@ -444,7 +450,6 @@ function wheelComputeTokenSlots(maxSlotsForTokens) {
     for (let i = 0; i < take; i++) slots.push(e.username);
   }
 
-  // shuffle tikai tad, kad rebuild notiek (sig mainās) — to dara wheelSyncTokenSlots
   const meta = {
     tokenUsers: entries.length,
     tokenTicketsTotal: total,
@@ -460,14 +465,12 @@ function wheelSyncTokenSlots(force = false) {
     ? wheelStore.manualSlots.length
     : 0;
 
-  // token slotiem atstājam vietu pēc manual slotiem
   const maxForTokens = Math.max(0, WHEEL_MAX_SLOTS - manualLen);
 
   const { fullSig, slots, meta } = wheelComputeTokenSlots(maxForTokens);
 
   if (!force && fullSig === wheelTokenSig) return false;
 
-  // shuffle (vizuāli patīkamāk ratam), bet tikai rebuild brīdī
   for (let i = slots.length - 1; i > 0; i--) {
     const j = crypto.randomInt(0, i + 1);
     [slots[i], slots[j]] = [slots[j], slots[i]];
@@ -481,13 +484,11 @@ function wheelSyncTokenSlots(force = false) {
 }
 
 function wheelGetCombinedSlots() {
-  // vienmēr pārliecināmies, ka token slots ir sync
   wheelSyncTokenSlots(false);
 
   const manual = Array.isArray(wheelStore.manualSlots) ? wheelStore.manualSlots : [];
   const token = Array.isArray(wheelTokenSlots) ? wheelTokenSlots : [];
 
-  // drošība: combined nedrīkst pārsniegt max (token jau ir capots)
   const slots = manual.concat(token).slice(0, WHEEL_MAX_SLOTS);
 
   return {
@@ -510,7 +511,6 @@ function publicWheelState() {
     spinEndsAt: wheelStore.spinEndsAt || 0,
     maxSlots: WHEEL_MAX_SLOTS,
 
-    // debug/info
     manualCount: combined.manualCount,
     tokenCount: combined.tokenCount,
     tokenMeta: { ...(wheelTokenMeta || {}) },
@@ -563,7 +563,7 @@ function wheelBlockIfSpinning(socket) {
 
 // ======== MANUĀLIE sloti (wheel:add) ========
 function wheelAdd(nameRaw, countRaw) {
-  const name = String(nameRaw || "").trim();
+  const name = String(nameRaw || "").trim().slice(0, 60);
   if (!name) return { ok: false, message: "Nav vārda." };
 
   let count = parseInt(countRaw ?? 1, 10);
@@ -577,10 +577,8 @@ function wheelAdd(nameRaw, countRaw) {
 
   for (let i = 0; i < count; i++) manual.push(name);
 
-  // saglabājam tikai manual slots
   saveWheelStore();
 
-  // token slots paliek, bet cap samazinās — pārsync
   wheelSyncTokenSlots(true);
 
   return { ok: true, name, count };
@@ -600,9 +598,6 @@ function wheelRemoveAllByName(nameRaw) {
   return { ok: true, name, removed };
 }
 
-// remove one by COMBINED index:
-// - ja index ir manual daļā -> izņem manual
-// - ja index ir token daļā -> atņem 1 tokens attiecīgajam user (ja removeOnWin loģikai līdzīgi)
 function wheelRemoveOneByIndex(indexRaw) {
   const idx = parseInt(indexRaw, 10);
   if (!Number.isFinite(idx)) return { ok: false, message: "Nederīgs index." };
@@ -624,7 +619,6 @@ function wheelRemoveOneByIndex(indexRaw) {
     return { ok: true, index: idx, name: removedName, source: "manual" };
   }
 
-  // token slot: atņem 1 token
   const u = USERS[removedName];
   if (u) {
     const prev = Math.max(0, Math.floor(u.tokens || 0));
@@ -634,13 +628,11 @@ function wheelRemoveOneByIndex(indexRaw) {
     return { ok: true, index: idx, name: removedName, source: "token", tokensNow: u.tokens };
   }
 
-  // fallback
   wheelSyncTokenSlots(true);
   return { ok: true, index: idx, name: removedName, source: "token" };
 }
 
 function wheelShuffle() {
-  // shuffle tikai MANUĀLOS slotus
   const arr = wheelStore.manualSlots;
   for (let i = arr.length - 1; i > 0; i--) {
     const j = crypto.randomInt(0, i + 1);
@@ -648,7 +640,6 @@ function wheelShuffle() {
   }
   saveWheelStore();
 
-  // token slots arī var pārbīdīt vizuāli (neizmaina tokens) — rebuild + shuffle
   wheelSyncTokenSlots(true);
 }
 
@@ -663,24 +654,24 @@ function wheelApplySettings({ spinMs, removeOnWin }) {
   saveWheelStore();
 }
 
-function wheelFinishSpin(spinId) {
+function wheelFinishSpin(spinId, io) {
   if (!wheelStore.spinning) return;
   if (wheelStore.spinId !== spinId) return;
 
   const last = wheelStore.lastSpin;
   const removeOnWin = !!wheelStore.settings?.removeOnWin;
 
-  // removeOnWin:
-  // - manual: izņem 1 manuālo ierakstu
-  // - token: atņem 1 token (tad rats auto-atjaunojas)
   if (removeOnWin && last && last.winnerName) {
     const winnerName = String(last.winnerName || "").trim();
     const src = String(last.winnerSource || "manual");
 
     if (src === "manual") {
-      // mēģinam izņemt pēc indeksa (manualIndex)
       const mi = Number.isFinite(last.manualIndex) ? last.manualIndex : -1;
-      if (mi >= 0 && mi < wheelStore.manualSlots.length && wheelStore.manualSlots[mi] === winnerName) {
+      if (
+        mi >= 0 &&
+        mi < wheelStore.manualSlots.length &&
+        wheelStore.manualSlots[mi] === winnerName
+      ) {
         wheelStore.manualSlots.splice(mi, 1);
       } else {
         const j = wheelStore.manualSlots.findIndex((x) => x === winnerName);
@@ -701,14 +692,12 @@ function wheelFinishSpin(spinId) {
   wheelStore.spinEndsAt = 0;
   wheelStore.spinId = null;
 
-  // token slots var mainīties (ja token tika noņemts / manual cap mainījās)
   wheelSyncTokenSlots(true);
 
   saveWheelStore();
   wheelEmitUpdate(true);
 
-  if (WHEEL_ANNOUNCE_TO_CHAT && last?.winnerName) {
-    // Paziņojums spēles čatā (optional)
+  if (WHEEL_ANNOUNCE_TO_CHAT && last?.winnerName && io) {
     io.emit("chatMessage", {
       username: "SYSTEM",
       text: `🎡 Laimes rats: uzvarēja ${last.winnerName}!`,
@@ -717,10 +706,9 @@ function wheelFinishSpin(spinId) {
   }
 }
 
-function wheelStartSpin(byUsername) {
+function wheelStartSpin(byUsername, io) {
   if (wheelIsSpinningNow()) return { ok: false, message: "Spin jau notiek." };
 
-  // pārsync token slots pirms spin (lai ir 100% aktuāli)
   wheelSyncTokenSlots(true);
 
   const combined = wheelGetCombinedSlots();
@@ -781,7 +769,7 @@ function wheelStartSpin(byUsername) {
     wheelNsp.emit("spin", spinPayload);
   }
 
-  setTimeout(() => wheelFinishSpin(spinId), ms + 30);
+  setTimeout(() => wheelFinishSpin(spinId, io), ms + 30);
 
   return { ok: true, ...spinPayload };
 }
@@ -1254,7 +1242,6 @@ function resetCoinsAndTokensForAllUsers() {
   }
   saveUsers(USERS);
 
-  // wheel: token slots jāatjauno
   wheelSyncTokenSlots(true);
   wheelEmitUpdate(true);
 }
@@ -1320,7 +1307,6 @@ function startSeasonFlow({ byAdminUsername } = {}) {
   seasonStore.current = seasonState;
   saveJsonAtomic(SEASONS_FILE, seasonStore);
 
-  // reset coins + tokens visiem (optional, caur ENV)
   let didReset = false;
   if (RESET_COINS_TOKENS_ON_ROLLOVER) {
     resetCoinsAndTokensForAllUsers();
@@ -1355,12 +1341,13 @@ function buildMePayload(u) {
     tokenPriceCoins: getTokenPrice(u),
     medals,
     avatarUrl: u.avatarUrl || null,
+    supporter: !!u.supporter,
   };
 }
 
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization || "";
-  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  const token = String(authHeader).replace(/^Bearer\s+/i, "").trim();
   if (!token) return res.status(401).json({ message: "Nav token" });
 
   try {
@@ -1382,6 +1369,11 @@ function authMiddleware(req, res, next) {
 
 // ======== Express + Socket.IO ========
 const app = express();
+
+// Hardening (safe)
+app.disable("x-powered-by");
+app.set("trust proxy", 1);
+
 app.use(cors(corsOptions));
 
 // ======== BODY PARSER LIMITI ========
@@ -1425,7 +1417,7 @@ const onlineBySocket = new Map(); // socket.id -> username
 function getMiniUserPayload(username) {
   const u = USERS[username];
   if (!u) {
-    return { username, avatarUrl: null, rankLevel: 1, rankTitle: "—" };
+    return { username, avatarUrl: null, rankLevel: 1, rankTitle: "—", supporter: false };
   }
   const info = ensureRankFields(u);
   return {
@@ -1602,7 +1594,6 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         `Admin ${adminUser.username} nobanoja lietotāju ${targetName}.`
       );
 
-      // wheel token slots jāatjauno (ban -> vairs nav ratā)
       wheelSyncTokenSlots(true);
       wheelEmitUpdate(true);
 
@@ -1623,7 +1614,6 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         `Admin ${adminUser.username} atbanoja lietotāju ${targetName}.`
       );
 
-      // wheel token slots jāatjauno (unban -> var atgriezties ratā)
       wheelSyncTokenSlots(true);
       wheelEmitUpdate(true);
 
@@ -1748,12 +1738,13 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         const totalSec = Math.floor(diffMs / 1000);
         const days = Math.floor(totalSec / (24 * 3600));
         const hours = Math.floor((totalSec % (24 * 3600)) / 3600);
-        const mins = Math.floor((totalSec % 3600) / 60);
+        const mins = Math.floor((totalSec % 3600)) / 60;
+        const minsInt = Math.floor(mins);
         const secs = totalSec % 60;
 
         const endStr = new Date(endTs).toLocaleString("lv-LV", { timeZone: TZ });
 
-        text = `${seasonState.name} ir aktīva. Līdz sezonas beigām: ${days}d ${hours}h ${mins}m ${secs}s (līdz ${endStr}).`;
+        text = `${seasonState.name} ir aktīva. Līdz sezonas beigām: ${days}d ${hours}h ${minsInt}m ${secs}s (līdz ${endStr}).`;
       }
 
       adminSocket.emit("chatMessage", {
@@ -1819,6 +1810,7 @@ async function signupHandler(req, res) {
     duelsWon: 0,
     duelsLost: 0,
     avatarUrl: null,
+    supporter: false, // NEW default
     dailyChest: { lastDate: "", streak: 0, totalOpens: 0 },
     specialMedals: [],
     lastChatAt: 0,
@@ -1837,7 +1829,6 @@ async function signupHandler(req, res) {
   USERS[name] = user;
   saveUsers(USERS);
 
-  // leaderboard var mainīties (jaunie lietotāji parasti ar 0, bet nav kaitīgi)
   broadcastLeaderboard(false);
 
   const token = jwt.sign({ username: name }, JWT_SECRET, { expiresIn: "30d" });
@@ -1874,6 +1865,9 @@ async function loginHandler(req, res) {
   ensureDailyChest(user);
   ensureSpecialMedals(user);
   ensureRankFields(user);
+
+  if (typeof user.supporter !== "boolean") user.supporter = false;
+
   saveUsers(USERS);
 
   const token = jwt.sign({ username: name }, JWT_SECRET, { expiresIn: "30d" });
@@ -1892,6 +1886,7 @@ app.get("/me", authMiddleware, (req, res) => {
   ensureDailyChest(u);
   ensureSpecialMedals(u);
   ensureRankFields(u);
+  if (typeof u.supporter !== "boolean") u.supporter = false;
   saveUsers(USERS);
   res.json(buildMePayload(u));
 });
@@ -1956,6 +1951,7 @@ function buildPublicProfilePayload(targetUser, requester) {
     duelsWon: targetUser.duelsWon || 0,
     duelsLost: targetUser.duelsLost || 0,
     avatarUrl: targetUser.avatarUrl || null,
+    supporter: !!targetUser.supporter,
   };
 
   if (isAdmin) {
@@ -2026,7 +2022,6 @@ app.post("/missions/claim", authMiddleware, (req, res) => {
   saveUsers(USERS);
   broadcastLeaderboard(false);
 
-  // wheel: tokens var mainīties
   if (addTokens > 0) {
     wheelSyncTokenSlots(true);
     wheelEmitUpdate(true);
@@ -2098,7 +2093,6 @@ app.post("/chest/open", authMiddleware, (req, res) => {
   saveUsers(USERS);
   broadcastLeaderboard(false);
 
-  // wheel: tokens var mainīties
   if (tokensGain > 0) {
     wheelSyncTokenSlots(true);
     wheelEmitUpdate(true);
@@ -2286,6 +2280,14 @@ app.post("/guess", authMiddleware, (req, res) => {
     });
   }
 
+  // NEW: atļaujam tikai burtus (A-Z + LV)
+  if (!GUESS_ALLOWED_RE.test(guessRaw)) {
+    saveUsers(USERS);
+    return res.status(400).json({
+      message: "Minējumā drīkst būt tikai burti (A-Z + latviešu burti).",
+    });
+  }
+
   if (round.attemptsLeft <= 0) {
     round.finished = true;
     saveUsers(USERS);
@@ -2359,12 +2361,10 @@ app.post("/guess", authMiddleware, (req, res) => {
 
   round.finished = finished;
 
-  // misijas (tagad bez dubult-save)
   updateMissionsOnGuess(user, { isWin, xpGain });
 
   saveUsers(USERS);
 
-  // (UZLABOJUMS) push leaderboard, ja mainījās
   if (isWin) broadcastLeaderboard(false);
 
   res.json({
@@ -2394,7 +2394,6 @@ app.post("/buy-token", authMiddleware, (req, res) => {
   saveUsers(USERS);
   broadcastLeaderboard(false);
 
-  // wheel: tokens mainījās -> atjaunojam ratā
   wheelSyncTokenSlots(true);
   wheelEmitUpdate(true);
 
@@ -2551,12 +2550,15 @@ setInterval(() => {
 
 // ======== Socket.IO auth middleware (atšķiras /wheel) ========
 function extractSocketToken(socket) {
-  const t =
-    socket.handshake.auth?.token ||
-    socket.handshake.query?.token ||
-    socket.handshake.headers?.authorization
-      ?.replace(/^Bearer\s+/i, "")
-      .trim();
+  // FIX: nekad neizsauc .trim() uz undefined
+  const fromAuth = socket?.handshake?.auth?.token;
+  const fromQuery = socket?.handshake?.query?.token;
+
+  const hdr = socket?.handshake?.headers?.authorization;
+  const fromHeader =
+    typeof hdr === "string" ? hdr.replace(/^Bearer\s+/i, "").trim() : "";
+
+  const t = fromAuth || fromQuery || fromHeader;
   return t ? String(t).trim() : "";
 }
 
@@ -2574,7 +2576,6 @@ io.use((socket, next) => {
       if (user && !user.isBanned) socket.data.user = user;
       return next();
     } catch {
-      // nederīgs token — joprojām ļaujam pieslēgties (read-only)
       return next();
     }
   }
@@ -2606,12 +2607,10 @@ wheelNsp.on("connection", (socket) => {
     isAdmin: u ? isAdminUser(u) : false,
   };
 
-  // initial state
   socket.emit("wheel:me", me);
   socket.emit("wheel:update", publicWheelState());
   socket.emit("update", publicWheelState());
 
-  // helper: bind both event names
   const bind = (action, fn) => {
     socket.on(`wheel:${action}`, fn);
     socket.on(action, fn);
@@ -2622,7 +2621,6 @@ wheelNsp.on("connection", (socket) => {
     socket.emit("update", publicWheelState());
   });
 
-  // admin: force sync tokens -> slots
   bind("syncTokens", () => {
     const admin = wheelRequireAdmin(socket);
     if (!admin) return;
@@ -2651,7 +2649,6 @@ wheelNsp.on("connection", (socket) => {
     if (!admin) return;
     if (wheelBlockIfSpinning(socket)) return;
 
-    // remove one by index (COMBINED index)
     if (payload && (payload.index || payload.index === 0)) {
       const r = wheelRemoveOneByIndex(payload.index);
       if (!r.ok) return wheelEmitError(socket, r.message);
@@ -2696,7 +2693,7 @@ wheelNsp.on("connection", (socket) => {
     const admin = wheelRequireAdmin(socket);
     if (!admin) return;
 
-    const r = wheelStartSpin(admin.username);
+    const r = wheelStartSpin(admin.username, io);
     if (!r.ok) return wheelEmitError(socket, r.message);
   });
 });
@@ -2716,6 +2713,7 @@ io.on("connection", (socket) => {
   ensureDailyChest(user);
   ensureSpecialMedals(user);
   ensureRankFields(user);
+  if (typeof user.supporter !== "boolean") user.supporter = false;
 
   const bonus = grantDailyLoginBonus(user);
   if (bonus > 0) {
@@ -2735,7 +2733,6 @@ io.on("connection", (socket) => {
   socket.emit("seasonUpdate", seasonState);
   socket.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
 
-  // Leaderboard pull
   socket.on("leaderboard:top10", () => {
     socket.emit("leaderboard:update", computeTop10Leaderboard());
   });
@@ -2749,8 +2746,6 @@ io.on("connection", (socket) => {
 
     const u = USERS[user.username] || user;
 
-    // Čata fix: vairs nerakstām users.json uz katru ziņu.
-    // Saglabājam tikai tad, ja tiešām piešķīrās pasīvie coini vai admin izmaiņas.
     const passiveChanged = markActivity(u);
     ensureRankFields(u);
 
@@ -2814,6 +2809,7 @@ io.on("connection", (socket) => {
       avatarUrl: u.avatarUrl || null,
       rankTitle: u.rankTitle || "—",
       rankLevel: u.rankLevel || 1,
+      supporter: !!u.supporter,
     });
   });
 
@@ -2965,6 +2961,10 @@ io.on("connection", (socket) => {
     if (rawGuess.length !== duel.len)
       return socket.emit("duel.error", {
         message: `Vārdam duelī jābūt ${duel.len} burtiem.`,
+      });
+    if (!GUESS_ALLOWED_RE.test(rawGuess))
+      return socket.emit("duel.error", {
+        message: "Minējumā drīkst būt tikai burti (A-Z + latviešu burti).",
       });
     if (duel.attemptsLeft[userName] <= 0)
       return socket.emit("duel.error", {
