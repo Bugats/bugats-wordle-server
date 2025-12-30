@@ -2609,17 +2609,34 @@ io.use((socket, next) => {
 // ======== WHEEL namespace (/wheel) ========
 wheelNsp = io.of("/wheel");
 
+// (FIX) Namespace-specific auth: /wheel savienojumiem ielasa token un iestata socket.data.user
+// Atļauj arī bez token (read-only).
+wheelNsp.use((socket, next) => {
+  const token = extractSocketToken(socket);
+  if (!token) return next();
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    const user = USERS[payload.username];
+    if (user && !user.isBanned) socket.data.user = user;
+  } catch {
+    // nederīgs token -> paliek read-only
+  }
+  return next();
+});
+
 // initial token sync (pirms pirmās publiskās state)
 wheelSyncTokenSlots(true);
 
 wheelNsp.on("connection", (socket) => {
-  const u = socket.data.user || null;
-  const me = {
-    username: u?.username || null,
-    isAdmin: u ? isAdminUser(u) : false,
+  const getMe = () => {
+    const u = socket.data.user || null;
+    return {
+      username: u?.username || null,
+      isAdmin: u ? isAdminUser(u) : false,
+    };
   };
 
-  socket.emit("wheel:me", me);
+  socket.emit("wheel:me", getMe());
   socket.emit("wheel:update", publicWheelState());
   socket.emit("update", publicWheelState());
 
@@ -2627,6 +2644,28 @@ wheelNsp.on("connection", (socket) => {
     socket.on(`wheel:${action}`, fn);
     socket.on(action, fn);
   };
+
+  // (BONUS) ja wheel.js pieslēdzas bez token, vari pēc tam iedot token:
+  // socket.emit("wheel:auth", { token })
+  bind("auth", (payload = {}) => {
+    const t = String(payload?.token || "").trim();
+    if (!t) return wheelEmitError(socket, "Nav token.");
+    try {
+      const p = jwt.verify(t, JWT_SECRET);
+      const user = USERS[p?.username];
+      if (user && !user.isBanned) {
+        socket.data.user = user;
+      } else {
+        socket.data.user = null;
+      }
+      socket.emit("wheel:me", getMe());
+      // iedod svaigu state uzreiz
+      socket.emit("wheel:update", publicWheelState());
+      socket.emit("update", publicWheelState());
+    } catch {
+      wheelEmitError(socket, "Nederīgs token.");
+    }
+  });
 
   bind("join", () => {
     socket.emit("wheel:update", publicWheelState());
@@ -2709,7 +2748,6 @@ wheelNsp.on("connection", (socket) => {
     if (!r.ok) return wheelEmitError(socket, r.message);
   });
 });
-
 // ======== Socket.IO pamat-connection (spēle) ========
 io.on("connection", (socket) => {
   const user = socket.data.user;
