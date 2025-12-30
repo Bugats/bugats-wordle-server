@@ -76,7 +76,7 @@ const AVATAR_MAX_CHARS = (() => {
 })();
 
 // Admin lietotāji (case-insensitive)
-// (bonus) vari paplašināt ar ENV: ADMIN_USERNAMES="Bugats,BugatsLV,AnotherNick"
+// (bonus) vari paplašināt ar ENV: ADMIN_USERNAMES="BugatsLV,AnotherNick"
 const ADMIN_USERNAMES = (() => {
   const raw = String(process.env.ADMIN_USERNAMES || "").trim();
   const defaults = ["BugatsLV"]; // ADMINI tikai BugatsLV
