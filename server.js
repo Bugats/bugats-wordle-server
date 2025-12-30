@@ -235,7 +235,7 @@ function loadUsers() {
       // Avatārs
       if (typeof u.avatarUrl !== "string") u.avatarUrl = null;
 
-      // Supporter flag (NEW: default boolean)
+      // Supporter flag
       if (typeof u.supporter !== "boolean") u.supporter = false;
 
       // Daily Chest
@@ -341,10 +341,9 @@ const WHEEL_ANNOUNCE_TO_CHAT =
 
 function buildInitialWheelStore() {
   return {
-    // MANUĀLIE ieraksti (tavs izvēlētais vārds / custom entries)
     manualSlots: [],
     settings: { spinMs: WHEEL_DEFAULT_SPIN_MS, removeOnWin: true },
-    lastSpin: null, // { winnerName, winnerIndex, winnerSource, by, at, spinMs, slotsCount, manualCount, tokenCount }
+    lastSpin: null,
     spinning: false,
     spinEndsAt: 0,
     spinId: null,
@@ -383,7 +382,6 @@ function normalizeWheelStore(x) {
   out.spinEndsAt = Number.isFinite(out.spinEndsAt) ? out.spinEndsAt : 0;
   out.spinId = typeof out.spinId === "string" ? out.spinId : null;
 
-  // ja server restartējas spin laikā — vienkārši noresetojam spin flag, ja laiks beidzies
   const now = Date.now();
   if (out.spinning && out.spinEndsAt && now >= out.spinEndsAt) {
     out.spinning = false;
@@ -391,7 +389,6 @@ function normalizeWheelStore(x) {
     out.spinId = null;
   }
 
-  // atstājam out.slots (ja ir) tikai saderībai, bet turpmāk saglabājam manualSlots
   return out;
 }
 
@@ -399,7 +396,6 @@ let wheelStore = normalizeWheelStore(loadJsonSafe(WHEEL_FILE, null));
 if (!fs.existsSync(WHEEL_FILE)) {
   saveJsonAtomic(WHEEL_FILE, wheelStore);
 } else {
-  // ja bija vecais formāts, ierecordējam jaunajā
   saveJsonAtomic(WHEEL_FILE, wheelStore);
 }
 
@@ -583,24 +579,61 @@ function wheelAdd(nameRaw, countRaw) {
   for (let i = 0; i < count; i++) manual.push(name);
 
   saveWheelStore();
-
   wheelSyncTokenSlots(true);
 
   return { ok: true, name, count };
 }
 
+function findUserKeyCaseInsensitive(nameRaw) {
+  const q = String(nameRaw || "").trim().toLowerCase();
+  if (!q) return null;
+  // tiešā atslēga
+  if (USERS[nameRaw]) return nameRaw;
+  // meklējam pēc lower
+  for (const k of Object.keys(USERS || {})) {
+    if (String(k).toLowerCase() === q) return k;
+  }
+  return null;
+}
+
+// (UPDATED) noņem “no visurienes” (manualSlots + tokens=0), case-insensitive
 function wheelRemoveAllByName(nameRaw) {
   const name = String(nameRaw || "").trim();
   if (!name) return { ok: false, message: "Nav vārda." };
 
-  const before = wheelStore.manualSlots.length;
-  wheelStore.manualSlots = wheelStore.manualSlots.filter((x) => x !== name);
-  const removed = before - wheelStore.manualSlots.length;
+  const needle = name.toLowerCase();
+
+  const beforeManual = wheelStore.manualSlots.length;
+  wheelStore.manualSlots = wheelStore.manualSlots.filter(
+    (x) => String(x || "").toLowerCase() !== needle
+  );
+  const removedManual = beforeManual - wheelStore.manualSlots.length;
+
+  // ja šis ir reāls user, uzliekam tokens=0
+  const key = findUserKeyCaseInsensitive(name);
+  let tokensBefore = null;
+  let tokensNow = null;
+  let userMatched = null;
+
+  if (key && USERS[key]) {
+    userMatched = USERS[key].username;
+    tokensBefore = Math.max(0, Math.floor(USERS[key].tokens || 0));
+    USERS[key].tokens = 0;
+    tokensNow = 0;
+    saveUsers(USERS);
+  }
 
   saveWheelStore();
   wheelSyncTokenSlots(true);
 
-  return { ok: true, name, removed };
+  return {
+    ok: true,
+    name,
+    removedManual,
+    userMatched,
+    tokensBefore,
+    tokensNow,
+  };
 }
 
 function wheelRemoveOneByIndex(indexRaw) {
@@ -624,7 +657,9 @@ function wheelRemoveOneByIndex(indexRaw) {
     return { ok: true, index: idx, name: removedName, source: "manual" };
   }
 
-  const u = USERS[removedName];
+  // token slots: noņem 1 biļeti (tokens -1)
+  const key = findUserKeyCaseInsensitive(removedName);
+  const u = key ? USERS[key] : null;
   if (u) {
     const prev = Math.max(0, Math.floor(u.tokens || 0));
     u.tokens = Math.max(0, prev - 1);
@@ -633,7 +668,7 @@ function wheelRemoveOneByIndex(indexRaw) {
     return {
       ok: true,
       index: idx,
-      name: removedName,
+      name: u.username,
       source: "token",
       tokensNow: u.tokens,
     };
@@ -663,7 +698,8 @@ function wheelApplySettings({ spinMs, removeOnWin }) {
     Number.isFinite(ms) && ms >= 3000 && ms <= 60000
       ? ms
       : WHEEL_DEFAULT_SPIN_MS;
-  if (typeof removeOnWin === "boolean") wheelStore.settings.removeOnWin = removeOnWin;
+  if (typeof removeOnWin === "boolean")
+    wheelStore.settings.removeOnWin = removeOnWin;
   saveWheelStore();
 }
 
@@ -692,7 +728,8 @@ function wheelFinishSpin(spinId, io) {
       }
       saveWheelStore();
     } else if (src === "token") {
-      const u = USERS[winnerName];
+      const key = findUserKeyCaseInsensitive(winnerName);
+      const u = key ? USERS[key] : null;
       if (u) {
         const prev = Math.max(0, Math.floor(u.tokens || 0));
         u.tokens = Math.max(0, prev - 1);
@@ -730,7 +767,10 @@ function wheelStartSpin(byUsername, io) {
   const n = slots.length;
   if (!n) return { ok: false, message: "Nav neviena ieraksta ratā." };
 
-  const spinMs = parseInt(wheelStore.settings?.spinMs ?? WHEEL_DEFAULT_SPIN_MS, 10);
+  const spinMs = parseInt(
+    wheelStore.settings?.spinMs ?? WHEEL_DEFAULT_SPIN_MS,
+    10
+  );
   const ms =
     Number.isFinite(spinMs) && spinMs >= 3000 && spinMs <= 60000
       ? spinMs
@@ -1171,103 +1211,10 @@ function defaultSeasonFinishedAt(seasonId) {
   const sid = Number(seasonId) || 0;
   if (sid === 1 && Number.isFinite(SEASON1_END_AT)) return SEASON1_END_AT;
 
-  // ja override-ojam pašreizējo sezonu, izmantojam tās endAt
   if (Number(seasonState?.id) === sid && Number.isFinite(seasonState?.endAt)) {
     return seasonState.endAt;
   }
   return Date.now();
-}
-
-function removeSpecialMedalFromAllUsers(code) {
-  if (!code) return false;
-  let changed = false;
-  for (const u of Object.values(USERS || {})) {
-    if (!u || !u.username) continue;
-    if (!Array.isArray(u.specialMedals)) u.specialMedals = [];
-    const before = u.specialMedals.length;
-    u.specialMedals = u.specialMedals.filter((m) => !(m && m.code === code));
-    if (u.specialMedals.length !== before) changed = true;
-  }
-  return changed;
-}
-
-// ADMIN override: pārraksta HOF sezonas čempionu + sakārto medaļu
-function upsertHallOfFameWinner(seasonId, username, scoreOverride, finishedAtOverride) {
-  const sid = Number(seasonId) || 0;
-  if (sid <= 0) return { ok: false, message: "Nederīgs seasonId." };
-
-  const uname = String(username || "").trim();
-  if (!uname) return { ok: false, message: "Nav username." };
-
-  const champ = USERS[uname];
-  if (!champ) return { ok: false, message: "Lietotājs nav atrasts users.json." };
-
-  if (champ.isBanned) {
-    // ļaujam, bet brīdinām (vari nomainīt uz return error, ja negribi)
-    console.log("HOF override: champ ir banned:", uname);
-  }
-
-  const medalCode = championMedalCode(sid);
-  const finishedAt =
-    Number.isFinite(Number(finishedAtOverride)) && Number(finishedAtOverride) > 0
-      ? Number(finishedAtOverride)
-      : defaultSeasonFinishedAt(sid);
-
-  const rankInfo = ensureRankFields(champ);
-
-  const hofEntry = {
-    seasonId: sid,
-    username: champ.username,
-    score:
-      scoreOverride !== undefined && scoreOverride !== null && scoreOverride !== ""
-        ? Math.max(0, Math.floor(Number(scoreOverride) || 0))
-        : (champ.score || 0),
-    xp: champ.xp || 0,
-    rankTitle: champ.rankTitle || rankInfo.title || "",
-    rankLevel: champ.rankLevel || rankInfo.level || 1,
-    avatarUrl: champ.avatarUrl || null,
-    finishedAt,
-    overriddenAt: Date.now(),
-  };
-
-  // izmetam veco ierakstu šai sezonai, ieliekam jauno augšā
-  seasonStore.hallOfFame = (seasonStore.hallOfFame || []).filter(
-    (x) => !(x && x.seasonId === sid)
-  );
-  seasonStore.hallOfFame.unshift(hofEntry);
-  seasonStore.hallOfFame = seasonStore.hallOfFame.slice(0, 20);
-
-  // medaļas: vispirms noņemam šo sezonas čempiona medaļu visiem, tad iedodam pareizajam
-  const removedAny = removeSpecialMedalFromAllUsers(medalCode);
-  ensureSpecialMedals(champ);
-  addSpecialMedalOnce(champ, {
-    code: medalCode,
-    icon: "🏆",
-    label: championMedalLabel(sid),
-    ts: finishedAt,
-  });
-
-  saveUsers(USERS);
-  saveJsonAtomic(SEASONS_FILE, seasonStore);
-
-  return { ok: true, hofEntry, removedAny };
-}
-function getTop1UserByScore() {
-  const all = Object.values(USERS || {});
-  if (!all.length) return null;
-
-  const sorted = all
-    .filter((u) => u && u.username && !u.isBanned)
-    .slice()
-    .sort((a, b) => {
-      const ds = (b.score || 0) - (a.score || 0);
-      if (ds !== 0) return ds;
-      const dx = (b.xp || 0) - (a.xp || 0);
-      if (dx !== 0) return dx;
-      return String(a.username).localeCompare(String(b.username));
-    });
-
-  return sorted[0] || null;
 }
 
 function ensureSpecialMedals(user) {
@@ -1288,6 +1235,102 @@ function addSpecialMedalOnce(user, medal) {
     ts: typeof medal.ts === "number" ? medal.ts : Date.now(),
   });
   return true;
+}
+
+function removeSpecialMedalFromAllUsers(code) {
+  if (!code) return false;
+  let changed = false;
+  for (const u of Object.values(USERS || {})) {
+    if (!u || !u.username) continue;
+    if (!Array.isArray(u.specialMedals)) u.specialMedals = [];
+    const before = u.specialMedals.length;
+    u.specialMedals = u.specialMedals.filter((m) => !(m && m.code === code));
+    if (u.specialMedals.length !== before) changed = true;
+  }
+  return changed;
+}
+
+// ADMIN override: pārraksta HOF sezonas čempionu + sakārto medaļu
+function upsertHallOfFameWinner(
+  seasonId,
+  username,
+  scoreOverride,
+  finishedAtOverride
+) {
+  const sid = Number(seasonId) || 0;
+  if (sid <= 0) return { ok: false, message: "Nederīgs seasonId." };
+
+  const uname = String(username || "").trim();
+  if (!uname) return { ok: false, message: "Nav username." };
+
+  const key = findUserKeyCaseInsensitive(uname);
+  const champ = key ? USERS[key] : null;
+  if (!champ) return { ok: false, message: "Lietotājs nav atrasts users.json." };
+
+  if (champ.isBanned) {
+    console.log("HOF override: champ ir banned:", uname);
+  }
+
+  const medalCode = championMedalCode(sid);
+  const finishedAt =
+    Number.isFinite(Number(finishedAtOverride)) && Number(finishedAtOverride) > 0
+      ? Number(finishedAtOverride)
+      : defaultSeasonFinishedAt(sid);
+
+  const rankInfo = ensureRankFields(champ);
+
+  const hofEntry = {
+    seasonId: sid,
+    username: champ.username,
+    score:
+      scoreOverride !== undefined && scoreOverride !== null && scoreOverride !== ""
+        ? Math.max(0, Math.floor(Number(scoreOverride) || 0))
+        : champ.score || 0,
+    xp: champ.xp || 0,
+    rankTitle: champ.rankTitle || rankInfo.title || "",
+    rankLevel: champ.rankLevel || rankInfo.level || 1,
+    avatarUrl: champ.avatarUrl || null,
+    finishedAt,
+    overriddenAt: Date.now(),
+  };
+
+  seasonStore.hallOfFame = (seasonStore.hallOfFame || []).filter(
+    (x) => !(x && x.seasonId === sid)
+  );
+  seasonStore.hallOfFame.unshift(hofEntry);
+  seasonStore.hallOfFame = seasonStore.hallOfFame.slice(0, 20);
+
+  const removedAny = removeSpecialMedalFromAllUsers(medalCode);
+  ensureSpecialMedals(champ);
+  addSpecialMedalOnce(champ, {
+    code: medalCode,
+    icon: "🏆",
+    label: championMedalLabel(sid),
+    ts: finishedAt,
+  });
+
+  saveUsers(USERS);
+  saveJsonAtomic(SEASONS_FILE, seasonStore);
+
+  return { ok: true, hofEntry, removedAny };
+}
+
+function getTop1UserByScore() {
+  const all = Object.values(USERS || {});
+  if (!all.length) return null;
+
+  const sorted = all
+    .filter((u) => u && u.username && !u.isBanned)
+    .slice()
+    .sort((a, b) => {
+      const ds = (b.score || 0) - (a.score || 0);
+      if (ds !== 0) return ds;
+      const dx = (b.xp || 0) - (a.xp || 0);
+      if (dx !== 0) return dx;
+      return String(a.username).localeCompare(String(b.username));
+    });
+
+  return sorted[0] || null;
 }
 
 function finalizeSeasonIfNeeded(seasonId) {
@@ -1319,21 +1362,12 @@ function finalizeSeasonIfNeeded(seasonId) {
   seasonStore.hallOfFame.unshift(hofEntry);
   seasonStore.hallOfFame = seasonStore.hallOfFame.slice(0, 20);
 
-  if (sid === 1) {
-    addSpecialMedalOnce(champ, {
-      code: "SEASON1_CHAMPION",
-      icon: "🏆",
-      label: "Sezona 1 čempions",
-      ts: finishedAt,
-    });
-  } else {
-    addSpecialMedalOnce(champ, {
-      code: `SEASON${sid}_CHAMPION`,
-      icon: "🏆",
-      label: `Sezona ${sid} čempions`,
-      ts: finishedAt,
-    });
-  }
+  addSpecialMedalOnce(champ, {
+    code: championMedalCode(sid),
+    icon: "🏆",
+    label: championMedalLabel(sid),
+    ts: finishedAt,
+  });
 
   saveUsers(USERS);
   saveJsonAtomic(SEASONS_FILE, seasonStore);
@@ -1393,7 +1427,12 @@ function startSeasonFlow({ byAdminUsername } = {}) {
   }
 
   if (!curEnded && cur && cur.active) {
-    return { mode: "already_active", season: cur, hofEntry: null, didReset: false };
+    return {
+      mode: "already_active",
+      season: cur,
+      hofEntry: null,
+      didReset: false,
+    };
   }
 
   const hofEntry = finalizeSeasonIfNeeded(curId);
@@ -1420,9 +1459,7 @@ function startSeasonFlow({ byAdminUsername } = {}) {
   }
 
   if (byAdminUsername) {
-    console.log(
-      `SEASON rollover by ${byAdminUsername}: now ${seasonState.name}`
-    );
+    console.log(`SEASON rollover by ${byAdminUsername}: now ${seasonState.name}`);
   }
 
   return { mode: "rolled_next", season: seasonState, hofEntry, didReset };
@@ -1501,10 +1538,10 @@ app.use((err, req, res, next) => {
 app.get("/", (_req, res) => res.send("VĀRDU ZONA OK"));
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-// (UZLABOJUMS) vienkāršs logout (ja nelieto — neko nesalauž)
+// vienkāršs logout
 app.post("/logout", (_req, res) => res.json({ ok: true }));
 
-// (bonus) wheel state (debug / integrācijām)
+// wheel state
 app.get("/wheel/state", (_req, res) => {
   res.json(publicWheelState());
 });
@@ -1523,7 +1560,13 @@ const onlineBySocket = new Map(); // socket.id -> username
 function getMiniUserPayload(username) {
   const u = USERS[username];
   if (!u) {
-    return { username, avatarUrl: null, rankLevel: 1, rankTitle: "—", supporter: false };
+    return {
+      username,
+      avatarUrl: null,
+      rankLevel: 1,
+      rankTitle: "—",
+      supporter: false,
+    };
   }
   const info = ensureRankFields(u);
   return {
@@ -1610,7 +1653,6 @@ function broadcastLeaderboard(force = false) {
   io.emit("leaderboard:update", top);
 }
 
-// periodiski (drošībai)
 setInterval(() => {
   broadcastLeaderboard(false);
 }, 45 * 1000);
@@ -1666,7 +1708,8 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
     return;
   }
 
-  const target = targetName ? USERS[targetName] : null;
+  const key = targetName ? findUserKeyCaseInsensitive(targetName) : null;
+  const target = key ? USERS[key] : null;
 
   switch (cmd) {
     case "kick":
@@ -1678,9 +1721,9 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         });
         return;
       }
-      kickUserByName(targetName, "kick");
+      kickUserByName(target.username, "kick");
       broadcastSystemMessage(
-        `Admin ${adminUser.username} izmeta lietotāju ${targetName}.`
+        `Admin ${adminUser.username} izmeta lietotāju ${target.username}.`
       );
       break;
 
@@ -1695,9 +1738,9 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       }
       target.isBanned = true;
       saveUsers(USERS);
-      kickUserByName(targetName, "ban");
+      kickUserByName(target.username, "ban");
       broadcastSystemMessage(
-        `Admin ${adminUser.username} nobanoja lietotāju ${targetName}.`
+        `Admin ${adminUser.username} nobanoja lietotāju ${target.username}.`
       );
 
       wheelSyncTokenSlots(true);
@@ -1717,7 +1760,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       target.isBanned = false;
       saveUsers(USERS);
       broadcastSystemMessage(
-        `Admin ${adminUser.username} atbanoja lietotāju ${targetName}.`
+        `Admin ${adminUser.username} atbanoja lietotāju ${target.username}.`
       );
 
       wheelSyncTokenSlots(true);
@@ -1741,7 +1784,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       target.mutedUntil = Date.now() + mins * 60 * 1000;
       saveUsers(USERS);
       broadcastSystemMessage(
-        `Admin ${adminUser.username} uzlika mute lietotājam ${targetName} uz ${mins} min.`
+        `Admin ${adminUser.username} uzlika mute lietotājam ${target.username} uz ${mins} min.`
       );
       break;
     }
@@ -1758,7 +1801,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       target.mutedUntil = 0;
       saveUsers(USERS);
       broadcastSystemMessage(
-        `Admin ${adminUser.username} noņēma mute lietotājam ${targetName}.`
+        `Admin ${adminUser.username} noņēma mute lietotājam ${target.username}.`
       );
       break;
 
@@ -1847,7 +1890,9 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         const minsInt = Math.floor((totalSec % 3600) / 60);
         const secs = totalSec % 60;
 
-        const endStr = new Date(endTs).toLocaleString("lv-LV", { timeZone: TZ });
+        const endStr = new Date(endTs).toLocaleString("lv-LV", {
+          timeZone: TZ,
+        });
 
         text = `${seasonState.name} ir aktīva. Līdz sezonas beigām: ${days}d ${hours}h ${minsInt}m ${secs}s (līdz ${endStr}).`;
       }
@@ -1859,46 +1904,47 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       });
       break;
     }
-case "hofset": {
-  // lietošana:
-  // /hofset 1 SantaEva13 957
-  const sid = parseInt(parts[1] || "", 10);
-  const uname = String(parts[2] || "").trim();
-  const scoreOverride = parts[3]; // optional
 
-  if (!Number.isFinite(sid) || sid <= 0 || !uname) {
-    adminSocket.emit("chatMessage", {
-      username: "SYSTEM",
-      text: "Lietošana: /hofset <seasonId> <username> [score]",
-      ts: Date.now(),
-    });
-    return;
-  }
+    case "hofset": {
+      // /hofset <seasonId> <username> [score]
+      const sid = parseInt(parts[1] || "", 10);
+      const uname = String(parts[2] || "").trim();
+      const scoreOverride = parts[3]; // optional
 
-  const r = upsertHallOfFameWinner(sid, uname, scoreOverride, null);
-  if (!r.ok) {
-    adminSocket.emit("chatMessage", {
-      username: "SYSTEM",
-      text: `HOF error: ${r.message}`,
-      ts: Date.now(),
-    });
-    return;
-  }
+      if (!Number.isFinite(sid) || sid <= 0 || !uname) {
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: "Lietošana: /hofset <seasonId> <username> [score]",
+          ts: Date.now(),
+        });
+        return;
+      }
 
-  io.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
+      const r = upsertHallOfFameWinner(sid, uname, scoreOverride, null);
+      if (!r.ok) {
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: `HOF error: ${r.message}`,
+          ts: Date.now(),
+        });
+        return;
+      }
 
-  adminSocket.emit("chatMessage", {
-    username: "SYSTEM",
-    text: `OK: Sezona ${sid} čempions = ${r.hofEntry.username} (score ${r.hofEntry.score}).`,
-    ts: Date.now(),
-  });
-  break;
-}
-      
+      io.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
+
+      adminSocket.emit("chatMessage", {
+        username: "SYSTEM",
+        text: `OK: Sezona ${sid} čempions = ${r.hofEntry.username} (score ${r.hofEntry.score}).`,
+        ts: Date.now(),
+      });
+      break;
+    }
+
     default:
       adminSocket.emit("chatMessage", {
         username: "SYSTEM",
-        text: "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute, /seasonstart, /seasononline.",
+        text:
+          "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute, /seasonstart, /seasononline, /hofset <sid> <username> [score].",
         ts: Date.now(),
       });
   }
@@ -1950,7 +1996,7 @@ async function signupHandler(req, res) {
     duelsWon: 0,
     duelsLost: 0,
     avatarUrl: null,
-    supporter: false, // NEW default
+    supporter: false,
     dailyChest: { lastDate: "", streak: 0, totalOpens: 0 },
     specialMedals: [],
     lastChatAt: 0,
@@ -1965,6 +2011,7 @@ async function signupHandler(req, res) {
   ensureRankFields(user);
   ensureDailyMissions(user);
   ensureDailyChest(user);
+  ensureSpecialMedals(user);
 
   USERS[name] = user;
   saveUsers(USERS);
@@ -2104,7 +2151,8 @@ function buildPublicProfilePayload(targetUser, requester) {
 app.get("/player/:username", authMiddleware, (req, res) => {
   const requester = req.user;
   const name = String(req.params.username || "").trim();
-  const user = USERS[name];
+  const key = findUserKeyCaseInsensitive(name);
+  const user = key ? USERS[key] : null;
   if (!user) return res.status(404).json({ message: "Lietotājs nav atrasts" });
   res.json(buildPublicProfilePayload(user, requester));
 });
@@ -2112,7 +2160,8 @@ app.get("/player/:username", authMiddleware, (req, res) => {
 app.get("/profile/:username", authMiddleware, (req, res) => {
   const requester = req.user;
   const name = String(req.params.username || "").trim();
-  const user = USERS[name];
+  const key = findUserKeyCaseInsensitive(name);
+  const user = key ? USERS[key] : null;
   if (!user) return res.status(404).json({ message: "Lietotājs nav atrasts" });
   res.json(buildPublicProfilePayload(user, requester));
 });
@@ -2445,7 +2494,6 @@ app.post("/guess", authMiddleware, (req, res) => {
     });
   }
 
-  // NEW: atļaujam tikai burtus (A-Z + LV)
   if (!GUESS_ALLOWED_RE.test(guessRaw)) {
     saveUsers(USERS);
     return res.status(400).json({
@@ -2715,7 +2763,6 @@ setInterval(() => {
 
 // ======== Socket.IO auth middleware (atšķiras /wheel) ========
 function extractSocketToken(socket) {
-  // FIX: nekad neizsauc .trim() uz undefined
   const fromAuth = socket?.handshake?.auth?.token;
   const fromQuery = socket?.handshake?.query?.token;
 
@@ -2762,8 +2809,6 @@ io.use((socket, next) => {
 // ======== WHEEL namespace (/wheel) ========
 wheelNsp = io.of("/wheel");
 
-// (FIX) Namespace-specific auth: /wheel savienojumiem ielasa token un iestata socket.data.user
-// Atļauj arī bez token (read-only).
 wheelNsp.use((socket, next) => {
   const token = extractSocketToken(socket);
   if (!token) return next();
@@ -2777,7 +2822,7 @@ wheelNsp.use((socket, next) => {
   return next();
 });
 
-// initial token sync (pirms pirmās publiskās state)
+// initial token sync
 wheelSyncTokenSlots(true);
 
 wheelNsp.on("connection", (socket) => {
@@ -2798,8 +2843,6 @@ wheelNsp.on("connection", (socket) => {
     socket.on(action, fn);
   };
 
-  // (BONUS) ja wheel.js pieslēdzas bez token, vari pēc tam iedot token:
-  // socket.emit("wheel:auth", { token })
   bind("auth", (payload = {}) => {
     const t = String(payload?.token || "").trim();
     if (!t) return wheelEmitError(socket, "Nav token.");
@@ -2812,7 +2855,6 @@ wheelNsp.on("connection", (socket) => {
         socket.data.user = null;
       }
       socket.emit("wheel:me", getMe());
-      // iedod svaigu state uzreiz
       socket.emit("wheel:update", publicWheelState());
       socket.emit("update", publicWheelState());
     } catch {
@@ -2832,8 +2874,9 @@ wheelNsp.on("connection", (socket) => {
     wheelSyncTokenSlots(true);
     wheelEmitUpdate(true);
   });
-  // ===== (NEW) ADMIN: koreģēt žetonus (+/- vai set) =====
-  bind("adjustTokens", (payload = {}) => {
+
+  // ===== ADMIN: tokenAdjust / tokenSet (un saderība ar adjustTokens) =====
+  function applyTokenChange(payload = {}, mode = "auto") {
     const admin = wheelRequireAdmin(socket);
     if (!admin) return;
     if (wheelBlockIfSpinning(socket)) return;
@@ -2846,40 +2889,54 @@ wheelNsp.on("connection", (socket) => {
 
     if (!username) return wheelEmitError(socket, "Nav username.");
 
-    const target = USERS[username];
+    const key = findUserKeyCaseInsensitive(username);
+    const target = key ? USERS[key] : null;
     if (!target) return wheelEmitError(socket, "Lietotājs nav atrasts.");
-
-    const hasSet = payload.set !== undefined && payload.set !== null && payload.set !== "";
-    const hasDelta = payload.delta !== undefined && payload.delta !== null && payload.delta !== "";
-
-    if (!hasSet && !hasDelta) {
-      return wheelEmitError(socket, "Norādi set vai delta.");
-    }
 
     let nextTokens = Math.max(0, Math.floor(target.tokens || 0));
 
-    if (hasSet) {
-      const v = parseInt(payload.set, 10);
+    if (mode === "set") {
+      const v = parseInt(payload.set ?? payload.value ?? payload.tokens, 10);
       if (!Number.isFinite(v) || v < 0) return wheelEmitError(socket, "Nederīgs set.");
       nextTokens = v;
-    } else {
-      const d = parseInt(payload.delta, 10);
+    } else if (mode === "delta") {
+      const d = parseInt(payload.delta ?? payload.d ?? payload.change, 10);
       if (!Number.isFinite(d) || d === 0) return wheelEmitError(socket, "Nederīgs delta.");
       nextTokens = Math.max(0, nextTokens + d);
+    } else {
+      const hasSet =
+        payload.set !== undefined && payload.set !== null && payload.set !== "";
+      const hasDelta =
+        payload.delta !== undefined && payload.delta !== null && payload.delta !== "";
+      if (!hasSet && !hasDelta) return wheelEmitError(socket, "Norādi set vai delta.");
+
+      if (hasSet) {
+        const v = parseInt(payload.set, 10);
+        if (!Number.isFinite(v) || v < 0) return wheelEmitError(socket, "Nederīgs set.");
+        nextTokens = v;
+      } else {
+        const d = parseInt(payload.delta, 10);
+        if (!Number.isFinite(d) || d === 0) return wheelEmitError(socket, "Nederīgs delta.");
+        nextTokens = Math.max(0, nextTokens + d);
+      }
     }
 
     target.tokens = nextTokens;
     saveUsers(USERS);
 
-    // uzreiz atjaunojam ratu
     wheelSyncTokenSlots(true);
     wheelEmitUpdate(true);
 
-    socket.emit("wheel:tokensUpdated", { username, tokens: nextTokens });
-  });
+    socket.emit("wheel:tokensUpdated", {
+      username: target.username,
+      tokens: nextTokens,
+    });
+  }
 
-  // alias (ja gribi)
-  bind("tokens", (payload = {}) => socket.emit("wheel:adjustTokens", payload));
+  bind("adjustTokens", (payload = {}) => applyTokenChange(payload, "auto"));
+  bind("tokenAdjust", (payload = {}) => applyTokenChange(payload, "delta"));
+  bind("tokenSet", (payload = {}) => applyTokenChange(payload, "set"));
+
   bind("add", (payload = {}) => {
     const admin = wheelRequireAdmin(socket);
     if (!admin) return;
@@ -2948,6 +3005,7 @@ wheelNsp.on("connection", (socket) => {
     if (!r.ok) return wheelEmitError(socket, r.message);
   });
 });
+
 // ======== Socket.IO pamat-connection (spēle) ========
 io.on("connection", (socket) => {
   const user = socket.data.user;
@@ -2996,7 +3054,7 @@ io.on("connection", (socket) => {
 
     const u = USERS[user.username] || user;
 
-    const passiveChanged = markActivity(u);
+    const passiveChanged2 = markActivity(u);
     ensureRankFields(u);
 
     const now = Date.now();
@@ -3007,7 +3065,7 @@ io.on("connection", (socket) => {
         text: "Tu esi nobanots no VĀRDU ZONAS.",
         ts: Date.now(),
       });
-      if (passiveChanged) saveUsers(USERS);
+      if (passiveChanged2) saveUsers(USERS);
       return;
     }
 
@@ -3021,12 +3079,12 @@ io.on("connection", (socket) => {
         text: `Tev ir mute līdz ${until}.`,
         ts: Date.now(),
       });
-      if (passiveChanged) saveUsers(USERS);
+      if (passiveChanged2) saveUsers(USERS);
       return;
     }
 
     if (u.lastChatAt && now - u.lastChatAt < CHAT_RATE_MS) {
-      if (passiveChanged) saveUsers(USERS);
+      if (passiveChanged2) saveUsers(USERS);
       return;
     }
     u.lastChatAt = now;
@@ -3037,7 +3095,7 @@ io.on("connection", (socket) => {
       u.lastChatTextAt &&
       now - u.lastChatTextAt < CHAT_DUP_WINDOW_MS
     ) {
-      if (passiveChanged) saveUsers(USERS);
+      if (passiveChanged2) saveUsers(USERS);
       return;
     }
     u.lastChatText = msg;
@@ -3046,11 +3104,11 @@ io.on("connection", (socket) => {
     const isAdmin = isAdminUser(u);
     if (isAdmin && (msg.startsWith("/") || msg.startsWith("!"))) {
       handleAdminCommand(msg, u, socket);
-      if (passiveChanged) saveUsers(USERS);
+      if (passiveChanged2) saveUsers(USERS);
       return;
     }
 
-    if (passiveChanged) saveUsers(USERS);
+    if (passiveChanged2) saveUsers(USERS);
 
     io.emit("chatMessage", {
       username: u.username,
@@ -3074,27 +3132,30 @@ io.on("connection", (socket) => {
     if (targetName === challengerName)
       return socket.emit("duel.error", { message: "Nevari izaicināt sevi." });
 
-    const targetUser = USERS[targetName];
+    const key = findUserKeyCaseInsensitive(targetName);
+    const targetUser = key ? USERS[key] : null;
     if (!targetUser)
       return socket.emit("duel.error", { message: "Lietotājs nav atrasts." });
 
     if (userToDuel.has(challengerName))
       return socket.emit("duel.error", { message: "Tu jau esi citā duelī." });
-    if (userToDuel.has(targetName))
+    if (userToDuel.has(targetUser.username))
       return socket.emit("duel.error", {
         message: "Pretinieks jau ir citā duelī.",
       });
 
-    const targetSocket = getSocketByUsername(targetName);
+    const targetSocket = getSocketByUsername(targetUser.username);
     if (!targetSocket)
-      return socket.emit("duel.error", { message: "Pretinieks nav tiešsaistē." });
+      return socket.emit("duel.error", {
+        message: "Pretinieks nav tiešsaistē.",
+      });
 
     const { word, len } = pickRandomWord();
     const duelId = crypto.randomBytes(8).toString("hex");
 
     const duel = {
       id: duelId,
-      players: [challengerName, targetName],
+      players: [challengerName, targetUser.username],
       word,
       len,
       status: "pending",
@@ -3103,19 +3164,27 @@ io.on("connection", (socket) => {
       expiresAt: null,
       attemptsLeft: {
         [challengerName]: DUEL_MAX_ATTEMPTS,
-        [targetName]: DUEL_MAX_ATTEMPTS,
+        [targetUser.username]: DUEL_MAX_ATTEMPTS,
       },
-      rowsUsed: { [challengerName]: 0, [targetName]: 0 },
+      rowsUsed: { [challengerName]: 0, [targetUser.username]: 0 },
       winner: null,
       finishedReason: null,
     };
 
     duels.set(duelId, duel);
     userToDuel.set(challengerName, duelId);
-    userToDuel.set(targetName, duelId);
+    userToDuel.set(targetUser.username, duelId);
 
-    socket.emit("duel.waiting", { duelId, opponent: targetName, len });
-    targetSocket.emit("duel.invite", { duelId, from: challengerName, len });
+    socket.emit("duel.waiting", {
+      duelId,
+      opponent: targetUser.username,
+      len,
+    });
+    targetSocket.emit("duel.invite", {
+      duelId,
+      from: challengerName,
+      len,
+    });
   });
 
   socket.on("duel.accept", (payload) => {
@@ -3188,128 +3257,133 @@ io.on("connection", (socket) => {
     duels.delete(duel.id);
   });
 
-  socket.on("duel.guess", (payload) => {
+  socket.on("duel.guess", (payload = {}) => {
     const duelId = payload?.duelId;
-    const rawGuess = (payload?.guess || "").toString().trim().toUpperCase();
-    const userName = socket.data.user.username;
+    const guess = String(payload?.guess || "")
+      .trim()
+      .toUpperCase();
+
+    const me = socket.data.user.username;
 
     const duel = duels.get(duelId);
-    if (!duel)
-      return socket.emit("duel.error", { message: "Duēlis nav atrasts." });
+    if (!duel) return socket.emit("duel.error", { message: "Duēlis nav atrasts." });
+    if (!duel.players.includes(me))
+      return socket.emit("duel.error", { message: "Tu neesi šajā duelī." });
     if (duel.status !== "active")
       return socket.emit("duel.error", { message: "Duēlis nav aktīvs." });
 
     const now = Date.now();
     if (duel.expiresAt && now >= duel.expiresAt) {
       finishDuel(duel, null, "timeout");
-      socket.emit("duel.error", { message: "Duēļa laiks ir beidzies." });
       return;
     }
 
-    if (!duel.players.includes(userName))
-      return socket.emit("duel.error", { message: "Tu neesi šajā duelī." });
-    if (rawGuess.length !== duel.len)
+    if (!guess) return;
+    if (guess.length !== duel.len) {
       return socket.emit("duel.error", {
-        message: `Vārdam duelī jābūt ${duel.len} burtiem.`,
+        message: `Vārdam jābūt ${duel.len} burtiem.`,
       });
-    if (!GUESS_ALLOWED_RE.test(rawGuess))
+    }
+    if (!GUESS_ALLOWED_RE.test(guess)) {
       return socket.emit("duel.error", {
         message: "Minējumā drīkst būt tikai burti (A-Z + latviešu burti).",
       });
-    if (duel.attemptsLeft[userName] <= 0)
-      return socket.emit("duel.error", {
-        message: "Tev vairs nav mēģinājumu duelī.",
-      });
+    }
 
-    duel.rowsUsed[userName] = (duel.rowsUsed[userName] || 0) + 1;
-    duel.attemptsLeft[userName] -= 1;
+    const left = duel.attemptsLeft?.[me] ?? DUEL_MAX_ATTEMPTS;
+    if (left <= 0) {
+      return socket.emit("duel.error", { message: "Tev vairs nav mēģinājumu." });
+    }
 
-    const pattern = buildPattern(duel.word, rawGuess);
-    const isWin = rawGuess === duel.word;
+    const pattern = buildPattern(duel.word, guess);
+    const isWin = guess === duel.word;
+
+    duel.attemptsLeft[me] = Math.max(0, left - 1);
+    duel.rowsUsed[me] = (duel.rowsUsed[me] || 0) + 1;
+
+    const [p1, p2] = duel.players;
+    const other = me === p1 ? p2 : p1;
+
+    const s1 = getSocketByUsername(p1);
+    const s2 = getSocketByUsername(p2);
+
+    const progressPayload = {
+      duelId: duel.id,
+      by: me,
+      guess,
+      pattern,
+      win: isWin,
+      attemptsLeft: {
+        [p1]: duel.attemptsLeft[p1],
+        [p2]: duel.attemptsLeft[p2],
+      },
+      rowsUsed: {
+        [p1]: duel.rowsUsed[p1],
+        [p2]: duel.rowsUsed[p2],
+      },
+      expiresAt: duel.expiresAt,
+    };
+
+    if (s1) s1.emit("duel.progress", progressPayload);
+    if (s2) s2.emit("duel.progress", progressPayload);
 
     if (isWin) {
-      socket.emit("duel.guessResult", {
-        duelId: duel.id,
-        pattern,
-        win: true,
-        finished: true,
-      });
-      finishDuel(duel, userName, "win");
+      finishDuel(duel, me, "win");
       return;
     }
 
-    const finishedForPlayer = duel.attemptsLeft[userName] <= 0;
-
-    socket.emit("duel.guessResult", {
-      duelId: duel.id,
-      pattern,
-      win: false,
-      finished: finishedForPlayer,
-    });
-
-    const [p1, p2] = duel.players;
-    if (
-      !duel.winner &&
-      duel.attemptsLeft[p1] <= 0 &&
-      duel.attemptsLeft[p2] <= 0
-    ) {
-      finishDuel(duel, null, "no_winner");
+    const leftMe = duel.attemptsLeft[me] || 0;
+    const leftOther = duel.attemptsLeft[other] || 0;
+    if (leftMe <= 0 && leftOther <= 0) {
+      finishDuel(duel, null, "no_attempts");
     }
   });
 
-  // ======== DISCONNECT FIX ========
+  // ===== disconnect =====
   socket.on("disconnect", () => {
-    const username = user.username;
+    const uname = onlineBySocket.get(socket.id);
+    onlineBySocket.delete(socket.id);
 
-    const duelId = userToDuel.get(username);
-    if (duelId) {
-      const duel = duels.get(duelId);
-      if (duel && duel.status !== "finished") {
-        const other = duel.players.find((p) => p !== username);
+    if (uname) {
+      // ja bija duelī — sakārtojam
+      const duelId = userToDuel.get(uname);
+      if (duelId) {
+        const duel = duels.get(duelId);
+        if (duel) {
+          const [p1, p2] = duel.players;
+          const other = uname === p1 ? p2 : p1;
 
-        if (duel.status === "pending") {
-          const sOther = getSocketByUsername(other);
-          if (sOther) {
-            sOther.emit("duel.end", {
-              duelId: duel.id,
-              winner: null,
-              youWin: false,
-              reason: "opponent_disconnect_pending",
-            });
+          if (duel.status === "pending") {
+            const sOther = getSocketByUsername(other);
+            if (sOther) {
+              sOther.emit("duel.end", {
+                duelId: duel.id,
+                winner: null,
+                youWin: false,
+                reason: "disconnect",
+              });
+            }
+            userToDuel.delete(p1);
+            userToDuel.delete(p2);
+            duels.delete(duel.id);
+          } else if (duel.status === "active") {
+            // forfeit: otrs uzvar
+            finishDuel(duel, other, "disconnect");
           }
-
-          userToDuel.delete(duel.players[0]);
-          userToDuel.delete(duel.players[1]);
-          duels.delete(duel.id);
         } else {
-          finishDuel(duel, other, "opponent_disconnect");
+          userToDuel.delete(uname);
         }
       }
     }
 
-    onlineBySocket.delete(socket.id);
     broadcastOnlineList(true);
-    console.log("Atvienojās:", user.username, "socket:", socket.id);
   });
 });
 
-// ======== Globāls error handler ========
-app.use((err, req, res, next) => {
-  if (!err) return next();
-  if (res.headersSent) return next(err);
+// ======== WHEEL API: state tikai ========
+// (ir jau /wheel/state augšā)
 
-  if (err.type === "entity.too.large" || err.status === 413) {
-    return res.status(413).json({
-      message:
-        "Payload Too Large: pieprasījums ir par lielu. Samazini failu vai palielini limitus serverī.",
-    });
-  }
-
-  console.error("UNHANDLED ERROR:", err);
-  return res.status(500).json({ message: "Servera kļūda." });
-});
-
-// ======== Start ========
+// ======== Start server ========
 httpServer.listen(PORT, () => {
-  console.log("VĀRDU ZONA serveris klausās portā", PORT);
+  console.log(`VĀRDU ZONA serveris darbojas uz porta: ${PORT}`);
 });
