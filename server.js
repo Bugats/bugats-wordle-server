@@ -2233,6 +2233,31 @@ app.get("/season/hof", authMiddleware, (_req, res) => {
   res.json(seasonStore.hallOfFame || []);
 });
 
+app.post("/season/hof/override", authMiddleware, (req, res) => {
+  const admin = req.user;
+  if (!isAdminUser(admin)) {
+    return res.status(403).json({ message: "Tikai admins." });
+  }
+
+  const { seasonId, username, score, finishedAt } = req.body || {};
+  const r = upsertHallOfFameWinner(seasonId, username, score, finishedAt);
+
+  if (!r.ok) return res.status(400).json({ message: r.message });
+
+  io.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
+
+  broadcastSystemMessage(
+    `🏆 Hall of Fame labots: Sezona ${r.hofEntry.seasonId} čempions = ${r.hofEntry.username} (score ${r.hofEntry.score}).`
+  );
+
+  return res.json({
+    ok: true,
+    top: seasonStore.hallOfFame[0] || null,
+    entry: r.hofEntry,
+    hallOfFame: seasonStore.hallOfFame || [],
+  });
+});
+
 app.post("/season/start", authMiddleware, (req, res) => {
   const user = req.user;
   if (!isAdminUser(user)) {
