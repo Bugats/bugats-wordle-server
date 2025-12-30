@@ -35,6 +35,24 @@ const MAX_ATTEMPTS = 6;
 
 const BASE_TOKEN_PRICE = 150;
 
+
+// ======== ABILITIES (spēles spējas) ========
+// Pielāgo pēc vajadzības (cenas ir COINS).
+const ABILITY_COSTS = {
+  revealLetter: 120, // atklāj 1 burtu pareizajā pozīcijā (tikai tev)
+  extraRow: 180,     // +1 mēģinājums šim raundam (tikai tev)
+  freeze: 250,       // īslaicīgi “iesaldē” minēšanu citiem + ziņa čatā
+};
+
+const ABILITY_LIMITS = {
+  revealLetterPerRound: 1,
+  extraRowMaxPerRound: 2,
+  freezePerRound: 1,
+};
+
+const FREEZE_MS = 7000; // cik ilgi citi nevar sūtīt /guess
+const ABILITY_COOLDOWN_MS = 1500; // anti-spam uz abilities
+
 // ======== Season rollover: coins/tokens reset (ENV slēdzis) ========
 // Default: ON (1). Lai izslēgtu: RESET_COINS_TOKENS_ON_ROLLOVER=0
 const RESET_COINS_TOKENS_ON_ROLLOVER =
@@ -1557,6 +1575,53 @@ const io = new Server(httpServer, {
 // ======== ONLINE saraksts ========
 const onlineBySocket = new Map(); // socket.id -> username
 
+// ======== ABILITIES runtime state ========
+// Globāls “freeze” (iesaldē minēšanu) stāvoklis (nav persistēts diskā).
+let globalFreeze = { until: 0, by: null };
+
+// Emit tikai konkrētam user (ja viņam ir vairāki sockets, aizsūta visiem).
+function emitToUser(username, event, payload) {
+  if (!username) return;
+  for (const [sid, u] of onlineBySocket.entries()) {
+    if (u === username) io.to(sid).emit(event, payload);
+  }
+}
+
+function emitSystemAll(text) {
+  io.emit("chatMessage", { username: "SYSTEM", text: String(text || ""), ts: Date.now() });
+}
+function emitSystemUser(username, text) {
+  emitToUser(username, "chatMessage", { username: "SYSTEM", text: String(text || ""), ts: Date.now() });
+}
+
+function getFreezePayloadFor(username) {
+  const now = Date.now();
+  if (globalFreeze && globalFreeze.until && globalFreeze.until > now && globalFreeze.by) {
+    return {
+      active: true,
+      until: globalFreeze.until,
+      by: globalFreeze.by,
+      affectsYou: globalFreeze.by !== username,
+    };
+  }
+  // auto-cleanup
+  if (globalFreeze && globalFreeze.until && globalFreeze.until <= now) globalFreeze = { until: 0, by: null };
+  return { active: false, until: 0, by: null, affectsYou: false };
+}
+
+function ensureRoundAbilities(round) {
+  if (!round || typeof round !== "object") return;
+  if (!round.revealed || typeof round.revealed !== "object") round.revealed = {};
+  if (!round.abilities || typeof round.abilities !== "object") {
+    round.abilities = { revealUsed: 0, extraRowUsed: 0, freezeUsed: 0 };
+  }
+  if (typeof round.abilities.revealUsed !== "number") round.abilities.revealUsed = 0;
+  if (typeof round.abilities.extraRowUsed !== "number") round.abilities.extraRowUsed = 0;
+  if (typeof round.abilities.freezeUsed !== "number") round.abilities.freezeUsed = 0;
+  if (typeof round.baseAttempts !== "number") round.baseAttempts = MAX_ATTEMPTS;
+}
+
+
 function getMiniUserPayload(username) {
   const u = USERS[username];
   if (!u) {
@@ -2376,27 +2441,42 @@ function startNewRoundForUser(user) {
   user.currentRound = {
     word,
     len,
+    baseAttempts: MAX_ATTEMPTS,
     attemptsLeft: MAX_ATTEMPTS,
     finished: false,
     startedAt: Date.now(),
+    // abilities meta
+    revealed: {},
+    abilities: { revealUsed: 0, extraRowUsed: 0, freezeUsed: 0 },
   };
   return user.currentRound;
 }
 
 app.get("/start-round", authMiddleware, (req, res) => {
   const user = req.user;
-  markActivity(user);
-  ensureDailyMissions(user);
-  ensureDailyChest(user);
-
-  if (user.currentRound && !user.currentRound.finished) {
-    saveUsers(USERS);
-    return res.json({ len: user.currentRound.len });
+  if (!user.currentRound || user.currentRound.finished) {
+    startNewRoundForUser(user);
+  } else {
+    ensureRoundAbilities(user.currentRound);
   }
 
-  const round = startNewRoundForUser(user);
-  saveUsers(USERS);
-  res.json({ len: round.len });
+  const round = user.currentRound;
+  res.json({
+    ok: true,
+    len: round.len,
+    attemptsLeft: round.attemptsLeft,
+    finished: !!round.finished,
+    startedAt: round.startedAt || Date.now(),
+    revealed: round.revealed || {},
+    abilities: {
+      costs: ABILITY_COSTS,
+      limits: ABILITY_LIMITS,
+      used: round.abilities || { revealUsed: 0, extraRowUsed: 0, freezeUsed: 0 },
+    },
+    freeze: getFreezePayloadFor(user.username),
+    coins: Number(user.coins || 0),
+    tokens: Number(user.tokens || 0),
+  });
 });
 
 function buildPattern(secret, guess) {
@@ -2476,6 +2556,17 @@ app.post("/guess", authMiddleware, (req, res) => {
     return res.status(gate.status).json({ message: gate.message });
   }
 
+  // Abilities: global freeze (citi nevar minēt īsu brīdi)
+  const freezeState = getFreezePayloadFor(user.username);
+  if (freezeState.active && freezeState.affectsYou && !user.isAdmin) {
+    return res.status(429).json({
+      message: `Iesaldēts uz īsu brīdi (by ${freezeState.by})`,
+      error: "FROZEN",
+      by: freezeState.by,
+      until: freezeState.until,
+    });
+  }
+
   const guessRaw = (req.body?.guess || "").toString().trim().toUpperCase();
   if (!user.currentRound || user.currentRound.finished) {
     saveUsers(USERS);
@@ -2483,6 +2574,7 @@ app.post("/guess", authMiddleware, (req, res) => {
   }
 
   const round = user.currentRound;
+  ensureRoundAbilities(round);
 
   if (guessRaw.length !== round.len) {
     const blocked = trackBadLength(user);
@@ -2505,7 +2597,7 @@ app.post("/guess", authMiddleware, (req, res) => {
     round.finished = true;
     saveUsers(USERS);
     return res.json({
-      pattern: buildPattern(round.word, guessRaw),
+          pattern: buildPattern(round.word, guessRaw),
       win: false,
       finished: true,
       attemptsLeft: 0,
@@ -2586,8 +2678,185 @@ app.post("/guess", authMiddleware, (req, res) => {
     finished,
     attemptsLeft: round.attemptsLeft,
     rewards: isWin ? { xpGain, coinsGain } : null,
+    wordLen: round.len,
+    revealed: round.revealed || {},
+    abilitiesUsed: round.abilities || { revealUsed: 0, extraRowUsed: 0, freezeUsed: 0 },
+    freeze: getFreezePayloadFor(user.username),
+    coins: Number(user.coins || 0),
+    tokens: Number(user.tokens || 0),
   });
 });
+
+
+// ======== ABILITIES API ========
+app.get("/abilities", authMiddleware, (req, res) => {
+  const user = req.user;
+
+  if (!user.currentRound || user.currentRound.finished) {
+    startNewRoundForUser(user);
+  } else {
+    ensureRoundAbilities(user.currentRound);
+  }
+
+  const round = user.currentRound;
+  res.json({
+    ok: true,
+    costs: ABILITY_COSTS,
+    limits: ABILITY_LIMITS,
+    used: round.abilities || { revealUsed: 0, extraRowUsed: 0, freezeUsed: 0 },
+    revealed: round.revealed || {},
+    attemptsLeft: round.attemptsLeft,
+    wordLen: round.len,
+    freeze: getFreezePayloadFor(user.username),
+    coins: Number(user.coins || 0),
+    tokens: Number(user.tokens || 0),
+  });
+});
+
+app.post("/ability/use", authMiddleware, (req, res) => {
+  const user = req.user;
+  const now = Date.now();
+  const type = String(req.body?.type || "").trim();
+
+  if (!type) return res.status(400).json({ ok: false, message: "Missing ability type" });
+  if (!user.currentRound || user.currentRound.finished) {
+    return res.status(400).json({ ok: false, message: "NO_ROUND" });
+  }
+
+  // anti-spam
+  const last = Number(user.lastAbilityAt || 0);
+  if (last && now - last < ABILITY_COOLDOWN_MS) {
+    return res.status(429).json({ ok: false, message: "Lēnāk — abilities ir cooldown." });
+  }
+  user.lastAbilityAt = now;
+
+  const round = user.currentRound;
+  ensureRoundAbilities(round);
+
+  // ensure numeric balances
+  user.coins = Number(user.coins || 0);
+  user.tokens = Number(user.tokens || 0);
+
+  const spendCoins = (cost) => {
+    if (cost <= 0) return true;
+    if (user.coins < cost) return false;
+    user.coins -= cost;
+    return true;
+  };
+
+  if (type === "revealLetter") {
+    if (round.abilities.revealUsed >= ABILITY_LIMITS.revealLetterPerRound) {
+      return res.status(400).json({ ok: false, message: "REVEAL_LIMIT" });
+    }
+    const cost = Number(ABILITY_COSTS.revealLetter || 0);
+    if (!spendCoins(cost)) return res.status(400).json({ ok: false, message: "NOT_ENOUGH_COINS" });
+
+    const word = String(round.word || "");
+    const len = Number(round.len || word.length || 0);
+
+    // pick random unrevealed position
+    const unrevealed = [];
+    for (let i = 0; i < len; i++) if (round.revealed[i] == null) unrevealed.push(i);
+    if (!unrevealed.length) {
+      // refund
+      user.coins += cost;
+      return res.status(400).json({ ok: false, message: "NO_MORE_LETTERS" });
+    }
+
+    const pos = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+    const letter = word[pos] || "";
+
+    round.revealed[pos] = letter;
+    round.abilities.revealUsed += 1;
+
+    saveUsers(USERS);
+
+    // privāta ziņa tikai lietotājam
+    emitSystemUser(user.username, `🔍 Hint: ${pos + 1}. burts ir “${String(letter).toUpperCase()}”`);
+
+    return res.json({
+      ok: true,
+      type,
+      costCoins: cost,
+      pos,
+      letter,
+      revealed: round.revealed,
+      used: round.abilities,
+      attemptsLeft: round.attemptsLeft,
+      wordLen: round.len,
+      freeze: getFreezePayloadFor(user.username),
+      coins: user.coins,
+      tokens: user.tokens,
+    });
+  }
+
+  if (type === "extraRow") {
+    if (round.abilities.extraRowUsed >= ABILITY_LIMITS.extraRowMaxPerRound) {
+      return res.status(400).json({ ok: false, message: "EXTRA_ROW_LIMIT" });
+    }
+    const cost = Number(ABILITY_COSTS.extraRow || 0);
+    if (!spendCoins(cost)) return res.status(400).json({ ok: false, message: "NOT_ENOUGH_COINS" });
+
+    round.attemptsLeft += 1;
+    round.abilities.extraRowUsed += 1;
+
+    saveUsers(USERS);
+
+    emitSystemUser(user.username, `➕ +1 rinda pievienota. Mēģinājumi: ${round.attemptsLeft}`);
+
+    return res.json({
+      ok: true,
+      type,
+      costCoins: cost,
+      attemptsLeft: round.attemptsLeft,
+      used: round.abilities,
+      revealed: round.revealed,
+      wordLen: round.len,
+      freeze: getFreezePayloadFor(user.username),
+      coins: user.coins,
+      tokens: user.tokens,
+    });
+  }
+
+  if (type === "freeze") {
+    if (round.abilities.freezeUsed >= ABILITY_LIMITS.freezePerRound) {
+      return res.status(400).json({ ok: false, message: "FREEZE_LIMIT" });
+    }
+
+    const freezeState = getFreezePayloadFor(user.username);
+    if (freezeState.active) {
+      return res.status(400).json({ ok: false, message: "FREEZE_ALREADY_ACTIVE", by: freezeState.by, until: freezeState.until });
+    }
+
+    const cost = Number(ABILITY_COSTS.freeze || 0);
+    if (!spendCoins(cost)) return res.status(400).json({ ok: false, message: "NOT_ENOUGH_COINS" });
+
+    round.abilities.freezeUsed += 1;
+
+    globalFreeze = { until: now + FREEZE_MS, by: user.username };
+    saveUsers(USERS);
+
+    // broadcast ziņa visiem + atsevišķs event, ja front-end grib UI lock
+    emitSystemAll(`❄️ ${user.username} iesaldēja minēšanu uz ${Math.ceil(FREEZE_MS / 1000)}s!`);
+    io.emit("ability:freeze", { by: user.username, until: globalFreeze.until, ms: FREEZE_MS });
+
+    return res.json({
+      ok: true,
+      type,
+      costCoins: cost,
+      freeze: getFreezePayloadFor(user.username),
+      used: round.abilities,
+      attemptsLeft: round.attemptsLeft,
+      wordLen: round.len,
+      coins: user.coins,
+      tokens: user.tokens,
+    });
+  }
+
+  return res.status(400).json({ ok: false, message: "UNKNOWN_ABILITY" });
+});
+
+
 
 app.post("/buy-token", authMiddleware, (req, res) => {
   const user = req.user;
