@@ -1159,6 +1159,99 @@ function mergeMedals(dynamicMedals, userSpecialMedals) {
 }
 
 // ======== SEASON 2 / HALL OF FAME loģika ========
+function championMedalCode(seasonId) {
+  const sid = Number(seasonId) || 0;
+  return sid === 1 ? "SEASON1_CHAMPION" : `SEASON${sid}_CHAMPION`;
+}
+function championMedalLabel(seasonId) {
+  const sid = Number(seasonId) || 0;
+  return sid === 1 ? "Sezona 1 čempions" : `Sezona ${sid} čempions`;
+}
+function defaultSeasonFinishedAt(seasonId) {
+  const sid = Number(seasonId) || 0;
+  if (sid === 1 && Number.isFinite(SEASON1_END_AT)) return SEASON1_END_AT;
+
+  // ja override-ojam pašreizējo sezonu, izmantojam tās endAt
+  if (Number(seasonState?.id) === sid && Number.isFinite(seasonState?.endAt)) {
+    return seasonState.endAt;
+  }
+  return Date.now();
+}
+
+function removeSpecialMedalFromAllUsers(code) {
+  if (!code) return false;
+  let changed = false;
+  for (const u of Object.values(USERS || {})) {
+    if (!u || !u.username) continue;
+    if (!Array.isArray(u.specialMedals)) u.specialMedals = [];
+    const before = u.specialMedals.length;
+    u.specialMedals = u.specialMedals.filter((m) => !(m && m.code === code));
+    if (u.specialMedals.length !== before) changed = true;
+  }
+  return changed;
+}
+
+// ADMIN override: pārraksta HOF sezonas čempionu + sakārto medaļu
+function upsertHallOfFameWinner(seasonId, username, scoreOverride, finishedAtOverride) {
+  const sid = Number(seasonId) || 0;
+  if (sid <= 0) return { ok: false, message: "Nederīgs seasonId." };
+
+  const uname = String(username || "").trim();
+  if (!uname) return { ok: false, message: "Nav username." };
+
+  const champ = USERS[uname];
+  if (!champ) return { ok: false, message: "Lietotājs nav atrasts users.json." };
+
+  if (champ.isBanned) {
+    // ļaujam, bet brīdinām (vari nomainīt uz return error, ja negribi)
+    console.log("HOF override: champ ir banned:", uname);
+  }
+
+  const medalCode = championMedalCode(sid);
+  const finishedAt =
+    Number.isFinite(Number(finishedAtOverride)) && Number(finishedAtOverride) > 0
+      ? Number(finishedAtOverride)
+      : defaultSeasonFinishedAt(sid);
+
+  const rankInfo = ensureRankFields(champ);
+
+  const hofEntry = {
+    seasonId: sid,
+    username: champ.username,
+    score:
+      scoreOverride !== undefined && scoreOverride !== null && scoreOverride !== ""
+        ? Math.max(0, Math.floor(Number(scoreOverride) || 0))
+        : (champ.score || 0),
+    xp: champ.xp || 0,
+    rankTitle: champ.rankTitle || rankInfo.title || "",
+    rankLevel: champ.rankLevel || rankInfo.level || 1,
+    avatarUrl: champ.avatarUrl || null,
+    finishedAt,
+    overriddenAt: Date.now(),
+  };
+
+  // izmetam veco ierakstu šai sezonai, ieliekam jauno augšā
+  seasonStore.hallOfFame = (seasonStore.hallOfFame || []).filter(
+    (x) => !(x && x.seasonId === sid)
+  );
+  seasonStore.hallOfFame.unshift(hofEntry);
+  seasonStore.hallOfFame = seasonStore.hallOfFame.slice(0, 20);
+
+  // medaļas: vispirms noņemam šo sezonas čempiona medaļu visiem, tad iedodam pareizajam
+  const removedAny = removeSpecialMedalFromAllUsers(medalCode);
+  ensureSpecialMedals(champ);
+  addSpecialMedalOnce(champ, {
+    code: medalCode,
+    icon: "🏆",
+    label: championMedalLabel(sid),
+    ts: finishedAt,
+  });
+
+  saveUsers(USERS);
+  saveJsonAtomic(SEASONS_FILE, seasonStore);
+
+  return { ok: true, hofEntry, removedAny };
+}
 function getTop1UserByScore() {
   const all = Object.values(USERS || {});
   if (!all.length) return null;
