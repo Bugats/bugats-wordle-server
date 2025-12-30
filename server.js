@@ -2,6 +2,8 @@
 // Serveris ar login/signup, JWT, XP, RANKIEM (25 līmeņi),
 // streak, coins, žetoniem, pasīvajiem coiniem ar Anti-AFK,
 // TOP10, online sarakstu un čatu + ADMIN komandām + MISIJĀM + MEDAĻĀM + 1v1 DUEĻIEM.
+// + ABILITIES (revealLetter / extraRow / freeze)
+// + LAIMES RATS (/wheel namespace) ar persistent wheel.json
 
 import express from "express";
 import { createServer } from "http";
@@ -12,7 +14,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import crypto from "crypto"; // drošāka random izvēle
+import crypto from "crypto";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,13 +37,11 @@ const MAX_ATTEMPTS = 6;
 
 const BASE_TOKEN_PRICE = 150;
 
-
 // ======== ABILITIES (spēles spējas) ========
-// Pielāgo pēc vajadzības (cenas ir COINS).
 const ABILITY_COSTS = {
-  revealLetter: 120, // atklāj 1 burtu pareizajā pozīcijā (tikai tev)
-  extraRow: 180,     // +1 mēģinājums šim raundam (tikai tev)
-  freeze: 250,       // īslaicīgi “iesaldē” minēšanu citiem + ziņa čatā
+  revealLetter: 120,
+  extraRow: 180,
+  freeze: 250,
 };
 
 const ABILITY_LIMITS = {
@@ -50,11 +50,18 @@ const ABILITY_LIMITS = {
   freezePerRound: 1,
 };
 
-const FREEZE_MS = 7000; // cik ilgi citi nevar sūtīt /guess
-const ABILITY_COOLDOWN_MS = 1500; // anti-spam uz abilities
+// variants: 2 (freezeSeconds: 5)
+const FREEZE_MS = (() => {
+  const v = parseInt(process.env.FREEZE_MS || "5000", 10);
+  return Number.isFinite(v) && v >= 1000 && v <= 30000 ? v : 5000;
+})();
+
+const ABILITY_COOLDOWN_MS = (() => {
+  const v = parseInt(process.env.ABILITY_COOLDOWN_MS || "1500", 10);
+  return Number.isFinite(v) && v >= 300 && v <= 10000 ? v : 1500;
+})();
 
 // ======== Season rollover: coins/tokens reset (ENV slēdzis) ========
-// Default: ON (1). Lai izslēgtu: RESET_COINS_TOKENS_ON_ROLLOVER=0
 const RESET_COINS_TOKENS_ON_ROLLOVER =
   String(process.env.RESET_COINS_TOKENS_ON_ROLLOVER ?? "1") === "1";
 
@@ -63,8 +70,6 @@ const BODY_JSON_LIMIT = process.env.BODY_JSON_LIMIT || "25mb";
 const BODY_URLENC_LIMIT = process.env.BODY_URLENC_LIMIT || BODY_JSON_LIMIT;
 
 // ======== CORS (default: atvērts) ========
-// Ja gribi ierobežot:
-// CORS_ORIGINS="https://thezone.lv,https://www.thezone.lv"
 const CORS_ORIGINS_RAW = (process.env.CORS_ORIGINS || "*").trim();
 const CORS_ORIGINS =
   CORS_ORIGINS_RAW === "*"
@@ -79,25 +84,23 @@ const corsOptions =
     ? undefined
     : {
         origin: (origin, cb) => {
-          if (!origin) return cb(null, true); // curl / server-to-server
+          if (!origin) return cb(null, true);
           return cb(null, CORS_ORIGINS.includes(origin));
         },
         credentials: true,
       };
 
 // Avatāra max garums (base64 string).
-// env: AVATAR_MAX_CHARS="8000000"
 const AVATAR_MAX_CHARS = (() => {
   const v = parseInt(process.env.AVATAR_MAX_CHARS || "", 10);
   if (Number.isFinite(v) && v > 200000) return v;
-  return 6 * 1024 * 1024; // ~6.29M chars
+  return 6 * 1024 * 1024;
 })();
 
 // Admin lietotāji (case-insensitive)
-// (bonus) vari paplašināt ar ENV: ADMIN_USERNAMES="BugatsLV,AnotherNick"
 const ADMIN_USERNAMES = (() => {
   const raw = String(process.env.ADMIN_USERNAMES || "").trim();
-  const defaults = ["BugatsLV"]; // ADMINI tikai BugatsLV
+  const defaults = ["BugatsLV"];
   if (!raw) return defaults;
   const extra = raw
     .split(",")
@@ -143,7 +146,7 @@ const COINS_STREAK_MAX_BONUS = 2;
 
 // ========== Pasīvie coini + Anti-AFK ==========
 const PASSIVE_COINS_PER_TICK = 2;
-const PASSIVE_INTERVAL_MS = 20 * 60 * 1000; // 20 min
+const PASSIVE_INTERVAL_MS = 20 * 60 * 1000;
 const AFK_BREAK_MS = 3 * 60 * 1000;
 
 // ========== MISIJAS ==========
@@ -175,23 +178,23 @@ const DAILY_MISSIONS_CONFIG = [
 const DUEL_MAX_ATTEMPTS = 6;
 const DUEL_REWARD_XP = 3;
 const DUEL_REWARD_COINS = 3;
-const DUEL_MAX_DURATION_MS = 2 * 60 * 1000; // 2 min
+const DUEL_MAX_DURATION_MS = 2 * 60 * 1000;
 
 const duels = new Map(); // duelId -> duel objekts
 const userToDuel = new Map(); // username -> duelId
 
 // ======== ČATS (mini anti-spam) ========
 const CHAT_MAX_LEN = 200;
-const CHAT_RATE_MS = 900; // 1 ziņa ~ 0.9s
-const CHAT_DUP_WINDOW_MS = 4000; // vienāds teksts 4s logā -> ignorējam
+const CHAT_RATE_MS = 900;
+const CHAT_DUP_WINDOW_MS = 4000;
 
 // ======== GUESS rate-limit (server-side) ========
-const GUESS_RATE_MS = 950; // ~1/sec
+const GUESS_RATE_MS = 950;
 const BAD_LEN_WINDOW_MS = 10 * 1000;
 const BAD_LEN_MAX = 5;
 const BAD_LEN_BLOCK_MS = 10 * 1000;
 
-// (NEW) Guess allowed chars (A-Z + LV diakritikas)
+// Guess allowed chars (A-Z + LV diakritikas)
 const GUESS_ALLOWED_RE = /^[A-ZĀČĒĢĪĶĻŅŠŪŽ]+$/;
 
 // ======== Failu helperi ========
@@ -207,7 +210,7 @@ function loadJsonSafe(file, fallback) {
   }
 }
 
-// atomic save (pret bojātu JSON, ja process nokrīt rakstīšanas laikā)
+// atomic save
 function saveJsonAtomic(file, data) {
   const tmp = file + ".tmp";
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
@@ -236,7 +239,7 @@ function loadUsers() {
       if (typeof u.missionsDate !== "string") u.missionsDate = "";
       if (!Array.isArray(u.missions)) u.missions = [];
 
-      // Statistika medaļām
+      // Medaļām
       if (typeof u.totalGuesses !== "number") u.totalGuesses = 0;
       if (typeof u.bestWinTimeMs !== "number") u.bestWinTimeMs = 0;
       if (typeof u.winsToday !== "number") u.winsToday = 0;
@@ -276,6 +279,9 @@ function loadUsers() {
       if (typeof u.badLenCount !== "number") u.badLenCount = 0;
       if (typeof u.badLenWindowStart !== "number") u.badLenWindowStart = 0;
       if (typeof u.guessBlockedUntil !== "number") u.guessBlockedUntil = 0;
+
+      // Abilities anti-spam
+      if (typeof u.lastAbilityAt !== "number") u.lastAbilityAt = 0;
 
       out[u.username] = u;
     }
@@ -319,7 +325,7 @@ if (!seasonStore || typeof seasonStore !== "object") {
 
 let seasonState = seasonStore.current;
 
-// Ja serveris restartējas pēc sezonas beigām — korekti atslēdzam active
+// restart fix: ja endAt pagājis, atslēdz active
 (() => {
   const now = Date.now();
   if (seasonState?.endAt && now >= seasonState.endAt && seasonState.active) {
@@ -329,7 +335,7 @@ let seasonState = seasonStore.current;
   }
 })();
 
-// Boot fix: ja Sezona 2 jau ir startēta, bet endAt nav “februāra vidus” (un nav SEASON_END_AT env)
+// Boot fix: ja Sezona 2 startēta, bet endAt nav mid-Feb (un nav SEASON_END_AT env)
 (() => {
   const envEnd = process.env.SEASON_END_AT;
   if (envEnd) return;
@@ -372,7 +378,7 @@ function normalizeWheelStore(x) {
   const base = buildInitialWheelStore();
   const out = x && typeof x === "object" ? x : base;
 
-  // MIGRĀCIJA: vecais formāts ar out.slots -> manualSlots
+  // migrācija: slots -> manualSlots
   if (!Array.isArray(out.manualSlots) && Array.isArray(out.slots)) {
     out.manualSlots = out.slots;
   }
@@ -411,11 +417,7 @@ function normalizeWheelStore(x) {
 }
 
 let wheelStore = normalizeWheelStore(loadJsonSafe(WHEEL_FILE, null));
-if (!fs.existsSync(WHEEL_FILE)) {
-  saveJsonAtomic(WHEEL_FILE, wheelStore);
-} else {
-  saveJsonAtomic(WHEEL_FILE, wheelStore);
-}
+saveJsonAtomic(WHEEL_FILE, wheelStore);
 
 function saveWheelStore() {
   saveJsonAtomic(WHEEL_FILE, wheelStore);
@@ -480,11 +482,11 @@ function wheelSyncTokenSlots(force = false) {
     : 0;
 
   const maxForTokens = Math.max(0, WHEEL_MAX_SLOTS - manualLen);
-
   const { fullSig, slots, meta } = wheelComputeTokenSlots(maxForTokens);
 
   if (!force && fullSig === wheelTokenSig) return false;
 
+  // shuffle token slots (fair)
   for (let i = slots.length - 1; i > 0; i--) {
     const j = crypto.randomInt(0, i + 1);
     [slots[i], slots[j]] = [slots[j], slots[i]];
@@ -493,7 +495,6 @@ function wheelSyncTokenSlots(force = false) {
   wheelTokenSig = fullSig;
   wheelTokenSlots = slots;
   wheelTokenMeta = meta;
-
   return true;
 }
 
@@ -547,8 +548,9 @@ let wheelNsp = null;
 
 function wheelEmitUpdate(force = true) {
   if (!wheelNsp) return;
-  wheelNsp.emit("wheel:update", publicWheelState());
-  if (force) wheelNsp.emit("update", publicWheelState());
+  const st = publicWheelState();
+  wheelNsp.emit("wheel:update", st);
+  if (force) wheelNsp.emit("update", st);
 }
 
 function wheelEmitError(socket, msg) {
@@ -605,16 +607,14 @@ function wheelAdd(nameRaw, countRaw) {
 function findUserKeyCaseInsensitive(nameRaw) {
   const q = String(nameRaw || "").trim().toLowerCase();
   if (!q) return null;
-  // tiešā atslēga
   if (USERS[nameRaw]) return nameRaw;
-  // meklējam pēc lower
   for (const k of Object.keys(USERS || {})) {
     if (String(k).toLowerCase() === q) return k;
   }
   return null;
 }
 
-// (UPDATED) noņem “no visurienes” (manualSlots + tokens=0), case-insensitive
+// noņem “no visurienes” (manualSlots + tokens=0), case-insensitive
 function wheelRemoveAllByName(nameRaw) {
   const name = String(nameRaw || "").trim();
   if (!name) return { ok: false, message: "Nav vārda." };
@@ -627,7 +627,6 @@ function wheelRemoveAllByName(nameRaw) {
   );
   const removedManual = beforeManual - wheelStore.manualSlots.length;
 
-  // ja šis ir reāls user, uzliekam tokens=0
   const key = findUserKeyCaseInsensitive(name);
   let tokensBefore = null;
   let tokensNow = null;
@@ -703,7 +702,6 @@ function wheelShuffle() {
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   saveWheelStore();
-
   wheelSyncTokenSlots(true);
 }
 
@@ -761,7 +759,6 @@ function wheelFinishSpin(spinId, io) {
   wheelStore.spinId = null;
 
   wheelSyncTokenSlots(true);
-
   saveWheelStore();
   wheelEmitUpdate(true);
 
@@ -781,7 +778,6 @@ function wheelStartSpin(byUsername, io) {
 
   const combined = wheelGetCombinedSlots();
   const slots = combined.slots;
-
   const n = slots.length;
   if (!n) return { ok: false, message: "Nav neviena ieraksta ratā." };
 
@@ -919,7 +915,7 @@ function todayKey(date = new Date()) {
     month: "2-digit",
     day: "2-digit",
   });
-  return fmt.format(date); // YYYY-MM-DD
+  return fmt.format(date);
 }
 
 // ======== Daily Chest helperi ========
@@ -964,7 +960,6 @@ function nextMidnightRigaTs(now = new Date()) {
 }
 
 // ======== Anti-AFK + pasīvie coini ========
-// atgriež true, ja piešķīra pasīvos coinus
 function markActivity(user) {
   const now = Date.now();
   let passiveChanged = false;
@@ -1035,7 +1030,6 @@ function getPublicMissions(user) {
   }));
 }
 
-// (UZLABOJUMS) vairs nesaglabā pati; atgriež changed
 function updateMissionsOnGuess(user, { isWin, xpGain }) {
   ensureDailyMissions(user);
   let changed = false;
@@ -1216,7 +1210,7 @@ function mergeMedals(dynamicMedals, userSpecialMedals) {
   return out;
 }
 
-// ======== SEASON 2 / HALL OF FAME loģika ========
+// ======== SEASON / HALL OF FAME loģika ========
 function championMedalCode(seasonId) {
   const sid = Number(seasonId) || 0;
   return sid === 1 ? "SEASON1_CHAMPION" : `SEASON${sid}_CHAMPION`;
@@ -1268,7 +1262,6 @@ function removeSpecialMedalFromAllUsers(code) {
   return changed;
 }
 
-// ADMIN override: pārraksta HOF sezonas čempionu + sakārto medaļu
 function upsertHallOfFameWinner(
   seasonId,
   username,
@@ -1284,10 +1277,6 @@ function upsertHallOfFameWinner(
   const key = findUserKeyCaseInsensitive(uname);
   const champ = key ? USERS[key] : null;
   if (!champ) return { ok: false, message: "Lietotājs nav atrasts users.json." };
-
-  if (champ.isBanned) {
-    console.log("HOF override: champ ir banned:", uname);
-  }
 
   const medalCode = championMedalCode(sid);
   const finishedAt =
@@ -1523,25 +1512,20 @@ function authMiddleware(req, res, next) {
     }
     req.user = user;
     next();
-  } catch (err) {
+  } catch {
     return res.status(401).json({ message: "Nederīgs token" });
   }
 }
 
 // ======== Express + Socket.IO ========
 const app = express();
-
-// Hardening (safe)
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
 
 app.use(cors(corsOptions));
-
-// ======== BODY PARSER LIMITI ========
 app.use(express.json({ limit: BODY_JSON_LIMIT }));
 app.use(express.urlencoded({ extended: true, limit: BODY_URLENC_LIMIT }));
 
-// 413 kā JSON
 app.use((err, req, res, next) => {
   if (err && (err.type === "entity.too.large" || err.status === 413)) {
     return res.status(413).json({
@@ -1560,9 +1544,7 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 app.post("/logout", (_req, res) => res.json({ ok: true }));
 
 // wheel state
-app.get("/wheel/state", (_req, res) => {
-  res.json(publicWheelState());
-});
+app.get("/wheel/state", (_req, res) => res.json(publicWheelState()));
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -1576,7 +1558,6 @@ const io = new Server(httpServer, {
 const onlineBySocket = new Map(); // socket.id -> username
 
 // ======== ABILITIES runtime state ========
-// Globāls “freeze” (iesaldē minēšanu) stāvoklis (nav persistēts diskā).
 let globalFreeze = { until: 0, by: null };
 
 // Emit tikai konkrētam user (ja viņam ir vairāki sockets, aizsūta visiem).
@@ -1588,15 +1569,28 @@ function emitToUser(username, event, payload) {
 }
 
 function emitSystemAll(text) {
-  io.emit("chatMessage", { username: "SYSTEM", text: String(text || ""), ts: Date.now() });
+  io.emit("chatMessage", {
+    username: "SYSTEM",
+    text: String(text || ""),
+    ts: Date.now(),
+  });
 }
 function emitSystemUser(username, text) {
-  emitToUser(username, "chatMessage", { username: "SYSTEM", text: String(text || ""), ts: Date.now() });
+  emitToUser(username, "chatMessage", {
+    username: "SYSTEM",
+    text: String(text || ""),
+    ts: Date.now(),
+  });
 }
 
 function getFreezePayloadFor(username) {
   const now = Date.now();
-  if (globalFreeze && globalFreeze.until && globalFreeze.until > now && globalFreeze.by) {
+  if (
+    globalFreeze &&
+    globalFreeze.until &&
+    globalFreeze.until > now &&
+    globalFreeze.by
+  ) {
     return {
       active: true,
       until: globalFreeze.until,
@@ -1604,8 +1598,8 @@ function getFreezePayloadFor(username) {
       affectsYou: globalFreeze.by !== username,
     };
   }
-  // auto-cleanup
-  if (globalFreeze && globalFreeze.until && globalFreeze.until <= now) globalFreeze = { until: 0, by: null };
+  if (globalFreeze && globalFreeze.until && globalFreeze.until <= now)
+    globalFreeze = { until: 0, by: null };
   return { active: false, until: 0, by: null, affectsYou: false };
 }
 
@@ -1620,7 +1614,6 @@ function ensureRoundAbilities(round) {
   if (typeof round.abilities.freezeUsed !== "number") round.abilities.freezeUsed = 0;
   if (typeof round.baseAttempts !== "number") round.baseAttempts = MAX_ATTEMPTS;
 }
-
 
 function getMiniUserPayload(username) {
   const u = USERS[username];
@@ -1644,7 +1637,6 @@ function getMiniUserPayload(username) {
 }
 
 let lastOnlineSig = "";
-
 function broadcastOnlineList(force = false) {
   const uniq = Array.from(new Set(onlineBySocket.values()))
     .map((x) => String(x || "").trim())
@@ -1668,9 +1660,7 @@ function broadcastOnlineList(force = false) {
   io.emit("onlineList", { count: users.length, users });
 }
 
-setInterval(() => {
-  broadcastOnlineList(false);
-}, 30 * 1000);
+setInterval(() => broadcastOnlineList(false), 30 * 1000);
 
 // ======== LEADERBOARD (TOP10) ========
 function computeTop10Leaderboard() {
@@ -1718,9 +1708,7 @@ function broadcastLeaderboard(force = false) {
   io.emit("leaderboard:update", top);
 }
 
-setInterval(() => {
-  broadcastLeaderboard(false);
-}, 45 * 1000);
+setInterval(() => broadcastLeaderboard(false), 45 * 1000);
 
 // === Admin & čata helperi ===
 function broadcastSystemMessage(text) {
@@ -1738,9 +1726,7 @@ function kickUserByName(username, reason) {
     if (s) {
       try {
         s.emit("forceDisconnect", { reason: reason || "kick" });
-      } catch (e) {
-        console.error("forceDisconnect emit error:", e);
-      }
+      } catch {}
       s.disconnect(true);
     }
     onlineBySocket.delete(sid);
@@ -1807,10 +1793,8 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       broadcastSystemMessage(
         `Admin ${adminUser.username} nobanoja lietotāju ${target.username}.`
       );
-
       wheelSyncTokenSlots(true);
       wheelEmitUpdate(true);
-
       break;
 
     case "unban":
@@ -1827,10 +1811,8 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       broadcastSystemMessage(
         `Admin ${adminUser.username} atbanoja lietotāju ${target.username}.`
       );
-
       wheelSyncTokenSlots(true);
       wheelEmitUpdate(true);
-
       break;
 
     case "mute": {
@@ -1974,7 +1956,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       // /hofset <seasonId> <username> [score]
       const sid = parseInt(parts[1] || "", 10);
       const uname = String(parts[2] || "").trim();
-      const scoreOverride = parts[3]; // optional
+      const scoreOverride = parts[3];
 
       if (!Number.isFinite(sid) || sid <= 0 || !uname) {
         adminSocket.emit("chatMessage", {
@@ -2071,6 +2053,7 @@ async function signupHandler(req, res) {
     badLenCount: 0,
     badLenWindowStart: 0,
     guessBlockedUntil: 0,
+    lastAbilityAt: 0,
   };
 
   ensureRankFields(user);
@@ -2336,7 +2319,7 @@ app.post("/chest/open", authMiddleware, (req, res) => {
   const coinsGain = coinsBase + streakBonusCoins;
   const xpGain = xpBase + streakBonusXp;
 
-  const tokenChance = Math.min(0.25, 0.06 + streak * 0.01); // līdz 25%
+  const tokenChance = Math.min(0.25, 0.06 + streak * 0.01);
   const tokensGain = Math.random() < tokenChance ? 1 : 0;
 
   user.coins = (user.coins || 0) + coinsGain;
@@ -2445,7 +2428,6 @@ function startNewRoundForUser(user) {
     attemptsLeft: MAX_ATTEMPTS,
     finished: false,
     startedAt: Date.now(),
-    // abilities meta
     revealed: {},
     abilities: { revealUsed: 0, extraRowUsed: 0, freezeUsed: 0 },
   };
@@ -2558,7 +2540,8 @@ app.post("/guess", authMiddleware, (req, res) => {
 
   // Abilities: global freeze (citi nevar minēt īsu brīdi)
   const freezeState = getFreezePayloadFor(user.username);
-  if (freezeState.active && freezeState.affectsYou && !user.isAdmin) {
+  if (freezeState.active && freezeState.affectsYou && !isAdminUser(user)) {
+    saveUsers(USERS);
     return res.status(429).json({
       message: `Iesaldēts uz īsu brīdi (by ${freezeState.by})`,
       error: "FROZEN",
@@ -2597,7 +2580,7 @@ app.post("/guess", authMiddleware, (req, res) => {
     round.finished = true;
     saveUsers(USERS);
     return res.json({
-          pattern: buildPattern(round.word, guessRaw),
+      pattern: buildPattern(round.word, guessRaw),
       win: false,
       finished: true,
       attemptsLeft: 0,
@@ -2680,13 +2663,16 @@ app.post("/guess", authMiddleware, (req, res) => {
     rewards: isWin ? { xpGain, coinsGain } : null,
     wordLen: round.len,
     revealed: round.revealed || {},
-    abilitiesUsed: round.abilities || { revealUsed: 0, extraRowUsed: 0, freezeUsed: 0 },
+    abilitiesUsed: round.abilities || {
+      revealUsed: 0,
+      extraRowUsed: 0,
+      freezeUsed: 0,
+    },
     freeze: getFreezePayloadFor(user.username),
     coins: Number(user.coins || 0),
     tokens: Number(user.tokens || 0),
   });
 });
-
 
 // ======== ABILITIES API ========
 app.get("/abilities", authMiddleware, (req, res) => {
@@ -2718,7 +2704,8 @@ app.post("/ability/use", authMiddleware, (req, res) => {
   const now = Date.now();
   const type = String(req.body?.type || "").trim();
 
-  if (!type) return res.status(400).json({ ok: false, message: "Missing ability type" });
+  if (!type)
+    return res.status(400).json({ ok: false, message: "Missing ability type" });
   if (!user.currentRound || user.currentRound.finished) {
     return res.status(400).json({ ok: false, message: "NO_ROUND" });
   }
@@ -2726,14 +2713,15 @@ app.post("/ability/use", authMiddleware, (req, res) => {
   // anti-spam
   const last = Number(user.lastAbilityAt || 0);
   if (last && now - last < ABILITY_COOLDOWN_MS) {
-    return res.status(429).json({ ok: false, message: "Lēnāk — abilities ir cooldown." });
+    return res
+      .status(429)
+      .json({ ok: false, message: "Lēnāk — abilities ir cooldown." });
   }
   user.lastAbilityAt = now;
 
   const round = user.currentRound;
   ensureRoundAbilities(round);
 
-  // ensure numeric balances
   user.coins = Number(user.coins || 0);
   user.tokens = Number(user.tokens || 0);
 
@@ -2749,21 +2737,21 @@ app.post("/ability/use", authMiddleware, (req, res) => {
       return res.status(400).json({ ok: false, message: "REVEAL_LIMIT" });
     }
     const cost = Number(ABILITY_COSTS.revealLetter || 0);
-    if (!spendCoins(cost)) return res.status(400).json({ ok: false, message: "NOT_ENOUGH_COINS" });
+    if (!spendCoins(cost))
+      return res.status(400).json({ ok: false, message: "NOT_ENOUGH_COINS" });
 
     const word = String(round.word || "");
     const len = Number(round.len || word.length || 0);
 
-    // pick random unrevealed position
     const unrevealed = [];
     for (let i = 0; i < len; i++) if (round.revealed[i] == null) unrevealed.push(i);
     if (!unrevealed.length) {
-      // refund
-      user.coins += cost;
+      user.coins += cost; // refund
+      saveUsers(USERS);
       return res.status(400).json({ ok: false, message: "NO_MORE_LETTERS" });
     }
 
-    const pos = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+    const pos = unrevealed[crypto.randomInt(0, unrevealed.length)];
     const letter = word[pos] || "";
 
     round.revealed[pos] = letter;
@@ -2771,8 +2759,10 @@ app.post("/ability/use", authMiddleware, (req, res) => {
 
     saveUsers(USERS);
 
-    // privāta ziņa tikai lietotājam
-    emitSystemUser(user.username, `🔍 Hint: ${pos + 1}. burts ir “${String(letter).toUpperCase()}”`);
+    emitSystemUser(
+      user.username,
+      `🔍 Hint: ${pos + 1}. burts ir “${String(letter).toUpperCase()}”`
+    );
 
     return res.json({
       ok: true,
@@ -2795,14 +2785,18 @@ app.post("/ability/use", authMiddleware, (req, res) => {
       return res.status(400).json({ ok: false, message: "EXTRA_ROW_LIMIT" });
     }
     const cost = Number(ABILITY_COSTS.extraRow || 0);
-    if (!spendCoins(cost)) return res.status(400).json({ ok: false, message: "NOT_ENOUGH_COINS" });
+    if (!spendCoins(cost))
+      return res.status(400).json({ ok: false, message: "NOT_ENOUGH_COINS" });
 
     round.attemptsLeft += 1;
     round.abilities.extraRowUsed += 1;
 
     saveUsers(USERS);
 
-    emitSystemUser(user.username, `➕ +1 rinda pievienota. Mēģinājumi: ${round.attemptsLeft}`);
+    emitSystemUser(
+      user.username,
+      `➕ +1 rinda pievienota. Mēģinājumi: ${round.attemptsLeft}`
+    );
 
     return res.json({
       ok: true,
@@ -2825,20 +2819,31 @@ app.post("/ability/use", authMiddleware, (req, res) => {
 
     const freezeState = getFreezePayloadFor(user.username);
     if (freezeState.active) {
-      return res.status(400).json({ ok: false, message: "FREEZE_ALREADY_ACTIVE", by: freezeState.by, until: freezeState.until });
+      return res.status(400).json({
+        ok: false,
+        message: "FREEZE_ALREADY_ACTIVE",
+        by: freezeState.by,
+        until: freezeState.until,
+      });
     }
 
     const cost = Number(ABILITY_COSTS.freeze || 0);
-    if (!spendCoins(cost)) return res.status(400).json({ ok: false, message: "NOT_ENOUGH_COINS" });
+    if (!spendCoins(cost))
+      return res.status(400).json({ ok: false, message: "NOT_ENOUGH_COINS" });
 
     round.abilities.freezeUsed += 1;
 
     globalFreeze = { until: now + FREEZE_MS, by: user.username };
     saveUsers(USERS);
 
-    // broadcast ziņa visiem + atsevišķs event, ja front-end grib UI lock
-    emitSystemAll(`❄️ ${user.username} iesaldēja minēšanu uz ${Math.ceil(FREEZE_MS / 1000)}s!`);
-    io.emit("ability:freeze", { by: user.username, until: globalFreeze.until, ms: FREEZE_MS });
+    emitSystemAll(
+      `❄️ ${user.username} iesaldēja minēšanu uz ${Math.ceil(FREEZE_MS / 1000)}s!`
+    );
+    io.emit("ability:freeze", {
+      by: user.username,
+      until: globalFreeze.until,
+      ms: FREEZE_MS,
+    });
 
     return res.json({
       ok: true,
@@ -2853,10 +2858,9 @@ app.post("/ability/use", authMiddleware, (req, res) => {
     });
   }
 
+  saveUsers(USERS);
   return res.status(400).json({ ok: false, message: "UNKNOWN_ABILITY" });
 });
-
-
 
 app.post("/buy-token", authMiddleware, (req, res) => {
   const user = req.user;
@@ -2997,7 +3001,7 @@ function grantDailyLoginBonus(user) {
   return DAILY_LOGIN_COINS;
 }
 
-// ===== SEZONAS AUTO-BEIGAS + AUTO-HOF (TOP1 freeze) =====
+// ===== SEZONAS AUTO-BEIGAS + AUTO-HOF =====
 let seasonEndedBroadcasted = false;
 
 setInterval(() => {
@@ -3030,7 +3034,7 @@ setInterval(() => {
   }
 }, 1500);
 
-// ======== Socket.IO auth middleware (atšķiras /wheel) ========
+// ======== Socket.IO auth middleware ========
 function extractSocketToken(socket) {
   const fromAuth = socket?.handshake?.auth?.token;
   const fromQuery = socket?.handshake?.query?.token;
@@ -3045,7 +3049,6 @@ function extractSocketToken(socket) {
 
 io.use((socket, next) => {
   const nsp = socket.nsp?.name || "/";
-
   const token = extractSocketToken(socket);
 
   // /wheel: atļaujam arī bez token (read-only)
@@ -3061,7 +3064,7 @@ io.use((socket, next) => {
     }
   }
 
-  // pārējais (spēle): token obligāts
+  // pārējais: token obligāts
   if (!token) return next(new Error("Nav token"));
   try {
     const payload = jwt.verify(token, JWT_SECRET);
@@ -3078,20 +3081,7 @@ io.use((socket, next) => {
 // ======== WHEEL namespace (/wheel) ========
 wheelNsp = io.of("/wheel");
 
-wheelNsp.use((socket, next) => {
-  const token = extractSocketToken(socket);
-  if (!token) return next();
-  try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    const user = USERS[payload.username];
-    if (user && !user.isBanned) socket.data.user = user;
-  } catch {
-    // nederīgs token -> paliek read-only
-  }
-  return next();
-});
-
-// initial token sync
+// init token sync
 wheelSyncTokenSlots(true);
 
 wheelNsp.on("connection", (socket) => {
@@ -3144,115 +3134,85 @@ wheelNsp.on("connection", (socket) => {
     wheelEmitUpdate(true);
   });
 
-  // ===== ADMIN: tokenAdjust / tokenSet (un saderība ar adjustTokens) =====
-  function applyTokenChange(payload = {}, mode = "auto") {
+  // ADMIN: tokenAdjust / tokenSet (+ saderība ar adjustTokens)
+  function applyTokenChange(payload = {}, mode = "adjust") {
     const admin = wheelRequireAdmin(socket);
     if (!admin) return;
     if (wheelBlockIfSpinning(socket)) return;
 
-    const username = String(
-      payload.username ?? payload.user ?? payload.name ?? payload.nick ?? ""
-    )
-      .trim()
-      .slice(0, 30);
+    const name = String(payload?.username || payload?.name || "").trim();
+    if (!name) return wheelEmitError(socket, "Nav username.");
 
-    if (!username) return wheelEmitError(socket, "Nav username.");
+    const key = findUserKeyCaseInsensitive(name);
+    const u = key ? USERS[key] : null;
+    if (!u) return wheelEmitError(socket, "Lietotājs nav atrasts.");
 
-    const key = findUserKeyCaseInsensitive(username);
-    const target = key ? USERS[key] : null;
-    if (!target) return wheelEmitError(socket, "Lietotājs nav atrasts.");
-
-    let nextTokens = Math.max(0, Math.floor(target.tokens || 0));
+    const prev = Math.max(0, Math.floor(u.tokens || 0));
 
     if (mode === "set") {
-      const v = parseInt(payload.set ?? payload.value ?? payload.tokens, 10);
-      if (!Number.isFinite(v) || v < 0) return wheelEmitError(socket, "Nederīgs set.");
-      nextTokens = v;
-    } else if (mode === "delta") {
-      const d = parseInt(payload.delta ?? payload.d ?? payload.change, 10);
-      if (!Number.isFinite(d) || d === 0) return wheelEmitError(socket, "Nederīgs delta.");
-      nextTokens = Math.max(0, nextTokens + d);
+      const next = Math.max(0, Math.floor(Number(payload?.tokens ?? 0) || 0));
+      u.tokens = next;
     } else {
-      const hasSet =
-        payload.set !== undefined && payload.set !== null && payload.set !== "";
-      const hasDelta =
-        payload.delta !== undefined && payload.delta !== null && payload.delta !== "";
-      if (!hasSet && !hasDelta) return wheelEmitError(socket, "Norādi set vai delta.");
-
-      if (hasSet) {
-        const v = parseInt(payload.set, 10);
-        if (!Number.isFinite(v) || v < 0) return wheelEmitError(socket, "Nederīgs set.");
-        nextTokens = v;
-      } else {
-        const d = parseInt(payload.delta, 10);
-        if (!Number.isFinite(d) || d === 0) return wheelEmitError(socket, "Nederīgs delta.");
-        nextTokens = Math.max(0, nextTokens + d);
-      }
+      const delta = Math.floor(Number(payload?.delta ?? 0) || 0);
+      u.tokens = Math.max(0, prev + delta);
     }
 
-    target.tokens = nextTokens;
     saveUsers(USERS);
-
     wheelSyncTokenSlots(true);
     wheelEmitUpdate(true);
 
-    socket.emit("wheel:tokensUpdated", {
-      username: target.username,
-      tokens: nextTokens,
+    socket.emit("wheel:tokenChanged", {
+      ok: true,
+      username: u.username,
+      tokens: u.tokens,
+      prev,
+    });
+    socket.emit("tokenChanged", {
+      ok: true,
+      username: u.username,
+      tokens: u.tokens,
+      prev,
     });
   }
 
-  bind("adjustTokens", (payload = {}) => applyTokenChange(payload, "auto"));
-  bind("tokenAdjust", (payload = {}) => applyTokenChange(payload, "delta"));
+  bind("tokenAdjust", (payload = {}) => applyTokenChange(payload, "adjust"));
   bind("tokenSet", (payload = {}) => applyTokenChange(payload, "set"));
+  bind("adjustTokens", (payload = {}) => applyTokenChange(payload, "adjust"));
 
   bind("add", (payload = {}) => {
     const admin = wheelRequireAdmin(socket);
     if (!admin) return;
     if (wheelBlockIfSpinning(socket)) return;
 
-    const name =
-      payload.name ?? payload.username ?? payload.nick ?? payload.player ?? "";
-    const count =
-      payload.count ?? payload.tickets ?? payload.qty ?? payload.amount ?? 1;
+    const name = String(payload?.name || payload?.username || "").trim();
+    const count = payload?.count ?? 1;
 
     const r = wheelAdd(name, count);
-    if (!r.ok) return wheelEmitError(socket, r.message);
+    if (!r.ok) return wheelEmitError(socket, r.message || "Neizdevās pievienot.");
+
     wheelEmitUpdate(true);
   });
 
-  bind("remove", (payload = {}) => {
+  bind("removeByIndex", (payload = {}) => {
     const admin = wheelRequireAdmin(socket);
     if (!admin) return;
     if (wheelBlockIfSpinning(socket)) return;
 
-    if (payload && (payload.index || payload.index === 0)) {
-      const r = wheelRemoveOneByIndex(payload.index);
-      if (!r.ok) return wheelEmitError(socket, r.message);
-      wheelEmitUpdate(true);
-      return;
-    }
+    const idx = payload?.index ?? payload?.i ?? payload;
+    const r = wheelRemoveOneByIndex(idx);
+    if (!r.ok) return wheelEmitError(socket, r.message || "Neizdevās noņemt.");
 
-    const name = payload.name ?? payload.username ?? payload.nick ?? "";
+    wheelEmitUpdate(true);
+  });
+
+  bind("removeAllByName", (payload = {}) => {
+    const admin = wheelRequireAdmin(socket);
+    if (!admin) return;
+    if (wheelBlockIfSpinning(socket)) return;
+
+    const name = String(payload?.name || payload?.username || "").trim();
     const r = wheelRemoveAllByName(name);
-    if (!r.ok) return wheelEmitError(socket, r.message);
-    wheelEmitUpdate(true);
-  });
-
-  bind("settings", (payload = {}) => {
-    const admin = wheelRequireAdmin(socket);
-    if (!admin) return;
-    if (wheelBlockIfSpinning(socket)) return;
-
-    wheelApplySettings({
-      spinMs: payload.spinMs ?? payload.spin_ms ?? payload.ms ?? payload.durationMs,
-      removeOnWin:
-        typeof payload.removeOnWin === "boolean"
-          ? payload.removeOnWin
-          : typeof payload.remove_on_win === "boolean"
-          ? payload.remove_on_win
-          : undefined,
-    });
+    if (!r.ok) return wheelEmitError(socket, r.message || "Neizdevās noņemt.");
 
     wheelEmitUpdate(true);
   });
@@ -3266,393 +3226,278 @@ wheelNsp.on("connection", (socket) => {
     wheelEmitUpdate(true);
   });
 
+  bind("settings", (payload = {}) => {
+    const admin = wheelRequireAdmin(socket);
+    if (!admin) return;
+    if (wheelBlockIfSpinning(socket)) return;
+
+    wheelApplySettings({
+      spinMs: payload?.spinMs,
+      removeOnWin: payload?.removeOnWin,
+    });
+    wheelEmitUpdate(true);
+  });
+
   bind("spin", () => {
     const admin = wheelRequireAdmin(socket);
     if (!admin) return;
-
     const r = wheelStartSpin(admin.username, io);
-    if (!r.ok) return wheelEmitError(socket, r.message);
+    if (!r.ok) return wheelEmitError(socket, r.message || "Spin error.");
   });
 });
 
-// ======== Socket.IO pamat-connection (spēle) ========
+// ======== MAIN namespace (spēle) ========
+function safeChatText(x) {
+  let t = String(x || "");
+  t = t.replace(/\s+/g, " ").trim();
+  if (t.length > CHAT_MAX_LEN) t = t.slice(0, CHAT_MAX_LEN);
+  return t;
+}
+
+function canChat(user, text) {
+  const now = Date.now();
+
+  if (user.mutedUntil && now < user.mutedUntil) {
+    return { ok: false, message: "Tu esi muted uz brīdi." };
+  }
+
+  if (user.lastChatAt && now - user.lastChatAt < CHAT_RATE_MS) {
+    return { ok: false, message: "Pārāk ātri čatā." };
+  }
+
+  const clean = safeChatText(text);
+  if (!clean) return { ok: false, message: "Tukšs teksts." };
+
+  if (
+    user.lastChatText &&
+    user.lastChatTextAt &&
+    now - user.lastChatTextAt < CHAT_DUP_WINDOW_MS &&
+    user.lastChatText === clean
+  ) {
+    return { ok: false, message: "Dublēts teksts." };
+  }
+
+  user.lastChatAt = now;
+  user.lastChatText = clean;
+  user.lastChatTextAt = now;
+
+  return { ok: true, clean };
+}
+
+function newDuelId() {
+  return crypto.randomBytes(10).toString("hex");
+}
+
 io.on("connection", (socket) => {
   const user = socket.data.user;
-  if (!user) {
-    socket.disconnect();
-    return;
-  }
+  if (!user || !user.username) return socket.disconnect(true);
 
-  console.log("Pieslēdzās:", user.username, "socket:", socket.id);
-
-  const passiveChanged = markActivity(user);
-  ensureDailyMissions(user);
-  ensureDailyChest(user);
-  ensureSpecialMedals(user);
-  ensureRankFields(user);
-  if (typeof user.supporter !== "boolean") user.supporter = false;
-
-  const bonus = grantDailyLoginBonus(user);
-  if (bonus > 0) {
-    socket.emit("chatMessage", {
-      username: "SYSTEM",
-      text: `Dienas ienākšanas bonuss: +${bonus} coins!`,
-      ts: Date.now(),
-    });
-  }
-
-  if (passiveChanged) saveUsers(USERS);
-
+  // online
   onlineBySocket.set(socket.id, user.username);
   broadcastOnlineList(true);
   broadcastLeaderboard(false);
 
-  socket.emit("seasonUpdate", seasonState);
-  socket.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
+  // daily login bonus
+  const bonus = grantDailyLoginBonus(user);
+  if (bonus) {
+    socket.emit("dailyLoginBonus", { coins: bonus, ts: Date.now() });
+    socket.emit("me:update", buildMePayload(user));
+  }
 
-  socket.on("leaderboard:top10", () => {
-    socket.emit("leaderboard:update", computeTop10Leaderboard());
-  });
+  // ja freeze aktīvs, dod klientam uzreiz
+  const fr = getFreezePayloadFor(user.username);
+  if (fr.active) socket.emit("ability:freeze", { by: fr.by, until: fr.until, ms: fr.until - Date.now() });
 
-  // ========== ČATS ==========
-  socket.on("chatMessage", (text) => {
-    if (typeof text !== "string") return;
-    let msg = text.trim();
-    if (!msg) return;
-    if (msg.length > CHAT_MAX_LEN) msg = msg.slice(0, CHAT_MAX_LEN);
+  // client may request immediate state
+  socket.on("leaderboard:get", () => socket.emit("leaderboard:update", computeTop10Leaderboard()));
+  socket.on("online:get", () => broadcastOnlineList(true));
 
-    const u = USERS[user.username] || user;
-
-    const passiveChanged2 = markActivity(u);
-    ensureRankFields(u);
-
-    const now = Date.now();
-
-    if (u.isBanned) {
-      socket.emit("chatMessage", {
-        username: "SYSTEM",
-        text: "Tu esi nobanots no VĀRDU ZONAS.",
-        ts: Date.now(),
-      });
-      if (passiveChanged2) saveUsers(USERS);
+  // chat (supports both events)
+  const onChat = (payload = {}) => {
+    const text =
+      typeof payload === "string" ? payload : payload?.text ?? payload?.message ?? "";
+    const gate = canChat(user, text);
+    if (!gate.ok) {
+      socket.emit("chatError", { message: gate.message });
       return;
     }
 
-    if (u.mutedUntil && u.mutedUntil > now) {
-      const until = new Date(u.mutedUntil).toLocaleTimeString("lv-LV", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      socket.emit("chatMessage", {
-        username: "SYSTEM",
-        text: `Tev ir mute līdz ${until}.`,
-        ts: Date.now(),
-      });
-      if (passiveChanged2) saveUsers(USERS);
+    const msg = gate.clean;
+
+    // admin komandas: /...
+    if (msg.startsWith("/") && isAdminUser(user)) {
+      handleAdminCommand(msg, user, socket);
+      saveUsers(USERS);
       return;
     }
 
-    if (u.lastChatAt && now - u.lastChatAt < CHAT_RATE_MS) {
-      if (passiveChanged2) saveUsers(USERS);
-      return;
-    }
-    u.lastChatAt = now;
-
-    if (
-      u.lastChatText &&
-      u.lastChatText === msg &&
-      u.lastChatTextAt &&
-      now - u.lastChatTextAt < CHAT_DUP_WINDOW_MS
-    ) {
-      if (passiveChanged2) saveUsers(USERS);
-      return;
-    }
-    u.lastChatText = msg;
-    u.lastChatTextAt = now;
-
-    const isAdmin = isAdminUser(u);
-    if (isAdmin && (msg.startsWith("/") || msg.startsWith("!"))) {
-      handleAdminCommand(msg, u, socket);
-      if (passiveChanged2) saveUsers(USERS);
-      return;
-    }
-
-    if (passiveChanged2) saveUsers(USERS);
-
+    saveUsers(USERS);
     io.emit("chatMessage", {
-      username: u.username,
+      username: user.username,
       text: msg,
       ts: Date.now(),
-      avatarUrl: u.avatarUrl || null,
-      rankTitle: u.rankTitle || "—",
-      rankLevel: u.rankLevel || 1,
-      supporter: !!u.supporter,
+      avatarUrl: user.avatarUrl || null,
+      supporter: !!user.supporter,
     });
+  };
+
+  socket.on("chatSend", onChat);
+  socket.on("chatMessageSend", onChat);
+  socket.on("chatMessage", (p) => {
+    // allow legacy inbound, but ignore if payload already looks like server-broadcast
+    if (p && typeof p === "object" && p.username && p.ts && p.text) return;
+    onChat(p);
   });
 
-  // ========== DUEĻI ==========
-  socket.on("duel.challenge", (targetNameRaw) => {
-    const challenger = socket.data.user;
-    const challengerName = challenger.username;
-    const targetName = String(targetNameRaw || "").trim();
+  // ====== DUELS (minimal, saderīgs ar “duel.*” eventiem) ======
+  socket.on("duel.challenge", (payload = {}) => {
+    const target = String(payload?.target || payload?.username || "").trim();
+    if (!target) return;
+    if (target === user.username) return;
 
-    if (!targetName)
-      return socket.emit("duel.error", { message: "Nav norādīts pretinieks." });
-    if (targetName === challengerName)
-      return socket.emit("duel.error", { message: "Nevari izaicināt sevi." });
+    if (userToDuel.has(user.username)) {
+      socket.emit("duel.error", { message: "Tu jau esi duelī." });
+      return;
+    }
+    if (userToDuel.has(target)) {
+      socket.emit("duel.error", { message: "Mērķis jau ir duelī." });
+      return;
+    }
 
-    const key = findUserKeyCaseInsensitive(targetName);
-    const targetUser = key ? USERS[key] : null;
-    if (!targetUser)
-      return socket.emit("duel.error", { message: "Lietotājs nav atrasts." });
+    const targetSock = getSocketByUsername(target);
+    if (!targetSock) {
+      socket.emit("duel.error", { message: "Mērķis nav online." });
+      return;
+    }
 
-    if (userToDuel.has(challengerName))
-      return socket.emit("duel.error", { message: "Tu jau esi citā duelī." });
-    if (userToDuel.has(targetUser.username))
-      return socket.emit("duel.error", {
-        message: "Pretinieks jau ir citā duelī.",
-      });
-
-    const targetSocket = getSocketByUsername(targetUser.username);
-    if (!targetSocket)
-      return socket.emit("duel.error", {
-        message: "Pretinieks nav tiešsaistē.",
-      });
-
+    const duelId = newDuelId();
     const { word, len } = pickRandomWord();
-    const duelId = crypto.randomBytes(8).toString("hex");
 
     const duel = {
       id: duelId,
-      players: [challengerName, targetUser.username],
+      status: "pending",
+      players: [user.username, target],
+      createdAt: Date.now(),
+      expiresAt: Date.now() + DUEL_MAX_DURATION_MS,
       word,
       len,
-      status: "pending",
-      createdAt: Date.now(),
-      startedAt: null,
-      expiresAt: null,
-      attemptsLeft: {
-        [challengerName]: DUEL_MAX_ATTEMPTS,
-        [targetUser.username]: DUEL_MAX_ATTEMPTS,
+      state: {
+        [user.username]: { attemptsLeft: DUEL_MAX_ATTEMPTS, finished: false },
+        [target]: { attemptsLeft: DUEL_MAX_ATTEMPTS, finished: false },
       },
-      rowsUsed: { [challengerName]: 0, [targetUser.username]: 0 },
-      winner: null,
-      finishedReason: null,
     };
 
     duels.set(duelId, duel);
-    userToDuel.set(challengerName, duelId);
-    userToDuel.set(targetUser.username, duelId);
+    userToDuel.set(user.username, duelId);
+    userToDuel.set(target, duelId);
 
-    socket.emit("duel.waiting", {
-      duelId,
-      opponent: targetUser.username,
-      len,
-    });
-    targetSocket.emit("duel.invite", {
-      duelId,
-      from: challengerName,
-      len,
-    });
+    socket.emit("duel.sent", { duelId, to: target, len });
+    targetSock.emit("duel.invite", { duelId, from: user.username, len });
   });
 
-  socket.on("duel.accept", (payload) => {
-    const duelId = payload?.duelId;
-    const userName = socket.data.user.username;
-    const duel = duels.get(duelId);
-    if (!duel)
-      return socket.emit("duel.error", { message: "Duēlis nav atrasts." });
-    if (!duel.players.includes(userName))
-      return socket.emit("duel.error", { message: "Tu neesi šajā duelī." });
-    if (duel.status !== "pending")
-      return socket.emit("duel.error", { message: "Duēlis jau ir sācies." });
-
-    duel.status = "active";
-    duel.startedAt = Date.now();
-    duel.expiresAt = duel.startedAt + DUEL_MAX_DURATION_MS;
-
-    const [p1, p2] = duel.players;
-    const s1 = getSocketByUsername(p1);
-    const s2 = getSocketByUsername(p2);
-
-    if (s1)
-      s1.emit("duel.start", {
-        duelId: duel.id,
-        len: duel.len,
-        opponent: p2,
-        expiresAt: duel.expiresAt,
-      });
-    if (s2)
-      s2.emit("duel.start", {
-        duelId: duel.id,
-        len: duel.len,
-        opponent: p1,
-        expiresAt: duel.expiresAt,
-      });
-
-    broadcastSystemMessage(
-      `⚔️ Duēlis sākas: ${p1} vs ${p2}! Kurš pirmais atminēs vārdu?`
-    );
-  });
-
-  socket.on("duel.decline", (payload) => {
-    const duelId = payload?.duelId;
-    const userName = socket.data.user.username;
-    const duel = duels.get(duelId);
+  socket.on("duel.decline", (payload = {}) => {
+    const duelId = String(payload?.duelId || "").trim();
+    const duel = duelId ? duels.get(duelId) : null;
     if (!duel) return;
-    if (!duel.players.includes(userName)) return;
+
+    if (!duel.players.includes(user.username)) return;
+
+    finishDuel(duel, null, "declined");
+  });
+
+  socket.on("duel.accept", (payload = {}) => {
+    const duelId = String(payload?.duelId || "").trim();
+    const duel = duelId ? duels.get(duelId) : null;
+    if (!duel) return;
+
+    if (!duel.players.includes(user.username)) return;
+
     if (duel.status !== "pending") return;
 
-    const [p1, p2] = duel.players;
-    const other = p1 === userName ? p2 : p1;
+    duel.status = "active";
+    duel.expiresAt = Date.now() + DUEL_MAX_DURATION_MS;
 
-    const sOther = getSocketByUsername(other);
-    if (sOther)
-      sOther.emit("duel.end", {
-        duelId: duel.id,
-        winner: null,
-        youWin: false,
-        reason: "declined",
-      });
-    socket.emit("duel.end", {
-      duelId: duel.id,
-      winner: null,
-      youWin: false,
-      reason: "declined",
-    });
-
-    userToDuel.delete(p1);
-    userToDuel.delete(p2);
-    duels.delete(duel.id);
+    for (const p of duel.players) {
+      const s = getSocketByUsername(p);
+      if (s) s.emit("duel.start", { duelId: duel.id, opponent: duel.players.find((x) => x !== p), len: duel.len, attempts: DUEL_MAX_ATTEMPTS });
+    }
   });
 
   socket.on("duel.guess", (payload = {}) => {
-    const duelId = payload?.duelId;
-    const guess = String(payload?.guess || "")
-      .trim()
-      .toUpperCase();
+    const duelId = String(payload?.duelId || "").trim();
+    const guess = String(payload?.guess || "").trim().toUpperCase();
 
-    const me = socket.data.user.username;
+    const duel = duelId ? duels.get(duelId) : null;
+    if (!duel) return;
+    if (duel.status !== "active") return;
+    if (!duel.players.includes(user.username)) return;
 
-    const duel = duels.get(duelId);
-    if (!duel) return socket.emit("duel.error", { message: "Duēlis nav atrasts." });
-    if (!duel.players.includes(me))
-      return socket.emit("duel.error", { message: "Tu neesi šajā duelī." });
-    if (duel.status !== "active")
-      return socket.emit("duel.error", { message: "Duēlis nav aktīvs." });
+    const st = duel.state?.[user.username];
+    if (!st || st.finished) return;
 
-    const now = Date.now();
-    if (duel.expiresAt && now >= duel.expiresAt) {
-      finishDuel(duel, null, "timeout");
+    if (guess.length !== duel.len || !GUESS_ALLOWED_RE.test(guess)) {
+      socket.emit("duel.result", { duelId, ok: false, message: "Nederīgs minējums." });
       return;
     }
 
-    if (!guess) return;
-    if (guess.length !== duel.len) {
-      return socket.emit("duel.error", {
-        message: `Vārdam jābūt ${duel.len} burtiem.`,
-      });
-    }
-    if (!GUESS_ALLOWED_RE.test(guess)) {
-      return socket.emit("duel.error", {
-        message: "Minējumā drīkst būt tikai burti (A-Z + latviešu burti).",
-      });
-    }
-
-    const left = duel.attemptsLeft?.[me] ?? DUEL_MAX_ATTEMPTS;
-    if (left <= 0) {
-      return socket.emit("duel.error", { message: "Tev vairs nav mēģinājumu." });
-    }
-
+    st.attemptsLeft -= 1;
     const pattern = buildPattern(duel.word, guess);
-    const isWin = guess === duel.word;
+    const win = guess === duel.word;
+    const finished = win || st.attemptsLeft <= 0;
 
-    duel.attemptsLeft[me] = Math.max(0, left - 1);
-    duel.rowsUsed[me] = (duel.rowsUsed[me] || 0) + 1;
+    st.finished = finished;
 
-    const [p1, p2] = duel.players;
-    const other = me === p1 ? p2 : p1;
-
-    const s1 = getSocketByUsername(p1);
-    const s2 = getSocketByUsername(p2);
-
-    const progressPayload = {
-      duelId: duel.id,
-      by: me,
-      guess,
+    socket.emit("duel.result", {
+      duelId,
+      ok: true,
       pattern,
-      win: isWin,
-      attemptsLeft: {
-        [p1]: duel.attemptsLeft[p1],
-        [p2]: duel.attemptsLeft[p2],
-      },
-      rowsUsed: {
-        [p1]: duel.rowsUsed[p1],
-        [p2]: duel.rowsUsed[p2],
-      },
-      expiresAt: duel.expiresAt,
-    };
+      win,
+      finished,
+      attemptsLeft: st.attemptsLeft,
+    });
 
-    if (s1) s1.emit("duel.progress", progressPayload);
-    if (s2) s2.emit("duel.progress", progressPayload);
-
-    if (isWin) {
-      finishDuel(duel, me, "win");
-      return;
+    // paziņo oponentam (UI sync)
+    const other = duel.players.find((x) => x !== user.username);
+    const os = getSocketByUsername(other);
+    if (os) {
+      os.emit("duel.opponentResult", {
+        duelId,
+        opponent: user.username,
+        win,
+        finished,
+        attemptsLeft: st.attemptsLeft,
+      });
     }
 
-    const leftMe = duel.attemptsLeft[me] || 0;
-    const leftOther = duel.attemptsLeft[other] || 0;
-    if (leftMe <= 0 && leftOther <= 0) {
-      finishDuel(duel, null, "no_attempts");
+    if (win) return finishDuel(duel, user.username, "win");
+
+    // ja abi pabeiguši bez uzvaras -> draw
+    const a = duel.state[duel.players[0]];
+    const b = duel.state[duel.players[1]];
+    if ((a?.finished && b?.finished) || (a?.attemptsLeft <= 0 && b?.attemptsLeft <= 0)) {
+      return finishDuel(duel, null, "draw");
     }
   });
 
-  // ===== disconnect =====
   socket.on("disconnect", () => {
-    const uname = onlineBySocket.get(socket.id);
     onlineBySocket.delete(socket.id);
+    broadcastOnlineList(true);
 
-    if (uname) {
-      // ja bija duelī — sakārtojam
-      const duelId = userToDuel.get(uname);
-      if (duelId) {
-        const duel = duels.get(duelId);
-        if (duel) {
-          const [p1, p2] = duel.players;
-          const other = uname === p1 ? p2 : p1;
-
-          if (duel.status === "pending") {
-            const sOther = getSocketByUsername(other);
-            if (sOther) {
-              sOther.emit("duel.end", {
-                duelId: duel.id,
-                winner: null,
-                youWin: false,
-                reason: "disconnect",
-              });
-            }
-            userToDuel.delete(p1);
-            userToDuel.delete(p2);
-            duels.delete(duel.id);
-          } else if (duel.status === "active") {
-            // forfeit: otrs uzvar
-            finishDuel(duel, other, "disconnect");
-          }
-        } else {
-          userToDuel.delete(uname);
-        }
+    // duel disconnect handling
+    const duelId = userToDuel.get(user.username);
+    if (duelId) {
+      const duel = duels.get(duelId);
+      if (duel && duel.players.includes(user.username) && duel.status !== "finished") {
+        const other = duel.players.find((x) => x !== user.username);
+        // active: forfeit -> other wins; pending: cancel
+        if (duel.status === "active") finishDuel(duel, other || null, "disconnect");
+        else finishDuel(duel, null, "cancelled");
       }
     }
-
-    broadcastOnlineList(true);
   });
 });
 
-// ======== WHEEL API: state tikai ========
-// (ir jau /wheel/state augšā)
-
-// ======== Start server ========
+// start server
 httpServer.listen(PORT, () => {
-  console.log(`VĀRDU ZONA serveris darbojas uz porta: ${PORT}`);
+  console.log(`VĀRDU ZONA server started on :${PORT}`);
 });
