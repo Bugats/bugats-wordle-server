@@ -35,6 +35,8 @@ const MAX_ATTEMPTS = 6;
 
 const BASE_TOKEN_PRICE = 150;
 
+const REVEAL_LETTER_COST = Number(process.env.REVEAL_LETTER_COST || 50);
+
 // ======== Season rollover: coins/tokens reset (ENV slēdzis) ========
 // Default: ON (1). Lai izslēgtu: RESET_COINS_TOKENS_ON_ROLLOVER=0
 const RESET_COINS_TOKENS_ON_ROLLOVER =
@@ -2377,6 +2379,8 @@ function startNewRoundForUser(user) {
     word,
     len,
     attemptsLeft: MAX_ATTEMPTS,
+    revealUsed: false,
+    revealed: [],
     finished: false,
     startedAt: Date.now(),
   };
@@ -2599,6 +2603,83 @@ app.post("/buy-token", authMiddleware, (req, res) => {
   if ((user.coins || 0) < price) {
     saveUsers(USERS);
     return res.status(400).json({ message: "Nepietiek coins" });
+
+// ======== Ability: Reveal one letter (paid, once per round) ========
+app.post("/ability/reveal-letter", authMiddleware, (req, res) => {
+  try {
+    const u = req.user;
+    if (!u) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+    const round = u.currentRound;
+    if (!round || round.finished) {
+      return res.status(400).json({ ok: false, error: "NO_ACTIVE_ROUND" });
+    }
+
+    if (round.revealUsed) {
+      return res.status(400).json({ ok: false, error: "ALREADY_USED" });
+    }
+
+    const cost = Math.max(0, Number(REVEAL_LETTER_COST || 0));
+    u.coins = Number(u.coins || 0);
+
+    if (u.coins < cost) {
+      return res.status(400).json({ ok: false, error: "NOT_ENOUGH_COINS", coins: u.coins, cost });
+    }
+
+    const secret = String(round.word || "");
+    const len = Number(round.len || secret.length || 0);
+    if (!secret || len <= 0) {
+      return res.status(400).json({ ok: false, error: "ROUND_INVALID" });
+    }
+
+    // indices already known as correct from past guesses (green positions)
+    const knownCorrect = new Set();
+    const guesses = Array.isArray(round.guesses) ? round.guesses : [];
+    for (const g of guesses) {
+      try {
+        const patt = buildPattern(secret, String(g || ""));
+        for (let i = 0; i < patt.length; i++) if (patt[i] === "correct") knownCorrect.add(i);
+      } catch {}
+    }
+
+    const revealed = Array.isArray(round.revealed) ? round.revealed : [];
+    const alreadyRevealed = new Set(
+      revealed.map((x) => Number(x && x.i)).filter((n) => Number.isFinite(n))
+    );
+
+    const candidates = [];
+    for (let i = 0; i < len; i++) {
+      if (alreadyRevealed.has(i)) continue;
+      if (knownCorrect.has(i)) continue; // avoid wasting reveal on already-green positions
+      candidates.push(i);
+    }
+
+    // if everything is already green, allow revealing any not-yet-revealed index
+    if (candidates.length === 0) {
+      for (let i = 0; i < len; i++) if (!alreadyRevealed.has(i)) candidates.push(i);
+    }
+
+    if (candidates.length === 0) {
+      return res.status(400).json({ ok: false, error: "NOTHING_TO_REVEAL" });
+    }
+
+    const idx = candidates[Math.floor(Math.random() * candidates.length)];
+    const letter = secret[idx];
+
+    // charge + persist
+    u.coins -= cost;
+    round.revealUsed = true;
+    if (!Array.isArray(round.revealed)) round.revealed = [];
+    round.revealed.push({ i: idx, ch: letter });
+
+    saveUsers(USERS);
+
+    return res.json({ ok: true, idx, letter, cost, coins: u.coins, len });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+  }
+});
+
   }
 
   user.coins = (user.coins || 0) - price;
