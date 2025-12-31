@@ -179,6 +179,7 @@ const DUEL_MAX_ATTEMPTS = 6;
 const DUEL_REWARD_XP = 3;
 const DUEL_REWARD_COINS = 3;
 const DUEL_MAX_DURATION_MS = 2 * 60 * 1000;
+const DUEL_PENDING_TTL_MS = 60 * 1000;
 
 const duels = new Map(); // duelId -> duel objekts
 const userToDuel = new Map(); // username -> duelId
@@ -719,6 +720,7 @@ function wheelApplySettings({ spinMs, removeOnWin }) {
   saveWheelStore();
 }
 
+// io ref būs pieejams pēc init
 function wheelFinishSpin(spinId, io) {
   if (!wheelStore.spinning) return;
   if (wheelStore.spinId !== spinId) return;
@@ -2122,6 +2124,13 @@ app.get("/me", authMiddleware, (req, res) => {
   ensureSpecialMedals(u);
   ensureRankFields(u);
   if (typeof u.supporter !== "boolean") u.supporter = false;
+
+  const bonus = grantDailyLoginBonus(u);
+  if (bonus > 0) {
+    // nerādām visiem, tikai pašam
+    emitSystemUser(u.username, `🎁 Dienas bonuss: +${bonus} coins!`);
+  }
+
   saveUsers(USERS);
   res.json(buildMePayload(u));
 });
@@ -2982,6 +2991,9 @@ function finishDuel(duel, winnerName, reason) {
 setInterval(() => {
   const now = Date.now();
   for (const duel of duels.values()) {
+    if (duel.status === "pending" && duel.pendingUntil && now >= duel.pendingUntil) {
+      finishDuel(duel, null, "pending_timeout");
+    }
     if (duel.status === "active" && duel.expiresAt && now >= duel.expiresAt) {
       finishDuel(duel, null, "timeout");
     }
@@ -2997,7 +3009,6 @@ function grantDailyLoginBonus(user) {
   if (user.dailyLoginDate === today) return 0;
   user.dailyLoginDate = today;
   user.coins = (user.coins || 0) + DAILY_LOGIN_COINS;
-  saveUsers(USERS);
   return DAILY_LOGIN_COINS;
 }
 
@@ -3126,6 +3137,11 @@ wheelNsp.on("connection", (socket) => {
     socket.emit("update", publicWheelState());
   });
 
+  bind("state", () => {
+    socket.emit("wheel:update", publicWheelState());
+    socket.emit("update", publicWheelState());
+  });
+
   bind("syncTokens", () => {
     const admin = wheelRequireAdmin(socket);
     if (!admin) return;
@@ -3184,25 +3200,15 @@ wheelNsp.on("connection", (socket) => {
     if (!admin) return;
     if (wheelBlockIfSpinning(socket)) return;
 
-    const name = String(payload?.name || payload?.username || "").trim();
-    const count = payload?.count ?? 1;
+    const name = payload?.name ?? payload?.username ?? payload?.text;
+    const count = payload?.count ?? payload?.n ?? 1;
 
     const r = wheelAdd(name, count);
     if (!r.ok) return wheelEmitError(socket, r.message || "Neizdevās pievienot.");
 
     wheelEmitUpdate(true);
-  });
-
-  bind("removeByIndex", (payload = {}) => {
-    const admin = wheelRequireAdmin(socket);
-    if (!admin) return;
-    if (wheelBlockIfSpinning(socket)) return;
-
-    const idx = payload?.index ?? payload?.i ?? payload;
-    const r = wheelRemoveOneByIndex(idx);
-    if (!r.ok) return wheelEmitError(socket, r.message || "Neizdevās noņemt.");
-
-    wheelEmitUpdate(true);
+    socket.emit("wheel:added", r);
+    socket.emit("added", r);
   });
 
   bind("removeAllByName", (payload = {}) => {
@@ -3210,11 +3216,32 @@ wheelNsp.on("connection", (socket) => {
     if (!admin) return;
     if (wheelBlockIfSpinning(socket)) return;
 
-    const name = String(payload?.name || payload?.username || "").trim();
+    const name = payload?.name ?? payload?.username ?? payload?.text;
     const r = wheelRemoveAllByName(name);
     if (!r.ok) return wheelEmitError(socket, r.message || "Neizdevās noņemt.");
 
     wheelEmitUpdate(true);
+    socket.emit("wheel:removed", r);
+    socket.emit("removed", r);
+  });
+
+  // aliasi
+  bind("removeAll", (payload = {}) => {
+    const name = payload?.name ?? payload?.username ?? payload?.text;
+    return socket.emit("wheel:removeAllByName", { name });
+  });
+
+  bind("removeOneByIndex", (payload = {}) => {
+    const admin = wheelRequireAdmin(socket);
+    if (!admin) return;
+    if (wheelBlockIfSpinning(socket)) return;
+
+    const r = wheelRemoveOneByIndex(payload?.index ?? payload?.idx);
+    if (!r.ok) return wheelEmitError(socket, r.message || "Neizdevās noņemt.");
+
+    wheelEmitUpdate(true);
+    socket.emit("wheel:removedOne", r);
+    socket.emit("removedOne", r);
   });
 
   bind("shuffle", () => {
@@ -3224,6 +3251,8 @@ wheelNsp.on("connection", (socket) => {
 
     wheelShuffle();
     wheelEmitUpdate(true);
+    socket.emit("wheel:shuffled", { ok: true });
+    socket.emit("shuffled", { ok: true });
   });
 
   bind("settings", (payload = {}) => {
@@ -3231,273 +3260,351 @@ wheelNsp.on("connection", (socket) => {
     if (!admin) return;
     if (wheelBlockIfSpinning(socket)) return;
 
-    wheelApplySettings({
-      spinMs: payload?.spinMs,
-      removeOnWin: payload?.removeOnWin,
-    });
+    wheelApplySettings(payload || {});
     wheelEmitUpdate(true);
+    socket.emit("wheel:settingsOk", { ok: true, settings: wheelStore.settings });
+    socket.emit("settingsOk", { ok: true, settings: wheelStore.settings });
   });
 
   bind("spin", () => {
     const admin = wheelRequireAdmin(socket);
     if (!admin) return;
+    if (wheelIsSpinningNow()) return wheelEmitError(socket, "Spin jau notiek.");
+
     const r = wheelStartSpin(admin.username, io);
-    if (!r.ok) return wheelEmitError(socket, r.message || "Spin error.");
+    if (!r.ok) return wheelEmitError(socket, r.message || "Spin kļūda.");
+    // wheelStartSpin pats emitē wheel:spin + update
+    socket.emit("wheel:spinOk", r);
+    socket.emit("spinOk", r);
   });
 });
 
-// ======== MAIN namespace (spēle) ========
-function safeChatText(x) {
-  let t = String(x || "");
-  t = t.replace(/\s+/g, " ").trim();
-  if (t.length > CHAT_MAX_LEN) t = t.slice(0, CHAT_MAX_LEN);
-  return t;
-}
-
-function canChat(user, text) {
-  const now = Date.now();
-
-  if (user.mutedUntil && now < user.mutedUntil) {
-    return { ok: false, message: "Tu esi muted uz brīdi." };
-  }
-
-  if (user.lastChatAt && now - user.lastChatAt < CHAT_RATE_MS) {
-    return { ok: false, message: "Pārāk ātri čatā." };
-  }
-
-  const clean = safeChatText(text);
-  if (!clean) return { ok: false, message: "Tukšs teksts." };
-
-  if (
-    user.lastChatText &&
-    user.lastChatTextAt &&
-    now - user.lastChatTextAt < CHAT_DUP_WINDOW_MS &&
-    user.lastChatText === clean
-  ) {
-    return { ok: false, message: "Dublēts teksts." };
-  }
-
-  user.lastChatAt = now;
-  user.lastChatText = clean;
-  user.lastChatTextAt = now;
-
-  return { ok: true, clean };
-}
-
-function newDuelId() {
-  return crypto.randomBytes(10).toString("hex");
-}
-
+// ======== Galvenais namespace (/) ========
 io.on("connection", (socket) => {
   const user = socket.data.user;
-  if (!user || !user.username) return socket.disconnect(true);
+  if (!user || !user.username) {
+    // teoretiski nevajadzētu notikt (jo token obligāts), bet drošībai
+    try {
+      socket.disconnect(true);
+    } catch {}
+    return;
+  }
 
   // online
   onlineBySocket.set(socket.id, user.username);
-  broadcastOnlineList(true);
-  broadcastLeaderboard(false);
 
-  // daily login bonus
+  markActivity(user);
+  ensureDailyMissions(user);
+  resetWinsTodayIfNeeded(user);
+  ensureDailyChest(user);
+  ensureSpecialMedals(user);
+  ensureRankFields(user);
+
   const bonus = grantDailyLoginBonus(user);
-  if (bonus) {
-    socket.emit("dailyLoginBonus", { coins: bonus, ts: Date.now() });
-    socket.emit("me:update", buildMePayload(user));
+  if (bonus > 0) {
+    emitSystemUser(user.username, `🎁 Dienas bonuss: +${bonus} coins!`);
   }
 
-  // ja freeze aktīvs, dod klientam uzreiz
-  const fr = getFreezePayloadFor(user.username);
-  if (fr.active) socket.emit("ability:freeze", { by: fr.by, until: fr.until, ms: fr.until - Date.now() });
+  saveUsers(USERS);
 
-  // client may request immediate state
-  socket.on("leaderboard:get", () => socket.emit("leaderboard:update", computeTop10Leaderboard()));
-  socket.on("online:get", () => broadcastOnlineList(true));
+  // initial push
+  socket.emit("leaderboard:update", computeTop10Leaderboard());
+  socket.emit("onlineList", {
+    count: Array.from(new Set(onlineBySocket.values())).size,
+    users: Array.from(new Set(onlineBySocket.values()))
+      .map((u) => String(u))
+      .sort((a, b) => a.localeCompare(b))
+      .map((u) => getMiniUserPayload(u)),
+  });
+  socket.emit("seasonUpdate", seasonState);
+  socket.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
+  socket.emit("freezeState", getFreezePayloadFor(user.username));
 
-  // chat (supports both events)
-  const onChat = (payload = {}) => {
-    const text =
-      typeof payload === "string" ? payload : payload?.text ?? payload?.message ?? "";
-    const gate = canChat(user, text);
-    if (!gate.ok) {
-      socket.emit("chatError", { message: gate.message });
+  broadcastOnlineList(true);
+
+  // helpers: chat send
+  function handleChatSend(textRaw) {
+    const txt = String(textRaw || "").trim();
+    if (!txt) return;
+
+    // admin komandas
+    if (txt.startsWith("/") && isAdminUser(user)) {
+      return handleAdminCommand(txt, user, socket);
+    }
+
+    // mute
+    const now = Date.now();
+    if (user.mutedUntil && now < user.mutedUntil && !isAdminUser(user)) {
+      socket.emit("chatMessage", {
+        username: "SYSTEM",
+        text: "Tev ir mute. Pagaidi, kamēr beigsies.",
+        ts: now,
+      });
       return;
     }
 
-    const msg = gate.clean;
+    // anti-spam
+    if (user.lastChatAt && now - user.lastChatAt < CHAT_RATE_MS) return;
+    user.lastChatAt = now;
 
-    // admin komandas: /...
-    if (msg.startsWith("/") && isAdminUser(user)) {
-      handleAdminCommand(msg, user, socket);
-      saveUsers(USERS);
+    const safe = txt.slice(0, CHAT_MAX_LEN);
+
+    // dedupe window
+    if (
+      user.lastChatText &&
+      user.lastChatTextAt &&
+      now - user.lastChatTextAt < CHAT_DUP_WINDOW_MS &&
+      user.lastChatText === safe
+    ) {
       return;
     }
+    user.lastChatText = safe;
+    user.lastChatTextAt = now;
 
+    markActivity(user);
     saveUsers(USERS);
-    io.emit("chatMessage", {
-      username: user.username,
-      text: msg,
-      ts: Date.now(),
-      avatarUrl: user.avatarUrl || null,
-      supporter: !!user.supporter,
-    });
-  };
 
-  socket.on("chatSend", onChat);
-  socket.on("chatMessageSend", onChat);
-  socket.on("chatMessage", (p) => {
-    // allow legacy inbound, but ignore if payload already looks like server-broadcast
-    if (p && typeof p === "object" && p.username && p.ts && p.text) return;
-    onChat(p);
+    io.emit("chatMessage", { username: user.username, text: safe, ts: now });
+  }
+
+  // atbalstām vairākus event nosaukumus (saderībai)
+  socket.on("chatMessage", (payload) => {
+    if (typeof payload === "string") return handleChatSend(payload);
+    handleChatSend(payload?.text ?? payload?.message ?? "");
+  });
+  socket.on("chat:send", (payload) => {
+    if (typeof payload === "string") return handleChatSend(payload);
+    handleChatSend(payload?.text ?? payload?.message ?? "");
   });
 
-  // ====== DUELS (minimal, saderīgs ar “duel.*” eventiem) ======
+  socket.on("online:request", () => broadcastOnlineList(true));
+  socket.on("leaderboard:request", () => broadcastLeaderboard(true));
+
+  // ======== DUEL SOCKET API ========
   socket.on("duel.challenge", (payload = {}) => {
-    const target = String(payload?.target || payload?.username || "").trim();
-    if (!target) return;
-    if (target === user.username) return;
+    const to = String(payload?.to || payload?.username || "").trim();
+    if (!to) return;
+    if (to === user.username) return;
 
     if (userToDuel.has(user.username)) {
-      socket.emit("duel.error", { message: "Tu jau esi duelī." });
-      return;
-    }
-    if (userToDuel.has(target)) {
-      socket.emit("duel.error", { message: "Mērķis jau ir duelī." });
-      return;
+      return socket.emit("duel.error", { message: "Tu jau esi duelī." });
     }
 
-    const targetSock = getSocketByUsername(target);
-    if (!targetSock) {
-      socket.emit("duel.error", { message: "Mērķis nav online." });
-      return;
+    const toKey = findUserKeyCaseInsensitive(to);
+    const targetUser = toKey ? USERS[toKey] : null;
+    if (!targetUser || targetUser.isBanned) {
+      return socket.emit("duel.error", { message: "Spēlētājs nav pieejams." });
+    }
+    if (userToDuel.has(targetUser.username)) {
+      return socket.emit("duel.error", { message: "Spēlētājs jau ir duelī." });
     }
 
-    const duelId = newDuelId();
-    const { word, len } = pickRandomWord();
+    const targetSocket = getSocketByUsername(targetUser.username);
+    if (!targetSocket) {
+      return socket.emit("duel.error", { message: "Spēlētājs nav online." });
+    }
+
+    const duelId = crypto.randomBytes(8).toString("hex");
+    const now = Date.now();
 
     const duel = {
       id: duelId,
       status: "pending",
-      players: [user.username, target],
-      createdAt: Date.now(),
-      expiresAt: Date.now() + DUEL_MAX_DURATION_MS,
-      word,
-      len,
-      state: {
-        [user.username]: { attemptsLeft: DUEL_MAX_ATTEMPTS, finished: false },
-        [target]: { attemptsLeft: DUEL_MAX_ATTEMPTS, finished: false },
-      },
+      players: [user.username, targetUser.username],
+      challenger: user.username,
+      pendingUntil: now + DUEL_PENDING_TTL_MS,
+      createdAt: now,
+      acceptedAt: 0,
+      startedAt: 0,
+      expiresAt: 0,
+      word: null,
+      len: 0,
+      attemptsLeft: { [user.username]: DUEL_MAX_ATTEMPTS, [targetUser.username]: DUEL_MAX_ATTEMPTS },
+      finishedReason: null,
+      winner: null,
     };
 
     duels.set(duelId, duel);
     userToDuel.set(user.username, duelId);
-    userToDuel.set(target, duelId);
+    userToDuel.set(targetUser.username, duelId);
 
-    socket.emit("duel.sent", { duelId, to: target, len });
-    targetSock.emit("duel.invite", { duelId, from: user.username, len });
+    // paziņojumi
+    targetSocket.emit("duel.inbox", {
+      duelId,
+      from: user.username,
+      pendingUntil: duel.pendingUntil,
+    });
+    socket.emit("duel.sent", {
+      duelId,
+      to: targetUser.username,
+      pendingUntil: duel.pendingUntil,
+    });
+
+    socket.emit("duel.toast", { text: `⚔️ Izaicinājums nosūtīts: ${targetUser.username}` });
+    targetSocket.emit("duel.toast", { text: `⚔️ Tevi izaicina: ${user.username}` });
   });
 
   socket.on("duel.decline", (payload = {}) => {
     const duelId = String(payload?.duelId || "").trim();
-    const duel = duelId ? duels.get(duelId) : null;
+    if (!duelId) return;
+    const duel = duels.get(duelId);
     if (!duel) return;
 
-    if (!duel.players.includes(user.username)) return;
+    if (duel.status !== "pending") return;
+
+    const [p1, p2] = duel.players;
+    if (user.username !== p1 && user.username !== p2) return;
+
+    const other = user.username === p1 ? p2 : p1;
+    const otherSocket = getSocketByUsername(other);
+
+    if (otherSocket) otherSocket.emit("duel.declined", { duelId, by: user.username });
+    socket.emit("duel.declined", { duelId, by: user.username });
 
     finishDuel(duel, null, "declined");
   });
 
   socket.on("duel.accept", (payload = {}) => {
     const duelId = String(payload?.duelId || "").trim();
-    const duel = duelId ? duels.get(duelId) : null;
-    if (!duel) return;
+    if (!duelId) return;
 
-    if (!duel.players.includes(user.username)) return;
+    const duel = duels.get(duelId);
+    if (!duel) return;
 
     if (duel.status !== "pending") return;
 
-    duel.status = "active";
-    duel.expiresAt = Date.now() + DUEL_MAX_DURATION_MS;
+    const [p1, p2] = duel.players;
+    if (user.username !== p1 && user.username !== p2) return;
 
-    for (const p of duel.players) {
-      const s = getSocketByUsername(p);
-      if (s) s.emit("duel.start", { duelId: duel.id, opponent: duel.players.find((x) => x !== p), len: duel.len, attempts: DUEL_MAX_ATTEMPTS });
+    const now = Date.now();
+    if (duel.pendingUntil && now > duel.pendingUntil) {
+      return finishDuel(duel, null, "pending_timeout");
     }
+
+    // start
+    const { word, len } = pickRandomWord();
+
+    duel.status = "active";
+    duel.acceptedAt = now;
+    duel.startedAt = now;
+    duel.expiresAt = now + DUEL_MAX_DURATION_MS;
+    duel.word = word;
+    duel.len = len;
+    duel.attemptsLeft[p1] = DUEL_MAX_ATTEMPTS;
+    duel.attemptsLeft[p2] = DUEL_MAX_ATTEMPTS;
+
+    const s1 = getSocketByUsername(p1);
+    const s2 = getSocketByUsername(p2);
+
+    const startPayload = (me, other) => ({
+      duelId: duel.id,
+      opponent: other,
+      wordLen: duel.len,
+      attemptsLeft: duel.attemptsLeft[me] ?? DUEL_MAX_ATTEMPTS,
+      expiresAt: duel.expiresAt,
+    });
+
+    if (s1) s1.emit("duel.start", startPayload(p1, p2));
+    if (s2) s2.emit("duel.start", startPayload(p2, p1));
+
+    broadcastSystemMessage(`⚔️ Duels sākās: ${p1} vs ${p2}!`);
   });
 
   socket.on("duel.guess", (payload = {}) => {
     const duelId = String(payload?.duelId || "").trim();
-    const guess = String(payload?.guess || "").trim().toUpperCase();
+    const guessRaw = String(payload?.guess || "").trim().toUpperCase();
+    if (!duelId || !guessRaw) return;
 
-    const duel = duelId ? duels.get(duelId) : null;
-    if (!duel) return;
-    if (duel.status !== "active") return;
-    if (!duel.players.includes(user.username)) return;
+    const duel = duels.get(duelId);
+    if (!duel || duel.status !== "active") return;
 
-    const st = duel.state?.[user.username];
-    if (!st || st.finished) return;
+    const [p1, p2] = duel.players;
+    if (user.username !== p1 && user.username !== p2) return;
 
-    if (guess.length !== duel.len || !GUESS_ALLOWED_RE.test(guess)) {
-      socket.emit("duel.result", { duelId, ok: false, message: "Nederīgs minējums." });
-      return;
+    const now = Date.now();
+    if (duel.expiresAt && now >= duel.expiresAt) {
+      return finishDuel(duel, null, "timeout");
     }
 
-    st.attemptsLeft -= 1;
-    const pattern = buildPattern(duel.word, guess);
-    const win = guess === duel.word;
-    const finished = win || st.attemptsLeft <= 0;
+    if (guessRaw.length !== duel.len || !GUESS_ALLOWED_RE.test(guessRaw)) {
+      return socket.emit("duel.result", {
+        duelId,
+        ok: false,
+        message: `Vārdam jābūt ${duel.len} burtiem (A-Z + LV burti).`,
+      });
+    }
 
-    st.finished = finished;
+    const left = Number(duel.attemptsLeft[user.username] ?? DUEL_MAX_ATTEMPTS);
+    if (left <= 0) {
+      return socket.emit("duel.result", {
+        duelId,
+        ok: false,
+        message: "Nav mēģinājumu.",
+      });
+    }
+
+    duel.attemptsLeft[user.username] = left - 1;
+
+    const pattern = buildPattern(duel.word, guessRaw);
+    const win = guessRaw === duel.word;
 
     socket.emit("duel.result", {
       duelId,
       ok: true,
       pattern,
       win,
-      finished,
-      attemptsLeft: st.attemptsLeft,
+      attemptsLeft: duel.attemptsLeft[user.username],
     });
 
-    // paziņo oponentam (UI sync)
-    const other = duel.players.find((x) => x !== user.username);
-    const os = getSocketByUsername(other);
-    if (os) {
-      os.emit("duel.opponentResult", {
+    const other = user.username === p1 ? p2 : p1;
+    const otherSocket = getSocketByUsername(other);
+    if (otherSocket) {
+      otherSocket.emit("duel.opponent", {
         duelId,
         opponent: user.username,
-        win,
-        finished,
-        attemptsLeft: st.attemptsLeft,
+        attemptsLeft: duel.attemptsLeft[user.username],
       });
     }
 
-    if (win) return finishDuel(duel, user.username, "win");
+    if (win) {
+      return finishDuel(duel, user.username, "win");
+    }
 
-    // ja abi pabeiguši bez uzvaras -> draw
-    const a = duel.state[duel.players[0]];
-    const b = duel.state[duel.players[1]];
-    if ((a?.finished && b?.finished) || (a?.attemptsLeft <= 0 && b?.attemptsLeft <= 0)) {
-      return finishDuel(duel, null, "draw");
+    // abi beiguši?
+    const a1 = Number(duel.attemptsLeft[p1] ?? 0);
+    const a2 = Number(duel.attemptsLeft[p2] ?? 0);
+    if (a1 <= 0 && a2 <= 0) {
+      return finishDuel(duel, null, "both_failed");
     }
   });
 
   socket.on("disconnect", () => {
+    const uname = onlineBySocket.get(socket.id);
     onlineBySocket.delete(socket.id);
     broadcastOnlineList(true);
 
-    // duel disconnect handling
-    const duelId = userToDuel.get(user.username);
-    if (duelId) {
-      const duel = duels.get(duelId);
-      if (duel && duel.players.includes(user.username) && duel.status !== "finished") {
-        const other = duel.players.find((x) => x !== user.username);
-        // active: forfeit -> other wins; pending: cancel
-        if (duel.status === "active") finishDuel(duel, other || null, "disconnect");
-        else finishDuel(duel, null, "cancelled");
+    // duel forfeit uz disconnect
+    if (uname) {
+      const duelId = userToDuel.get(uname);
+      if (duelId) {
+        const duel = duels.get(duelId);
+        if (duel && duel.status !== "finished") {
+          const [p1, p2] = duel.players;
+          const other = uname === p1 ? p2 : p1;
+          finishDuel(duel, other, "disconnect_forfeit");
+        }
       }
     }
   });
 });
 
-// start server
+// ======== WHEEL sync (ja tokens mainās no ārpuses) ========
+setInterval(() => {
+  // viegls “keep fresh” — ja kāds tokens mainās, wheelSig izmainīsies
+  if (wheelSyncTokenSlots(false)) wheelEmitUpdate(true);
+}, 15 * 1000);
+
+// ======== START ========
 httpServer.listen(PORT, () => {
-  console.log(`VĀRDU ZONA server started on :${PORT}`);
+  console.log(`VĀRDU ZONA serveris strādā uz porta ${PORT}`);
 });
