@@ -33,9 +33,11 @@ const MIN_WORD_LEN = 5;
 const MAX_WORD_LEN = 7;
 const MAX_ATTEMPTS = 6;
 
-const BASE_TOKEN_PRICE = 150;
 
-const REVEAL_LETTER_COST = Number(process.env.REVEAL_LETTER_COST || 50);
+const REVEAL_LETTER_COST_COINS =
+  Number(process.env.REVEAL_LETTER_COST_COINS || 25);
+
+const BASE_TOKEN_PRICE = 150;
 
 // ======== Season rollover: coins/tokens reset (ENV slēdzis) ========
 // Default: ON (1). Lai izslēgtu: RESET_COINS_TOKENS_ON_ROLLOVER=0
@@ -2379,11 +2381,12 @@ function startNewRoundForUser(user) {
     word,
     len,
     attemptsLeft: MAX_ATTEMPTS,
-    revealUsed: false,
-    revealed: [],
     finished: false,
     startedAt: Date.now(),
-  };
+  
+    revealUsed: false,
+    reveal: null,
+};
   return user.currentRound;
 }
 
@@ -2395,7 +2398,81 @@ app.get("/start-round", authMiddleware, (req, res) => {
 
   if (user.currentRound && !user.currentRound.finished) {
     saveUsers(USERS);
-    return res.json({ len: user.currentRound.len });
+const revealUsed = !!user.currentRound?.revealUsed;
+const reveal =
+  revealUsed && user.currentRound?.reveal
+    ? { pos: user.currentRound.reveal.pos, letter: user.currentRound.reveal.letter }
+    : null;
+
+return res.json({ len: user.currentRound.len, revealUsed, reveal });
+
+// ======== Ability: Atvērt 1 burtu (par samaksu, 1x katrā raundā) ========
+// POST /ability/reveal-letter
+// Body: { avoid?: number[] }  // pozīcijas, ko klients grib izvairīties (piem. jau aizpildītās ailes)
+app.post("/ability/reveal-letter", authMiddleware, (req, res) => {
+  const user = req.user;
+
+  // ja raunds nav vai ir beidzies, sākam jaunu (tāpat kā /guess)
+  if (!user.currentRound || user.currentRound.finished) {
+    startNewRoundForUser(user);
+  }
+  const round = user.currentRound;
+
+  if (!round || round.finished || round.attemptsLeft <= 0) {
+    return res.status(400).json({ message: "Raunds ir beidzies.", code: "ROUND_FINISHED" });
+  }
+  if (round.revealUsed) {
+    return res.status(400).json({ message: "Šajā raundā burts jau tika atvērts.", code: "ALREADY_USED" });
+  }
+
+  const cost = REVEAL_LETTER_COST_COINS;
+  if (!Number.isFinite(cost) || cost <= 0) {
+    return res.status(500).json({ message: "Servera konfigurācijas kļūda (REVEAL_LETTER_COST_COINS).", code: "CONFIG_ERROR" });
+  }
+  if ((user.coins || 0) < cost) {
+    return res.status(400).json({
+      message: "Nepietiek coins šai spējai.",
+      code: "INSUFFICIENT_COINS",
+      need: cost,
+      have: user.coins || 0,
+    });
+  }
+
+  // Avoid list (no klienta) — lai neatvērtu jau aizpildītā ailē
+  const avoidRaw = req.body && Array.isArray(req.body.avoid) ? req.body.avoid : [];
+  const avoid = new Set(
+    avoidRaw
+      .map((x) => Number(x))
+      .filter((n) => Number.isInteger(n) && n >= 0 && n < round.len)
+  );
+
+  const allPos = [];
+  for (let i = 0; i < round.len; i++) allPos.push(i);
+
+  let pool = allPos.filter((i) => !avoid.has(i));
+  if (!pool.length) pool = allPos;
+
+  const pos = pool[crypto.randomInt(0, pool.length)];
+  const letter = String(round.word[pos] || "").toUpperCase();
+
+  user.coins = (user.coins || 0) - cost;
+
+  round.revealUsed = true;
+  round.reveal = { pos, letter, cost, ts: Date.now() };
+
+  saveUsers(USERS);
+
+  return res.json({
+    ok: true,
+    pos,
+    letter,
+    cost,
+    coins: user.coins,
+    tokens: user.tokens || 0,
+  });
+});
+
+
   }
 
   const round = startNewRoundForUser(user);
@@ -2603,83 +2680,6 @@ app.post("/buy-token", authMiddleware, (req, res) => {
   if ((user.coins || 0) < price) {
     saveUsers(USERS);
     return res.status(400).json({ message: "Nepietiek coins" });
-
-// ======== Ability: Reveal one letter (paid, once per round) ========
-app.post("/ability/reveal-letter", authMiddleware, (req, res) => {
-  try {
-    const u = req.user;
-    if (!u) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
-
-    const round = u.currentRound;
-    if (!round || round.finished) {
-      return res.status(400).json({ ok: false, error: "NO_ACTIVE_ROUND" });
-    }
-
-    if (round.revealUsed) {
-      return res.status(400).json({ ok: false, error: "ALREADY_USED" });
-    }
-
-    const cost = Math.max(0, Number(REVEAL_LETTER_COST || 0));
-    u.coins = Number(u.coins || 0);
-
-    if (u.coins < cost) {
-      return res.status(400).json({ ok: false, error: "NOT_ENOUGH_COINS", coins: u.coins, cost });
-    }
-
-    const secret = String(round.word || "");
-    const len = Number(round.len || secret.length || 0);
-    if (!secret || len <= 0) {
-      return res.status(400).json({ ok: false, error: "ROUND_INVALID" });
-    }
-
-    // indices already known as correct from past guesses (green positions)
-    const knownCorrect = new Set();
-    const guesses = Array.isArray(round.guesses) ? round.guesses : [];
-    for (const g of guesses) {
-      try {
-        const patt = buildPattern(secret, String(g || ""));
-        for (let i = 0; i < patt.length; i++) if (patt[i] === "correct") knownCorrect.add(i);
-      } catch {}
-    }
-
-    const revealed = Array.isArray(round.revealed) ? round.revealed : [];
-    const alreadyRevealed = new Set(
-      revealed.map((x) => Number(x && x.i)).filter((n) => Number.isFinite(n))
-    );
-
-    const candidates = [];
-    for (let i = 0; i < len; i++) {
-      if (alreadyRevealed.has(i)) continue;
-      if (knownCorrect.has(i)) continue; // avoid wasting reveal on already-green positions
-      candidates.push(i);
-    }
-
-    // if everything is already green, allow revealing any not-yet-revealed index
-    if (candidates.length === 0) {
-      for (let i = 0; i < len; i++) if (!alreadyRevealed.has(i)) candidates.push(i);
-    }
-
-    if (candidates.length === 0) {
-      return res.status(400).json({ ok: false, error: "NOTHING_TO_REVEAL" });
-    }
-
-    const idx = candidates[Math.floor(Math.random() * candidates.length)];
-    const letter = secret[idx];
-
-    // charge + persist
-    u.coins -= cost;
-    round.revealUsed = true;
-    if (!Array.isArray(round.revealed)) round.revealed = [];
-    round.revealed.push({ i: idx, ch: letter });
-
-    saveUsers(USERS);
-
-    return res.json({ ok: true, idx, letter, cost, coins: u.coins, len });
-  } catch (e) {
-    return res.status(500).json({ ok: false, error: "SERVER_ERROR" });
-  }
-});
-
   }
 
   user.coins = (user.coins || 0) - price;
