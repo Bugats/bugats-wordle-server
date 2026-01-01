@@ -354,6 +354,12 @@ function loadUsers() {
           u.currentRound.revealUsed = false;
         if (!u.currentRound.reveal || typeof u.currentRound.reveal !== "object")
           u.currentRound.reveal = null;
+        // MIGRĀCIJA: pareizi atminēto pozīciju masks (lai reveal neatver jau zināmo)
+        if (!Array.isArray(u.currentRound.knownCorrect)) {
+          const len = Math.max(0, Math.floor(u.currentRound.len || 0));
+          u.currentRound.knownCorrect =
+            len > 0 ? new Array(len).fill(false) : [];
+        }
       }
 
       out[u.username] = u;
@@ -2758,6 +2764,9 @@ function startNewRoundForUser(user) {
     // Ability: reveal 1 letter
     revealUsed: false,
     reveal: null,
+
+    // (NEW) Lai reveal-letter neatver jau pareizi zināmu pozīciju
+    knownCorrect: new Array(len).fill(false),
   };
   return user.currentRound;
 }
@@ -2776,6 +2785,10 @@ app.get("/start-round", authMiddleware, (req, res) => {
       user.currentRound.revealUsed = false;
     if (!user.currentRound.reveal || typeof user.currentRound.reveal !== "object")
       user.currentRound.reveal = null;
+    if (!Array.isArray(user.currentRound.knownCorrect)) {
+      const len = Math.max(0, Math.floor(user.currentRound.len || 0));
+      user.currentRound.knownCorrect = len > 0 ? new Array(len).fill(false) : [];
+    }
 
     saveUsers(USERS);
 
@@ -2829,6 +2842,11 @@ app.post("/ability/reveal-letter", authMiddleware, (req, res) => {
     });
   }
 
+  if (!Array.isArray(round.knownCorrect)) {
+    const len = Math.max(0, Math.floor(round.len || 0));
+    round.knownCorrect = len > 0 ? new Array(len).fill(false) : [];
+  }
+
   const cost = REVEAL_LETTER_COST_COINS;
   if (!Number.isFinite(cost) || cost <= 0) {
     return res.status(500).json({
@@ -2856,8 +2874,19 @@ app.post("/ability/reveal-letter", authMiddleware, (req, res) => {
   const allPos = [];
   for (let i = 0; i < round.len; i++) allPos.push(i);
 
-  let pool = allPos.filter((i) => !avoid.has(i));
+  // prioritāte: atveram tikai tādu pozīciju, kas vēl nav zināma kā pareiza
+  let pool = allPos.filter((i) => !avoid.has(i) && !round.knownCorrect?.[i]);
   if (!pool.length) pool = allPos;
+
+  // ja pat pēc fallbacka visas pozīcijas jau ir zināmas kā pareizas, nav jēgas atvērt
+  const unknownAny = allPos.some((i) => !round.knownCorrect?.[i]);
+  if (!unknownAny) {
+    saveUsers(USERS);
+    return res.status(400).json({
+      message: "Visi burti jau ir atminēti pareizajās vietās.",
+      code: "ALL_KNOWN",
+    });
+  }
 
   const pos = pool[crypto.randomInt(0, pool.length)];
   const letter = String(round.word[pos] || "").toUpperCase();
@@ -2967,6 +2996,10 @@ app.post("/guess", authMiddleware, (req, res) => {
   }
 
   const round = user.currentRound;
+  if (!Array.isArray(round.knownCorrect)) {
+    const len2 = Math.max(0, Math.floor(round.len || 0));
+    round.knownCorrect = len2 > 0 ? new Array(len2).fill(false) : [];
+  }
 
   if (guessRaw.length !== round.len) {
     const blocked = trackBadLength(user);
@@ -2999,6 +3032,14 @@ app.post("/guess", authMiddleware, (req, res) => {
   user.totalGuesses = (user.totalGuesses || 0) + 1;
 
   const pattern = buildPattern(round.word, guessRaw);
+
+  // (NEW) atzīmējam pozīcijas, kur burts jau ir pareizi atminēts
+  for (let i = 0; i < round.len; i++) {
+    if (guessRaw[i] && guessRaw[i] === round.word[i]) {
+      round.knownCorrect[i] = true;
+    }
+  }
+
   round.attemptsLeft -= 1;
 
   const len = round.len;
