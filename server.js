@@ -132,7 +132,7 @@ const AFK_BREAK_MS = 3 * 60 * 1000;
 // ========== MISIJAS ==========
 const DAILY_MISSIONS_COUNT = (() => {
   const v = parseInt(process.env.DAILY_MISSIONS_COUNT || "6", 10);
-  return Number.isFinite(v) && v >= 3 && v <= 8 ? v : 5;
+  return Number.isFinite(v) && v >= 3 && v <= 8 ? v : 6;
 })();
 
 // Missionu tipiem jābūt atbalstam updateMissionsOn* funkcijās zemāk.
@@ -1232,6 +1232,68 @@ function ensureDailyMissions(user) {
   if (user.missionsDate !== key || !Array.isArray(user.missions) || !user.missions.length) {
     user.missionsDate = key;
     user.missions = buildDailyMissions(user);
+  } else {
+    // Migrācija/upgrade tajā pašā dienā:
+    // - ja vecais formāts (nav code/meta) -> pievienojam
+    // - ja misiju ir mazāk nekā DAILY_MISSIONS_COUNT -> pieliekam klāt līdz vēlamajam skaitam
+    let changed = false;
+
+    const codeFromLegacyId = (id) => {
+      const s = String(id || "").toLowerCase();
+      if (s.startsWith("win")) return "wins";
+      if (s.startsWith("xp")) return "xp";
+      if (s.startsWith("guess")) return "guesses";
+      return String(id || "").trim() || "unknown";
+    };
+
+    for (const m of user.missions) {
+      if (!m || typeof m !== "object") continue;
+      if (!m.code) {
+        m.code = codeFromLegacyId(m.id);
+        changed = true;
+      }
+      if (!m.meta || typeof m.meta !== "object") {
+        m.meta = {};
+        changed = true;
+      }
+      if (typeof m.isCompleted !== "boolean") {
+        m.isCompleted = (m.progress || 0) >= (m.target || 0);
+        changed = true;
+      }
+      if (typeof m.isClaimed !== "boolean") {
+        m.isClaimed = false;
+        changed = true;
+      }
+    }
+
+    const desired = DAILY_MISSIONS_COUNT;
+    if (Array.isArray(user.missions) && user.missions.length < desired) {
+      const existingCodes = new Set(
+        user.missions
+          .map((m) => (m && m.code ? String(m.code) : ""))
+          .filter(Boolean)
+      );
+
+      const fresh = buildDailyMissions(user);
+      const add = [];
+      for (const m of fresh) {
+        if (add.length + user.missions.length >= desired) break;
+        const c = m && m.code ? String(m.code) : "";
+        if (!c) continue;
+        if (existingCodes.has(c)) continue;
+        existingCodes.add(c);
+        add.push(m);
+      }
+
+      if (add.length) {
+        user.missions.push(...add);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      // nekas vairāk; saveUsers notiek pie /me vai /missions endpointiem
+    }
   }
 }
 
