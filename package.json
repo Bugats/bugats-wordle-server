@@ -1,14 +1,11 @@
 {
   "name": "bugats-wordle-server",
   "version": "1.0.0",
-  "main": "server.js",
   "type": "module",
-  "engines": {
-    "node": ">=18"
-  },
+  "engines": { "node": ">=18" },
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node index.js",
+    "dev": "node --watch index.js"
   },
   "dependencies": {
     "express": "^4.19.2",
