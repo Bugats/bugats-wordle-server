@@ -837,43 +837,63 @@ try {
 }
 
 // ======== Rank loģika (25 līmeņi) ========
-function calcRankFromXp(xp) {
-  const table = [
-    { minXp: 0, title: "Jauniņais" },
-    { minXp: 40, title: "Burtu Skolnieks" },
-    { minXp: 90, title: "Vārdu Mednieks" },
-    { minXp: 160, title: "Burtošanas Aizrautis" },
-    { minXp: 250, title: "Vārdu Taktikis" },
-    { minXp: 360, title: "Leksikas Kareivis" },
-    { minXp: 490, title: "Leksikas Bruņinieks" },
-    { minXp: 640, title: "Erudīcijas Cīnītājs" },
-    { minXp: 810, title: "Erudīcijas Kapteinis" },
-    { minXp: 1000, title: "Erudīcijas Komandieris" },
-    { minXp: 1200, title: "Smadzeņu Atlēts" },
-    { minXp: 1450, title: "Loģikas Inženieris" },
-    { minXp: 1750, title: "Stratēģijas Arhitekts" },
-    { minXp: 2100, title: "Vārdu Burvis" },
-    { minXp: 2500, title: "Vārdu Maģistrs" },
-    { minXp: 2950, title: "Vārdu Profesors" },
-    { minXp: 3450, title: "ZONAS Sargs" },
-    { minXp: 4000, title: "ZONAS Boss" },
-    { minXp: 4600, title: "ZONAS Karalis" },
-    { minXp: 5250, title: "Bugats Māceklis" },
-    { minXp: 5950, title: "Bugats Elites Spēlētājs" },
-    { minXp: 6700, title: "Bugats PRIME" },
-    { minXp: 7500, title: "Bugats Mītiskais" },
-    { minXp: 8350, title: "Kosmiskais Prāts" },
-    { minXp: 9250, title: "Nemirstīgais ZONAS Mīts" },
-  ];
+// Rank tabula ir ārpus funkcijas (ātrāk + vieglāk papildināt).
+// Pirmie 25 līmeņi saglabāti kā iepriekš, pievienoti nākamie līmeņi + krāsas.
+const RANK_TABLE = [
+  // 1..25 (legacy)
+  { minXp: 0, title: "Jauniņais", color: "#9CA3AF" },
+  { minXp: 40, title: "Burtu Skolnieks", color: "#94A3B8" },
+  { minXp: 90, title: "Vārdu Mednieks", color: "#60A5FA" },
+  { minXp: 160, title: "Burtošanas Aizrautis", color: "#38BDF8" },
+  { minXp: 250, title: "Vārdu Taktikis", color: "#34D399" },
+  { minXp: 360, title: "Leksikas Kareivis", color: "#22C55E" },
+  { minXp: 490, title: "Leksikas Bruņinieks", color: "#A3E635" },
+  { minXp: 640, title: "Erudīcijas Cīnītājs", color: "#FBBF24" },
+  { minXp: 810, title: "Erudīcijas Kapteinis", color: "#F59E0B" },
+  { minXp: 1000, title: "Erudīcijas Komandieris", color: "#FB7185" },
+  { minXp: 1200, title: "Smadzeņu Atlēts", color: "#F43F5E" },
+  { minXp: 1450, title: "Loģikas Inženieris", color: "#E879F9" },
+  { minXp: 1750, title: "Stratēģijas Arhitekts", color: "#C084FC" },
+  { minXp: 2100, title: "Vārdu Burvis", color: "#A78BFA" },
+  { minXp: 2500, title: "Vārdu Maģistrs", color: "#818CF8" },
+  { minXp: 2950, title: "Vārdu Profesors", color: "#6366F1" },
+  { minXp: 3450, title: "ZONAS Sargs", color: "#22D3EE" },
+  { minXp: 4000, title: "ZONAS Boss", color: "#06B6D4" },
+  { minXp: 4600, title: "ZONAS Karalis", color: "#10B981" },
+  { minXp: 5250, title: "Bugats Māceklis", color: "#14B8A6" },
+  { minXp: 5950, title: "Bugats Elites Spēlētājs", color: "#F97316" },
+  { minXp: 6700, title: "Bugats PRIME", color: "#EF4444" },
+  { minXp: 7500, title: "Bugats Mītiskais", color: "#8B5CF6" },
+  { minXp: 8350, title: "Kosmiskais Prāts", color: "#7C3AED" },
+  { minXp: 9250, title: "Nemirstīgais ZONAS Mīts", color: "#FDE047" },
 
-  const currentXp = xp || 0;
-  let current = table[0];
-  for (const r of table) {
+  // 26..40 (jaunie)
+  { minXp: 10200, title: "ZONAS Leģenda", color: "#FACC15" },
+  { minXp: 11200, title: "ZONAS Titāns", color: "#FDBA74" },
+  { minXp: 12300, title: "ZONAS Arhonts", color: "#FB7185" },
+  { minXp: 13500, title: "ZONAS Imperators", color: "#F43F5E" },
+  { minXp: 14800, title: "Vārdu Sensojs", color: "#38BDF8" },
+  { minXp: 16200, title: "Leksikas Vētra", color: "#22C55E" },
+  { minXp: 17700, title: "Diakritiku Meistars", color: "#A3E635" },
+  { minXp: 19300, title: "Kosmiskais Arhitekts", color: "#A78BFA" },
+  { minXp: 21000, title: "ZONAS Dievība", color: "#E879F9" },
+  { minXp: 22800, title: "Bugats Panteons", color: "#FDE047" },
+  { minXp: 24700, title: "Mūžīgais Vārdu Avots", color: "#FFFFFF" },
+  { minXp: 26700, title: "Absolūtais ZONAS Apex", color: "#00E5FF" },
+  { minXp: 28800, title: "Vārdu Multiverss", color: "#7CFF6B" },
+  { minXp: 31000, title: "Nemirstīgais PRIME Mīts", color: "#FF4DFF" },
+  { minXp: 33300, title: "ZONAS Bezgalība", color: "#FFD166" },
+];
+
+function calcRankFromXp(xp) {
+  const currentXp = Number.isFinite(Number(xp)) ? Number(xp) : 0;
+  let current = RANK_TABLE[0];
+  for (const r of RANK_TABLE) {
     if (currentXp >= r.minXp) current = r;
     else break;
   }
-  const level = table.indexOf(current) + 1;
-  return { level, title: current.title };
+  const level = RANK_TABLE.indexOf(current) + 1;
+  return { level, title: current.title, color: current.color || "#9CA3AF" };
 }
 
 function ensureRankFields(u) {
@@ -881,6 +901,7 @@ function ensureRankFields(u) {
   if (u) {
     u.rankLevel = info.level;
     u.rankTitle = info.title;
+    u.rankColor = info.color;
   }
   return info;
 }
@@ -1466,6 +1487,7 @@ function buildMePayload(u) {
     bestStreak: u.bestStreak || 0,
     rankTitle: u.rankTitle || rankInfo.title,
     rankLevel: u.rankLevel || rankInfo.level,
+    rankColor: u.rankColor || rankInfo.color,
     tokenPriceCoins: getTokenPrice(u),
     medals,
     avatarUrl: u.avatarUrl || null,
@@ -1544,6 +1566,7 @@ function getMiniUserPayload(username) {
       avatarUrl: null,
       rankLevel: 1,
       rankTitle: "—",
+      rankColor: "#9CA3AF",
       supporter: false,
     };
   }
@@ -1553,6 +1576,7 @@ function getMiniUserPayload(username) {
     avatarUrl: u.avatarUrl || null,
     rankLevel: u.rankLevel || info.level || 1,
     rankTitle: u.rankTitle || info.title || "—",
+    rankColor: u.rankColor || info.color || "#9CA3AF",
     supporter: !!u.supporter,
   };
 }
@@ -1605,6 +1629,7 @@ function computeTop10Leaderboard() {
     xp: u.xp || 0,
     rankTitle: u.rankTitle || "—",
     rankLevel: u.rankLevel || 1,
+    rankColor: u.rankColor || "#9CA3AF",
     avatarUrl: u.avatarUrl || null,
     supporter: !!u.supporter,
   }));
@@ -2100,6 +2125,7 @@ function buildPublicProfilePayload(targetUser, requester) {
     bestStreak: targetUser.bestStreak || 0,
     rankTitle: targetUser.rankTitle || rankInfo.title,
     rankLevel: targetUser.rankLevel || rankInfo.level,
+    rankColor: targetUser.rankColor || rankInfo.color,
     medals,
     duelsWon: targetUser.duelsWon || 0,
     duelsLost: targetUser.duelsLost || 0,
@@ -2632,6 +2658,7 @@ app.post("/guess", authMiddleware, (req, res) => {
       coinsGain,
       rankTitle: user.rankTitle,
       rankLevel: user.rankLevel,
+      rankColor: user.rankColor || "#9CA3AF",
       avatarUrl: user.avatarUrl || null,
       streak: user.streak || 0,
     });
@@ -3176,6 +3203,7 @@ io.on("connection", (socket) => {
       avatarUrl: u.avatarUrl || null,
       rankTitle: u.rankTitle || "—",
       rankLevel: u.rankLevel || 1,
+      rankColor: u.rankColor || "#9CA3AF",
       supporter: !!u.supporter,
     });
   });
