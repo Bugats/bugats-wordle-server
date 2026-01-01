@@ -131,7 +131,7 @@ const AFK_BREAK_MS = 3 * 60 * 1000;
 
 // ========== MISIJAS ==========
 const DAILY_MISSIONS_COUNT = (() => {
-  const v = parseInt(process.env.DAILY_MISSIONS_COUNT || "5", 10);
+  const v = parseInt(process.env.DAILY_MISSIONS_COUNT || "6", 10);
   return Number.isFinite(v) && v >= 3 && v <= 8 ? v : 5;
 })();
 
