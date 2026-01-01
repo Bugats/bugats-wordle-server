@@ -130,27 +130,107 @@ const PASSIVE_INTERVAL_MS = 20 * 60 * 1000; // 20 min
 const AFK_BREAK_MS = 3 * 60 * 1000;
 
 // ========== MISIJAS ==========
-const DAILY_MISSIONS_CONFIG = [
+const DAILY_MISSIONS_COUNT = (() => {
+  const v = parseInt(process.env.DAILY_MISSIONS_COUNT || "5", 10);
+  return Number.isFinite(v) && v >= 3 && v <= 8 ? v : 5;
+})();
+
+// Missionu tipiem jābūt atbalstam updateMissionsOn* funkcijās zemāk.
+// baseTarget/baseRewards tiks skalēti pēc spēlētāja rank tier (lai augstākiem rankiem grūtāk).
+const DAILY_MISSION_POOL = [
+  // pamata
   {
-    id: "win3",
-    title: "Atmini 3 vārdus šodien",
+    id: "wins",
+    title: "Atmini {target} vārdus šodien",
     type: "wins",
-    target: 3,
-    rewards: { xp: 30, coins: 25, tokens: 0 },
+    baseTarget: 3,
+    baseRewards: { xp: 30, coins: 25, tokens: 0 },
+    weight: 6,
   },
   {
-    id: "xp50",
-    title: "Nopelni 50 XP šodien",
+    id: "xp",
+    title: "Nopelni {target} XP šodien",
     type: "xp",
-    target: 50,
-    rewards: { xp: 0, coins: 35, tokens: 0 },
+    baseTarget: 60,
+    baseRewards: { xp: 0, coins: 40, tokens: 0 },
+    weight: 6,
   },
   {
-    id: "guess20",
-    title: "Izdari 20 minējumus",
+    id: "guesses",
+    title: "Izdari {target} minējumus",
     type: "guesses",
-    target: 20,
-    rewards: { xp: 20, coins: 15, tokens: 1 },
+    baseTarget: 25,
+    baseRewards: { xp: 25, coins: 20, tokens: 1 },
+    weight: 6,
+  },
+
+  // grūtākas / dažādākas
+  {
+    id: "streak",
+    title: "Sasniedz streak {target} (nepārtraukta uzvaru sērija)",
+    type: "streak",
+    baseTarget: 3,
+    baseRewards: { xp: 45, coins: 35, tokens: 1 },
+    weight: 5,
+  },
+  {
+    id: "fastwins",
+    title: "Atmini {target} vārdus ātri (≤ {sec}s)",
+    type: "fast_wins",
+    baseTarget: 2,
+    baseRewards: { xp: 50, coins: 30, tokens: 1 },
+    // metadata
+    sec: 75,
+    weight: 4,
+  },
+  {
+    id: "perfect",
+    title: "Atmini {target} vārdus 3 mēģinājumos vai mazāk",
+    type: "perfect_wins",
+    baseTarget: 2,
+    baseRewards: { xp: 55, coins: 30, tokens: 1 },
+    maxAttempts: 3,
+    weight: 4,
+  },
+  {
+    id: "longwins",
+    title: "Atmini {target} garos vārdus (7 burti)",
+    type: "long_wins_7",
+    baseTarget: 2,
+    baseRewards: { xp: 55, coins: 35, tokens: 1 },
+    weight: 4,
+  },
+  {
+    id: "reveal",
+    title: "Izmanto “Atvērt 1 burtu” {target} reizes",
+    type: "reveal_used",
+    baseTarget: 1,
+    baseRewards: { xp: 20, coins: 25, tokens: 0 },
+    weight: 3,
+  },
+  {
+    id: "tokenbuy",
+    title: "Nopērc {target} žetonus",
+    type: "token_buys",
+    baseTarget: 1,
+    baseRewards: { xp: 20, coins: 10, tokens: 0 },
+    weight: 2,
+  },
+  {
+    id: "chest",
+    title: "Atver Daily Chest",
+    type: "chest_open",
+    baseTarget: 1,
+    baseRewards: { xp: 15, coins: 20, tokens: 0 },
+    weight: 5,
+  },
+  {
+    id: "duelwins",
+    title: "Uzvari {target} dueli",
+    type: "duel_wins",
+    baseTarget: 1,
+    baseRewards: { xp: 35, coins: 25, tokens: 1 },
+    weight: 3,
   },
 ];
 
@@ -229,6 +309,14 @@ function loadUsers() {
       // Duēļu statistika
       if (typeof u.duelsWon !== "number") u.duelsWon = 0;
       if (typeof u.duelsLost !== "number") u.duelsLost = 0;
+      if (typeof u.duelWinsToday !== "number") u.duelWinsToday = 0;
+      if (typeof u.duelWinsTodayDate !== "string") u.duelWinsTodayDate = "";
+
+      // Ekonomikas / ability dienas skaitītāji (misijām)
+      if (typeof u.tokensBoughtToday !== "number") u.tokensBoughtToday = 0;
+      if (typeof u.tokensBoughtTodayDate !== "string") u.tokensBoughtTodayDate = "";
+      if (typeof u.revealUsedToday !== "number") u.revealUsedToday = 0;
+      if (typeof u.revealUsedTodayDate !== "string") u.revealUsedTodayDate = "";
 
       // Aktīvais raunds
       if (!u.currentRound) u.currentRound = null;
@@ -997,22 +1085,153 @@ function markActivity(user) {
 // ======== MISIJU HELPERI ========
 function ensureDailyMissions(user) {
   const key = todayKey();
-  if (
-    user.missionsDate !== key ||
-    !Array.isArray(user.missions) ||
-    !user.missions.length
-  ) {
+
+  // helperi deterministiskai izvēlei (lai vienam useram vienā dienā nemainās)
+  function xmur3(str) {
+    let h = 1779033703 ^ str.length;
+    for (let i = 0; i < str.length; i++) {
+      h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+      h = (h << 13) | (h >>> 19);
+    }
+    return function () {
+      h = Math.imul(h ^ (h >>> 16), 2246822507);
+      h = Math.imul(h ^ (h >>> 13), 3266489909);
+      h ^= h >>> 16;
+      return h >>> 0;
+    };
+  }
+  function mulberry32(a) {
+    return function () {
+      let t = (a += 0x6d2b79f5);
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function clampInt(n, lo, hi) {
+    const x = Math.floor(Number(n) || 0);
+    return Math.max(lo, Math.min(hi, x));
+  }
+
+  function computeMissionTier(u) {
+    // 0..5 (augstāks => grūtākas misijas). Balstās uz rankLevel.
+    const info = ensureRankFields(u);
+    const lvl = Math.max(1, Number(info?.level || u?.rankLevel || 1));
+    return clampInt(Math.floor((lvl - 1) / 7), 0, 5);
+  }
+
+  function scaleTarget(baseTarget, tier, type) {
+    const b = Math.max(1, Math.floor(Number(baseTarget) || 1));
+    // dažiem tipiem lēnāka skale, lai nebūtu absurdi
+    const mult =
+      type === "token_buys" || type === "reveal_used"
+        ? 1 + tier * 0.25
+        : type === "fast_wins" || type === "perfect_wins" || type === "duel_wins"
+        ? 1 + tier * 0.35
+        : 1 + tier * 0.45;
+    return Math.max(1, Math.round(b * mult));
+  }
+
+  function scaleRewards(baseRewards, tier) {
+    const rw = baseRewards || {};
+    const mult = 1 + tier * 0.18;
+    return {
+      xp: Math.max(0, Math.round((rw.xp || 0) * mult)),
+      coins: Math.max(0, Math.round((rw.coins || 0) * mult)),
+      tokens: Math.max(0, Math.round((rw.tokens || 0) * (tier >= 4 ? 1.2 : 1))),
+    };
+  }
+
+  function formatTitle(tpl, ctx) {
+    const s = String(tpl || "");
+    return s
+      .replaceAll("{target}", String(ctx.target))
+      .replaceAll("{sec}", String(ctx.sec ?? ""))
+      .replaceAll("{maxAttempts}", String(ctx.maxAttempts ?? ""));
+  }
+
+  function pickWeightedUnique(pool, count, rng) {
+    const out = [];
+    const used = new Set();
+    const items = (Array.isArray(pool) ? pool : []).filter(Boolean);
+
+    function pickOne() {
+      const candidates = items.filter((m) => !used.has(m.id));
+      if (!candidates.length) return null;
+      let total = 0;
+      for (const m of candidates) total += Math.max(0.0001, Number(m.weight) || 1);
+      let r = rng() * total;
+      for (const m of candidates) {
+        r -= Math.max(0.0001, Number(m.weight) || 1);
+        if (r <= 0) return m;
+      }
+      return candidates[candidates.length - 1];
+    }
+
+    for (let i = 0; i < count; i++) {
+      const m = pickOne();
+      if (!m) break;
+      used.add(m.id);
+      out.push(m);
+    }
+    return out;
+  }
+
+  function buildDailyMissions(u) {
+    const tier = computeMissionTier(u);
+    const seed = xmur3(`${key}|${u?.username || "user"}`)();
+    const rng = mulberry32(seed);
+
+    const desired = DAILY_MISSIONS_COUNT;
+
+    // garantējam, ka ir vismaz 1 no pamata tipiem (wins/xp/guesses)
+    const basics = DAILY_MISSION_POOL.filter((m) =>
+      ["wins", "xp", "guesses"].includes(m.type)
+    );
+    const others = DAILY_MISSION_POOL.filter((m) => !basics.includes(m));
+
+    const selected = [];
+    selected.push(...pickWeightedUnique(basics, 1, rng));
+    // vēl 1 basic, lai misijas nav pārāk "eksotiskas"
+    selected.push(...pickWeightedUnique(basics, 1, rng));
+    selected.push(...pickWeightedUnique(others, Math.max(0, desired - selected.length), rng));
+
+    const uniqById = new Map();
+    for (const m of selected) {
+      if (m && m.id && !uniqById.has(m.id)) uniqById.set(m.id, m);
+    }
+    const finalDefs = Array.from(uniqById.values()).slice(0, desired);
+
+    return finalDefs.map((def) => {
+      const target = scaleTarget(def.baseTarget, tier, def.type);
+      const rewards = scaleRewards(def.baseRewards, tier);
+      const title = formatTitle(def.title, {
+        target,
+        sec: def.sec,
+        maxAttempts: def.maxAttempts,
+      });
+      return {
+        id: `${def.id}_${key}`, // unikāls katrai dienai (lai vecas misijas nesajaucas)
+        code: def.id, // stabils kods tipam
+        title,
+        type: def.type,
+        target,
+        progress: 0,
+        isCompleted: false,
+        isClaimed: false,
+        rewards,
+        meta: {
+          sec: def.sec,
+          maxAttempts: def.maxAttempts,
+        },
+      };
+    });
+  }
+
+  if (user.missionsDate !== key || !Array.isArray(user.missions) || !user.missions.length) {
     user.missionsDate = key;
-    user.missions = DAILY_MISSIONS_CONFIG.map((m) => ({
-      id: m.id,
-      title: m.title,
-      type: m.type,
-      target: m.target,
-      progress: 0,
-      isCompleted: false,
-      isClaimed: false,
-      rewards: { ...(m.rewards || {}) },
-    }));
+    user.missions = buildDailyMissions(user);
   }
 }
 
@@ -1029,7 +1248,7 @@ function getPublicMissions(user) {
   }));
 }
 
-function updateMissionsOnGuess(user, { isWin, xpGain }) {
+function updateMissionsOnGuess(user, { isWin, xpGain, winTimeMs, wordLen, attemptsUsed }) {
   ensureDailyMissions(user);
   let changed = false;
 
@@ -1052,6 +1271,42 @@ function updateMissionsOnGuess(user, { isWin, xpGain }) {
         m.progress = prevProgress + 1;
         changed = true;
         break;
+      case "streak":
+        // progress ir max sasniegtais streak šodien (nevis +1)
+        if (isWin) {
+          const s = Math.max(0, Math.floor(user.streak || 0));
+          if (s > prevProgress) {
+            m.progress = s;
+            changed = true;
+          }
+        }
+        break;
+      case "fast_wins": {
+        if (!isWin) break;
+        const sec = Number(m?.meta?.sec || 75);
+        const lim = Number.isFinite(sec) && sec > 0 ? sec * 1000 : 75 * 1000;
+        if (Number.isFinite(winTimeMs) && winTimeMs > 0 && winTimeMs <= lim) {
+          m.progress = prevProgress + 1;
+          changed = true;
+        }
+        break;
+      }
+      case "perfect_wins": {
+        if (!isWin) break;
+        const maxA = Number(m?.meta?.maxAttempts || 3);
+        const lim = Number.isFinite(maxA) && maxA >= 1 ? maxA : 3;
+        if (Number.isFinite(attemptsUsed) && attemptsUsed > 0 && attemptsUsed <= lim) {
+          m.progress = prevProgress + 1;
+          changed = true;
+        }
+        break;
+      }
+      case "long_wins_7":
+        if (isWin && Number(wordLen) === 7) {
+          m.progress = prevProgress + 1;
+          changed = true;
+        }
+        break;
       default:
         break;
     }
@@ -1062,6 +1317,63 @@ function updateMissionsOnGuess(user, { isWin, xpGain }) {
   }
 
   return changed;
+}
+
+function resetDailyCountersIfNeeded(user) {
+  const today = todayKey();
+  if (user.duelWinsTodayDate !== today) {
+    user.duelWinsTodayDate = today;
+    user.duelWinsToday = 0;
+  }
+  if (user.tokensBoughtTodayDate !== today) {
+    user.tokensBoughtTodayDate = today;
+    user.tokensBoughtToday = 0;
+  }
+  if (user.revealUsedTodayDate !== today) {
+    user.revealUsedTodayDate = today;
+    user.revealUsedToday = 0;
+  }
+}
+
+function updateMissionsGenericCounter(user, type, nextValue) {
+  ensureDailyMissions(user);
+  let changed = false;
+  for (const m of user.missions) {
+    if (m.type !== type) continue;
+    const prev = m.progress || 0;
+    const nv = Math.max(prev, Math.floor(nextValue || 0));
+    if (nv !== prev) {
+      m.progress = nv;
+      changed = true;
+    }
+    if (m.progress >= m.target && !m.isCompleted) {
+      m.isCompleted = true;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function updateMissionsOnDuelWin(user) {
+  resetDailyCountersIfNeeded(user);
+  user.duelWinsToday = (user.duelWinsToday || 0) + 1;
+  return updateMissionsGenericCounter(user, "duel_wins", user.duelWinsToday);
+}
+
+function updateMissionsOnTokenBuy(user, qty = 1) {
+  resetDailyCountersIfNeeded(user);
+  user.tokensBoughtToday = (user.tokensBoughtToday || 0) + Math.max(1, Math.floor(qty || 1));
+  return updateMissionsGenericCounter(user, "token_buys", user.tokensBoughtToday);
+}
+
+function updateMissionsOnRevealUsed(user) {
+  resetDailyCountersIfNeeded(user);
+  user.revealUsedToday = (user.revealUsedToday || 0) + 1;
+  return updateMissionsGenericCounter(user, "reveal_used", user.revealUsedToday);
+}
+
+function updateMissionsOnChestOpen(user) {
+  return updateMissionsGenericCounter(user, "chest_open", 1);
 }
 
 function resetWinsTodayIfNeeded(user) {
@@ -1986,6 +2298,12 @@ async function signupHandler(req, res) {
     dailyLoginDate: "",
     duelsWon: 0,
     duelsLost: 0,
+    duelWinsToday: 0,
+    duelWinsTodayDate: "",
+    tokensBoughtToday: 0,
+    tokensBoughtTodayDate: "",
+    revealUsedToday: 0,
+    revealUsedTodayDate: "",
     avatarUrl: null,
     supporter: false,
     dailyChest: { lastDate: "", streak: 0, totalOpens: 0 },
@@ -2003,6 +2321,7 @@ async function signupHandler(req, res) {
   ensureDailyMissions(user);
   ensureDailyChest(user);
   ensureSpecialMedals(user);
+  resetDailyCountersIfNeeded(user);
 
   USERS[name] = user;
   saveUsers(USERS);
@@ -2040,6 +2359,7 @@ async function loginHandler(req, res) {
   markActivity(user);
   ensureDailyMissions(user);
   resetWinsTodayIfNeeded(user);
+  resetDailyCountersIfNeeded(user);
   ensureDailyChest(user);
   ensureSpecialMedals(user);
   ensureRankFields(user);
@@ -2061,6 +2381,7 @@ app.get("/me", authMiddleware, (req, res) => {
   markActivity(u);
   ensureDailyMissions(u);
   resetWinsTodayIfNeeded(u);
+  resetDailyCountersIfNeeded(u);
   ensureDailyChest(u);
   ensureSpecialMedals(u);
   ensureRankFields(u);
@@ -2163,6 +2484,7 @@ app.get("/missions", authMiddleware, (req, res) => {
   markActivity(user);
   ensureDailyMissions(user);
   resetWinsTodayIfNeeded(user);
+  resetDailyCountersIfNeeded(user);
   ensureDailyChest(user);
   ensureSpecialMedals(user);
   ensureRankFields(user);
@@ -2177,6 +2499,7 @@ app.post("/missions/claim", authMiddleware, (req, res) => {
 
   markActivity(user);
   ensureDailyMissions(user);
+  resetDailyCountersIfNeeded(user);
   ensureDailyChest(user);
   ensureSpecialMedals(user);
 
@@ -2233,6 +2556,8 @@ app.post("/chest/open", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
   ensureDailyChest(user);
+  ensureDailyMissions(user);
+  resetDailyCountersIfNeeded(user);
 
   const today = todayKey();
   const available = user.dailyChest.lastDate !== today;
@@ -2269,6 +2594,7 @@ app.post("/chest/open", authMiddleware, (req, res) => {
   user.xp = (user.xp || 0) + xpGain;
   user.tokens = (user.tokens || 0) + tokensGain;
 
+  updateMissionsOnChestOpen(user);
   ensureRankFields(user);
   saveUsers(USERS);
   broadcastLeaderboard(false);
@@ -2419,6 +2745,7 @@ app.get("/start-round", authMiddleware, (req, res) => {
 app.post("/ability/reveal-letter", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
+  resetDailyCountersIfNeeded(user);
 
   // ja nav raunda vai ir beidzies — sākam jaunu
   if (!user.currentRound || user.currentRound.finished) {
@@ -2478,6 +2805,7 @@ app.post("/ability/reveal-letter", authMiddleware, (req, res) => {
   round.revealUsed = true;
   round.reveal = { pos, letter, cost, ts: Date.now() };
 
+  updateMissionsOnRevealUsed(user);
   saveUsers(USERS);
 
   return res.json({
@@ -2561,6 +2889,7 @@ app.post("/guess", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
   ensureDailyMissions(user);
+  resetDailyCountersIfNeeded(user);
   ensureDailyChest(user);
 
   const gate = enforceGuessRate(user);
@@ -2616,6 +2945,8 @@ app.post("/guess", authMiddleware, (req, res) => {
 
   let xpGain = 0;
   let coinsGain = 0;
+  let winTimeMs = 0;
+  let attemptsUsed = 0;
 
   if (isWin) {
     const prevStreak = user.streak || 0;
@@ -2626,6 +2957,7 @@ app.post("/guess", authMiddleware, (req, res) => {
 
     if (round.startedAt) {
       const winTime = Date.now() - round.startedAt;
+      winTimeMs = winTime;
       if (!user.bestWinTimeMs || winTime < user.bestWinTimeMs) {
         user.bestWinTimeMs = winTime;
       }
@@ -2668,7 +3000,14 @@ app.post("/guess", authMiddleware, (req, res) => {
 
   round.finished = finished;
 
-  updateMissionsOnGuess(user, { isWin, xpGain });
+  attemptsUsed = Math.max(1, MAX_ATTEMPTS - (round.attemptsLeft || 0));
+  updateMissionsOnGuess(user, {
+    isWin,
+    xpGain,
+    winTimeMs,
+    wordLen: len,
+    attemptsUsed,
+  });
 
   saveUsers(USERS);
 
@@ -2688,6 +3027,7 @@ app.post("/buy-token", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
   ensureDailyMissions(user);
+  resetDailyCountersIfNeeded(user);
   ensureDailyChest(user);
 
   const price = getTokenPrice(user);
@@ -2698,6 +3038,8 @@ app.post("/buy-token", authMiddleware, (req, res) => {
 
   user.coins = (user.coins || 0) - price;
   user.tokens = (user.tokens || 0) + 1;
+
+  updateMissionsOnTokenBuy(user, 1);
 
   saveUsers(USERS);
   broadcastLeaderboard(false);
@@ -2752,6 +3094,7 @@ function finishDuel(duel, winnerName, reason) {
       winner.duelsWon = (winner.duelsWon || 0) + 1;
       winner.xp = (winner.xp || 0) + DUEL_REWARD_XP;
       winner.coins = (winner.coins || 0) + DUEL_REWARD_COINS;
+      updateMissionsOnDuelWin(winner);
       ensureRankFields(winner);
     }
     if (loser) {
