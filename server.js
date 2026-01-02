@@ -1,5 +1,5 @@
 // ======== VĀRDU ZONA — Bugats edition ========
-// Serveris ar login/signup, JWT, XP, RANKIEM (25 līmeņi),
+// Serveris ar login/signup, JWT, XP, RANKIEM (40 līmeņi),
 // streak, coins, žetoniem, pasīvajiem coiniem ar Anti-AFK,
 // TOP10, online sarakstu un čatu + ADMIN komandām + MISIJĀM + MEDAĻĀM + 1v1 DUEĻIEM.
 // + SEZONAS + HOF
@@ -939,7 +939,7 @@ try {
   console.error("Neizdevās ielādēt words.txt:", err);
 }
 
-// ======== Rank loģika (25 līmeņi) ========
+// ======== Rank loģika (40 līmeņi) ========
 // Rank tabula ir ārpus funkcijas (ātrāk + vieglāk papildināt).
 // Pirmie 25 līmeņi saglabāti kā iepriekš, pievienoti nākamie līmeņi + krāsas.
 const RANK_TABLE = [
