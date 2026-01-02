@@ -3198,6 +3198,12 @@ function finishDuel(duel, winnerName, reason) {
   const u1 = USERS[p1];
   const u2 = USERS[p2];
 
+  const rows1 = duel.rowsUsed?.[p1] ?? 0;
+  const rows2 = duel.rowsUsed?.[p2] ?? 0;
+  const left1 = duel.attemptsLeft?.[p1] ?? 0;
+  const left2 = duel.attemptsLeft?.[p2] ?? 0;
+  const scoreText = `${p1}: ${rows1}/${DUEL_MAX_ATTEMPTS} (left ${left1}) — ${p2}: ${rows2}/${DUEL_MAX_ATTEMPTS} (left ${left2})`;
+
   if (winnerName && u1 && u2) {
     const winner = USERS[winnerName];
     const loser = winnerName === p1 ? u2 : u1;
@@ -3222,6 +3228,11 @@ function finishDuel(duel, winnerName, reason) {
         winner: winnerName,
         youWin: winnerName === p1,
         reason,
+        opponent: p2,
+        scoreText,
+        len: duel.len,
+        startedAt: duel.startedAt || null,
+        expiresAt: duel.expiresAt || null,
       });
     if (s2)
       s2.emit("duel.end", {
@@ -3229,6 +3240,11 @@ function finishDuel(duel, winnerName, reason) {
         winner: winnerName,
         youWin: winnerName === p2,
         reason,
+        opponent: p1,
+        scoreText,
+        len: duel.len,
+        startedAt: duel.startedAt || null,
+        expiresAt: duel.expiresAt || null,
       });
 
     const other = winnerName === p1 ? p2 : p1;
@@ -3240,6 +3256,11 @@ function finishDuel(duel, winnerName, reason) {
         winner: null,
         youWin: false,
         reason,
+        opponent: p2,
+        scoreText,
+        len: duel.len,
+        startedAt: duel.startedAt || null,
+        expiresAt: duel.expiresAt || null,
       });
     if (s2)
       s2.emit("duel.end", {
@@ -3247,6 +3268,11 @@ function finishDuel(duel, winnerName, reason) {
         winner: null,
         youWin: false,
         reason,
+        opponent: p1,
+        scoreText,
+        len: duel.len,
+        startedAt: duel.startedAt || null,
+        expiresAt: duel.expiresAt || null,
       });
   }
 
