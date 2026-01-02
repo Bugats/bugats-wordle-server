@@ -2831,6 +2831,9 @@ function startNewRoundForUser(user) {
 
     // (NEW) Lai reveal-letter neatver jau pareizi zināmu pozīciju
     knownCorrect: new Array(len).fill(false),
+
+    // (NEW) Solo raunda vēsture, lai var atjaunot pēc refresh/disconnect
+    history: [], // [{ guess, pattern, ts }]
   };
   return user.currentRound;
 }
@@ -2853,6 +2856,7 @@ app.get("/start-round", authMiddleware, (req, res) => {
       const len = Math.max(0, Math.floor(user.currentRound.len || 0));
       user.currentRound.knownCorrect = len > 0 ? new Array(len).fill(false) : [];
     }
+    if (!Array.isArray(user.currentRound.history)) user.currentRound.history = [];
 
     saveUsers(USERS);
 
@@ -2869,13 +2873,27 @@ app.get("/start-round", authMiddleware, (req, res) => {
       len: user.currentRound.len,
       revealUsed,
       reveal,
+      attemptsLeft: user.currentRound.attemptsLeft ?? null,
+      startedAt: user.currentRound.startedAt ?? null,
+      history: user.currentRound.history.slice(0, MAX_ATTEMPTS).map((h) => ({
+        guess: h?.guess,
+        pattern: h?.pattern,
+        ts: h?.ts,
+      })),
     });
   }
 
   // citādi sākam jaunu
   const round = startNewRoundForUser(user);
   saveUsers(USERS);
-  return res.json({ len: round.len, revealUsed: false, reveal: null });
+  return res.json({
+    len: round.len,
+    revealUsed: false,
+    reveal: null,
+    attemptsLeft: round.attemptsLeft ?? null,
+    startedAt: round.startedAt ?? null,
+    history: [],
+  });
 });
 
 // ======== Ability: Atvērt 1 burtu (1x katrā raundā) ========
@@ -3064,6 +3082,7 @@ app.post("/guess", authMiddleware, (req, res) => {
     const len2 = Math.max(0, Math.floor(round.len || 0));
     round.knownCorrect = len2 > 0 ? new Array(len2).fill(false) : [];
   }
+  if (!Array.isArray(round.history)) round.history = [];
 
   if (guessRaw.length !== round.len) {
     const blocked = trackBadLength(user);
@@ -3166,6 +3185,11 @@ app.post("/guess", authMiddleware, (req, res) => {
   }
 
   round.finished = finished;
+
+  try {
+    round.history.push({ guess: guessRaw, pattern, ts: Date.now() });
+    if (round.history.length > MAX_ATTEMPTS) round.history = round.history.slice(-MAX_ATTEMPTS);
+  } catch {}
 
   attemptsUsed = Math.max(1, MAX_ATTEMPTS - (round.attemptsLeft || 0));
   updateMissionsOnGuess(user, {
