@@ -3793,13 +3793,19 @@ io.on("connection", (socket) => {
 
     const pattern = buildPattern(duel.word, guess);
     const win = guess === duel.word;
+    const attemptsLeftNow = duel.attemptsLeft[u.username] ?? 0;
+    const finished = attemptsLeftNow <= 0 && !win;
 
-    socket.emit("duel.result", {
+    // Backward/forward compat: daži klienti klausās "duel.result", citi "duel.guessResult"
+    const resultPayload = {
       duelId,
       pattern,
       win,
-      attemptsLeft: duel.attemptsLeft[u.username],
-    });
+      finished,
+      attemptsLeft: attemptsLeftNow,
+    };
+    socket.emit("duel.result", resultPayload);
+    socket.emit("duel.guessResult", resultPayload);
 
     if (win) {
       finishDuel(duel, u.username, "win");
