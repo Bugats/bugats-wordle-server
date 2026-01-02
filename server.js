@@ -244,6 +244,14 @@ const DUEL_INVITE_TIMEOUT_MS = 30 * 1000; // 30s, lai "pending" dueli neiestrēg
 const duels = new Map(); // duelId -> duel objekts
 const userToDuel = new Map(); // username -> duelId
 
+function getDuelOpponent(duel, username) {
+  if (!duel || !Array.isArray(duel.players)) return null;
+  const [p1, p2] = duel.players;
+  if (username === p1) return p2 || null;
+  if (username === p2) return p1 || null;
+  return null;
+}
+
 // ======== ČATS (mini anti-spam) ========
 const CHAT_MAX_LEN = 200;
 const CHAT_RATE_MS = 900;
@@ -3555,6 +3563,24 @@ io.on("connection", (socket) => {
   }
 
   const passiveChanged = markActivity(user);
+
+  // Ja lietotājs ir aktīvā duelī un viņš pārlādē lapu, dodam iespēju turpināt
+  try {
+    const duelId = userToDuel.get(user.username);
+    const duel = duelId ? duels.get(duelId) : null;
+    if (duel && duel.status === "active") {
+      socket.emit("duel.resume", {
+        duelId: duel.id,
+        len: duel.len,
+        opponent: getDuelOpponent(duel, user.username),
+        startedAt: duel.startedAt || null,
+        expiresAt: duel.expiresAt || null,
+        attemptsLeft: duel.attemptsLeft?.[user.username] ?? null,
+        rowsUsed: duel.rowsUsed?.[user.username] ?? null,
+        history: Array.isArray(duel.history?.[user.username]) ? duel.history[user.username] : [],
+      });
+    }
+  } catch {}
   ensureDailyMissions(user);
   ensureDailyChest(user);
   ensureSpecialMedals(user);
@@ -3695,6 +3721,8 @@ io.on("connection", (socket) => {
     const duel = {
       id: duelId,
       players: [challengerName, targetUser.username],
+      challenger: challengerName,
+      target: targetUser.username,
       word,
       len,
       status: "pending",
@@ -3706,6 +3734,7 @@ io.on("connection", (socket) => {
         [targetUser.username]: DUEL_MAX_ATTEMPTS,
       },
       rowsUsed: { [challengerName]: 0, [targetUser.username]: 0 },
+      history: { [challengerName]: [], [targetUser.username]: [] }, // [{ guess, pattern, ts }]
       winner: null,
       finishedReason: null,
     };
@@ -3764,8 +3793,14 @@ io.on("connection", (socket) => {
     const s1 = getSocketByUsername(p1);
     const s2 = getSocketByUsername(p2);
 
-    if (s1) s1.emit("duel.start", { duelId, opponent: p2, len: duel.len });
-    if (s2) s2.emit("duel.start", { duelId, opponent: p1, len: duel.len });
+    const basePayload = {
+      duelId,
+      len: duel.len,
+      startedAt: duel.startedAt,
+      expiresAt: duel.expiresAt,
+    };
+    if (s1) s1.emit("duel.start", { ...basePayload, opponent: p2 });
+    if (s2) s2.emit("duel.start", { ...basePayload, opponent: p1 });
   });
 
   socket.on("duel.guess", (payload) => {
@@ -3796,9 +3831,16 @@ io.on("connection", (socket) => {
     const attemptsLeftNow = duel.attemptsLeft[u.username] ?? 0;
     const finished = attemptsLeftNow <= 0 && !win;
 
+    try {
+      if (!duel.history) duel.history = {};
+      if (!Array.isArray(duel.history[u.username])) duel.history[u.username] = [];
+      duel.history[u.username].push({ guess, pattern, ts: Date.now() });
+    } catch {}
+
     // Backward/forward compat: daži klienti klausās "duel.result", citi "duel.guessResult"
     const resultPayload = {
       duelId,
+      guess,
       pattern,
       win,
       finished,
@@ -3820,8 +3862,8 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    // Ja lietotājs atvienojas duelī (īpaši pending invite), iztīram,
-    // lai nepaliek "Tu jau esi citā duelī."
+    // Pending invite tīram, bet ACTIVE dueli NEbeidzam (lai refresh gadījumā var turpināt).
+    // ACTIVE duelis tāpat beigsies ar 2min timeout.
     try {
       const u = socket.data.user;
       const uname = u && u.username ? u.username : null;
@@ -3829,15 +3871,7 @@ io.on("connection", (socket) => {
         const duelId = userToDuel.get(uname);
         const duel = duelId ? duels.get(duelId) : null;
 
-        if (duel) {
-          const [p1, p2] = duel.players || [];
-          const other = uname === p1 ? p2 : p1;
-          if (duel.status === "active" && other) finishDuel(duel, other, "disconnect");
-          else finishDuel(duel, null, "declined");
-        } else {
-          // drošībai: ja duel objekta nav, vismaz noņemam map entry
-          userToDuel.delete(uname);
-        }
+        if (duel && duel.status === "pending") finishDuel(duel, null, "declined");
       }
     } catch {}
 
