@@ -239,6 +239,7 @@ const DUEL_MAX_ATTEMPTS = 6;
 const DUEL_REWARD_XP = 3;
 const DUEL_REWARD_COINS = 3;
 const DUEL_MAX_DURATION_MS = 2 * 60 * 1000; // 2 min
+const DUEL_INVITE_TIMEOUT_MS = 30 * 1000; // 30s, lai "pending" dueli neiestrēgst
 
 const duels = new Map(); // duelId -> duel objekts
 const userToDuel = new Map(); // username -> duelId
@@ -3250,6 +3251,11 @@ function finishDuel(duel, winnerName, reason) {
 setInterval(() => {
   const now = Date.now();
   for (const duel of duels.values()) {
+    // Pending invite timeout (citādi userToDuel var iestrēgt pēc ignorēta invite/refresh)
+    if (duel.status === "pending" && duel.expiresAt && now >= duel.expiresAt) {
+      finishDuel(duel, null, "declined");
+      continue;
+    }
     if (duel.status === "active" && duel.expiresAt && now >= duel.expiresAt) {
       finishDuel(duel, null, "timeout");
     }
@@ -3694,7 +3700,7 @@ io.on("connection", (socket) => {
       status: "pending",
       createdAt: Date.now(),
       startedAt: null,
-      expiresAt: null,
+      expiresAt: Date.now() + DUEL_INVITE_TIMEOUT_MS,
       attemptsLeft: {
         [challengerName]: DUEL_MAX_ATTEMPTS,
         [targetUser.username]: DUEL_MAX_ATTEMPTS,
@@ -3808,6 +3814,27 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    // Ja lietotājs atvienojas duelī (īpaši pending invite), iztīram,
+    // lai nepaliek "Tu jau esi citā duelī."
+    try {
+      const u = socket.data.user;
+      const uname = u && u.username ? u.username : null;
+      if (uname && userToDuel.has(uname)) {
+        const duelId = userToDuel.get(uname);
+        const duel = duelId ? duels.get(duelId) : null;
+
+        if (duel) {
+          const [p1, p2] = duel.players || [];
+          const other = uname === p1 ? p2 : p1;
+          if (duel.status === "active" && other) finishDuel(duel, other, "disconnect");
+          else finishDuel(duel, null, "declined");
+        } else {
+          // drošībai: ja duel objekta nav, vismaz noņemam map entry
+          userToDuel.delete(uname);
+        }
+      }
+    } catch {}
+
     onlineBySocket.delete(socket.id);
     broadcastOnlineList(true);
   });
