@@ -3847,13 +3847,9 @@ io.on("connection", (socket) => {
 
     if (u.username !== p1 && u.username !== p2) return;
 
-    const other = u.username === p1 ? p2 : p1;
-    const otherSock = getSocketByUsername(other);
-    if (otherSock) otherSock.emit("duel.declined", { duelId, by: u.username });
-
-    userToDuel.delete(p1);
-    userToDuel.delete(p2);
-    duels.delete(duelId);
+    // vienmēr beidzam caur finishDuel, lai abiem klientiem atnāk duel.end
+    // (pretējā gadījumā izaicinātājam var palikt "gaidām atbildi..." karājoties)
+    finishDuel(duel, null, "declined");
   });
 
   socket.on("duel.accept", (payload) => {
