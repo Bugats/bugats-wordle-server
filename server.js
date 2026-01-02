@@ -990,13 +990,29 @@ const RANK_TABLE = [
 
 function calcRankFromXp(xp) {
   const currentXp = Number.isFinite(Number(xp)) ? Number(xp) : 0;
-  let current = RANK_TABLE[0];
-  for (const r of RANK_TABLE) {
-    if (currentXp >= r.minXp) current = r;
+  let currentIndex = 0;
+  for (let i = 0; i < RANK_TABLE.length; i++) {
+    const r = RANK_TABLE[i];
+    if (currentXp >= r.minXp) currentIndex = i;
     else break;
   }
-  const level = RANK_TABLE.indexOf(current) + 1;
-  return { level, title: current.title, color: current.color || "#9CA3AF" };
+
+  const current = RANK_TABLE[currentIndex] || RANK_TABLE[0];
+  const next = RANK_TABLE[currentIndex + 1] || null;
+  const level = currentIndex + 1;
+
+  const minXp = Number(current?.minXp) || 0;
+  const nextMinXp = next ? Number(next.minXp) || null : null;
+  const isMax = !next;
+
+  return {
+    level,
+    title: current?.title || "—",
+    color: current?.color || "#9CA3AF",
+    minXp,
+    nextMinXp,
+    isMax,
+  };
 }
 
 function ensureRankFields(u) {
@@ -1866,9 +1882,22 @@ function buildMePayload(u) {
   const dynamicMedals = computeMedalsForUser(u);
   const medals = mergeMedals(dynamicMedals, u.specialMedals);
 
+  const xp = u.xp || 0;
+  const minXp = Number(rankInfo.minXp) || 0;
+  const nextMinXp =
+    rankInfo.nextMinXp === null || rankInfo.nextMinXp === undefined
+      ? null
+      : Number(rankInfo.nextMinXp) || null;
+
+  const need =
+    nextMinXp && Number.isFinite(nextMinXp) && nextMinXp > minXp ? nextMinXp - minXp : 0;
+  const inLevel = Math.max(0, xp - minXp);
+  const pct = need > 0 ? Math.max(0, Math.min(100, (inLevel / need) * 100)) : 100;
+  const toNext = need > 0 ? Math.max(0, nextMinXp - xp) : 0;
+
   return {
     username: u.username,
-    xp: u.xp || 0,
+    xp,
     score: u.score || 0,
     coins: u.coins || 0,
     tokens: u.tokens || 0,
@@ -1877,6 +1906,13 @@ function buildMePayload(u) {
     rankTitle: u.rankTitle || rankInfo.title,
     rankLevel: u.rankLevel || rankInfo.level,
     rankColor: u.rankColor || rankInfo.color,
+    rankMinXp: minXp,
+    rankNextMinXp: nextMinXp, // null => MAX rank
+    rankInLevelXp: inLevel,
+    rankNeedXp: need, // 0 => MAX rank
+    rankToNextXp: toNext,
+    rankProgressPct: Math.round(pct * 10) / 10,
+    rankIsMax: !!rankInfo.isMax,
     tokenPriceCoins: getTokenPrice(u),
     medals,
     avatarUrl: u.avatarUrl || null,
@@ -2513,9 +2549,21 @@ function buildPublicProfilePayload(targetUser, requester) {
   const dynamicMedals = computeMedalsForUser(targetUser);
   const medals = mergeMedals(dynamicMedals, targetUser.specialMedals);
 
+  const xp = targetUser.xp || 0;
+  const minXp = Number(rankInfo.minXp) || 0;
+  const nextMinXp =
+    rankInfo.nextMinXp === null || rankInfo.nextMinXp === undefined
+      ? null
+      : Number(rankInfo.nextMinXp) || null;
+  const need =
+    nextMinXp && Number.isFinite(nextMinXp) && nextMinXp > minXp ? nextMinXp - minXp : 0;
+  const inLevel = Math.max(0, xp - minXp);
+  const pct = need > 0 ? Math.max(0, Math.min(100, (inLevel / need) * 100)) : 100;
+  const toNext = need > 0 ? Math.max(0, nextMinXp - xp) : 0;
+
   const payload = {
     username: targetUser.username,
-    xp: targetUser.xp || 0,
+    xp,
     score: targetUser.score || 0,
     coins: targetUser.coins || 0,
     tokens: targetUser.tokens || 0,
@@ -2524,6 +2572,13 @@ function buildPublicProfilePayload(targetUser, requester) {
     rankTitle: targetUser.rankTitle || rankInfo.title,
     rankLevel: targetUser.rankLevel || rankInfo.level,
     rankColor: targetUser.rankColor || rankInfo.color,
+    rankMinXp: minXp,
+    rankNextMinXp: nextMinXp,
+    rankInLevelXp: inLevel,
+    rankNeedXp: need,
+    rankToNextXp: toNext,
+    rankProgressPct: Math.round(pct * 10) / 10,
+    rankIsMax: !!rankInfo.isMax,
     medals,
     duelsWon: targetUser.duelsWon || 0,
     duelsLost: targetUser.duelsLost || 0,
