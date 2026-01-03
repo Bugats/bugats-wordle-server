@@ -257,6 +257,12 @@ const CHAT_MAX_LEN = 200;
 const CHAT_RATE_MS = 900;
 const CHAT_DUP_WINDOW_MS = 4000;
 
+// ======== PRIVĀTAIS ČATS (DM) ========
+const DM_MAX_LEN = 400;
+const DM_RATE_MS = 650;
+const DM_DUP_WINDOW_MS = 5000;
+const DM_THREAD_MAX = 200; // max ziņas vienā sarunā (katram userim)
+
 // ======== GUESS rate-limit (server-side) ========
 const GUESS_RATE_MS = 950; // ~1/sec
 const BAD_LEN_WINDOW_MS = 10 * 1000;
@@ -350,6 +356,16 @@ function loadUsers() {
       if (typeof u.lastChatAt !== "number") u.lastChatAt = 0;
       if (typeof u.lastChatText !== "string") u.lastChatText = "";
       if (typeof u.lastChatTextAt !== "number") u.lastChatTextAt = 0;
+
+      // Privātais čats (DM) — inbox users.json
+      if (!u.dm || typeof u.dm !== "object") u.dm = {};
+      if (!u.dm.threads || typeof u.dm.threads !== "object") u.dm.threads = {};
+      if (!u.dm.unread || typeof u.dm.unread !== "object") u.dm.unread = {};
+      if (!u.dm.lastRead || typeof u.dm.lastRead !== "object") u.dm.lastRead = {};
+      // DM anti-spam state
+      if (typeof u.lastDmAt !== "number") u.lastDmAt = 0;
+      if (typeof u.lastDmText !== "string") u.lastDmText = "";
+      if (typeof u.lastDmTextAt !== "number") u.lastDmTextAt = 0;
 
       // Guess anti-spam
       if (typeof u.lastGuessAt !== "number") u.lastGuessAt = 0;
@@ -2084,6 +2100,75 @@ function broadcastSystemMessage(text) {
   io.emit("chatMessage", { username: "SYSTEM", text, ts: Date.now() });
 }
 
+// ======== DM helperi ========
+function ensureDm(user) {
+  if (!user || typeof user !== "object") return null;
+  if (!user.dm || typeof user.dm !== "object") user.dm = {};
+  if (!user.dm.threads || typeof user.dm.threads !== "object") user.dm.threads = {};
+  if (!user.dm.unread || typeof user.dm.unread !== "object") user.dm.unread = {};
+  if (!user.dm.lastRead || typeof user.dm.lastRead !== "object") user.dm.lastRead = {};
+  return user.dm;
+}
+
+function dmThreadKeyFor(userA, userB) {
+  // saglabājam thread zem “other username” tieši, lai frontā vienkārši atvērt
+  return String(userB || "").trim();
+}
+
+function dmSanitizeText(raw) {
+  if (typeof raw !== "string") return "";
+  let t = raw.trim();
+  if (!t) return "";
+  if (t.length > DM_MAX_LEN) t = t.slice(0, DM_MAX_LEN);
+  return t;
+}
+
+function dmComputeUnread(dm) {
+  const byUser = dm?.unread && typeof dm.unread === "object" ? dm.unread : {};
+  let total = 0;
+  for (const v of Object.values(byUser)) total += Math.max(0, Number(v) || 0);
+  return { total, byUser };
+}
+
+function dmPushMessage(fromUser, toUser, text) {
+  const from = fromUser?.username;
+  const to = toUser?.username;
+  if (!from || !to) return null;
+
+  const dmFrom = ensureDm(fromUser);
+  const dmTo = ensureDm(toUser);
+  if (!dmFrom || !dmTo) return null;
+
+  const msg = {
+    id: crypto.randomBytes(8).toString("hex"),
+    from,
+    to,
+    text,
+    ts: Date.now(),
+  };
+
+  const keyFrom = dmThreadKeyFor(fromUser, toUser);
+  const keyTo = dmThreadKeyFor(toUser, fromUser);
+
+  if (!Array.isArray(dmFrom.threads[keyFrom])) dmFrom.threads[keyFrom] = [];
+  if (!Array.isArray(dmTo.threads[keyTo])) dmTo.threads[keyTo] = [];
+
+  dmFrom.threads[keyFrom].push(msg);
+  dmTo.threads[keyTo].push(msg);
+
+  if (dmFrom.threads[keyFrom].length > DM_THREAD_MAX) {
+    dmFrom.threads[keyFrom] = dmFrom.threads[keyFrom].slice(-DM_THREAD_MAX);
+  }
+  if (dmTo.threads[keyTo].length > DM_THREAD_MAX) {
+    dmTo.threads[keyTo] = dmTo.threads[keyTo].slice(-DM_THREAD_MAX);
+  }
+
+  // increment unread only saņēmējam
+  dmTo.unread[keyTo] = Math.max(0, Number(dmTo.unread[keyTo]) || 0) + 1;
+
+  return msg;
+}
+
 function kickUserByName(username, reason) {
   const ids = [];
   for (const [sid, uname] of onlineBySocket.entries()) {
@@ -3710,6 +3795,13 @@ io.on("connection", (socket) => {
   socket.emit("seasonUpdate", seasonState);
   socket.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
 
+  // DM: uzreiz iedodam neizlasīto skaitu (badge sync)
+  try {
+    const u = USERS[user.username] || user;
+    ensureDm(u);
+    socket.emit("dm.unread", dmComputeUnread(u.dm));
+  } catch {}
+
   socket.on("leaderboard:top10", () => {
     socket.emit("leaderboard:update", computeTop10Leaderboard());
   });
@@ -3789,6 +3881,119 @@ io.on("connection", (socket) => {
       rankColor: u.rankColor || "#9CA3AF",
       supporter: !!u.supporter,
     });
+  });
+
+  // ========== PRIVĀTAIS ČATS (DM) ==========
+  socket.on("dm.send", (payload) => {
+    const sender = USERS[user.username] || user;
+    const now = Date.now();
+
+    const toRaw =
+      typeof payload === "string"
+        ? ""
+        : payload?.to ?? payload?.username ?? payload?.target ?? "";
+    const textRaw = typeof payload === "string" ? payload : payload?.text ?? "";
+
+    const toName = String(toRaw || "").trim();
+    const text = dmSanitizeText(textRaw);
+    if (!toName) return socket.emit("dm.error", { message: "Nav norādīts saņēmējs." });
+    if (!text) return socket.emit("dm.error", { message: "Ziņa ir tukša." });
+
+    if (sender.isBanned) {
+      return socket.emit("dm.error", { message: "Tu esi nobanots." });
+    }
+    if (sender.mutedUntil && sender.mutedUntil > now) {
+      const until = new Date(sender.mutedUntil).toLocaleTimeString("lv-LV", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      return socket.emit("dm.error", { message: `Tev ir mute līdz ${until}.` });
+    }
+
+    // anti-spam
+    if (sender.lastDmAt && now - sender.lastDmAt < DM_RATE_MS) return;
+    sender.lastDmAt = now;
+    if (
+      sender.lastDmText &&
+      sender.lastDmText === text &&
+      sender.lastDmTextAt &&
+      now - sender.lastDmTextAt < DM_DUP_WINDOW_MS
+    ) {
+      return;
+    }
+    sender.lastDmText = text;
+    sender.lastDmTextAt = now;
+
+    const key = findUserKeyCaseInsensitive(toName);
+    const target = key ? USERS[key] : null;
+    if (!target) return socket.emit("dm.error", { message: "Lietotājs nav atrasts." });
+    if (target.username === sender.username)
+      return socket.emit("dm.error", { message: "Nevari rakstīt sev." });
+
+    // aktivitāte (anti-afk)
+    markActivity(sender);
+    markActivity(target);
+
+    const msg = dmPushMessage(sender, target, text);
+    if (!msg) return socket.emit("dm.error", { message: "Neizdevās nosūtīt ziņu." });
+
+    saveUsers(USERS);
+
+    // sūtītājam apstiprinājums
+    socket.emit("dm.sent", { message: msg, with: target.username });
+
+    // saņēmējam ziņa + unread sync (netraucē spēlei; frontā var rādīt toast)
+    const targetSocket = getSocketByUsername(target.username);
+    if (targetSocket) {
+      targetSocket.emit("dm.message", {
+        message: msg,
+        fromUser: getMiniUserPayload(sender.username),
+      });
+      try {
+        ensureDm(target);
+        targetSocket.emit("dm.unread", dmComputeUnread(target.dm));
+      } catch {}
+    }
+  });
+
+  socket.on("dm.history", (payload) => {
+    const me = USERS[user.username] || user;
+    const otherRaw =
+      typeof payload === "string" ? payload : payload?.with ?? payload?.username ?? payload?.user ?? "";
+    const otherName = String(otherRaw || "").trim();
+    if (!otherName) return socket.emit("dm.history", { with: "", messages: [] });
+
+    ensureDm(me);
+    const key = findUserKeyCaseInsensitive(otherName);
+    const other = key ? USERS[key] : null;
+    const otherUsername = other?.username || otherName;
+
+    const threadKey = dmThreadKeyFor(me, otherUsername);
+    const arr = Array.isArray(me.dm.threads?.[threadKey]) ? me.dm.threads[threadKey] : [];
+
+    // sūtam pēdējās 60 ziņas, lai nav milzīgs payload
+    socket.emit("dm.history", {
+      with: otherUsername,
+      messages: arr.slice(-60),
+    });
+  });
+
+  socket.on("dm.read", (payload) => {
+    const me = USERS[user.username] || user;
+    const otherRaw =
+      typeof payload === "string" ? payload : payload?.with ?? payload?.username ?? payload?.user ?? "";
+    const otherName = String(otherRaw || "").trim();
+    if (!otherName) return;
+
+    ensureDm(me);
+    const key = findUserKeyCaseInsensitive(otherName);
+    const other = key ? USERS[key] : null;
+    const otherUsername = other?.username || otherName;
+
+    me.dm.lastRead[otherUsername] = Date.now();
+    me.dm.unread[otherUsername] = 0;
+    saveUsers(USERS);
+    socket.emit("dm.unread", dmComputeUnread(me.dm));
   });
 
   // ========== DUEĻI ==========
