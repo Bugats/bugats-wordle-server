@@ -2107,12 +2107,45 @@ function ensureDm(user) {
   if (!user.dm.threads || typeof user.dm.threads !== "object") user.dm.threads = {};
   if (!user.dm.unread || typeof user.dm.unread !== "object") user.dm.unread = {};
   if (!user.dm.lastRead || typeof user.dm.lastRead !== "object") user.dm.lastRead = {};
+
+  // migrācija/clean-up: veci bugaini keyi (piem. "[object Object]")
+  try {
+    for (const k of Object.keys(user.dm.threads)) {
+      const ks = String(k || "").trim();
+      if (!ks || ks.startsWith("[object")) delete user.dm.threads[k];
+    }
+    for (const k of Object.keys(user.dm.unread)) {
+      const ks = String(k || "").trim();
+      if (!ks || ks.startsWith("[object")) delete user.dm.unread[k];
+    }
+    for (const k of Object.keys(user.dm.lastRead)) {
+      const ks = String(k || "").trim();
+      if (!ks || ks.startsWith("[object")) delete user.dm.lastRead[k];
+    }
+  } catch {}
   return user.dm;
 }
 
 function dmThreadKeyFor(userA, userB) {
-  // saglabājam thread zem “other username” tieši, lai frontā vienkārši atvērt
-  return String(userB || "").trim();
+  // saglabājam thread zem “other username” (string), lai frontā vienkārši atvērt
+  const getName = (x) => {
+    if (typeof x === "string") return x.trim();
+    if (x && typeof x === "object" && typeof x.username === "string") return x.username.trim();
+    return "";
+  };
+  return getName(userB);
+}
+
+function dmZeroUnreadCaseInsensitive(dm, otherUsername) {
+  if (!dm || typeof dm !== "object") return;
+  if (!dm.unread || typeof dm.unread !== "object") dm.unread = {};
+  const target = String(otherUsername || "").trim();
+  if (!target) return;
+  const t = target.toLowerCase();
+  for (const k of Object.keys(dm.unread)) {
+    if (String(k).toLowerCase() === t) dm.unread[k] = 0;
+  }
+  dm.unread[target] = 0;
 }
 
 function dmSanitizeText(raw) {
@@ -2149,6 +2182,7 @@ function dmPushMessage(fromUser, toUser, text) {
 
   const keyFrom = dmThreadKeyFor(fromUser, toUser);
   const keyTo = dmThreadKeyFor(toUser, fromUser);
+  if (!keyFrom || !keyTo) return null;
 
   if (!Array.isArray(dmFrom.threads[keyFrom])) dmFrom.threads[keyFrom] = [];
   if (!Array.isArray(dmTo.threads[keyTo])) dmTo.threads[keyTo] = [];
@@ -3991,7 +4025,7 @@ io.on("connection", (socket) => {
     const otherUsername = other?.username || otherName;
 
     me.dm.lastRead[otherUsername] = Date.now();
-    me.dm.unread[otherUsername] = 0;
+    dmZeroUnreadCaseInsensitive(me.dm, otherUsername);
     saveUsers(USERS);
     socket.emit("dm.unread", dmComputeUnread(me.dm));
   });
