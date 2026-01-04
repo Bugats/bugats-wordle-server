@@ -4034,6 +4034,36 @@ io.on("connection", (socket) => {
     socket.emit("dm.unread", dmComputeUnread(me.dm));
   });
 
+  // Dzēst visu DM sarunu (tikai šim lietotājam / "delete for me")
+  // payload: { with: "OtherUser" }
+  socket.on("dm.clearThread", (payload) => {
+    const me = USERS[user.username] || user;
+    const otherRaw =
+      typeof payload === "string" ? payload : payload?.with ?? payload?.username ?? payload?.user ?? "";
+    const otherName = String(otherRaw || "").trim();
+    if (!otherName) return socket.emit("dm.error", { message: "Nav norādīta saruna." });
+
+    ensureDm(me);
+    const key = findUserKeyCaseInsensitive(otherName);
+    const other = key ? USERS[key] : null;
+    const otherUsername = other?.username || otherName;
+    if (!otherUsername || otherUsername === me.username)
+      return socket.emit("dm.error", { message: "Nederīga saruna." });
+
+    const threadKey = dmThreadKeyFor(me, otherUsername);
+    try {
+      if (me.dm.threads && typeof me.dm.threads === "object") delete me.dm.threads[threadKey];
+    } catch {}
+    try {
+      if (me.dm.lastRead && typeof me.dm.lastRead === "object") delete me.dm.lastRead[otherUsername];
+    } catch {}
+    dmZeroUnreadCaseInsensitive(me.dm, otherUsername);
+
+    saveUsers(USERS);
+    socket.emit("dm.cleared", { with: otherUsername });
+    socket.emit("dm.unread", dmComputeUnread(me.dm));
+  });
+
   // ========== DUEĻI ==========
   socket.on("duel.challenge", (targetNameRaw) => {
     const challenger = socket.data.user;
