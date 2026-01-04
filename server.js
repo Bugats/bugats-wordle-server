@@ -1897,6 +1897,7 @@ function startSeasonFlow({ byAdminUsername } = {}) {
 // ======== JWT helperi ========
 function buildMePayload(u) {
   const rankInfo = ensureRankFields(u);
+  ensureDuelEloFields(u);
   const dynamicMedals = computeMedalsForUser(u);
   const medals = mergeMedals(dynamicMedals, u.specialMedals);
 
@@ -1921,6 +1922,8 @@ function buildMePayload(u) {
     tokens: u.tokens || 0,
     streak: u.streak || 0,
     bestStreak: u.bestStreak || 0,
+    duelElo: u.duelElo,
+    duelEloGames: u.duelEloGames || 0,
     rankTitle: u.rankTitle || rankInfo.title,
     rankLevel: u.rankLevel || rankInfo.level,
     rankColor: u.rankColor || rankInfo.color,
@@ -2490,6 +2493,9 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
 // ======== AUTH ENDPOINTI ========
 const DEVICE_SIGNUP_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
 const DEVICE_SIGNUP_MAX = 1; // max konti 24h uz vienu deviceId
+const DUEL_ELO_DEFAULT = 1000;
+const DUEL_ELO_K_BASE = 32;
+const DUEL_ELO_K_NEWBIE = 40; // pirmajās spēlēs ātrāk stabilizējas
 
 function getDeviceIdFromReq(req) {
   const h =
@@ -2520,6 +2526,49 @@ function countRecentSignupsForDeviceId(deviceId, now = Date.now()) {
     if (ids.includes(deviceId)) n++;
   }
   return n;
+}
+
+function ensureDuelEloFields(u) {
+  if (!u) return { elo: DUEL_ELO_DEFAULT, games: 0 };
+  if (!Number.isFinite(u.duelElo)) u.duelElo = DUEL_ELO_DEFAULT;
+  if (!Number.isFinite(u.duelEloGames)) {
+    const w = Number(u.duelsWon) || 0;
+    const l = Number(u.duelsLost) || 0;
+    u.duelEloGames = Math.max(0, w + l);
+  }
+  return { elo: u.duelElo, games: u.duelEloGames };
+}
+
+function duelEloExpected(ra, rb) {
+  // 1 / (1 + 10^((Rb-Ra)/400))
+  return 1 / (1 + Math.pow(10, (rb - ra) / 400));
+}
+
+function duelEloK(u) {
+  const g = Number(u?.duelEloGames) || 0;
+  return g < 20 ? DUEL_ELO_K_NEWBIE : DUEL_ELO_K_BASE;
+}
+
+function applyDuelEloWinLoss(winner, loser) {
+  if (!winner || !loser) return;
+  ensureDuelEloFields(winner);
+  ensureDuelEloFields(loser);
+
+  const ra = Number(winner.duelElo) || DUEL_ELO_DEFAULT;
+  const rb = Number(loser.duelElo) || DUEL_ELO_DEFAULT;
+  const ea = duelEloExpected(ra, rb);
+  const eb = 1 - ea;
+
+  const ka = duelEloK(winner);
+  const kb = duelEloK(loser);
+
+  const ra2 = ra + ka * (1 - ea);
+  const rb2 = rb + kb * (0 - eb);
+
+  winner.duelElo = Math.round(ra2);
+  loser.duelElo = Math.round(rb2);
+  winner.duelEloGames = (Number(winner.duelEloGames) || 0) + 1;
+  loser.duelEloGames = (Number(loser.duelEloGames) || 0) + 1;
 }
 
 async function signupHandler(req, res) {
@@ -2581,6 +2630,8 @@ async function signupHandler(req, res) {
     dailyLoginDate: "",
     duelsWon: 0,
     duelsLost: 0,
+    duelElo: DUEL_ELO_DEFAULT,
+    duelEloGames: 0,
     duelWinsToday: 0,
     duelWinsTodayDate: "",
     tokensBoughtToday: 0,
@@ -2723,6 +2774,7 @@ app.post("/avatar", authMiddleware, (req, res) => {
 function buildPublicProfilePayload(targetUser, requester) {
   const rankInfo = ensureRankFields(targetUser);
   const isAdmin = requester && isAdminUser(requester);
+  ensureDuelEloFields(targetUser);
 
   const dynamicMedals = computeMedalsForUser(targetUser);
   const medals = mergeMedals(dynamicMedals, targetUser.specialMedals);
@@ -2747,6 +2799,8 @@ function buildPublicProfilePayload(targetUser, requester) {
     tokens: targetUser.tokens || 0,
     streak: targetUser.streak || 0,
     bestStreak: targetUser.bestStreak || 0,
+    duelElo: targetUser.duelElo,
+    duelEloGames: targetUser.duelEloGames || 0,
     rankTitle: targetUser.rankTitle || rankInfo.title,
     rankLevel: targetUser.rankLevel || rankInfo.level,
     rankColor: targetUser.rankColor || rankInfo.color,
@@ -3462,6 +3516,15 @@ function finishDuel(duel, winnerName, reason) {
   const scoreText = `${p1}: ${rows1}/${DUEL_MAX_ATTEMPTS} (left ${left1}) — ${p2}: ${rows2}/${DUEL_MAX_ATTEMPTS} (left ${left2})`;
 
   if (winnerName && u1 && u2) {
+    const isRanked = duel.ranked !== false;
+    // ELO snapshot pirms izmaiņām
+    let eloBefore = null;
+    if (isRanked) {
+      ensureDuelEloFields(u1);
+      ensureDuelEloFields(u2);
+      eloBefore = { [p1]: u1.duelElo, [p2]: u2.duelElo };
+    }
+
     const winner = USERS[winnerName];
     const loser = winnerName === p1 ? u2 : u1;
 
@@ -3476,8 +3539,22 @@ function finishDuel(duel, winnerName, reason) {
       loser.duelsLost = (loser.duelsLost || 0) + 1;
     }
 
+    // Ranked ELO update (tikai, ja ir uzvarētājs)
+    if (isRanked && winner && loser) {
+      applyDuelEloWinLoss(winner, loser);
+    }
+
     saveUsers(USERS);
     broadcastLeaderboard(false);
+
+    const eloAfter = (duel.ranked !== false && u1 && u2)
+      ? { [p1]: u1.duelElo, [p2]: u2.duelElo }
+      : null;
+
+    const eloDelta1 =
+      eloBefore && eloAfter ? Number(eloAfter[p1] || 0) - Number(eloBefore[p1] || 0) : 0;
+    const eloDelta2 =
+      eloBefore && eloAfter ? Number(eloAfter[p2] || 0) - Number(eloBefore[p2] || 0) : 0;
 
     if (s1)
       s1.emit("duel.end", {
@@ -3490,6 +3567,10 @@ function finishDuel(duel, winnerName, reason) {
         len: duel.len,
         startedAt: duel.startedAt || null,
         expiresAt: duel.expiresAt || null,
+        ranked: duel.ranked !== false,
+        yourElo: eloAfter ? eloAfter[p1] : null,
+        opponentElo: eloAfter ? eloAfter[p2] : null,
+        eloDelta: eloAfter ? eloDelta1 : null,
       });
     if (s2)
       s2.emit("duel.end", {
@@ -3502,6 +3583,10 @@ function finishDuel(duel, winnerName, reason) {
         len: duel.len,
         startedAt: duel.startedAt || null,
         expiresAt: duel.expiresAt || null,
+        ranked: duel.ranked !== false,
+        yourElo: eloAfter ? eloAfter[p2] : null,
+        opponentElo: eloAfter ? eloAfter[p1] : null,
+        eloDelta: eloAfter ? eloDelta2 : null,
       });
 
     const other = winnerName === p1 ? p2 : p1;
@@ -3518,6 +3603,7 @@ function finishDuel(duel, winnerName, reason) {
         len: duel.len,
         startedAt: duel.startedAt || null,
         expiresAt: duel.expiresAt || null,
+        ranked: duel.ranked !== false,
       });
     if (s2)
       s2.emit("duel.end", {
@@ -3530,6 +3616,7 @@ function finishDuel(duel, winnerName, reason) {
         len: duel.len,
         startedAt: duel.startedAt || null,
         expiresAt: duel.expiresAt || null,
+        ranked: duel.ranked !== false,
       });
   }
 
@@ -3860,6 +3947,7 @@ io.on("connection", (socket) => {
         expiresAt: duel.expiresAt || null,
         serverNow: Date.now(),
         countdownMs: DUEL_COUNTDOWN_MS,
+        ranked: duel.ranked !== false,
         attemptsLeft: duel.attemptsLeft?.[user.username] ?? null,
         rowsUsed: duel.rowsUsed?.[user.username] ?? null,
         history: Array.isArray(duel.history?.[user.username]) ? duel.history[user.username] : [],
@@ -4125,7 +4213,14 @@ io.on("connection", (socket) => {
   socket.on("duel.challenge", (targetNameRaw) => {
     const challenger = socket.data.user;
     const challengerName = challenger.username;
-    const targetName = String(targetNameRaw || "").trim();
+    const isObj = targetNameRaw && typeof targetNameRaw === "object";
+    const targetName = String(
+      isObj
+        ? targetNameRaw.target || targetNameRaw.username || targetNameRaw.opponent || ""
+        : targetNameRaw || ""
+    ).trim();
+    // default: ranked (back-compat ar veco klientu, kas sūta tikai string)
+    const ranked = isObj ? targetNameRaw.ranked !== false : true;
 
     if (!targetName)
       return socket.emit("duel.error", { message: "Nav norādīts pretinieks." });
@@ -4160,6 +4255,7 @@ io.on("connection", (socket) => {
       target: targetUser.username,
       word,
       len,
+      ranked,
       status: "pending",
       createdAt: Date.now(),
       startedAt: null,
@@ -4182,11 +4278,13 @@ io.on("connection", (socket) => {
       duelId,
       opponent: targetUser.username,
       len,
+      ranked,
     });
     targetSocket.emit("duel.invite", {
       duelId,
       from: challengerName,
       len,
+      ranked,
     });
   });
 
@@ -4232,6 +4330,7 @@ io.on("connection", (socket) => {
       expiresAt: duel.expiresAt,
       serverNow: Date.now(),
       countdownMs: DUEL_COUNTDOWN_MS,
+      ranked: duel.ranked !== false,
     };
     if (s1) s1.emit("duel.start", { ...basePayload, opponent: p2 });
     if (s2) s2.emit("duel.start", { ...basePayload, opponent: p1 });
