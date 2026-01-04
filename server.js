@@ -239,6 +239,8 @@ const DUEL_MAX_ATTEMPTS = 6;
 const DUEL_REWARD_XP = 3;
 const DUEL_REWARD_COINS = 3;
 const DUEL_MAX_DURATION_MS = 2 * 60 * 1000; // 2 min
+// Duel start countdown (frontā rāda 5..1 AIZIET, bet spēles laiks paliek pilnas 2 min)
+const DUEL_COUNTDOWN_MS = 5 * 1000;
 const DUEL_INVITE_TIMEOUT_MS = 30 * 1000; // 30s, lai "pending" dueli neiestrēgst
 
 const duels = new Map(); // duelId -> duel objekts
@@ -3800,6 +3802,7 @@ io.on("connection", (socket) => {
         startedAt: duel.startedAt || null,
         expiresAt: duel.expiresAt || null,
         serverNow: Date.now(),
+        countdownMs: DUEL_COUNTDOWN_MS,
         attemptsLeft: duel.attemptsLeft?.[user.username] ?? null,
         rowsUsed: duel.rowsUsed?.[user.username] ?? null,
         history: Array.isArray(duel.history?.[user.username]) ? duel.history[user.username] : [],
@@ -4128,7 +4131,8 @@ io.on("connection", (socket) => {
     if (u.username !== p1 && u.username !== p2) return;
 
     duel.status = "active";
-    duel.startedAt = Date.now();
+    // spēle sākas pēc īsas atskaites, bet faktiskais laiks ir pilnas 2 min
+    duel.startedAt = Date.now() + DUEL_COUNTDOWN_MS;
     duel.expiresAt = duel.startedAt + DUEL_MAX_DURATION_MS;
 
     const s1 = getSocketByUsername(p1);
@@ -4140,6 +4144,7 @@ io.on("connection", (socket) => {
       startedAt: duel.startedAt,
       expiresAt: duel.expiresAt,
       serverNow: Date.now(),
+      countdownMs: DUEL_COUNTDOWN_MS,
     };
     if (s1) s1.emit("duel.start", { ...basePayload, opponent: p2 });
     if (s2) s2.emit("duel.start", { ...basePayload, opponent: p1 });
@@ -4154,6 +4159,11 @@ io.on("connection", (socket) => {
 
     if (duel.status !== "active") return;
     if (!duel.players.includes(u.username)) return;
+
+    // neļaujam minēt pirms atskaites beigām (fair play)
+    if (duel.startedAt && Date.now() < duel.startedAt) {
+      return socket.emit("duel.error", { message: "Duelis vēl nav sācies. Pagaidi atskaiti!" });
+    }
 
     if (!guess || guess.length !== duel.len) {
       return socket.emit("duel.error", { message: `Vārdam jābūt ${duel.len} burtiem.` });
