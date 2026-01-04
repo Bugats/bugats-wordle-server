@@ -2488,6 +2488,40 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
 }
 
 // ======== AUTH ENDPOINTI ========
+const DEVICE_SIGNUP_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
+const DEVICE_SIGNUP_MAX = 1; // max konti 24h uz vienu deviceId
+
+function getDeviceIdFromReq(req) {
+  const h =
+    (req && req.headers && (req.headers["x-vz-device-id"] || req.headers["x-device-id"])) || "";
+  const b = req && req.body && (req.body.deviceId || req.body.deviceID || req.body.did);
+  const raw = typeof b === "string" && b.trim() ? b : typeof h === "string" ? h : "";
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  // vienkāršs, drošs formāts (UUID/slug)
+  if (s.length < 8 || s.length > 80) return "";
+  if (!/^[a-zA-Z0-9_-]+$/.test(s)) return "";
+  return s;
+}
+
+function countRecentSignupsForDeviceId(deviceId, now = Date.now()) {
+  if (!deviceId) return 0;
+  let n = 0;
+  for (const u of Object.values(USERS || {})) {
+    if (!u || typeof u !== "object") continue;
+    const createdAt = Number(u.createdAt) || 0;
+    if (!createdAt) continue;
+    if (now - createdAt > DEVICE_SIGNUP_WINDOW_MS) continue;
+    if (u.createdDeviceId && String(u.createdDeviceId) === deviceId) {
+      n++;
+      continue;
+    }
+    const ids = Array.isArray(u.deviceIds) ? u.deviceIds : [];
+    if (ids.includes(deviceId)) n++;
+  }
+  return n;
+}
+
 async function signupHandler(req, res) {
   const { username, password } = req.body || {};
   if (!username || !password) {
@@ -2506,12 +2540,27 @@ async function signupHandler(req, res) {
     return res.status(400).json({ message: "Šāds lietotājs jau eksistē" });
   }
 
+  // Anti-alt: 24h limits uz ierīci (deviceId)
+  const deviceId = getDeviceIdFromReq(req);
+  if (deviceId) {
+    const recent = countRecentSignupsForDeviceId(deviceId, Date.now());
+    if (recent >= DEVICE_SIGNUP_MAX) {
+      return res.status(429).json({
+        message: "No šīs ierīces pēdējo 24h laikā jau izveidots konts. Pamēģini vēlāk.",
+        code: "DEVICE_SIGNUP_LIMIT",
+      });
+    }
+  }
+
   const hash = await bcrypt.hash(password, 10);
   const now = Date.now();
 
   const user = {
     username: name,
     passwordHash: hash,
+    createdAt: now,
+    createdDeviceId: deviceId || null,
+    deviceIds: deviceId ? [deviceId] : [],
     xp: 0,
     score: 0,
     coins: 0,
@@ -2589,6 +2638,14 @@ async function loginHandler(req, res) {
 
   const ok = await bcrypt.compare(password, user.passwordHash || "");
   if (!ok) return res.status(400).json({ message: "Nepareiza parole" });
+
+  // Ierīces ID (ja ir) – uzkrājam pie user (noder nākotnē anti-abuse)
+  const deviceId = getDeviceIdFromReq(req);
+  if (deviceId) {
+    if (!Array.isArray(user.deviceIds)) user.deviceIds = [];
+    if (!user.deviceIds.includes(deviceId)) user.deviceIds.push(deviceId);
+    while (user.deviceIds.length > 5) user.deviceIds.shift();
+  }
 
   markActivity(user);
   ensureDailyMissions(user);
