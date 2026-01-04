@@ -3799,6 +3799,7 @@ io.on("connection", (socket) => {
         opponent: getDuelOpponent(duel, user.username),
         startedAt: duel.startedAt || null,
         expiresAt: duel.expiresAt || null,
+        serverNow: Date.now(),
         attemptsLeft: duel.attemptsLeft?.[user.username] ?? null,
         rowsUsed: duel.rowsUsed?.[user.username] ?? null,
         history: Array.isArray(duel.history?.[user.username]) ? duel.history[user.username] : [],
@@ -4138,6 +4139,7 @@ io.on("connection", (socket) => {
       len: duel.len,
       startedAt: duel.startedAt,
       expiresAt: duel.expiresAt,
+      serverNow: Date.now(),
     };
     if (s1) s1.emit("duel.start", { ...basePayload, opponent: p2 });
     if (s2) s2.emit("duel.start", { ...basePayload, opponent: p1 });
