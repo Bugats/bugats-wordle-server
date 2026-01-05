@@ -1170,10 +1170,19 @@ function ensureDailyMissions(user) {
     return clampInt(Math.floor((lvl - 1) / 7), 0, 5);
   }
 
+  // Misiju target “caps” (lai neuzģenerē neizpildāmas vai absurdi lielas misijas).
+  // Piemēri:
+  // - chest_open: var atvērt tikai 1x dienā
+  // - token_buys: lai nav paywall/absurdi targeti
+  // - reveal_used: lai nav pārāk daudz “spied ar pinceti”
+  const MISSION_TARGET_CAPS = {
+    chest_open: 1,
+    token_buys: 3,
+    reveal_used: 2,
+  };
+
   function scaleTarget(baseTarget, tier, type) {
     const b = Math.max(1, Math.floor(Number(baseTarget) || 1));
-    // Daily Chest var atvērt tikai 1x dienā, tāpēc šai misijai mērķis nekad nedrīkst pārsniegt 1.
-    if (type === "chest_open") return 1;
     // dažiem tipiem lēnāka skale, lai nebūtu absurdi
     const mult =
       type === "token_buys" || type === "reveal_used"
@@ -1181,7 +1190,11 @@ function ensureDailyMissions(user) {
         : type === "fast_wins" || type === "perfect_wins" || type === "duel_wins"
         ? 1 + tier * 0.35
         : 1 + tier * 0.45;
-    return Math.max(1, Math.round(b * mult));
+
+    let target = Math.max(1, Math.round(b * mult));
+    const cap = Number(MISSION_TARGET_CAPS[type]);
+    if (Number.isFinite(cap) && cap >= 1) target = Math.min(target, Math.floor(cap));
+    return target;
   }
 
   function scaleRewards(baseRewards, tier) {
@@ -1297,6 +1310,14 @@ function ensureDailyMissions(user) {
       return String(id || "").trim() || "unknown";
     };
 
+    const defByCodeOrType = (code, type) => {
+      const c = String(code || "");
+      const t = String(type || "");
+      return (
+        DAILY_MISSION_POOL.find((d) => d && (d.id === c || d.type === t || d.id === t)) || null
+      );
+    };
+
     for (const m of user.missions) {
       if (!m || typeof m !== "object") continue;
       if (!m.code) {
@@ -1307,13 +1328,33 @@ function ensureDailyMissions(user) {
         m.meta = {};
         changed = true;
       }
-      // Fix: neizpildāma misija — Daily Chest var atvērt tikai 1x dienā
-      if (m.type === "chest_open" && Number(m.target) > 1) {
-        m.target = 1;
-        // progress tiek turēts kā max value, tāpēc pietiek ar 1
-        if ((m.progress || 0) >= 1) m.isCompleted = true;
+
+      // Fix: target caps (neizpildāmi / pārāk lieli targeti)
+      const cap = Number(MISSION_TARGET_CAPS[m.type]);
+      const curTarget = Math.max(1, Math.floor(Number(m.target) || 1));
+      if (Number.isFinite(cap) && cap >= 1 && curTarget > cap) {
+        m.target = Math.floor(cap);
+
+        // title var saturēt {target} (reveal/tokenbuy). Pārrakstām to ar jauno target.
+        const def = defByCodeOrType(m.code, m.type);
+        if (def && def.title) {
+          const title = formatTitle(def.title, {
+            target: m.target,
+            sec: def.sec,
+            maxAttempts: def.maxAttempts,
+          });
+          m.title = title;
+
+          // meta saskaņošana (ja vajag)
+          if (def.sec != null) m.meta.sec = def.sec;
+          if (def.maxAttempts != null) m.meta.maxAttempts = def.maxAttempts;
+        }
+
+        // progress tiek turēts kā max value, tāpēc clampā pietiek ar jauno target
+        if ((m.progress || 0) >= m.target) m.isCompleted = true;
         changed = true;
       }
+
       if (typeof m.isCompleted !== "boolean") {
         m.isCompleted = (m.progress || 0) >= (m.target || 0);
         changed = true;
