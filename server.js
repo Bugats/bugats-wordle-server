@@ -1172,6 +1172,8 @@ function ensureDailyMissions(user) {
 
   function scaleTarget(baseTarget, tier, type) {
     const b = Math.max(1, Math.floor(Number(baseTarget) || 1));
+    // Daily Chest var atvērt tikai 1x dienā, tāpēc šai misijai mērķis nekad nedrīkst pārsniegt 1.
+    if (type === "chest_open") return 1;
     // dažiem tipiem lēnāka skale, lai nebūtu absurdi
     const mult =
       type === "token_buys" || type === "reveal_used"
@@ -1303,6 +1305,13 @@ function ensureDailyMissions(user) {
       }
       if (!m.meta || typeof m.meta !== "object") {
         m.meta = {};
+        changed = true;
+      }
+      // Fix: neizpildāma misija — Daily Chest var atvērt tikai 1x dienā
+      if (m.type === "chest_open" && Number(m.target) > 1) {
+        m.target = 1;
+        // progress tiek turēts kā max value, tāpēc pietiek ar 1
+        if ((m.progress || 0) >= 1) m.isCompleted = true;
         changed = true;
       }
       if (typeof m.isCompleted !== "boolean") {
