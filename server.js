@@ -2178,6 +2178,53 @@ function ensureDm(user) {
       if (!ks || ks.startsWith("[object")) delete user.dm.lastRead[k];
     }
   } catch {}
+
+  // Normalizācija: apvienojam thread/unread keyus case-insensitive, lai nav dubult-threadi ("Bugats" vs "bugats").
+  try {
+    const canonName = (name) => {
+      const raw = String(name || "").trim();
+      if (!raw) return "";
+      const key = findUserKeyCaseInsensitive(raw);
+      const u = key ? USERS[key] : null;
+      return (u && u.username) || raw;
+    };
+
+    // threads: pārliekam uz kanonisko key + merge
+    const newThreads = {};
+    for (const [k, arr] of Object.entries(user.dm.threads || {})) {
+      const ck = canonName(k);
+      if (!ck) continue;
+      const list = Array.isArray(arr) ? arr.filter(Boolean) : [];
+      if (!newThreads[ck]) newThreads[ck] = [];
+      newThreads[ck].push(...list);
+    }
+    // sakārtojam pēc ts un nogriežam limitu
+    for (const [k, arr] of Object.entries(newThreads)) {
+      arr.sort((a, b) => (Number(a?.ts) || 0) - (Number(b?.ts) || 0));
+      if (arr.length > DM_THREAD_MAX) newThreads[k] = arr.slice(-DM_THREAD_MAX);
+    }
+    user.dm.threads = newThreads;
+
+    // unread: apvienojam (sum) uz kanonisko key
+    const newUnread = {};
+    for (const [k, v] of Object.entries(user.dm.unread || {})) {
+      const ck = canonName(k);
+      if (!ck) continue;
+      newUnread[ck] = Math.max(0, Number(newUnread[ck]) || 0) + Math.max(0, Number(v) || 0);
+    }
+    user.dm.unread = newUnread;
+
+    // lastRead: ņemam max uz kanonisko key
+    const newLastRead = {};
+    for (const [k, v] of Object.entries(user.dm.lastRead || {})) {
+      const ck = canonName(k);
+      if (!ck) continue;
+      const ts = Math.max(0, Number(v) || 0);
+      newLastRead[ck] = Math.max(Number(newLastRead[ck]) || 0, ts);
+    }
+    user.dm.lastRead = newLastRead;
+  } catch {}
+
   return user.dm;
 }
 
@@ -2215,7 +2262,31 @@ function dmComputeUnread(dm) {
   const byUser = dm?.unread && typeof dm.unread === "object" ? dm.unread : {};
   let total = 0;
   for (const v of Object.values(byUser)) total += Math.max(0, Number(v) || 0);
-  return { total, byUser };
+  // bonus: dodam inbox preview (front-end var uzreiz uzbūvēt “Inbox” pēc refresh)
+  let threads = [];
+  try {
+    const th = dm?.threads && typeof dm.threads === "object" ? dm.threads : {};
+    const keys = new Set([...Object.keys(th), ...Object.keys(byUser)]);
+    for (const withUser of keys) {
+      const arr = Array.isArray(th?.[withUser]) ? th[withUser] : [];
+      const last = arr.length ? arr[arr.length - 1] : null;
+      threads.push({
+        with: withUser,
+        unread: Math.max(0, Number(byUser?.[withUser]) || 0),
+        lastTs: Number(last?.ts) || 0,
+        lastFrom: last?.from || "",
+        lastText: last?.text ? String(last.text).slice(0, 80) : "",
+      });
+    }
+    threads.sort(
+      (a, b) =>
+        (b.unread - a.unread) ||
+        (b.lastTs - a.lastTs) ||
+        String(a.with).localeCompare(String(b.with))
+    );
+    threads = threads.slice(0, 60);
+  } catch {}
+  return { total, byUser, threads };
 }
 
 function dmPushMessage(fromUser, toUser, text) {
