@@ -2328,39 +2328,54 @@ input:focus-visible {
   text-shadow: 0 1px 0 rgba(0,0,0,0.9) !important; /* ass, ne miglains */
   filter: none !important;
 }
-/* ===== LOGO: ELITE (override) ===== */
+/* ===== LOGO: NEON (override) ===== */
 .vz-logo-main{
   margin: 18px auto 10px;
   padding: 10px 0 18px;
 }
  
 .vz-logo-title{
-  font-weight: 1000;
-  letter-spacing: 0.52em;
+  font-weight: 900;
+  letter-spacing: 0.44em;
   text-transform: uppercase;
- 
-  /* elite: balts + silts zelts, minimāli */
   color: transparent;
-  background: linear-gradient(180deg,
-    #ffffff 0%,
-    #f7f3ea 38%,
-    #e7d7b5 68%,
-    #ffffff 100%
+  background: linear-gradient(90deg,
+    #ff2d8a 0%,
+    #ff005c 40%,
+    #7cf7ff 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
- 
-  -webkit-text-stroke: 1px rgba(0,0,0,0.88);
   text-shadow:
-    0 2px 0 rgba(0,0,0,0.92),
-    0 0 14px rgba(231,215,181,0.22),
-    0 0 28px rgba(0,0,0,0.55);
- 
+    0 0 6px rgba(255,45,138,0.75),
+    0 0 16px rgba(255,0,92,0.65),
+    0 0 26px rgba(124,247,255,0.55),
+    0 0 46px rgba(124,247,255,0.35);
   position: relative;
   display: inline-block;
+  animation: vzNeonPulse 4.6s ease-in-out infinite;
 }
  
-/* plāna “zelta” līnija zem logo */
+/* subtle neon sweep */
+.vz-logo-title::before{
+  content:"";
+  position:absolute;
+  inset:-6px -12px;
+  border-radius: 18px;
+  pointer-events:none;
+  background: linear-gradient(120deg,
+    transparent 0%,
+    rgba(124,247,255,0.28) 45%,
+    rgba(255,45,138,0.28) 50%,
+    rgba(124,247,255,0.22) 55%,
+    transparent 100%
+  );
+  transform: translateX(-120%) skewX(-12deg);
+  opacity: 0.6;
+  mix-blend-mode: screen;
+  animation: vzNeonSweep 7s ease-in-out infinite;
+}
+ 
 .vz-logo-main::after{
   content:"";
   position:absolute;
@@ -2372,50 +2387,49 @@ input:focus-visible {
   border-radius: 999px;
   background: linear-gradient(90deg,
     transparent,
-    rgba(231,215,181,0.95),
+    rgba(255,45,138,0.95),
+    rgba(124,247,255,0.95),
     transparent
   );
-  box-shadow: 0 0 16px rgba(231,215,181,0.28);
+  box-shadow: 0 0 16px rgba(255,45,138,0.35), 0 0 22px rgba(124,247,255,0.35);
   opacity: 0.95;
 }
  
-/* very subtle shine sweep */
-.vz-logo-title::before{
-  content:"";
-  position:absolute;
-  inset:-6px -12px;
-  border-radius: 18px;
-  pointer-events:none;
-  background: linear-gradient(120deg,
-    transparent 0%,
-    rgba(255,255,255,0.25) 45%,
-    rgba(231,215,181,0.22) 50%,
-    rgba(255,255,255,0.20) 55%,
-    transparent 100%
-  );
-  transform: translateX(-120%) skewX(-14deg);
-  opacity: 0.55;
-  mix-blend-mode: screen;
-  animation: vzEliteShine 6.5s ease-in-out infinite;
+@keyframes vzNeonSweep{
+  0%, 70% { transform: translateX(-120%) skewX(-12deg); opacity: 0; }
+  78%     { opacity: 0.6; }
+  100%    { transform: translateX(120%) skewX(-12deg); opacity: 0; }
 }
- 
-@keyframes vzEliteShine{
-  0%, 65% { transform: translateX(-120%) skewX(-14deg); opacity: 0; }
-  75%     { opacity: 0.55; }
-  100%    { transform: translateX(120%) skewX(-14deg); opacity: 0; }
+@keyframes vzNeonPulse{
+  0%, 100% {
+    text-shadow:
+      0 0 6px rgba(255,45,138,0.65),
+      0 0 16px rgba(255,0,92,0.55),
+      0 0 26px rgba(124,247,255,0.45),
+      0 0 40px rgba(124,247,255,0.28);
+  }
+  50% {
+    text-shadow:
+      0 0 8px rgba(255,45,138,0.9),
+      0 0 18px rgba(255,0,92,0.75),
+      0 0 30px rgba(124,247,255,0.7),
+      0 0 52px rgba(124,247,255,0.5);
+  }
 }
  
 .vz-logo-sub{
   margin-top: 10px;
-  font-weight: 900;
-  letter-spacing: 0.34em;
-  color: rgba(255,255,255,0.88);
-  text-shadow: 0 0 10px rgba(0,0,0,0.9);
+  font-weight: 800;
+  letter-spacing: 0.30em;
+  color: rgba(180, 235, 255, 0.92);
+  text-shadow: 0 0 10px rgba(0,0,0,0.9), 0 0 14px rgba(124,247,255,0.35);
 }
  
 /* reduced motion */
 @media (prefers-reduced-motion: reduce){
-  .vz-logo-title::before{ animation: none; display: none; }
+  .vz-logo-title,
+  .vz-logo-title::before{ animation: none; }
+  .vz-logo-title::before{ display: none; }
 }
  
 @media (max-width: 480px){
