@@ -268,6 +268,7 @@ const seasonStartBtn = $("#season-start-btn");
 
 // Profila karte
 const playerNameEl = $("#player-name");
+const playerTitleEl = $("#player-title");
 const playerRankEl = $("#player-rank");
 const playerXpEl = $("#player-xp");
 const playerScoreEl = $("#player-score");
@@ -387,6 +388,7 @@ const chatMentionPopupTextEl = document.getElementById("chat-mention-popup-text"
 const profilePopupEl = $("#player-profile-popup");
 const profileCloseBtn = $("#profile-popup-close");
 const ppUsernameEl = $("#pp-username");
+const ppTitleEl = $("#pp-title");
 const ppRankEl = $("#pp-rank");
 const ppXpEl = $("#pp-xp");
 const ppScoreEl = $("#pp-score");
@@ -705,6 +707,11 @@ function updatePlayerCard(me) {
     playerNameEl.textContent = me.username;
     applyNameTierClass(playerNameEl, me.rankLevel);
   }
+  if (playerTitleEl) {
+    const title = String(me.title || "").trim();
+    playerTitleEl.textContent = title || "—";
+    playerTitleEl.classList.toggle("vz-title-empty", !title);
+  }
 
   if (playerRankEl) playerRankEl.textContent = `${me.rankTitle} (L${me.rankLevel})`;
   applyRankColor(playerNameEl, me.rankColor);
@@ -804,6 +811,11 @@ function showPlayerProfile(data) {
   if (ppUsernameEl) {
     ppUsernameEl.textContent = data.username;
     applyNameTierClass(ppUsernameEl, data.rankLevel);
+  }
+  if (ppTitleEl) {
+    const title = String(data.title || "").trim();
+    ppTitleEl.textContent = title || "—";
+    ppTitleEl.classList.toggle("vz-title-empty", !title);
   }
   if (ppRankEl) ppRankEl.textContent = `${data.rankTitle} (L${data.rankLevel})`;
   applyRankColor(ppUsernameEl, data.rankColor);

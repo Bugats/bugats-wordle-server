@@ -47,6 +47,10 @@ const REVEAL_LETTER_COST_COINS = Number(
 );
 
 const BASE_TOKEN_PRICE = 150;
+const TITLE_MAX_LEN = (() => {
+  const v = parseInt(process.env.TITLE_MAX_LEN || "32", 10);
+  return Number.isFinite(v) && v >= 8 && v <= 64 ? v : 32;
+})();
 
 // ======== Season rollover: coins/tokens reset (ENV slēdzis) ========
 const RESET_COINS_TOKENS_ON_ROLLOVER =
@@ -103,6 +107,13 @@ function isAdminName(name) {
 }
 function isAdminUser(u) {
   return !!u && isAdminName(u.username);
+}
+function normalizeTitle(title) {
+  const cleaned = String(title || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) return "";
+  return cleaned.length > TITLE_MAX_LEN ? cleaned.slice(0, TITLE_MAX_LEN) : cleaned;
 }
 
 // ======== Laika zona ========
@@ -347,6 +358,10 @@ function loadUsers() {
 
       // Supporter flag
       if (typeof u.supporter !== "boolean") u.supporter = false;
+
+      // Tituls (cosmetic)
+      if (typeof u.title !== "string") u.title = "";
+      u.title = normalizeTitle(u.title);
 
       // Daily Chest
       if (!u.dailyChest || typeof u.dailyChest !== "object") u.dailyChest = {};
@@ -1970,6 +1985,7 @@ function buildMePayload(u) {
 
   return {
     username: u.username,
+    title: u.title || "",
     xp,
     score: u.score || 0,
     coins: u.coins || 0,
@@ -2379,7 +2395,10 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
     return;
   }
 
-  if (["ban", "unban", "kick", "mute", "unmute"].includes(cmd) && !targetName) {
+  if (
+    ["ban", "unban", "kick", "mute", "unmute", "title", "settitle"].includes(cmd) &&
+    !targetName
+  ) {
     adminSocket.emit("chatMessage", {
       username: "SYSTEM",
       text: "Norādi lietotājvārdu. Piem.: /kick Nick",
@@ -2480,6 +2499,31 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         `Admin ${adminUser.username} noņēma mute lietotājam ${target.username}.`
       );
       break;
+
+    case "title":
+    case "settitle": {
+      if (!target) {
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: `Lietotājs '${targetName}' nav atrasts.`,
+          ts: Date.now(),
+        });
+        return;
+      }
+      const titleRaw = parts.slice(2).join(" ");
+      const nextTitle = normalizeTitle(titleRaw);
+      target.title = nextTitle;
+      saveUsers(USERS);
+      broadcastOnlineList(true);
+      adminSocket.emit("chatMessage", {
+        username: "SYSTEM",
+        text: nextTitle
+          ? `OK: ${target.username} tituls = "${nextTitle}".`
+          : `OK: ${target.username} titulam noņemts.`,
+        ts: Date.now(),
+      });
+      break;
+    }
 
     case "seasonstart": {
       if (!isAdminUser(adminUser)) {
@@ -2620,7 +2664,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       adminSocket.emit("chatMessage", {
         username: "SYSTEM",
         text:
-          "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute, /seasonstart, /seasononline, /hofset <sid> <username> [score].",
+          "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute, /title <user> <tituls>, /seasonstart, /seasononline, /hofset <sid> <username> [score].",
         ts: Date.now(),
       });
   }
@@ -2775,6 +2819,7 @@ async function signupHandler(req, res) {
     revealUsedToday: 0,
     revealUsedTodayDate: "",
     avatarUrl: null,
+    title: "",
     supporter: false,
     dailyChest: { lastDate: "", streak: 0, totalOpens: 0 },
     specialMedals: [],
@@ -2929,6 +2974,7 @@ function buildPublicProfilePayload(targetUser, requester) {
 
   const payload = {
     username: targetUser.username,
+    title: targetUser.title || "",
     xp,
     score: targetUser.score || 0,
     coins: targetUser.coins || 0,

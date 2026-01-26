@@ -507,6 +507,17 @@ input:focus-visible {
   justify-content: space-between;
   margin: 1px 0;
 }
+.vz-title-row {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.78);
+}
+.vz-title-row .vz-title-value {
+  font-weight: 700;
+  color: #fff;
+}
+.vz-title-empty {
+  opacity: 0.6;
+}
 
 .vz-divider {
   border: none;
@@ -1497,6 +1508,16 @@ input:focus-visible {
 .vz-profile-popup-inner h3 {
   margin: 0 0 8px 0;
   font-size: 18px;
+  color: #ffffff;
+}
+.vz-profile-title {
+  margin: -4px 0 8px;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+}
+.vz-profile-title .vz-title-value {
+  font-weight: 700;
   color: #ffffff;
 }
 
