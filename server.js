@@ -32,6 +32,10 @@ const WORDS_FILE = path.join(__dirname, "words.txt");
 const SEASONS_FILE =
   process.env.SEASONS_FILE || path.join(__dirname, "seasons.json");
 
+// Static frontend (Render)
+const STATIC_DIR = process.env.STATIC_DIR || path.join(__dirname, "public");
+const STATIC_INDEX = path.join(STATIC_DIR, "index.html");
+
 // ====== Word config ======
 const MIN_WORD_LEN = 5;
 const MAX_WORD_LEN = 7;
@@ -2033,10 +2037,19 @@ app.use((err, req, res, next) => {
   return next(err);
 });
 
-// Health
-app.get("/", (_req, res) => res.send("VĀRDU ZONA OK"));
+const HAS_STATIC_INDEX = fs.existsSync(STATIC_INDEX);
+
+// Health / root
+app.get("/", (_req, res) => {
+  if (HAS_STATIC_INDEX) return res.sendFile(STATIC_INDEX);
+  return res.send("VĀRDU ZONA OK");
+});
 app.get("/health", (_req, res) => res.json({ ok: true }));
 app.post("/logout", (_req, res) => res.json({ ok: true }));
+
+if (HAS_STATIC_INDEX) {
+  app.use(express.static(STATIC_DIR));
+}
 
 // wheel state
 app.get("/wheel/state", (_req, res) => {

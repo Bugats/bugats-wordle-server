@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="lv">
+  <head>
+    <meta charset="UTF-8" />
+    <title>VĀRDU ZONA — Bugats edition</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="style.css" />
+
+    <!-- ĻOTI agrs redirect, ja jau esi ielogojies -->
+    <script>
+      (function () {
+        try {
+          const token = localStorage.getItem("vz_token");
+          const username = localStorage.getItem("vz_username");
+          if (token && username) {
+            // aizvieto lapu vēsturē, lai nav “atpakaļ” cilpa
+            window.location.replace("game.html");
+          }
+        } catch (e) {
+          console.error("Auto redirect kļūda:", e);
+        }
+      })();
+    </script>
+  </head>
+  <body class="auth-page-body">
+    <!-- ================= AUTH EKRĀNS ================= -->
+    <div id="auth-screen">
+      <div class="container">
+        <h1>VĀRDU ZONA</h1>
+        <p class="subtitle">
+          Ienāc ar savu lietotājvārdu vai izveido jaunu profilu.
+        </p>
+
+        <div class="form-block">
+          <h2>Reģistrācija</h2>
+          <form id="signup-form">
+            <label for="signup-username">Lietotājvārds</label>
+            <input
+              type="text"
+              id="signup-username"
+              autocomplete="username"
+              required
+            />
+            <label for="signup-password">Parole</label>
+            <input
+              type="password"
+              id="signup-password"
+              autocomplete="new-password"
+              required
+            />
+            <button type="submit" class="btn-primary">Reģistrēties</button>
+          </form>
+        </div>
+
+        <div class="form-block">
+          <h2>Pierakstīšanās</h2>
+          <form id="login-form">
+            <label for="login-username">Lietotājvārds</label>
+            <input
+              type="text"
+              id="login-username"
+              autocomplete="username"
+              required
+            />
+            <label for="login-password">Parole</label>
+            <input
+              type="password"
+              id="login-password"
+              autocomplete="current-password"
+              required
+            />
+            <button type="submit" class="btn-primary">Ienākt</button>
+          </form>
+        </div>
+
+        <div id="auth-error" class="error-message"></div>
+      </div>
+    </div>
+
+    <!-- ================= SCRIPTS ================= -->
+    <script src="auth.js"></script>
+  </body>
+</html>
