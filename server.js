@@ -2049,6 +2049,8 @@ app.post("/logout", (_req, res) => res.json({ ok: true }));
 
 if (HAS_STATIC_INDEX) {
   app.use(express.static(STATIC_DIR));
+  // Backward-compat for older /wordle URLs (Hostinger -> Render)
+  app.use("/wordle", express.static(STATIC_DIR));
 }
 
 // wheel state
