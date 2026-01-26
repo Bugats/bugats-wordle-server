@@ -1,0 +1,15 @@
+{
+  "packageId": "lv.thezone.wordle",
+  "host": "wordle.thezone.lv",
+  "name": "VARDU ZONA",
+  "launcherName": "VARDU ZONA",
+  "display": "standalone",
+  "orientation": "portrait",
+  "themeColor": "#0b0f2a",
+  "backgroundColor": "#0b0f2a",
+  "startUrl": "/",
+  "webManifestUrl": "https://wordle.thezone.lv/manifest.json",
+  "iconUrl": "https://wordle.thezone.lv/icon-maskable.svg",
+  "splashScreenFadeOutDuration": 300,
+  "enableNotifications": false
+}

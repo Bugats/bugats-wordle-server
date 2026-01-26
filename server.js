@@ -2067,6 +2067,11 @@ if (HAS_STATIC_INDEX) {
   app.use(express.static(STATIC_DIR));
   // Backward-compat for older /wordle URLs (Hostinger -> Render)
   app.use("/wordle", express.static(STATIC_DIR));
+  // Allow serving /.well-known (assetlinks.json) for TWA verification
+  app.use(
+    "/.well-known",
+    express.static(path.join(STATIC_DIR, ".well-known"), { dotfiles: "allow" })
+  );
 }
 
 // wheel state

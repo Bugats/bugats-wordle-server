@@ -1,0 +1,25 @@
+{
+  "name": "VARDU ZONA",
+  "short_name": "VARDU ZONA",
+  "description": "Latvian word guessing game with ranks, missions, and duels.",
+  "lang": "lv",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0f2a",
+  "theme_color": "#0b0f2a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
