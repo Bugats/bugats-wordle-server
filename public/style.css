@@ -2335,9 +2335,11 @@ input:focus-visible {
 }
  
 .vz-logo-title{
-  font-weight: 900;
-  letter-spacing: 0.44em;
+  font-family: "Rubik Spray Paint", "Permanent Marker", "Arial Black", sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
+  line-height: 1.05;
   color: transparent;
   background: linear-gradient(90deg,
     #ff2d8a 0%,
@@ -2433,7 +2435,7 @@ input:focus-visible {
 }
  
 @media (max-width: 480px){
-  .vz-logo-title{ letter-spacing: 0.34em; }
+  .vz-logo-title{ letter-spacing: 0.12em; }
   .vz-logo-sub{ letter-spacing: 0.22em; }
 }
 /* ===== MOBILE/FULLSCREEN: nekas netraucē režģim + klaviatūrai ===== */
