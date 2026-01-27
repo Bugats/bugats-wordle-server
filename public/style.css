@@ -2627,8 +2627,21 @@ input:focus-visible {
   display: inline-block;
 }
  
-.vz-logo-title::before{
-  content: none;
+.vz-logo-title::after{
+  content: attr(data-text);
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: -1;
+  color: #8b6c42;
+  text-shadow:
+    1px 1px 0 #8b6c42,
+    2px 2px 0 #7a5c37,
+    3px 3px 0 #6a4f30,
+    4px 4px 0 #5a432a,
+    5px 5px 0 #4a3723,
+    6px 6px 12px rgba(0,0,0,0.65);
+  transform: translate(2px, 2px);
 }
  
 .vz-logo-main::after{
