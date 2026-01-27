@@ -848,6 +848,45 @@ input:focus-visible {
   box-shadow: 0 0 12px rgba(124, 247, 255, 0.45);
   transition: width 220ms ease;
 }
+.vz-region-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.vz-region-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+.vz-region-action-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-weight: 700;
+  cursor: pointer;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
+  transition: transform 0.1s ease, filter 0.1s ease;
+}
+.vz-region-action-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.vz-region-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.vz-region-action-danger {
+  background: rgba(255, 87, 87, 0.2);
+  border: 1px solid rgba(255, 87, 87, 0.35);
+}
+.vz-region-action-select {
+  min-width: 140px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 12px;
+}
 .vz-region-list {
   list-style: none;
   padding-left: 0;

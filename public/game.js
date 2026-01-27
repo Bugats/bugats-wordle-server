@@ -205,6 +205,7 @@ const state = {
   token: null,
   username: null,
   region: "",
+  regionPoints: 0,
 // DM (privāts čats)
   dmOpenWith: null,
   dmThreads: new Map(), // username -> [{id,from,to,text,ts}]
@@ -419,6 +420,10 @@ const regionModalBtns = regionModalEl
 // Novadu sacīkste UI
 const regionTotalScoreEl = document.getElementById("region-total-score");
 const regionTotalFillEl = document.getElementById("region-total-fill");
+const regionPointsEl = document.getElementById("region-points");
+const regionBoostBtn = document.getElementById("region-boost-btn");
+const regionAttackBtn = document.getElementById("region-attack-btn");
+const regionAttackSelect = document.getElementById("region-attack-target");
 
 // Audio MP3
 const sClick = $("#s-click");
@@ -733,6 +738,70 @@ function buildRegionBadge(region, extraClass = "") {
   return badge;
 }
 
+function renderRegionAttackOptions(currentRegion) {
+  if (!regionAttackSelect) return;
+  regionAttackSelect.innerHTML = "";
+  const regions = Object.keys(REGION_META);
+  regions.forEach((r) => {
+    if (r === currentRegion) return;
+    const opt = document.createElement("option");
+    opt.value = r;
+    opt.textContent = r;
+    regionAttackSelect.appendChild(opt);
+  });
+  if (!regionAttackSelect.options.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Nav pretinieku";
+    regionAttackSelect.appendChild(opt);
+  }
+}
+
+function updateRegionPointsUi(points, region) {
+  const p = Math.max(0, Math.floor(points || 0));
+  state.regionPoints = p;
+  if (regionPointsEl) regionPointsEl.textContent = String(p);
+  if (regionAttackSelect && region) renderRegionAttackOptions(region);
+  const canSpend = p > 0;
+  if (regionBoostBtn) regionBoostBtn.disabled = !canSpend;
+  if (regionAttackBtn) {
+    const target = regionAttackSelect ? regionAttackSelect.value : "";
+    regionAttackBtn.disabled = !canSpend || !target;
+  }
+}
+
+async function handleRegionBoost() {
+  if (!state.token) return;
+  if (state.regionPoints <= 0) return;
+  if (regionBoostBtn) regionBoostBtn.disabled = true;
+  try {
+    const data = await apiPost("/region/boost", { amount: 1 });
+    if (data?.me) updatePlayerCard(data.me);
+    await refreshRegionStats();
+  } catch (err) {
+    appendSystemMessage(err.message || "Neizdevās pieskaitīt novadam.");
+  } finally {
+    if (regionBoostBtn) regionBoostBtn.disabled = false;
+  }
+}
+
+async function handleRegionAttack() {
+  if (!state.token) return;
+  if (state.regionPoints <= 0) return;
+  const target = regionAttackSelect ? regionAttackSelect.value : "";
+  if (!target) return;
+  if (regionAttackBtn) regionAttackBtn.disabled = true;
+  try {
+    const data = await apiPost("/region/attack", { region: target, amount: 1 });
+    if (data?.me) updatePlayerCard(data.me);
+    await refreshRegionStats();
+  } catch (err) {
+    appendSystemMessage(err.message || "Neizdevās noņemt pretiniekam.");
+  } finally {
+    if (regionAttackBtn) regionAttackBtn.disabled = false;
+  }
+}
+
 function updatePlayerCard(me) {
   if (!me) return;
 
@@ -751,6 +820,7 @@ function updatePlayerCard(me) {
     playerTitleEl.textContent = title || "—";
     playerTitleEl.classList.toggle("vz-title-empty", !title);
   }
+  updateRegionPointsUi(me.regionPoints || 0, me.region || "");
 
   if (playerRankEl) playerRankEl.textContent = `${me.rankTitle} (L${me.rankLevel})`;
   applyRankColor(playerNameEl, me.rankColor);
@@ -873,6 +943,16 @@ function bindRegionModal() {
       setRegionChoice(region);
     });
   });
+}
+
+function bindRegionActions() {
+  if (regionBoostBtn) regionBoostBtn.addEventListener("click", handleRegionBoost);
+  if (regionAttackBtn) regionAttackBtn.addEventListener("click", handleRegionAttack);
+  if (regionAttackSelect) {
+    regionAttackSelect.addEventListener("change", () => {
+      updateRegionPointsUi(state.regionPoints, state.region);
+    });
+  }
 }
 
 async function refreshRegionStats() {
@@ -4711,6 +4791,7 @@ setTimeout(() => {
   });
 
   bindRegionModal();
+  bindRegionActions();
 
   try {
     const me = await apiGet("/me");

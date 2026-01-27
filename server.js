@@ -54,6 +54,14 @@ const TITLE_MAX_LEN = (() => {
 
 const REGION_NAMES = ["Zemgale", "Latgale", "Vidzeme", "Kurzeme"];
 const REGION_MAP = new Map(REGION_NAMES.map((n) => [n.toLowerCase(), n]));
+const REGION_POINTS_PER_WIN = (() => {
+  const v = parseInt(process.env.REGION_POINTS_PER_WIN || "1", 10);
+  return Number.isFinite(v) && v >= 0 && v <= 50 ? v : 1;
+})();
+const REGION_POINTS_MAX_ACTION = (() => {
+  const v = parseInt(process.env.REGION_POINTS_MAX_ACTION || "10", 10);
+  return Number.isFinite(v) && v >= 1 && v <= 100 ? v : 10;
+})();
 
 // ======== Season rollover: coins/tokens reset (ENV slēdzis) ========
 const RESET_COINS_TOKENS_ON_ROLLOVER =
@@ -121,6 +129,11 @@ function normalizeTitle(title) {
 function normalizeRegion(region) {
   const key = String(region || "").trim().toLowerCase();
   return REGION_MAP.get(key) || "";
+}
+function clampInt(n, lo, hi, fallback = lo) {
+  const x = Math.floor(Number(n));
+  if (!Number.isFinite(x)) return fallback;
+  return Math.max(lo, Math.min(hi, x));
 }
 
 // ======== Laika zona ========
@@ -373,6 +386,24 @@ function loadUsers() {
       // Novads (klan)
       if (typeof u.region !== "string") u.region = "";
       u.region = normalizeRegion(u.region);
+      if (!Number.isFinite(u.regionPoints)) u.regionPoints = 0;
+      if (!Number.isFinite(u.regionBoost)) u.regionBoost = 0;
+      u.regionPoints = Math.max(0, Math.floor(u.regionPoints));
+      u.regionBoost = Math.max(0, Math.floor(u.regionBoost));
+      if (!u.regionAttacks || typeof u.regionAttacks !== "object") u.regionAttacks = {};
+      try {
+        const cleaned = {};
+        for (const [k, v] of Object.entries(u.regionAttacks || {})) {
+          const rk = normalizeRegion(k);
+          if (!rk) continue;
+          const val = Math.max(0, Math.floor(Number(v) || 0));
+          if (!val) continue;
+          cleaned[rk] = (cleaned[rk] || 0) + val;
+        }
+        u.regionAttacks = cleaned;
+      } catch {
+        u.regionAttacks = {};
+      }
 
       // Daily Chest
       if (!u.dailyChest || typeof u.dailyChest !== "object") u.dailyChest = {};
@@ -1998,6 +2029,7 @@ function buildMePayload(u) {
     username: u.username,
     title: u.title || "",
     region: u.region || "",
+    regionPoints: Math.max(0, Math.floor(u.regionPoints || 0)),
     xp,
     score: u.score || 0,
     coins: u.coins || 0,
@@ -2189,25 +2221,41 @@ function computeRegionStats() {
     xp: 0,
   }));
   const byRegion = new Map(base.map((r) => [r.region, r]));
+  const attacks = new Map(REGION_NAMES.map((r) => [r, 0]));
 
   for (const u of Object.values(USERS || {})) {
     if (!u || !u.username || u.isBanned) continue;
     const region = normalizeRegion(u.region);
-    if (!region) continue;
-    const row = byRegion.get(region);
-    if (!row) continue;
-    row.players += 1;
-    row.score += Number(u.score || 0);
-    row.xp += Number(u.xp || 0);
+    if (region) {
+      const row = byRegion.get(region);
+      if (row) {
+        row.players += 1;
+        row.score += Number(u.score || 0) + Math.max(0, Number(u.regionBoost || 0));
+        row.xp += Number(u.xp || 0);
+      }
+    }
+    if (u.regionAttacks && typeof u.regionAttacks === "object") {
+      for (const [k, v] of Object.entries(u.regionAttacks)) {
+        const rk = normalizeRegion(k);
+        if (!rk) continue;
+        const val = Math.max(0, Math.floor(Number(v) || 0));
+        if (!val) continue;
+        attacks.set(rk, (attacks.get(rk) || 0) + val);
+      }
+    }
   }
 
-  const out = base.map((r) => ({
-    region: r.region,
-    players: r.players,
-    score: r.score,
-    xp: r.xp,
-    avgScore: r.players ? Math.round((r.score / r.players) * 10) / 10 : 0,
-  }));
+  const out = base.map((r) => {
+    const attacked = attacks.get(r.region) || 0;
+    const score = Math.max(0, r.score - attacked);
+    return {
+      region: r.region,
+      players: r.players,
+      score,
+      xp: r.xp,
+      avgScore: r.players ? Math.round((score / r.players) * 10) / 10 : 0,
+    };
+  });
 
   out.sort((a, b) => {
     const ds = (b.score || 0) - (a.score || 0);
@@ -2915,6 +2963,9 @@ async function signupHandler(req, res) {
     avatarUrl: null,
     title: "",
     region: canonRegion,
+    regionPoints: 0,
+    regionBoost: 0,
+    regionAttacks: {},
     supporter: false,
     dailyChest: { lastDate: "", streak: 0, totalOpens: 0 },
     specialMedals: [],
@@ -3675,6 +3726,9 @@ app.post("/guess", authMiddleware, (req, res) => {
     user.xp = (user.xp || 0) + xpGain;
     user.score = (user.score || 0) + SCORE_PER_WIN;
     user.coins = (user.coins || 0) + coinsGain;
+    if (REGION_POINTS_PER_WIN > 0) {
+      user.regionPoints = Math.max(0, Math.floor(user.regionPoints || 0)) + REGION_POINTS_PER_WIN;
+    }
 
     user.bestStreak = Math.max(user.bestStreak || 0, user.streak || 0);
 
@@ -3781,6 +3835,40 @@ app.post("/region", authMiddleware, (req, res) => {
   user.region = region;
   saveUsers(USERS);
   broadcastOnlineList(true);
+  res.json({ ok: true, me: buildMePayload(user) });
+});
+
+app.post("/region/boost", authMiddleware, (req, res) => {
+  const user = req.user;
+  const amount = clampInt(req.body?.amount, 1, REGION_POINTS_MAX_ACTION, 1);
+  const points = Math.max(0, Math.floor(user.regionPoints || 0));
+  if (points < amount) {
+    return res.status(400).json({ message: "Nepietiek novada punktu." });
+  }
+  user.regionPoints = points - amount;
+  user.regionBoost = Math.max(0, Math.floor(user.regionBoost || 0)) + amount;
+  saveUsers(USERS);
+  res.json({ ok: true, me: buildMePayload(user) });
+});
+
+app.post("/region/attack", authMiddleware, (req, res) => {
+  const user = req.user;
+  const target = normalizeRegion(req.body?.region);
+  if (!target) {
+    return res.status(400).json({ message: "Izvēlies pretinieka novadu." });
+  }
+  if (user.region && target === user.region) {
+    return res.status(400).json({ message: "Nevari uzbrukt savam novadam." });
+  }
+  const amount = clampInt(req.body?.amount, 1, REGION_POINTS_MAX_ACTION, 1);
+  const points = Math.max(0, Math.floor(user.regionPoints || 0));
+  if (points < amount) {
+    return res.status(400).json({ message: "Nepietiek novada punktu." });
+  }
+  user.regionPoints = points - amount;
+  if (!user.regionAttacks || typeof user.regionAttacks !== "object") user.regionAttacks = {};
+  user.regionAttacks[target] = (Number(user.regionAttacks[target]) || 0) + amount;
+  saveUsers(USERS);
   res.json({ ok: true, me: buildMePayload(user) });
 });
 
