@@ -833,10 +833,75 @@ input:focus-visible {
   height: 16px;
   font-size: 9px;
 }
-.vz-region-zemgale { background: #4caf50; }
-.vz-region-latgale { background: #7c4dff; color: #f5f5f5; }
-.vz-region-vidzeme { background: #29b6f6; }
-.vz-region-kurzeme { background: #ffb74d; }
+.vz-region-zemgale { background: #4caf50; fill: #4caf50; --region-glow: rgba(76, 175, 80, 0.75); }
+.vz-region-latgale { background: #7c4dff; fill: #7c4dff; color: #f5f5f5; --region-glow: rgba(124, 77, 255, 0.8); }
+.vz-region-vidzeme { background: #29b6f6; fill: #29b6f6; --region-glow: rgba(41, 182, 246, 0.8); }
+.vz-region-kurzeme { background: #ffb74d; fill: #ffb74d; --region-glow: rgba(255, 183, 77, 0.8); }
+
+/* ===== NOVADI (TOP) ===== */
+.vz-region-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 2px 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+}
+.vz-region-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+.vz-region-place { width: 22px; text-align: right; font-weight: 600; }
+.vz-region-name { font-weight: 700; }
+.vz-region-meta { opacity: 0.7; font-size: 0.85em; }
+.vz-region-score { margin-left: auto; opacity: 0.9; font-size: 0.9em; }
+.vz-region-item.vz-region-self {
+  color: #b3e5fc;
+  text-shadow: 0 0 6px rgba(0, 188, 212, 1), 0 0 10px rgba(0, 0, 0, 0.95);
+}
+
+/* ===== LATVIJAS KARTE ===== */
+.vz-map-card {
+  margin-top: 10px;
+  padding: 10px 12px 12px;
+  background: rgba(12, 14, 24, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 8px;
+  box-shadow: 0 0 16px rgba(0, 0, 0, 0.9), 0 0 16px rgba(0, 0, 0, 0.8);
+}
+.vz-map-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 6px 0 8px;
+}
+#region-map {
+  width: min(440px, 95%);
+  height: auto;
+}
+.vz-map-outline {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.35);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.5));
+}
+.vz-region-shape {
+  stroke: rgba(255, 255, 255, 0.6);
+  stroke-width: 2;
+  opacity: 0.3;
+  --power: 0;
+  filter: drop-shadow(0 0 calc(4px + 12px * var(--power)) var(--region-glow, rgba(255,255,255,0.3)));
+  transition: opacity 160ms ease, filter 160ms ease;
+}
+.vz-map-label {
+  font-size: 16px;
+  font-weight: 900;
+  fill: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
 
 .vz-online-avatar,
 .vz-chat-avatar {
@@ -2260,6 +2325,7 @@ input:focus-visible {
   .vz-left-area, .vz-right-area { max-width: 100%; flex: 1 1 auto; }
   .vz-top-panels { justify-content: center; }
   .vz-player-card, .vz-leaderboard-card, .vz-online-card, .vz-missions-card, .vz-support-card, .vz-radio-card { max-width: 100%; }
+  .vz-region-list { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 768px) {
@@ -2591,6 +2657,7 @@ body.vz-mobile-game-only .vz-logo-title::before{
 body.vz-mobile-game-only .vz-topbar,
 body.vz-mobile-game-only .vz-logo-main,
 body.vz-mobile-game-only .vz-left-area .vz-player-card,
+body.vz-mobile-game-only .vz-left-area .vz-map-card,
 body.vz-mobile-game-only .vz-left-area .vz-season-box,
 body.vz-mobile-game-only .vz-left-area #hof-box,
 body.vz-mobile-game-only .vz-right-area,

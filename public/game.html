@@ -118,6 +118,51 @@
 
           <div id="keyboard" class="vz-keyboard"></div>
 
+          <div class="vz-map-card" id="region-map-card">
+            <div class="vz-card-header">Latvijas karte</div>
+            <div class="vz-map-wrap">
+              <svg id="region-map" viewBox="0 0 400 240" role="img" aria-label="Latvijas novadu karte">
+                <path
+                  class="vz-map-outline"
+                  d="M20 45 L130 20 L260 15 L310 70 L370 130 L320 200 L140 205 L60 190 L10 115 Z"
+                />
+                <polygon
+                  id="map-kurzeme"
+                  class="vz-region-shape vz-region-kurzeme"
+                  points="20,45 130,20 160,70 120,140 40,160 10,115"
+                >
+                  <title>Kurzeme</title>
+                </polygon>
+                <polygon
+                  id="map-vidzeme"
+                  class="vz-region-shape vz-region-vidzeme"
+                  points="130,20 260,15 310,70 230,95 160,70"
+                >
+                  <title>Vidzeme</title>
+                </polygon>
+                <polygon
+                  id="map-latgale"
+                  class="vz-region-shape vz-region-latgale"
+                  points="230,95 310,70 370,130 320,200 240,185 210,140"
+                >
+                  <title>Latgale</title>
+                </polygon>
+                <polygon
+                  id="map-zemgale"
+                  class="vz-region-shape vz-region-zemgale"
+                  points="120,140 160,70 230,95 210,140 240,185 140,205 60,190 40,160"
+                >
+                  <title>Zemgale</title>
+                </polygon>
+                <text class="vz-map-label" x="85" y="115">K</text>
+                <text class="vz-map-label" x="210" y="70">V</text>
+                <text class="vz-map-label" x="305" y="150">L</text>
+                <text class="vz-map-label" x="165" y="175">Z</text>
+              </svg>
+            </div>
+            <ul id="region-list" class="vz-region-list"></ul>
+          </div>
+
           <div class="vz-bottom-buttons">
             <button id="new-round-btn" type="button" style="display: none">Jauns raunds</button>
             <button id="logout-btn" type="button">Izlogoties</button>
@@ -181,12 +226,6 @@
             <div class="vz-leaderboard-card">
               <div class="vz-card-header">TOP 10 spēlētāji</div>
               <ol id="lb-list" class="vz-lb-list"></ol>
-            </div>
-
-            <!-- NOVADU TOP -->
-            <div class="vz-leaderboard-card" id="region-box">
-              <div class="vz-card-header">Novadu TOP</div>
-              <ul id="region-list" class="vz-region-list"></ul>
             </div>
 
             <!-- HALL OF FAME -->

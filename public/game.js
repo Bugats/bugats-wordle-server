@@ -415,6 +415,15 @@ const regionModalBtns = regionModalEl
   ? Array.from(regionModalEl.querySelectorAll("[data-region]"))
   : [];
 
+// Karte
+const regionMapEl = document.getElementById("region-map");
+const regionShapeEls = {
+  Zemgale: document.getElementById("map-zemgale"),
+  Latgale: document.getElementById("map-latgale"),
+  Vidzeme: document.getElementById("map-vidzeme"),
+  Kurzeme: document.getElementById("map-kurzeme"),
+};
+
 // Audio MP3
 const sClick = $("#s-click");
 const sType = $("#s-type");
@@ -902,9 +911,34 @@ async function refreshRegionStats() {
 
       regionListEl.appendChild(li);
     });
+    updateRegionMap(list);
   } catch (err) {
     console.error("Novadu stats kļūda:", err);
   }
+}
+
+function updateRegionMap(list) {
+  if (!regionMapEl) return;
+  const scores = new Map();
+  let total = 0;
+  list.forEach((item) => {
+    const score = Number(item?.score || 0);
+    scores.set(item.region, score);
+    total += score;
+  });
+
+  Object.entries(regionShapeEls).forEach(([region, el]) => {
+    if (!el) return;
+    const score = scores.get(region) || 0;
+    const ratio = total > 0 ? Math.max(0, Math.min(1, score / total)) : 0;
+    const opacity = 0.25 + ratio * 0.75;
+    el.style.opacity = opacity.toFixed(3);
+    el.style.setProperty("--power", ratio.toFixed(3));
+    const titleEl = el.querySelector("title");
+    if (titleEl) {
+      titleEl.textContent = `${region} — ${score} p. (${Math.round(ratio * 100)}%)`;
+    }
+  });
 }
 
 async function runPostLoginInit() {
