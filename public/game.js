@@ -222,6 +222,10 @@ const state = {
   dmNotifyOn: true,
   dmLastFrom: null,
   dmInboxPreview: [], // servera inbox preview (no dm.unread)
+  dmReply: null, // { id, from, text }
+  dmEdit: null, // { id, text }
+  dmPeerRead: {}, // username -> ts (peer last read)
+  dmTypingByUser: {}, // username -> bool
   rows: 6,
   cols: 5,
   currentRow: 0,
@@ -2557,6 +2561,8 @@ function clearUnreadIfNeeded() {
   }
 }
 // ==================== DM (privāts čats) UI + loģika ====================
+let dmTypingLastSent = 0;
+let dmTypingStopTimer = null;
 function ensureDmUi() {
   if (document.getElementById("vz-dm-fab")) return;
  
@@ -2695,6 +2701,45 @@ header.appendChild(del);
   msgs.style.flexDirection = "column";
   msgs.style.gap = "8px";
  
+  const contextBar = document.createElement("div");
+  contextBar.id = "vz-dm-context";
+  contextBar.style.display = "none";
+  contextBar.style.alignItems = "center";
+  contextBar.style.justifyContent = "space-between";
+  contextBar.style.gap = "8px";
+  contextBar.style.padding = "6px 12px";
+  contextBar.style.borderTop = "1px solid rgba(255,255,255,0.08)";
+  contextBar.style.background = "rgba(255,255,255,0.04)";
+
+  const contextText = document.createElement("div");
+  contextText.id = "vz-dm-context-text";
+  contextText.style.fontSize = "12px";
+  contextText.style.opacity = "0.85";
+  contextText.style.whiteSpace = "nowrap";
+  contextText.style.overflow = "hidden";
+  contextText.style.textOverflow = "ellipsis";
+
+  const contextClose = document.createElement("button");
+  contextClose.type = "button";
+  contextClose.textContent = "✕";
+  contextClose.style.width = "26px";
+  contextClose.style.height = "26px";
+  contextClose.style.borderRadius = "8px";
+  contextClose.style.border = "1px solid rgba(255,255,255,0.12)";
+  contextClose.style.background = "rgba(255,255,255,0.06)";
+  contextClose.style.color = "#fff";
+  contextClose.addEventListener("click", () => dmClearContext());
+
+  contextBar.appendChild(contextText);
+  contextBar.appendChild(contextClose);
+
+  const typingBar = document.createElement("div");
+  typingBar.id = "vz-dm-typing";
+  typingBar.style.display = "none";
+  typingBar.style.padding = "0 12px 8px";
+  typingBar.style.fontSize = "12px";
+  typingBar.style.opacity = "0.8";
+
   const inputRow = document.createElement("div");
   inputRow.id = "vz-dm-input-row";
   inputRow.style.display = "flex";
@@ -2713,6 +2758,7 @@ header.appendChild(del);
   inp.style.border = "1px solid rgba(255,255,255,0.14)";
   inp.style.background = "rgba(255,255,255,0.06)";
   inp.style.color = "#fff";
+  inp.addEventListener("input", () => dmHandleTypingInput());
   inp.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -2722,6 +2768,7 @@ header.appendChild(del);
       dmClose();
     }
   });
+  inp.addEventListener("blur", () => dmSendTyping(false));
  
   const send = document.createElement("button");
   send.id = "vz-dm-send";
@@ -2740,6 +2787,8 @@ header.appendChild(del);
  
   drawer.appendChild(header);
   drawer.appendChild(msgs);
+  drawer.appendChild(contextBar);
+  drawer.appendChild(typingBar);
   drawer.appendChild(inputRow);
  
   // Toast
@@ -2804,6 +2853,8 @@ try {
 function dmClose() {
   const drawer = document.getElementById("vz-dm-drawer");
   if (drawer) drawer.style.display = "none";
+  dmSendTyping(false);
+  dmClearContext();
 }
  
 function dmSetBadge(total, byUser) {
@@ -2856,6 +2907,92 @@ function dmToast(text, fromUser) {
   }, 3200);
 }
  
+function dmUpdateContextBar() {
+  const bar = document.getElementById("vz-dm-context");
+  const text = document.getElementById("vz-dm-context-text");
+  if (!bar || !text) return;
+
+  if (state.dmEdit) {
+    const preview = String(state.dmEdit.text || "").slice(0, 80);
+    text.textContent = `Rediģē: ${preview || "—"}`;
+    bar.style.display = "flex";
+    return;
+  }
+
+  if (state.dmReply) {
+    const preview = String(state.dmReply.text || "").slice(0, 80);
+    const who = String(state.dmReply.from || "");
+    text.textContent = `Atbilde ${who}: ${preview || "—"}`;
+    bar.style.display = "flex";
+    return;
+  }
+
+  bar.style.display = "none";
+  text.textContent = "";
+}
+
+function dmClearContext() {
+  state.dmEdit = null;
+  state.dmReply = null;
+  dmUpdateContextBar();
+}
+
+function dmSetReply(msg) {
+  if (!msg) return;
+  state.dmEdit = null;
+  state.dmReply = {
+    id: String(msg.id || ""),
+    from: String(msg.from || ""),
+    text: msg.deleted ? "Ziņa dzēsta" : String(msg.text || ""),
+  };
+  dmUpdateContextBar();
+}
+
+function dmSetEdit(msg) {
+  if (!msg) return;
+  state.dmReply = null;
+  state.dmEdit = {
+    id: String(msg.id || ""),
+    text: msg.deleted ? "" : String(msg.text || ""),
+  };
+  dmUpdateContextBar();
+  const inp = document.getElementById("vz-dm-input");
+  if (inp) {
+    inp.value = state.dmEdit.text || "";
+    try { inp.focus(); } catch {}
+  }
+}
+
+function dmSendTyping(typing) {
+  if (!state.socket || !state.dmOpenWith) return;
+  state.socket.emit("dm.typing", { with: state.dmOpenWith, typing: !!typing });
+}
+
+function dmHandleTypingInput() {
+  if (!state.socket || !state.dmOpenWith) return;
+  const now = Date.now();
+  if (now - dmTypingLastSent > 800) {
+    dmSendTyping(true);
+    dmTypingLastSent = now;
+  }
+  if (dmTypingStopTimer) clearTimeout(dmTypingStopTimer);
+  dmTypingStopTimer = setTimeout(() => dmSendTyping(false), 1400);
+}
+
+function dmUpdateTypingIndicator() {
+  const bar = document.getElementById("vz-dm-typing");
+  if (!bar) return;
+  const u = String(state.dmOpenWith || "").trim();
+  const typing = !!(u && state.dmTypingByUser && state.dmTypingByUser[u]);
+  if (!typing) {
+    bar.style.display = "none";
+    bar.textContent = "";
+    return;
+  }
+  bar.textContent = `${u} raksta…`;
+  bar.style.display = "block";
+}
+
 function dmGetThread(withUser) {
   const key = String(withUser || "").trim();
   if (!key) return [];
@@ -2893,93 +3030,173 @@ function dmRenderThread(withUser) {
   box.appendChild(topBar);
  
   const thread = dmGetThread(withUser);
+  const peerReadTs = Math.max(0, Number(state.dmPeerRead?.[withUser]) || 0);
+  const lastMy = [...thread].reverse().find((m) => m && m.from === state.username && !m.deleted);
+  const lastMyId = lastMy ? String(lastMy.id || "") : "";
  
   thread.forEach((m) => {
-  const isMe = m.from === state.username;
- 
-  const row = document.createElement("div");
-  row.style.display = "flex";
-  row.style.alignItems = "flex-end";
-  row.style.gap = "8px";
-  row.style.justifyContent = isMe ? "flex-end" : "flex-start";
- 
-  // Avatārs tikai otrai pusei (lai nav spam)
-  if (!isMe) {
-    const avatarWrap = document.createElement("div");
-    avatarWrap.style.width = "28px";
-    avatarWrap.style.height = "28px";
-    avatarWrap.style.borderRadius = "10px";
-    avatarWrap.style.overflow = "hidden";
-    avatarWrap.style.flex = "0 0 28px";
-    avatarWrap.style.border = "1px solid rgba(255,255,255,0.10)";
- 
-    const img = document.createElement("img");
-    img.style.width = "100%";
-    img.style.height = "100%";
-    img.style.objectFit = "cover";
-    img.style.display = "none";
- 
-    const init = document.createElement("div");
-    init.style.width = "100%";
-    init.style.height = "100%";
-    init.style.display = "flex";
-    init.style.alignItems = "center";
-    init.style.justifyContent = "center";
-    init.style.fontWeight = "900";
-    init.style.color = "#fff";
-    init.style.background = "rgba(255,255,255,0.06)";
- 
-    avatarWrap.appendChild(img);
-    avatarWrap.appendChild(init);
- 
-    applyMiniAvatar(m.from, img, init);
-    row.appendChild(avatarWrap);
-  }
- 
-  const col = document.createElement("div");
-  col.style.display = "flex";
-  col.style.flexDirection = "column";
-  col.style.gap = "2px";
-  col.style.alignItems = isMe ? "flex-end" : "flex-start";
- 
-  const bubble = document.createElement("div");
-  bubble.style.maxWidth = "90%";
-  bubble.style.padding = "8px 10px";
-  bubble.style.borderRadius = "12px";
-  bubble.style.border = "1px solid rgba(255,255,255,0.10)";
-  bubble.style.background = isMe ? "rgba(60,180,120,0.25)" : "rgba(255,255,255,0.06)";
-  bubble.style.color = "#fff";
-  bubble.style.whiteSpace = "pre-wrap";
-  bubble.textContent = String(m.text || "");
- 
-  const meta = document.createElement("div");
-  meta.style.fontSize = "11px";
-  meta.style.opacity = "0.7";
-  const t = new Date(Number(m.ts) || Date.now()).toLocaleTimeString("lv-LV", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/Riga",
+    if (!m) return;
+    const isMe = m.from === state.username;
+
+    const row = document.createElement("div");
+    row.className = "dm-row " + (isMe ? "dm-row-me" : "dm-row-other");
+
+    // Avatārs tikai otrai pusei (lai nav spam)
+    if (!isMe) {
+      const avatarWrap = document.createElement("div");
+      avatarWrap.className = "dm-avatar";
+
+      const img = document.createElement("img");
+      img.className = "dm-avatar-img";
+      img.style.display = "none";
+
+      const init = document.createElement("div");
+      init.className = "dm-avatar-init";
+
+      avatarWrap.appendChild(img);
+      avatarWrap.appendChild(init);
+
+      applyMiniAvatar(m.from, img, init);
+      row.appendChild(avatarWrap);
+    }
+
+    const col = document.createElement("div");
+    col.className = "dm-col " + (isMe ? "dm-col-me" : "dm-col-other");
+
+    const bubble = document.createElement("div");
+    bubble.className = "dm-bubble " + (isMe ? "dm-bubble-me" : "dm-bubble-other");
+    if (m.deleted) bubble.classList.add("dm-bubble-deleted");
+
+    if (m.reply && m.reply.text) {
+      const reply = document.createElement("div");
+      reply.className = "dm-reply-preview";
+      const rFrom = String(m.reply.from || "");
+      const rText = String(m.reply.text || "");
+      reply.textContent = `↩ ${rFrom}: ${rText}`;
+      bubble.appendChild(reply);
+    }
+
+    const text = document.createElement("div");
+    text.className = "dm-text";
+    text.textContent = m.deleted ? "Ziņa dzēsta" : String(m.text || "");
+    bubble.appendChild(text);
+
+    const actions = document.createElement("div");
+    actions.className = "dm-actions";
+
+    const replyBtn = document.createElement("button");
+    replyBtn.type = "button";
+    replyBtn.className = "dm-action-btn";
+    replyBtn.textContent = "↩️";
+    replyBtn.title = "Atbildēt";
+    replyBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      dmSetReply(m);
+    });
+    actions.appendChild(replyBtn);
+
+    if (isMe && !m.deleted) {
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "dm-action-btn";
+      editBtn.textContent = "✏️";
+      editBtn.title = "Rediģēt";
+      editBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        dmSetEdit(m);
+      });
+      actions.appendChild(editBtn);
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "dm-action-btn";
+      delBtn.textContent = "🗑️";
+      delBtn.title = "Dzēst sev";
+      delBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!state.socket || !state.dmOpenWith) return;
+        state.socket.emit("dm.delete", { with: state.dmOpenWith, id: m.id });
+      });
+      actions.appendChild(delBtn);
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "dm-meta";
+    const t = new Date(Number(m.ts) || Date.now()).toLocaleTimeString("lv-LV", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Europe/Riga",
+    });
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "dm-name";
+    nameSpan.textContent = isMe ? "Tu" : String(m.from || "");
+    if (!isMe && m.meta) {
+      if (typeof m.meta.rankLevel === "number") applyNameTierClass(nameSpan, m.meta.rankLevel);
+      if (m.meta.rankColor) applyRankColor(nameSpan, m.meta.rankColor);
+    }
+    meta.appendChild(nameSpan);
+
+    if (!isMe && typeof m.meta?.rankLevel === "number") {
+      const rankBadge = document.createElement("span");
+      rankBadge.className = "dm-rank-badge";
+      rankBadge.textContent = `L${m.meta.rankLevel}`;
+      meta.appendChild(rankBadge);
+    }
+
+    if (!isMe && m.meta?.region) {
+      const badge = buildRegionBadge(m.meta.region, "vz-region-badge-chat");
+      if (badge) meta.appendChild(badge);
+    }
+
+    const timeSpan = document.createElement("span");
+    timeSpan.className = "dm-time";
+    timeSpan.textContent = t;
+    meta.appendChild(timeSpan);
+
+    if (m.edited) {
+      const edited = document.createElement("span");
+      edited.className = "dm-edited";
+      edited.textContent = "rediģēta";
+      meta.appendChild(edited);
+    }
+
+    if (isMe && lastMyId && String(m.id || "") === lastMyId && peerReadTs >= (Number(m.ts) || 0)) {
+      const seen = document.createElement("span");
+      seen.className = "dm-seen";
+      const seenStr = new Date(peerReadTs).toLocaleTimeString("lv-LV", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "Europe/Riga",
+      });
+      seen.textContent = `lasīts ${seenStr}`;
+      meta.appendChild(seen);
+    }
+
+    col.appendChild(bubble);
+    col.appendChild(actions);
+    col.appendChild(meta);
+
+    row.appendChild(col);
+    box.appendChild(row);
   });
-  meta.textContent = `${isMe ? "Tu" : m.from} · ${t}`;
- 
-  col.appendChild(bubble);
-  col.appendChild(meta);
- 
-  row.appendChild(col);
-  box.appendChild(row);
-});
  
   box.scrollTop = box.scrollHeight;
+  dmUpdateTypingIndicator();
 }
 
  function dmRenderInbox() {
   const box = document.getElementById("vz-dm-messages");
   const inputRow = document.getElementById("vz-dm-input-row");
   const title = document.getElementById("vz-dm-title");
+  const contextBar = document.getElementById("vz-dm-context");
+  const typingBar = document.getElementById("vz-dm-typing");
   if (!box) return;
  
   if (title) title.textContent = "Privātais čats";
   if (inputRow) inputRow.style.display = "none";
+  if (contextBar) contextBar.style.display = "none";
+  if (typingBar) typingBar.style.display = "none";
  
   box.innerHTML = "";
  
@@ -3061,9 +3278,10 @@ function dmRenderThread(withUser) {
     return;
   }
  
- items.forEach((it) => {
+ items.forEach((it, idx) => {
   const row = document.createElement("button");
   row.type = "button";
+  row.className = "dm-inbox-row";
   row.style.display = "flex";
   row.style.alignItems = "center";
   row.style.justifyContent = "space-between";
@@ -3076,6 +3294,8 @@ function dmRenderThread(withUser) {
   row.style.background = "rgba(255,255,255,0.06)";
   row.style.color = "#fff";
   row.style.cursor = "pointer";
+  if (it.unread > 0) row.classList.add("dm-inbox-row-unread");
+  if (idx === 0) row.classList.add("dm-inbox-row-latest");
  
   // Left side: avatar + texts
   const leftWrap = document.createElement("div");
@@ -3131,6 +3351,7 @@ function dmRenderThread(withUser) {
   sub.style.overflow = "hidden";
   sub.style.textOverflow = "ellipsis";
   sub.textContent = it.lastText ? String(it.lastText).slice(0, 60) : "—";
+  if (it.unread > 0) sub.classList.add("dm-inbox-sub-unread");
  
   textCol.appendChild(nameEl);
   textCol.appendChild(sub);
@@ -3175,6 +3396,9 @@ function dmShowInbox() {
   const drawer = document.getElementById("vz-dm-drawer");
   if (drawer) drawer.style.display = "flex";
   state.dmOpenWith = null;
+  dmSendTyping(false);
+  dmClearContext();
+  dmUpdateTypingIndicator();
   dmRenderInbox();
 }
 function openDmWith(username) {
@@ -3192,6 +3416,7 @@ function openDmWith(username) {
  ensureDmUi();
  
   state.dmOpenWith = u;
+  dmClearContext();
  
   const drawer = document.getElementById("vz-dm-drawer");
   const title = document.getElementById("vz-dm-title");
@@ -3205,7 +3430,7 @@ dmMarkReadLocal(u);
  const inputRow = document.getElementById("vz-dm-input-row");
 if (inputRow) inputRow.style.display = "flex";
 
-dmRenderThread(u);
+  dmRenderThread(u);
  
   const inp = document.getElementById("vz-dm-input");
   if (inp) {
@@ -3218,11 +3443,15 @@ function dmUpsertMessages(withUser, messages) {
   if (!u) return;
  
   const thread = dmGetThread(u);
-  const seen = new Set(thread.map((m) => String(m.id || "")));
+  const byId = new Map(thread.map((m, idx) => [String(m?.id || ""), idx]));
  
   (messages || []).forEach((m) => {
     const id = String(m && m.id ? m.id : "");
-    if (id && seen.has(id)) return;
+    if (id && byId.has(id)) {
+      const idx = byId.get(id);
+      thread[idx] = { ...thread[idx], ...m };
+      return;
+    }
     thread.push(m);
   });
  
@@ -3237,8 +3466,18 @@ function dmSendCurrent() {
   const text = inp ? String(inp.value || "").trim() : "";
   if (!text) return;
  
-  state.socket.emit("dm.send", { to: u, text });
+  if (state.dmEdit && state.dmEdit.id) {
+    state.socket.emit("dm.edit", { with: u, id: state.dmEdit.id, text });
+    dmClearContext();
+  } else {
+    const reply = state.dmReply
+      ? { id: state.dmReply.id, from: state.dmReply.from, text: state.dmReply.text }
+      : null;
+    state.socket.emit("dm.send", { to: u, text, reply });
+    dmClearContext();
+  }
   if (inp) inp.value = "";
+  dmSendTyping(false);
 }
 // ==================== WIN TICKER ====================
 function updateWinTicker(info) {
@@ -3752,6 +3991,9 @@ socket.on("chatMessage", (payload) => {
     const messages = Array.isArray(payload?.messages) ? payload.messages : [];
     if (!withUser) return;
  
+    if (payload && Object.prototype.hasOwnProperty.call(payload, "peerLastRead")) {
+      state.dmPeerRead[withUser] = Math.max(0, Number(payload.peerLastRead) || 0);
+    }
     dmUpsertMessages(withUser, messages);
     if (state.dmOpenWith === withUser) dmRenderThread(withUser);
   });
@@ -3761,6 +4003,19 @@ socket.on("chatMessage", (payload) => {
     const from = String(msg?.from || "").trim();
     if (!from) return;
     state.dmLastFrom = from;
+    state.dmTypingByUser[from] = false;
+
+    if (msg && !msg.meta && payload?.fromUser) {
+      const fu = payload.fromUser;
+      msg.meta = {
+        rankLevel: fu.rankLevel,
+        rankTitle: fu.rankTitle,
+        rankColor: fu.rankColor,
+        region: fu.region,
+        avatarUrl: fu.avatarUrl,
+        supporter: !!fu.supporter,
+      };
+    }
  
     dmUpsertMessages(from, [msg]);
  
@@ -3781,6 +4036,37 @@ socket.on("chatMessage", (payload) => {
     if (!withUser || !msg) return;
  
     dmUpsertMessages(withUser, [msg]);
+    if (state.dmOpenWith === withUser) dmRenderThread(withUser);
+  });
+
+  socket.on("dm.read", (payload) => {
+    const withUser = String(payload?.with || "").trim();
+    if (!withUser) return;
+    const ts = Math.max(0, Number(payload?.ts) || 0);
+    if (ts) state.dmPeerRead[withUser] = ts;
+    if (state.dmOpenWith === withUser) dmRenderThread(withUser);
+  });
+
+  socket.on("dm.typing", (payload) => {
+    const from = String(payload?.from || "").trim();
+    if (!from) return;
+    state.dmTypingByUser[from] = !!payload?.typing;
+    if (state.dmOpenWith === from) dmUpdateTypingIndicator();
+  });
+
+  socket.on("dm.edited", (payload) => {
+    const withUser = String(payload?.with || "").trim();
+    const msg = payload?.message;
+    if (!withUser || !msg) return;
+    dmUpsertMessages(withUser, [msg]);
+    if (state.dmOpenWith === withUser) dmRenderThread(withUser);
+  });
+
+  socket.on("dm.deleted", (payload) => {
+    const withUser = String(payload?.with || "").trim();
+    const id = String(payload?.id || "").trim();
+    if (!withUser || !id) return;
+    dmUpsertMessages(withUser, [{ id, deleted: true, text: "" }]);
     if (state.dmOpenWith === withUser) dmRenderThread(withUser);
   });
  

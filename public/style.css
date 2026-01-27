@@ -2772,6 +2772,170 @@ body.vz-mobile-game-only .vz-bottom-buttons #logout-btn{
   flex: 1 1 0;
   max-width: 220px;
 }
+
+/* ===========================
+   DM (privātais čats)
+   =========================== */
+#vz-dm-drawer .dm-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+#vz-dm-drawer .dm-row-me {
+  justify-content: flex-end;
+}
+
+#vz-dm-drawer .dm-row-other {
+  justify-content: flex-start;
+}
+
+#vz-dm-drawer .dm-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex: 0 0 28px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+#vz-dm-drawer .dm-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+#vz-dm-drawer .dm-avatar-init {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+#vz-dm-drawer .dm-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+}
+
+#vz-dm-drawer .dm-col-me {
+  align-items: flex-end;
+}
+
+#vz-dm-drawer .dm-bubble {
+  max-width: 90%;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+#vz-dm-drawer .dm-bubble-me {
+  background: rgba(60, 180, 120, 0.25);
+}
+
+#vz-dm-drawer .dm-bubble-other {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+#vz-dm-drawer .dm-bubble-deleted {
+  opacity: 0.65;
+  font-style: italic;
+}
+
+#vz-dm-drawer .dm-text {
+  white-space: pre-wrap;
+}
+
+#vz-dm-drawer .dm-reply-preview {
+  font-size: 11px;
+  opacity: 0.85;
+  border-left: 2px solid rgba(255, 255, 255, 0.2);
+  padding-left: 6px;
+  margin-bottom: 4px;
+}
+
+#vz-dm-drawer .dm-meta {
+  font-size: 11px;
+  opacity: 0.75;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#vz-dm-drawer .dm-name {
+  font-weight: 800;
+}
+
+#vz-dm-drawer .dm-rank-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+#vz-dm-drawer .dm-edited {
+  opacity: 0.8;
+  font-style: italic;
+}
+
+#vz-dm-drawer .dm-seen {
+  color: #7dd3fc;
+  font-weight: 800;
+}
+
+#vz-dm-drawer .dm-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+  opacity: 0.7;
+}
+
+#vz-dm-drawer .dm-action-btn {
+  background: transparent;
+  border: none;
+  color: #cbd5e1;
+  cursor: pointer;
+  padding: 0;
+}
+
+#vz-dm-drawer .dm-action-btn:hover {
+  color: #fff;
+}
+
+#vz-dm-drawer .dm-inbox-row {
+  transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+#vz-dm-drawer .dm-inbox-row:hover {
+  transform: translateY(-1px);
+}
+
+#vz-dm-drawer .dm-inbox-row-unread {
+  border-color: rgba(239, 68, 68, 0.6) !important;
+  background: rgba(239, 68, 68, 0.08) !important;
+}
+
+#vz-dm-drawer .dm-inbox-row-latest {
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.35) inset;
+}
+
+#vz-dm-drawer .dm-inbox-sub-unread {
+  font-weight: 800;
+  color: #fff;
+}
+
+#vz-dm-typing {
+  color: rgba(255, 255, 255, 0.8);
+}
 /* FULLSCREEN: bottom bar nedrīkst būt flex-item body layoutā */
 body.vz-mobile-game-only #vz-fs-bottom-bar{
   position: fixed;

@@ -2519,6 +2519,31 @@ function dmSanitizeText(raw) {
   return t;
 }
 
+function dmBuildMeta(u) {
+  if (!u) return null;
+  const info = ensureRankFields(u);
+  return {
+    rankLevel: u.rankLevel || info.level || 1,
+    rankTitle: u.rankTitle || info.title || "—",
+    rankColor: u.rankColor || info.color || "#9CA3AF",
+    region: u.region || "",
+    avatarUrl: u.avatarUrl || null,
+    supporter: !!u.supporter,
+  };
+}
+
+function dmGetLastRead(dm, otherUsername) {
+  if (!dm || typeof dm !== "object") return 0;
+  const by = dm.lastRead && typeof dm.lastRead === "object" ? dm.lastRead : {};
+  const target = String(otherUsername || "").trim();
+  if (!target) return 0;
+  const t = target.toLowerCase();
+  for (const [k, v] of Object.entries(by)) {
+    if (String(k || "").toLowerCase() === t) return Math.max(0, Number(v) || 0);
+  }
+  return 0;
+}
+
 function dmComputeUnread(dm) {
   const byUser = dm?.unread && typeof dm.unread === "object" ? dm.unread : {};
   let total = 0;
@@ -2550,7 +2575,7 @@ function dmComputeUnread(dm) {
   return { total, byUser, threads };
 }
 
-function dmPushMessage(fromUser, toUser, text) {
+function dmPushMessage(fromUser, toUser, text, extra = {}) {
   const from = fromUser?.username;
   const to = toUser?.username;
   if (!from || !to) return null;
@@ -2559,13 +2584,18 @@ function dmPushMessage(fromUser, toUser, text) {
   const dmTo = ensureDm(toUser);
   if (!dmFrom || !dmTo) return null;
 
-  const msg = {
+  const base = {
     id: crypto.randomBytes(8).toString("hex"),
     from,
     to,
     text,
     ts: Date.now(),
   };
+  if (extra.reply) base.reply = extra.reply;
+
+  const meta = dmBuildMeta(fromUser);
+  const msgFrom = { ...base, meta };
+  const msgTo = { ...base, meta };
 
   const keyFrom = dmThreadKeyFor(fromUser, toUser);
   const keyTo = dmThreadKeyFor(toUser, fromUser);
@@ -2574,8 +2604,8 @@ function dmPushMessage(fromUser, toUser, text) {
   if (!Array.isArray(dmFrom.threads[keyFrom])) dmFrom.threads[keyFrom] = [];
   if (!Array.isArray(dmTo.threads[keyTo])) dmTo.threads[keyTo] = [];
 
-  dmFrom.threads[keyFrom].push(msg);
-  dmTo.threads[keyTo].push(msg);
+  dmFrom.threads[keyFrom].push(msgFrom);
+  dmTo.threads[keyTo].push(msgTo);
 
   if (dmFrom.threads[keyFrom].length > DM_THREAD_MAX) {
     dmFrom.threads[keyFrom] = dmFrom.threads[keyFrom].slice(-DM_THREAD_MAX);
@@ -2587,7 +2617,7 @@ function dmPushMessage(fromUser, toUser, text) {
   // increment unread only saņēmējam
   dmTo.unread[keyTo] = Math.max(0, Number(dmTo.unread[keyTo]) || 0) + 1;
 
-  return msg;
+  return msgFrom;
 }
 
 function kickUserByName(username, reason) {
@@ -4633,7 +4663,18 @@ io.on("connection", (socket) => {
     markActivity(sender);
     markActivity(target);
 
-    const msg = dmPushMessage(sender, target, text);
+    let reply = null;
+    if (payload && typeof payload === "object" && payload.reply) {
+      const rid = String(payload.reply?.id || "").trim();
+      const rfrom = String(payload.reply?.from || "").trim();
+      let rtext = String(payload.reply?.text || "").trim();
+      if (rtext.length > 80) rtext = rtext.slice(0, 80);
+      if (rid && rfrom && rtext && (rfrom === sender.username || rfrom === target.username)) {
+        reply = { id: rid, from: rfrom, text: rtext };
+      }
+    }
+
+    const msg = dmPushMessage(sender, target, text, { reply });
     if (!msg) return socket.emit("dm.error", { message: "Neizdevās nosūtīt ziņu." });
 
     saveUsers(USERS);
@@ -4655,6 +4696,73 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("dm.typing", (payload) => {
+    const sender = USERS[user.username] || user;
+    const toRaw =
+      typeof payload === "string" ? payload : payload?.with ?? payload?.to ?? payload?.username ?? "";
+    const toName = String(toRaw || "").trim();
+    if (!toName) return;
+    const key = findUserKeyCaseInsensitive(toName);
+    const target = key ? USERS[key] : null;
+    if (!target || target.username === sender.username) return;
+    const targetSocket = getSocketByUsername(target.username);
+    if (!targetSocket) return;
+    const typing = !!(payload && typeof payload === "object" ? payload.typing : false);
+    targetSocket.emit("dm.typing", { from: sender.username, typing });
+  });
+
+  socket.on("dm.edit", (payload) => {
+    const me = USERS[user.username] || user;
+    const otherRaw =
+      typeof payload === "string" ? payload : payload?.with ?? payload?.to ?? payload?.username ?? "";
+    const otherName = String(otherRaw || "").trim();
+    const id = String(payload?.id || "").trim();
+    const text = dmSanitizeText(payload?.text || "");
+    if (!otherName || !id) return socket.emit("dm.error", { message: "Nederīga ziņa." });
+    if (!text) return socket.emit("dm.error", { message: "Ziņa ir tukša." });
+
+    ensureDm(me);
+    const key = findUserKeyCaseInsensitive(otherName);
+    const other = key ? USERS[key] : null;
+    const otherUsername = other?.username || otherName;
+    const threadKey = dmThreadKeyFor(me, otherUsername);
+    const arr = Array.isArray(me.dm.threads?.[threadKey]) ? me.dm.threads[threadKey] : [];
+    const idx = arr.findIndex((m) => m && m.id === id);
+    if (idx === -1) return socket.emit("dm.error", { message: "Ziņa nav atrasta." });
+    const msg = arr[idx];
+    if (msg?.from !== me.username)
+      return socket.emit("dm.error", { message: "Vari rediģēt tikai savas ziņas." });
+
+    arr[idx] = { ...msg, text, edited: true, editedAt: Date.now() };
+    saveUsers(USERS);
+    socket.emit("dm.edited", { with: otherUsername, message: arr[idx] });
+  });
+
+  socket.on("dm.delete", (payload) => {
+    const me = USERS[user.username] || user;
+    const otherRaw =
+      typeof payload === "string" ? payload : payload?.with ?? payload?.to ?? payload?.username ?? "";
+    const otherName = String(otherRaw || "").trim();
+    const id = String(payload?.id || "").trim();
+    if (!otherName || !id) return socket.emit("dm.error", { message: "Nederīga ziņa." });
+
+    ensureDm(me);
+    const key = findUserKeyCaseInsensitive(otherName);
+    const other = key ? USERS[key] : null;
+    const otherUsername = other?.username || otherName;
+    const threadKey = dmThreadKeyFor(me, otherUsername);
+    const arr = Array.isArray(me.dm.threads?.[threadKey]) ? me.dm.threads[threadKey] : [];
+    const idx = arr.findIndex((m) => m && m.id === id);
+    if (idx === -1) return socket.emit("dm.error", { message: "Ziņa nav atrasta." });
+    const msg = arr[idx];
+    if (msg?.from !== me.username)
+      return socket.emit("dm.error", { message: "Vari dzēst tikai savas ziņas." });
+
+    arr[idx] = { ...msg, text: "", deleted: true, deletedAt: Date.now() };
+    saveUsers(USERS);
+    socket.emit("dm.deleted", { with: otherUsername, id });
+  });
+
   socket.on("dm.history", (payload) => {
     const me = USERS[user.username] || user;
     const otherRaw =
@@ -4669,11 +4777,13 @@ io.on("connection", (socket) => {
 
     const threadKey = dmThreadKeyFor(me, otherUsername);
     const arr = Array.isArray(me.dm.threads?.[threadKey]) ? me.dm.threads[threadKey] : [];
+    const peerLastRead = other ? dmGetLastRead(other.dm, me.username) : 0;
 
     // sūtam pēdējās 60 ziņas, lai nav milzīgs payload
     socket.emit("dm.history", {
       with: otherUsername,
       messages: arr.slice(-60),
+      peerLastRead,
     });
   });
 
@@ -4689,10 +4799,16 @@ io.on("connection", (socket) => {
     const other = key ? USERS[key] : null;
     const otherUsername = other?.username || otherName;
 
-    me.dm.lastRead[otherUsername] = Date.now();
+    const readAt = Date.now();
+    me.dm.lastRead[otherUsername] = readAt;
     dmZeroUnreadCaseInsensitive(me.dm, otherUsername);
     saveUsers(USERS);
     socket.emit("dm.unread", dmComputeUnread(me.dm));
+
+    const otherSocket = getSocketByUsername(otherUsername);
+    if (otherSocket) {
+      otherSocket.emit("dm.read", { with: me.username, ts: readAt });
+    }
   });
 
   // Dzēst visu DM sarunu (tikai šim lietotājam / "delete for me")
