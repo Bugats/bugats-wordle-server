@@ -2494,54 +2494,35 @@ input:focus-visible {
   text-shadow: 0 1px 0 rgba(0,0,0,0.9) !important; /* ass, ne miglains */
   filter: none !important;
 }
-/* ===== LOGO: NEON (override) ===== */
+/* ===== LOGO: PREMIUM (override) ===== */
 .vz-logo-main{
   margin: 18px auto 10px;
-  padding: 10px 0 18px;
+  padding: 10px 0 16px;
 }
  
 .vz-logo-title{
-  font-family: "Rubik Spray Paint", "Permanent Marker", "Arial Black", sans-serif;
-  font-weight: 400;
-  letter-spacing: 0.18em;
+  font-family: "Cinzel", "Times New Roman", serif;
+  font-weight: 700;
+  letter-spacing: 0.28em;
   text-transform: uppercase;
   line-height: 1.05;
   color: transparent;
-  background: linear-gradient(90deg,
-    #ff2d8a 0%,
-    #ff005c 40%,
-    #7cf7ff 100%
+  background: linear-gradient(180deg,
+    #ffffff 0%,
+    #f2ead8 45%,
+    #d7c08b 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
   text-shadow:
-    0 0 6px rgba(255,45,138,0.75),
-    0 0 16px rgba(255,0,92,0.65),
-    0 0 26px rgba(124,247,255,0.55),
-    0 0 46px rgba(124,247,255,0.35);
+    0 1px 0 rgba(0,0,0,0.9),
+    0 0 10px rgba(215,192,139,0.25);
   position: relative;
   display: inline-block;
-  animation: vzNeonPulse 4.6s ease-in-out infinite;
 }
  
-/* subtle neon sweep */
 .vz-logo-title::before{
-  content:"";
-  position:absolute;
-  inset:-6px -12px;
-  border-radius: 18px;
-  pointer-events:none;
-  background: linear-gradient(120deg,
-    transparent 0%,
-    rgba(124,247,255,0.28) 45%,
-    rgba(255,45,138,0.28) 50%,
-    rgba(124,247,255,0.22) 55%,
-    transparent 100%
-  );
-  transform: translateX(-120%) skewX(-12deg);
-  opacity: 0.6;
-  mix-blend-mode: screen;
-  animation: vzNeonSweep 7s ease-in-out infinite;
+  content: none;
 }
  
 .vz-logo-main::after{
@@ -2555,54 +2536,29 @@ input:focus-visible {
   border-radius: 999px;
   background: linear-gradient(90deg,
     transparent,
-    rgba(255,45,138,0.95),
-    rgba(124,247,255,0.95),
+    rgba(215,192,139,0.9),
     transparent
   );
-  box-shadow: 0 0 16px rgba(255,45,138,0.35), 0 0 22px rgba(124,247,255,0.35);
+  box-shadow: 0 0 14px rgba(215,192,139,0.25);
   opacity: 0.95;
 }
  
-@keyframes vzNeonSweep{
-  0%, 70% { transform: translateX(-120%) skewX(-12deg); opacity: 0; }
-  78%     { opacity: 0.6; }
-  100%    { transform: translateX(120%) skewX(-12deg); opacity: 0; }
-}
-@keyframes vzNeonPulse{
-  0%, 100% {
-    text-shadow:
-      0 0 6px rgba(255,45,138,0.65),
-      0 0 16px rgba(255,0,92,0.55),
-      0 0 26px rgba(124,247,255,0.45),
-      0 0 40px rgba(124,247,255,0.28);
-  }
-  50% {
-    text-shadow:
-      0 0 8px rgba(255,45,138,0.9),
-      0 0 18px rgba(255,0,92,0.75),
-      0 0 30px rgba(124,247,255,0.7),
-      0 0 52px rgba(124,247,255,0.5);
-  }
-}
- 
 .vz-logo-sub{
-  margin-top: 10px;
-  font-weight: 800;
-  letter-spacing: 0.30em;
-  color: rgba(180, 235, 255, 0.92);
-  text-shadow: 0 0 10px rgba(0,0,0,0.9), 0 0 14px rgba(124,247,255,0.35);
+  margin-top: 8px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  color: rgba(255,255,255,0.78);
+  text-shadow: 0 0 8px rgba(0,0,0,0.9);
 }
  
 /* reduced motion */
 @media (prefers-reduced-motion: reduce){
-  .vz-logo-title,
-  .vz-logo-title::before{ animation: none; }
   .vz-logo-title::before{ display: none; }
 }
  
 @media (max-width: 480px){
-  .vz-logo-title{ letter-spacing: 0.12em; }
-  .vz-logo-sub{ letter-spacing: 0.22em; }
+  .vz-logo-title{ letter-spacing: 0.18em; }
+  .vz-logo-sub{ letter-spacing: 0.18em; }
 }
 /* ===== MOBILE/FULLSCREEN: nekas netraucē režģim + klaviatūrai ===== */
  
