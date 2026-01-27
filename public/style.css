@@ -2727,50 +2727,53 @@ input:focus-visible {
   text-shadow: 0 1px 0 rgba(0,0,0,0.9) !important; /* ass, ne miglains */
   filter: none !important;
 }
-/* ===== LOGO: PREMIUM (override) ===== */
+/* ===== LOGO: SLANT + DARK BLUE + RED NEON ===== */
 .vz-logo-main{
   margin: 18px auto 10px;
   padding: 10px 0 16px;
 }
- 
+
 .vz-logo-title{
   font-family: "Cinzel", "Times New Roman", serif;
   font-weight: 700;
-  letter-spacing: 0.28em;
+  font-style: italic;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
   line-height: 1.05;
   color: transparent;
   background: linear-gradient(180deg,
-    #ffffff 0%,
-    #f2ead8 45%,
-    #d7c08b 100%
+    #0b1233 0%,
+    #101b46 55%,
+    #1a2660 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
+  -webkit-text-stroke: 1px rgba(0,0,0,0.65);
   text-shadow:
-    0 1px 0 rgba(0,0,0,0.9),
-    0 0 10px rgba(215,192,139,0.25);
+    0 0 6px rgba(0,0,0,0.9),
+    0 0 12px rgba(255, 0, 70, 0.75),
+    0 0 24px rgba(255, 0, 70, 0.45),
+    0 0 40px rgba(255, 0, 90, 0.35);
   position: relative;
   display: inline-block;
+  transform: skewX(-10deg);
+  animation: vzLogoNeon 3s ease-in-out infinite;
 }
- 
+
 .vz-logo-title::after{
   content: attr(data-text);
   position: absolute;
   left: 0;
   top: 0;
   z-index: -1;
-  color: #8b6c42;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(255, 0, 70, 0.85);
   text-shadow:
-    1px 1px 0 #8b6c42,
-    2px 2px 0 #7a5c37,
-    3px 3px 0 #6a4f30,
-    4px 4px 0 #5a432a,
-    5px 5px 0 #4a3723,
-    6px 6px 12px rgba(0,0,0,0.65);
-  transform: translate(2px, 2px);
+    0 0 14px rgba(255, 0, 70, 0.8),
+    0 0 26px rgba(255, 0, 70, 0.55);
+  opacity: 0.9;
 }
- 
+
 .vz-logo-main::after{
   content:"";
   position:absolute;
@@ -2782,19 +2785,37 @@ input:focus-visible {
   border-radius: 999px;
   background: linear-gradient(90deg,
     transparent,
-    rgba(215,192,139,0.9),
+    rgba(10,18,51,0.9),
+    rgba(255, 0, 70, 0.85),
+    rgba(10,18,51,0.9),
     transparent
   );
-  box-shadow: 0 0 14px rgba(215,192,139,0.25);
+  box-shadow: 0 0 12px rgba(255, 0, 70, 0.55), 0 0 18px rgba(5, 10, 30, 0.9);
   opacity: 0.95;
 }
- 
+
 .vz-logo-sub{
   margin-top: 8px;
   font-weight: 600;
-  letter-spacing: 0.24em;
-  color: rgba(255,255,255,0.78);
-  text-shadow: 0 0 8px rgba(0,0,0,0.9);
+  font-style: italic;
+  letter-spacing: 0.22em;
+  color: rgba(180, 200, 255, 0.78);
+  text-shadow: 0 0 10px rgba(255, 0, 70, 0.45), 0 0 8px rgba(0,0,0,0.9);
+}
+
+@keyframes vzLogoNeon {
+  0%, 100% {
+    text-shadow:
+      0 0 6px rgba(0,0,0,0.9),
+      0 0 12px rgba(255, 0, 70, 0.65),
+      0 0 22px rgba(255, 0, 70, 0.4);
+  }
+  50% {
+    text-shadow:
+      0 0 8px rgba(0,0,0,0.95),
+      0 0 16px rgba(255, 0, 70, 0.9),
+      0 0 30px rgba(255, 0, 70, 0.6);
+  }
 }
  
 /* reduced motion */
