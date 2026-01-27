@@ -121,53 +121,72 @@
           <div class="vz-map-card" id="region-map-card">
             <div class="vz-card-header">Latvijas karte</div>
             <div class="vz-map-wrap">
-              <svg id="region-map" viewBox="0 0 400 240" role="img" aria-label="Latvijas novadu karte">
+              <svg id="region-map" viewBox="0 0 800 600" role="img" aria-label="Latvijas novadu karte">
                 <defs>
-                  <clipPath id="lv-clip">
-                    <path
-                      id="lv-outline-path"
-                      d="M24 98 L52 52 L118 30 L190 36 L244 22 L316 42 L364 90 L382 138 L356 200 L300 224 L222 220 L150 232 L92 210 L48 176 L18 132 Z"
+                  <filter id="lv-mask-filter" color-interpolation-filters="sRGB">
+                    <feColorMatrix type="matrix" values="
+                      0.2126 0.7152 0.0722 0 0
+                      0.2126 0.7152 0.0722 0 0
+                      0.2126 0.7152 0.0722 0 0
+                      0      0      0      1 0
+                    " />
+                    <feComponentTransfer>
+                      <feFuncR type="linear" slope="5" />
+                      <feFuncG type="linear" slope="5" />
+                      <feFuncB type="linear" slope="5" />
+                    </feComponentTransfer>
+                  </filter>
+                  <mask id="lv-mask" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">
+                    <rect x="0" y="0" width="800" height="600" fill="black" />
+                    <image
+                      href="assets/latvia-map.png"
+                      x="0"
+                      y="0"
+                      width="800"
+                      height="600"
+                      preserveAspectRatio="none"
+                      filter="url(#lv-mask-filter)"
                     />
-                  </clipPath>
+                  </mask>
                 </defs>
-                <g id="region-layer" clip-path="url(#lv-clip)">
+                <g id="region-layer" mask="url(#lv-mask)">
                   <polygon
                     id="map-kurzeme"
                     class="vz-region-shape vz-region-kurzeme"
-                    points="28,98 54,58 118,34 150,70 128,120 70,152 34,132"
+                    points="56,245 108,145 236,85 300,175 256,300 140,380 68,330"
                   >
                     <title>Kurzeme</title>
                   </polygon>
                   <polygon
                     id="map-vidzeme"
                     class="vz-region-shape vz-region-vidzeme"
-                    points="118,34 244,22 316,42 338,88 256,104 170,82 150,70"
+                    points="236,85 488,55 632,105 676,220 512,260 340,205 300,175"
                   >
                     <title>Vidzeme</title>
                   </polygon>
                   <polygon
                     id="map-latgale"
                     class="vz-region-shape vz-region-latgale"
-                    points="256,104 338,88 364,90 382,138 356,200 300,224 238,198 232,150"
+                    points="512,260 676,220 728,225 764,345 712,500 600,560 476,495 464,375"
                   >
                     <title>Latgale</title>
                   </polygon>
                   <polygon
                     id="map-zemgale"
                     class="vz-region-shape vz-region-zemgale"
-                    points="70,152 128,120 170,82 256,104 232,150 238,198 150,232 92,210 48,176 34,132"
+                    points="140,380 256,300 340,205 512,260 464,375 476,495 300,580 184,525 96,440 68,330"
                   >
                     <title>Zemgale</title>
                   </polygon>
                 </g>
                 <path
                   class="vz-map-outline"
-                  d="M24 98 L52 52 L118 30 L190 36 L244 22 L316 42 L364 90 L382 138 L356 200 L300 224 L222 220 L150 232 L92 210 L48 176 L18 132 Z"
+                  d="M48 245 L104 130 L236 75 L380 90 L488 55 L632 105 L728 225 L764 345 L712 500 L600 560 L444 550 L300 580 L184 525 L96 440 L36 330 Z"
                 />
-                <text class="vz-map-label" x="78" y="118">K</text>
-                <text class="vz-map-label" x="205" y="78">V</text>
-                <text class="vz-map-label" x="318" y="155">L</text>
-                <text class="vz-map-label" x="165" y="190">Z</text>
+                <text class="vz-map-label" x="156" y="295">K</text>
+                <text class="vz-map-label" x="410" y="195">V</text>
+                <text class="vz-map-label" x="636" y="388">L</text>
+                <text class="vz-map-label" x="330" y="475">Z</text>
               </svg>
             </div>
             <ul id="region-list" class="vz-region-list"></ul>
