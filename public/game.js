@@ -22,6 +22,13 @@ function isAdminUsername(u) {
   return ADMIN_SET.has(String(u || "").trim().toLowerCase());
 }
 
+const REGION_META = {
+  Zemgale: { code: "Z", cls: "vz-region-zemgale", label: "Zemgale" },
+  Latgale: { code: "L", cls: "vz-region-latgale", label: "Latgale" },
+  Vidzeme: { code: "V", cls: "vz-region-vidzeme", label: "Vidzeme" },
+  Kurzeme: { code: "K", cls: "vz-region-kurzeme", label: "Kurzeme" },
+};
+
 // Nedrīkst rādīt uz ekrāna klaviatūras + ignorējam arī no fiziskās
 const DISALLOWED_KEYS = new Set(["Q", "W", "X", "Y"]);
 
@@ -708,6 +715,17 @@ function applyNameTierClass(el, level) {
  
   for (let i = 0; i <= 15; i++) el.classList.remove("vz-name-tier-" + i);
   el.classList.add("vz-name-tier-" + getNameTierFromLevel(level));
+}
+
+function buildRegionBadge(region, extraClass = "") {
+  const meta = REGION_META[String(region || "").trim()] || null;
+  if (!meta) return null;
+  const badge = createEl("span", "vz-region-badge");
+  badge.textContent = meta.code;
+  badge.title = meta.label;
+  badge.classList.add(meta.cls);
+  if (extraClass) badge.classList.add(extraClass);
+  return badge;
 }
 
 function updatePlayerCard(me) {
@@ -2038,6 +2056,7 @@ let supporter = false;
 let avatarUrl = null;
 let rankLevel = null;
 let rankColor = null;
+let region = "";
 
     if (typeof p === "string") username = p;
     else if (p && typeof p === "object") {
@@ -2046,6 +2065,7 @@ let rankColor = null;
       avatarUrl = p.avatarUrl || null;
     if (typeof p.rankLevel === "number") rankLevel = p.rankLevel;
     if (typeof p.rankColor === "string") rankColor = p.rankColor;
+    if (typeof p.region === "string") region = p.region;
     }
 
     if (!username) return;
@@ -2080,6 +2100,8 @@ let rankColor = null;
     applyRankColor(span, rankColor);
     if (rankLevel != null) applyNameTierClass(span, rankLevel);
     span.addEventListener("click", () => openProfile(username));
+    const badge = buildRegionBadge(region, "vz-region-badge-online");
+    if (badge) li.appendChild(badge);
     li.appendChild(span);
 
     ul.appendChild(li);
@@ -2281,6 +2303,8 @@ function buildChatRowElement(msg) {
     if (typeof msg.rankLevel === "number") applyNameTierClass(clickable, msg.rankLevel);
     applyRankColor(clickable, msg.rankColor);
     clickable.addEventListener("click", () => openProfile(msg.username));
+    const badge = buildRegionBadge(msg.region, "vz-region-badge-chat");
+    if (badge) nameSpan.appendChild(badge);
     nameSpan.appendChild(clickable);
     row.appendChild(nameSpan);
   }

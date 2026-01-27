@@ -2112,6 +2112,7 @@ function getMiniUserPayload(username) {
       rankTitle: "—",
       rankColor: "#9CA3AF",
       supporter: false,
+      region: "",
     };
   }
   const info = ensureRankFields(u);
@@ -2122,6 +2123,7 @@ function getMiniUserPayload(username) {
     rankTitle: u.rankTitle || info.title || "—",
     rankColor: u.rankColor || info.color || "#9CA3AF",
     supporter: !!u.supporter,
+    region: u.region || "",
   };
 }
 
@@ -2139,7 +2141,7 @@ function broadcastOnlineList(force = false) {
       (u) =>
         `${u.username}|${u.avatarUrl || ""}|${u.rankLevel || 0}|${
           u.rankTitle || ""
-        }|${u.supporter ? 1 : 0}`
+        }|${u.supporter ? 1 : 0}|${u.region || ""}`
     )
     .join(";");
 
@@ -4361,6 +4363,7 @@ io.on("connection", (socket) => {
       rankLevel: u.rankLevel || 1,
       rankColor: u.rankColor || "#9CA3AF",
       supporter: !!u.supporter,
+      region: u.region || "",
     });
   });
 
