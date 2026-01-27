@@ -416,15 +416,9 @@ const regionModalBtns = regionModalEl
   ? Array.from(regionModalEl.querySelectorAll("[data-region]"))
   : [];
 
-// Karte
-const regionMapEl = document.getElementById("region-map");
-const regionLayerEl = document.getElementById("region-layer");
-const regionShapeEls = {
-  Zemgale: document.getElementById("map-zemgale"),
-  Latgale: document.getElementById("map-latgale"),
-  Vidzeme: document.getElementById("map-vidzeme"),
-  Kurzeme: document.getElementById("map-kurzeme"),
-};
+// Novadu sacīkste UI
+const regionTotalScoreEl = document.getElementById("region-total-score");
+const regionTotalFillEl = document.getElementById("region-total-fill");
 
 // Audio MP3
 const sClick = $("#s-click");
@@ -888,6 +882,18 @@ async function refreshRegionStats() {
     const list = Array.isArray(raw) ? raw : raw?.regions || raw?.list || [];
     if (!Array.isArray(list)) return;
 
+    let totalScore = 0;
+    list.forEach((item) => {
+      totalScore += Number(item?.score || 0);
+    });
+    if (regionTotalScoreEl) regionTotalScoreEl.textContent = String(totalScore);
+    if (regionTotalFillEl) {
+      const totalPct = REGION_TOTAL_CAP
+        ? Math.max(0, Math.min(100, (totalScore / REGION_TOTAL_CAP) * 100))
+        : 0;
+      regionTotalFillEl.style.width = totalPct.toFixed(1) + "%";
+    }
+
     regionListEl.innerHTML = "";
     list.forEach((item, idx) => {
       const li = createEl("li", "vz-region-item");
@@ -895,68 +901,46 @@ async function refreshRegionStats() {
         li.classList.add("vz-region-self");
       }
 
+      const row = createEl("div", "vz-region-row");
+
       const place = createEl("span", "vz-region-place");
       place.textContent = `${idx + 1}.`;
-      li.appendChild(place);
+      row.appendChild(place);
 
       const name = createEl("span", "vz-region-name");
       name.textContent = item.region || "—";
-      li.appendChild(name);
+      row.appendChild(name);
 
       const meta = createEl("span", "vz-region-meta");
       meta.textContent = `(${item.players || 0} spēl.)`;
-      li.appendChild(meta);
+      row.appendChild(meta);
 
       const score = createEl("span", "vz-region-score");
       score.textContent = `${item.score || 0} p.`;
-      li.appendChild(score);
+      row.appendChild(score);
+
+      const pct = createEl("span", "vz-region-pct");
+      const pctVal = REGION_TOTAL_CAP
+        ? Math.max(0, Math.min(100, (Number(item.score || 0) / REGION_TOTAL_CAP) * 100))
+        : 0;
+      pct.textContent = `${pctVal.toFixed(1)}%`;
+      row.appendChild(pct);
+
+      li.appendChild(row);
+
+      const bar = createEl("div", "vz-region-bar");
+      const fill = createEl("div", "vz-region-bar-fill");
+      const metaDef = REGION_META[item.region] || null;
+      if (metaDef?.cls) fill.classList.add(metaDef.cls);
+      fill.style.width = pctVal.toFixed(1) + "%";
+      bar.appendChild(fill);
+      li.appendChild(bar);
 
       regionListEl.appendChild(li);
     });
-    updateRegionMap(list);
   } catch (err) {
     console.error("Novadu stats kļūda:", err);
   }
-}
-
-function updateRegionMap(list) {
-  if (!regionMapEl) return;
-  const scores = new Map();
-  let total = 0;
-  list.forEach((item) => {
-    const score = Number(item?.score || 0);
-    scores.set(item.region, score);
-    total += score;
-  });
-
-  const ordered = Object.entries(regionShapeEls).sort((a, b) => {
-    const sa = scores.get(a[0]) || 0;
-    const sb = scores.get(b[0]) || 0;
-    return sa - sb;
-  });
-
-  if (regionLayerEl) {
-    ordered.forEach(([, el]) => {
-      if (el) regionLayerEl.appendChild(el);
-    });
-  }
-
-  ordered.forEach(([region, el]) => {
-    if (!el) return;
-    const score = scores.get(region) || 0;
-    const ratio = total > 0 ? Math.max(0, Math.min(1, score / total)) : 0;
-    const fillFactor = total > 0 ? Math.max(0, Math.min(1, total / REGION_TOTAL_CAP)) : 0;
-    const power = ratio * fillFactor;
-    const opacity = 0.18 + power * 0.82;
-    el.style.opacity = opacity.toFixed(3);
-    el.style.setProperty("--power", power.toFixed(3));
-    const scale = 0.7 + power * 0.9;
-    el.style.transform = `scale(${scale.toFixed(3)})`;
-    const titleEl = el.querySelector("title");
-    if (titleEl) {
-      titleEl.textContent = `${region} — ${score} p. (${Math.round(ratio * 100)}%)`;
-    }
-  });
 }
 
 async function runPostLoginInit() {
