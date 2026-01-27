@@ -206,6 +206,8 @@ const state = {
   username: null,
   region: "",
   regionPoints: 0,
+  regionAttackTarget: "",
+  regionAttackRegion: "",
 // DM (privāts čats)
   dmOpenWith: null,
   dmThreads: new Map(), // username -> [{id,from,to,text,ts}]
@@ -738,7 +740,7 @@ function buildRegionBadge(region, extraClass = "") {
   return badge;
 }
 
-function renderRegionAttackOptions(currentRegion) {
+function renderRegionAttackOptions(currentRegion, preferredTarget = "") {
   if (!regionAttackSelect) return;
   regionAttackSelect.innerHTML = "";
   const regions = Object.keys(REGION_META);
@@ -755,13 +757,27 @@ function renderRegionAttackOptions(currentRegion) {
     opt.textContent = "Nav pretinieku";
     regionAttackSelect.appendChild(opt);
   }
+  if (preferredTarget) {
+    regionAttackSelect.value = preferredTarget;
+  }
+  if (!regionAttackSelect.value && regionAttackSelect.options.length) {
+    regionAttackSelect.selectedIndex = 0;
+  }
+  state.regionAttackTarget = regionAttackSelect.value || "";
+  state.regionAttackRegion = currentRegion || "";
 }
 
 function updateRegionPointsUi(points, region) {
   const p = Math.max(0, Math.floor(points || 0));
   state.regionPoints = p;
   if (regionPointsEl) regionPointsEl.textContent = String(p);
-  if (regionAttackSelect && region) renderRegionAttackOptions(region);
+  if (regionAttackSelect && region) {
+    const shouldRender =
+      state.regionAttackRegion !== region || !regionAttackSelect.options.length;
+    if (shouldRender) {
+      renderRegionAttackOptions(region, state.regionAttackTarget);
+    }
+  }
   const canSpend = p > 0;
   if (regionBoostBtn) regionBoostBtn.disabled = !canSpend;
   if (regionAttackBtn) {
@@ -950,6 +966,7 @@ function bindRegionActions() {
   if (regionAttackBtn) regionAttackBtn.addEventListener("click", handleRegionAttack);
   if (regionAttackSelect) {
     regionAttackSelect.addEventListener("change", () => {
+      state.regionAttackTarget = regionAttackSelect.value || "";
       updateRegionPointsUi(state.regionPoints, state.region);
     });
   }

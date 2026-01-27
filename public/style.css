@@ -2756,7 +2756,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar{
   justify-content: center;
   
   padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
-  background: rgba0,0,0,0.25);
+  background: rgba(0,0,0,0.25);
   backdrop-filter: blur(6px);
   
   z-index: 1000000;
