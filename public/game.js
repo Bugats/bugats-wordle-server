@@ -228,6 +228,11 @@ const state = {
   dmTypingByUser: {}, // username -> bool
   dmBlockedUsers: [],
   dmBlockedSet: new Set(),
+  friends: [],
+  friendInvitesIn: [],
+  friendInvitesOut: [],
+  onlineUsers: new Set(),
+  lastShareResult: null,
   rows: 6,
   cols: 5,
   currentRow: 0,
@@ -284,6 +289,8 @@ const logoutBtn = $("#logout-btn");
 const buyTokenBtn = $("#buy-token-btn");
 const mobileFsBtn = $("#mobile-fullscreen-btn");
 const shareBtn = $("#share-btn");
+const shareResultBtn = $("#share-result-btn");
+const shareResultNote = $("#share-result-note");
 
 // SEZONA UI
 const seasonBoxEl = $("#season-box");
@@ -346,6 +353,15 @@ const hofSeason1El = document.getElementById("hof-season1");
 
 // Misijas
 const missionsListEl = $("#missions-list");
+const weeklyListEl = $("#weekly-list");
+const weeklySubEl = $("#weekly-sub");
+const weeklyYouEl = $("#weekly-you");
+
+// Draugi
+const friendsListEl = $("#friends-list");
+const friendsInvitesEl = $("#friends-invites");
+const friendAddInputEl = $("#friend-add-input");
+const friendAddBtnEl = $("#friend-add-btn");
 
 // Čats
 const chatMessagesEl = $("#chat-messages");
@@ -1076,7 +1092,9 @@ async function runPostLoginInit() {
   await refreshHof();
   await startNewRound();
   await refreshLeaderboard();
+  await refreshWeekly();
   await refreshMissions();
+  await refreshFriends();
   await refreshRegionStats();
   ensureDailyChestUi();
   await refreshDailyChestStatus();
@@ -1207,7 +1225,18 @@ applyRankColor(ppRankEl, data.rankColor);
     inner.appendChild(reportBtn);
   }
 
+  let friendBtn = document.getElementById("vz-profile-friend-btn");
+  if (!friendBtn && inner) {
+    friendBtn = document.createElement("button");
+    friendBtn.id = "vz-profile-friend-btn";
+    friendBtn.className = "mission-claim-btn";
+    friendBtn.style.marginTop = "8px";
+    friendBtn.addEventListener("click", () => handleProfileFriendAction());
+    inner.appendChild(friendBtn);
+  }
+
   updateProfileBlockButtons();
+  updateProfileFriendButton();
 
   profilePopupEl.classList.remove("hidden");
 }
@@ -1240,7 +1269,7 @@ function handleProfileDuelClick() {
 }
 
 // ==================== DIENAS MISIJAS ====================
-function renderMissions(missions) {
+function renderMissions(missions, bonus) {
   if (!missionsListEl) return;
   missionsListEl.innerHTML = "";
 
@@ -1299,6 +1328,53 @@ function renderMissions(missions) {
 
     missionsListEl.appendChild(li);
   });
+
+  if (bonus && typeof bonus === "object") {
+    const li = createEl("li", "mission-item");
+    li.classList.add("mission-bonus-item");
+
+    const title = createEl("div", "mission-title");
+    title.textContent = "Dienas bonus";
+    li.appendChild(title);
+
+    const progress = createEl("div", "mission-progress");
+    const total = Math.max(0, Number(bonus.total) || 0);
+    const completed = Math.max(0, Number(bonus.completed) || 0);
+    progress.textContent = `${Math.min(completed, total)}/${total}`;
+    li.appendChild(progress);
+
+    const rw = bonus.rewards || {};
+    const rewardParts = [];
+    if (rw.xp) rewardParts.push(`+${rw.xp} XP`);
+    if (rw.coins) rewardParts.push(`+${rw.coins} coins`);
+    if (rw.tokens) rewardParts.push(`+${rw.tokens} žetoni`);
+    if (rewardParts.length) {
+      const rewardsEl = createEl("div", "mission-rewards");
+      rewardsEl.textContent = "Bonus balva: " + rewardParts.join(", ");
+      li.appendChild(rewardsEl);
+    }
+
+    const bottom = createEl("div", "mission-bottom");
+    li.appendChild(bottom);
+
+    const statusSpan = createEl("span", "mission-status");
+    if (!bonus.isCompleted) statusSpan.textContent = "Progressā";
+    else if (bonus.isCompleted && !bonus.isClaimed) statusSpan.textContent = "Gatavs saņemšanai";
+    else {
+      statusSpan.textContent = "Balva saņemta";
+      statusSpan.classList.add("mission-status-done");
+    }
+    bottom.appendChild(statusSpan);
+
+    if (bonus.isCompleted && !bonus.isClaimed) {
+      const btn = createEl("button", "mission-claim-btn");
+      btn.textContent = "Saņemt bonusu";
+      btn.addEventListener("click", () => claimMissionBonus());
+      bottom.appendChild(btn);
+    }
+
+    missionsListEl.appendChild(li);
+  }
 }
 
 function extractMissions(data) {
@@ -1309,11 +1385,17 @@ function extractMissions(data) {
   return [];
 }
 
+function extractMissionBonus(data) {
+  if (!data || typeof data !== "object") return null;
+  if (data.bonus && typeof data.bonus === "object") return data.bonus;
+  return null;
+}
+
 async function refreshMissions() {
   if (!state.token) return;
   try {
     const missionsRaw = await apiGet("/missions");
-    renderMissions(extractMissions(missionsRaw));
+    renderMissions(extractMissions(missionsRaw), extractMissionBonus(missionsRaw));
   } catch (err) {
     console.error("Misiju kļūda:", err);
   }
@@ -1326,12 +1408,231 @@ async function claimMission(id) {
       updatePlayerCard(data.me);
       playSound(sCoin);
     }
-    if (data.missions) renderMissions(extractMissions(data.missions));
+    if (data.missions || data.bonus) {
+      const missions = extractMissions(data.missions || data);
+      const bonus = extractMissionBonus(data);
+      renderMissions(missions, bonus);
+    }
     appendSystemMessage("✅ Misijas balva saņemta!");
   } catch (err) {
     console.error("Misijas claim kļūda:", err);
     appendSystemMessage(err.message || "Misijas kļūda, mēģini vēlreiz.");
   }
+}
+
+async function claimMissionBonus() {
+  try {
+    const data = await apiPost("/missions/bonus", {});
+    if (data.me) {
+      updatePlayerCard(data.me);
+      playSound(sCoin);
+    }
+    if (data.missions || data.bonus) {
+      const missions = extractMissions(data.missions || data);
+      const bonus = extractMissionBonus(data);
+      renderMissions(missions, bonus);
+    }
+    appendSystemMessage("✅ Dienas bonus balva saņemta!");
+  } catch (err) {
+    console.error("Bonus misijas kļūda:", err);
+    appendSystemMessage(err.message || "Bonus balvas kļūda, mēģini vēlreiz.");
+  }
+}
+
+// ==================== DRAUGI ====================
+function applyFriendsPayload(payload) {
+  if (!payload || typeof payload !== "object") return;
+  state.friends = Array.isArray(payload.friends) ? payload.friends : [];
+  state.friendInvitesIn = Array.isArray(payload.incoming) ? payload.incoming : [];
+  state.friendInvitesOut = Array.isArray(payload.outgoing) ? payload.outgoing : [];
+  renderFriends();
+  updateProfileFriendButton();
+}
+
+function friendRelation(name) {
+  const uname = String(name || "").trim();
+  const key = uname.toLowerCase();
+  const isFriend = state.friends.some((n) => String(n || "").toLowerCase() === key);
+  const incoming = state.friendInvitesIn.some((x) => String(x?.name || "").toLowerCase() === key);
+  const outgoing = state.friendInvitesOut.some((x) => String(x?.name || "").toLowerCase() === key);
+  return { isFriend, incoming, outgoing };
+}
+
+function renderFriends() {
+  if (!friendsListEl || !friendsInvitesEl) return;
+  friendsListEl.innerHTML = "";
+  friendsInvitesEl.innerHTML = "";
+
+  // Incoming invites
+  if (state.friendInvitesIn.length) {
+    state.friendInvitesIn.forEach((inv) => {
+      const name = String(inv?.name || "").trim();
+      if (!name) return;
+      const row = createEl("div", "vz-friends-invite");
+      row.textContent = `${name} uzaicina draugos`;
+
+      const actions = createEl("div", "vz-friends-invite-actions");
+      const accept = document.createElement("button");
+      accept.textContent = "Pieņemt";
+      accept.addEventListener("click", () => friendAccept(name));
+      const decline = document.createElement("button");
+      decline.textContent = "Noraidīt";
+      decline.addEventListener("click", () => friendDecline(name));
+      actions.appendChild(accept);
+      actions.appendChild(decline);
+      row.appendChild(actions);
+      friendsInvitesEl.appendChild(row);
+    });
+  }
+
+  // Outgoing invites
+  if (state.friendInvitesOut.length) {
+    state.friendInvitesOut.forEach((inv) => {
+      const name = String(inv?.name || "").trim();
+      if (!name) return;
+      const row = createEl("div", "vz-friends-invite");
+      row.textContent = `Ielūgums: ${name}`;
+
+      const actions = createEl("div", "vz-friends-invite-actions");
+      const cancel = document.createElement("button");
+      cancel.textContent = "Atcelt";
+      cancel.addEventListener("click", () => friendCancel(name));
+      actions.appendChild(cancel);
+      row.appendChild(actions);
+      friendsInvitesEl.appendChild(row);
+    });
+  }
+
+  if (!state.friends.length && !state.friendInvitesIn.length && !state.friendInvitesOut.length) {
+    const empty = createEl("div", "mission-status");
+    empty.textContent = "Nav draugu. Pievieno kādu!";
+    friendsInvitesEl.appendChild(empty);
+    return;
+  }
+
+  state.friends.forEach((name) => {
+    const row = createEl("li", "vz-friend-row");
+    const left = createEl("div", "vz-friend-left");
+    const dot = createEl("span", "vz-friend-status");
+    const online = state.onlineUsers.has(String(name || "").trim().toLowerCase());
+    if (online) dot.classList.add("vz-friend-online");
+    left.appendChild(dot);
+
+    const nick = createEl("span", "vz-friend-name clickable-username");
+    nick.textContent = name;
+    nick.addEventListener("click", () => openProfile(name));
+    left.appendChild(nick);
+    row.appendChild(left);
+
+    const actions = createEl("div", "vz-friend-actions");
+    const dmBtn = document.createElement("button");
+    dmBtn.textContent = "DM";
+    dmBtn.addEventListener("click", () => openDmWith(name));
+    const rmBtn = document.createElement("button");
+    rmBtn.textContent = "Noņemt";
+    rmBtn.addEventListener("click", () => friendRemove(name));
+    actions.appendChild(dmBtn);
+    actions.appendChild(rmBtn);
+    row.appendChild(actions);
+
+    friendsListEl.appendChild(row);
+  });
+}
+
+async function refreshFriends() {
+  if (!state.token) return;
+  try {
+    const data = await apiGet("/friends");
+    applyFriendsPayload(data);
+  } catch (err) {
+    console.error("Draugu kļūda:", err);
+  }
+}
+
+async function friendRequest(name) {
+  const u = String(name || "").trim();
+  if (!u) return;
+  try {
+    const data = await apiPost("/friends/request", { to: u });
+    applyFriendsPayload(data.friends || data);
+    appendSystemMessage("✅ Ielūgums nosūtīts.");
+  } catch (err) {
+    appendSystemMessage(err.message || "Neizdevās nosūtīt ielūgumu.");
+  }
+}
+
+async function friendAccept(name) {
+  const u = String(name || "").trim();
+  if (!u) return;
+  try {
+    const data = await apiPost("/friends/accept", { from: u });
+    applyFriendsPayload(data.friends || data);
+    appendSystemMessage("✅ Draugs pievienots.");
+  } catch (err) {
+    appendSystemMessage(err.message || "Neizdevās pieņemt ielūgumu.");
+  }
+}
+
+async function friendDecline(name) {
+  const u = String(name || "").trim();
+  if (!u) return;
+  try {
+    const data = await apiPost("/friends/decline", { from: u });
+    applyFriendsPayload(data.friends || data);
+  } catch (err) {
+    appendSystemMessage(err.message || "Neizdevās noraidīt ielūgumu.");
+  }
+}
+
+async function friendCancel(name) {
+  const u = String(name || "").trim();
+  if (!u) return;
+  try {
+    const data = await apiPost("/friends/cancel", { to: u });
+    applyFriendsPayload(data.friends || data);
+  } catch (err) {
+    appendSystemMessage(err.message || "Neizdevās atcelt ielūgumu.");
+  }
+}
+
+async function friendRemove(name) {
+  const u = String(name || "").trim();
+  if (!u) return;
+  try {
+    const data = await apiPost("/friends/remove", { user: u });
+    applyFriendsPayload(data.friends || data);
+    appendSystemMessage("✅ Draugs noņemts.");
+  } catch (err) {
+    appendSystemMessage(err.message || "Neizdevās noņemt draugu.");
+  }
+}
+
+function updateProfileFriendButton() {
+  const name = String(currentProfileName || "").trim();
+  const btn = document.getElementById("vz-profile-friend-btn");
+  if (!btn) return;
+  const isSelf = name && name === state.username;
+  if (isSelf || !name) {
+    btn.style.display = "none";
+    return;
+  }
+
+  const rel = friendRelation(name);
+  btn.style.display = "inline-block";
+  if (rel.incoming) btn.textContent = "✅ Pieņemt draugu";
+  else if (rel.outgoing) btn.textContent = "⌛ Ielūgts (atcelt)";
+  else if (rel.isFriend) btn.textContent = "❌ Noņemt draugu";
+  else btn.textContent = "➕ Pievienot draugu";
+}
+
+async function handleProfileFriendAction() {
+  const name = String(currentProfileName || "").trim();
+  if (!name) return;
+  const rel = friendRelation(name);
+  if (rel.incoming) return friendAccept(name);
+  if (rel.outgoing) return friendCancel(name);
+  if (rel.isFriend) return friendRemove(name);
+  return friendRequest(name);
 }
 
 // ==================== GRID / SPĒLES LOĢIKA ====================
@@ -1432,6 +1733,8 @@ function resetGrid(len) {
   state.currentCol = 0;
   state.isLocked = false;
   state.roundFinished = false;
+  state.lastShareResult = null;
+  setShareResultVisible(false);
 // reset reveal-letter ability katram jaunam raundam
 state.revealUsed = false;
 state.revealHint = null;
@@ -1838,6 +2141,7 @@ const guessLetters = letters.slice(); // kopija
       if (gameMessageEl) gameMessageEl.textContent = "Precīzi! Tu atminēji vārdu!";
       setTimeout(() => showWinEffects(), Math.min(120, unlockAfter));
       state.roundFinished = true;
+      setTimeout(() => prepareShareResult(true, rowIndex + 1), unlockAfter + 50);
 
       if (newRoundBtn) {
         newRoundBtn.style.display = "inline-block";
@@ -1851,6 +2155,7 @@ const guessLetters = letters.slice(); // kopija
           const me = await apiGet("/me");
           updatePlayerCard(me);
           refreshMissions();
+          refreshWeekly();
         } catch {}
       }, unlockAfter);
 
@@ -1860,6 +2165,7 @@ const guessLetters = letters.slice(); // kopija
     if (finished) {
       if (gameMessageEl) gameMessageEl.textContent = "Raunds beidzies!";
       state.roundFinished = true;
+      setTimeout(() => prepareShareResult(false, rowIndex + 1), unlockAfter + 50);
 
       if (newRoundBtn) {
         newRoundBtn.style.display = "inline-block";
@@ -1875,6 +2181,7 @@ const guessLetters = letters.slice(); // kopija
           const me = await apiGet("/me");
           updatePlayerCard(me);
           refreshMissions();
+          refreshWeekly();
         } catch {}
       }, unlockAfter);
 
@@ -2252,6 +2559,71 @@ async function refreshLeaderboard() {
   }
 }
 
+function renderWeekly(payload) {
+  if (!weeklyListEl) return;
+  const list = Array.isArray(payload?.list) ? payload.list : [];
+  weeklyListEl.innerHTML = "";
+
+  if (weeklySubEl) {
+    const wk = payload?.weekKey ? String(payload.weekKey) : "";
+    weeklySubEl.textContent = wk ? `Nedēļa sākas: ${wk}` : "Šonedēļ";
+  }
+
+  if (!list.length) {
+    const li = createEl("li", "vz-lb-item");
+    li.textContent = "Šonedēļ vēl nav rezultātu.";
+    weeklyListEl.appendChild(li);
+  } else {
+    list.forEach((item, idx) => {
+      const li = createEl("li", "vz-lb-item");
+
+      const placeSpan = createEl("span", "vz-lb-place");
+      placeSpan.textContent = String(idx + 1) + ".";
+      li.appendChild(placeSpan);
+
+      const avatarWrap = createEl("span", "vz-lb-avatar");
+      const avatarImg = createEl("img", "vz-lb-avatar-img");
+      const avatarInitials = createEl("span", "vz-lb-avatar-initials");
+      avatarWrap.appendChild(avatarImg);
+      avatarWrap.appendChild(avatarInitials);
+      li.appendChild(avatarWrap);
+
+      const spanName = createEl("span", "clickable-username vz-lb-name");
+      spanName.textContent = item.username;
+      applyRankColor(spanName, item.rankColor);
+      spanName.title = item.rankTitle || "";
+      spanName.addEventListener("click", () => openProfile(item.username));
+      applyNameTierClass(spanName, item.rankLevel);
+      li.appendChild(spanName);
+
+      const scoreSpan = createEl("span", "vz-lb-score");
+      scoreSpan.textContent = ` — ${item.wins || 0} W`;
+      li.appendChild(scoreSpan);
+
+      weeklyListEl.appendChild(li);
+      loadLeaderboardAvatar(item.username, avatarImg, avatarInitials);
+    });
+  }
+
+  if (weeklyYouEl) {
+    if (payload?.you && payload.you.username) {
+      weeklyYouEl.textContent = `Tava vieta: #${payload.you.rank} — ${payload.you.wins || 0} W`;
+    } else {
+      weeklyYouEl.textContent = "Tava vieta: —";
+    }
+  }
+}
+
+async function refreshWeekly() {
+  if (!state.token) return;
+  try {
+    const data = await apiGet("/weekly");
+    renderWeekly(data || {});
+  } catch (err) {
+    console.error("Weekly kļūda:", err);
+  }
+}
+
 function updateOnlineList(payload) {
   const ul = onlineListEl;
   const countEl = onlineCountEl;
@@ -2273,6 +2645,7 @@ function updateOnlineList(payload) {
 
   const myName = (state.username || "").trim();
   const visibleCount = players.length;
+  const onlineSet = new Set();
 
   players.forEach((p) => {
     let username = "";
@@ -2293,6 +2666,7 @@ let region = "";
     }
 
     if (!username) return;
+    onlineSet.add(String(username || "").trim().toLowerCase());
 
     const li = document.createElement("li");
     if (username === myName) li.classList.add("vz-online-self");
@@ -2333,6 +2707,8 @@ let region = "";
 
   const finalCount = typeof count === "number" && count > 0 ? count : visibleCount;
   countEl.textContent = String(finalCount);
+  state.onlineUsers = onlineSet;
+  renderFriends();
 }
 
 // ==================== HALL OF FAME ====================
@@ -4200,6 +4576,10 @@ socket.on("chatMessage", (payload) => {
     dmSetBlockedUsers(list);
     if (state.dmOpenWith) dmUpdateBlockUi();
   });
+
+  socket.on("friends.update", (payload) => {
+    applyFriendsPayload(payload);
+  });
  
   socket.on("dm.history", (payload) => {
     const withUser = String(payload?.with || "").trim();
@@ -4310,6 +4690,7 @@ socket.on("chatMessage", (payload) => {
   socket.on("playerWin", (info) => {
     updateWinTicker(info);
     refreshLeaderboard();
+    refreshWeekly();
     refreshRegionStats();
   });
 
@@ -4947,6 +5328,186 @@ async function handleShare() {
   }
 }
 
+function setShareResultVisible(on) {
+  if (shareResultBtn) shareResultBtn.style.display = on ? "block" : "none";
+  if (shareResultNote) shareResultNote.style.display = on ? "block" : "none";
+}
+
+function buildShareMatrix(rowsUsed) {
+  const out = [];
+  const rows = Math.max(0, Math.min(state.rows, rowsUsed || 0));
+  for (let r = 0; r < rows; r++) {
+    const rowTiles = state.gridTiles?.[r] || [];
+    const row = [];
+    for (let c = 0; c < state.cols; c++) {
+      const tile = rowTiles[c];
+      if (!tile) {
+        row.push("empty");
+        continue;
+      }
+      if (tile.classList.contains("correct")) row.push("correct");
+      else if (tile.classList.contains("present")) row.push("present");
+      else if (tile.classList.contains("absent")) row.push("absent");
+      else row.push("empty");
+    }
+    out.push(row);
+  }
+  return out;
+}
+
+function buildShareGridText(matrix) {
+  const map = {
+    correct: "🟩",
+    present: "🟨",
+    absent: "⬛",
+    empty: "⬜",
+  };
+  return matrix
+    .map((row) => row.map((c) => map[c] || "⬜").join(""))
+    .join("\n");
+}
+
+function buildShareText(data) {
+  const dateStr = new Date().toLocaleDateString("lv-LV");
+  const result = data.win ? `${data.attempts}/${data.rows}` : `X/${data.rows}`;
+  const gridText = data.gridText || "";
+  return `VĀRDU ZONA ${dateStr} ${result}\n${gridText}\n${window.location.origin}`;
+}
+
+function drawRoundedRect(ctx, x, y, w, h, r) {
+  const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+async function buildShareSticker(data) {
+  const width = 1080;
+  const height = 1350;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  const bg = ctx.createLinearGradient(0, 0, 0, height);
+  bg.addColorStop(0, "#050716");
+  bg.addColorStop(0.5, "#0b1233");
+  bg.addColorStop(1, "#0a0f2a");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillStyle = "#ffffff";
+  ctx.shadowColor = "rgba(255, 0, 70, 0.75)";
+  ctx.shadowBlur = 18;
+  ctx.font = "italic 84px Cinzel, serif";
+  ctx.fillText("VĀRDU ZONA", width / 2, 80);
+  ctx.shadowBlur = 0;
+
+  const result = data.win ? `${data.attempts}/${data.rows}` : `X/${data.rows}`;
+  ctx.fillStyle = "#ff0046";
+  ctx.font = "700 48px Arial, sans-serif";
+  ctx.fillText(`Rezultāts: ${result}`, width / 2, 190);
+
+  const matrix = data.matrix || [];
+  const rows = matrix.length;
+  const cols = state.cols || 5;
+  const maxGridWidth = width - 200;
+  const cell = Math.floor(Math.min(78, maxGridWidth / cols));
+  const gap = Math.max(6, Math.floor(cell * 0.12));
+  const gridW = cols * cell + (cols - 1) * gap;
+  const gridH = rows * cell + (rows - 1) * gap;
+  const startX = Math.floor((width - gridW) / 2);
+  const startY = 300;
+
+  const colors = {
+    correct: "#00c853",
+    present: "#ff9100",
+    absent: "#1a1b2e",
+    empty: "#2a2a2c",
+  };
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const val = matrix[r]?.[c] || "empty";
+      const x = startX + c * (cell + gap);
+      const y = startY + r * (cell + gap);
+      ctx.fillStyle = colors[val] || colors.empty;
+      drawRoundedRect(ctx, x, y, cell, cell, 10);
+      ctx.fill();
+    }
+  }
+
+  ctx.fillStyle = "rgba(255,255,255,0.75)";
+  ctx.font = "600 26px Arial, sans-serif";
+  ctx.fillText("Uzspēlē VĀRDU ZONU!", width / 2, height - 140);
+  ctx.fillStyle = "rgba(255,255,255,0.5)";
+  ctx.font = "500 22px Arial, sans-serif";
+  ctx.fillText(window.location.origin, width / 2, height - 98);
+
+  return await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+}
+
+function prepareShareResult(isWin, attemptsUsed) {
+  if (state.duelMode) return;
+  const rowsUsed = Math.max(1, Math.min(state.rows, attemptsUsed || state.rows));
+  const matrix = buildShareMatrix(rowsUsed);
+  const gridText = buildShareGridText(matrix);
+  state.lastShareResult = {
+    win: !!isWin,
+    attempts: rowsUsed,
+    rows: state.rows,
+    matrix,
+    gridText,
+  };
+  setShareResultVisible(true);
+}
+
+async function handleShareResult() {
+  const data = state.lastShareResult;
+  if (!data) return;
+  const text = buildShareText(data);
+  const blob = await buildShareSticker(data);
+
+  if (blob && navigator.share && navigator.canShare) {
+    const file = new File([blob], "vardu-zona.png", { type: "image/png" });
+    if (navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ title: "VĀRDU ZONA", text, files: [file] });
+        appendSystemMessage("✅ Rezultāts padalīts.");
+        return;
+      } catch {}
+    }
+  }
+
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: "VĀRDU ZONA", text });
+      appendSystemMessage("✅ Rezultāts padalīts.");
+      return;
+    } catch {}
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    appendSystemMessage("✅ Rezultāts nokopēts.");
+  } catch {
+    prompt("Nokopē rezultātu:", text);
+  }
+
+  if (blob) {
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener,noreferrer");
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+}
+
 // ==================== RADIO INIT (vienreiz) ====================
 function initRadioUi() {
   const radioAudio = document.getElementById("vz-radio");
@@ -5108,6 +5669,22 @@ async function initGame() {
   }
 
   if (shareBtn) shareBtn.addEventListener("click", handleShare);
+  if (shareResultBtn) shareResultBtn.addEventListener("click", handleShareResult);
+
+  if (friendAddBtnEl && friendAddInputEl) {
+    friendAddBtnEl.addEventListener("click", () => {
+      const name = String(friendAddInputEl.value || "").trim();
+      if (!name) return;
+      friendAddInputEl.value = "";
+      friendRequest(name);
+    });
+    friendAddInputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        friendAddBtnEl.click();
+      }
+    });
+  }
 
   if (playerAvatarUploadBtnEl && playerAvatarFileEl) {
     playerAvatarUploadBtnEl.addEventListener("click", () => playerAvatarFileEl.click());

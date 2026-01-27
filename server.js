@@ -206,6 +206,12 @@ const DAILY_MISSIONS_COUNT = (() => {
   return Number.isFinite(v) && v >= 3 && v <= 8 ? v : 6;
 })();
 
+const DAILY_MISSION_BONUS_REWARD = {
+  xp: parseInt(process.env.DAILY_MISSION_BONUS_XP || "80", 10),
+  coins: parseInt(process.env.DAILY_MISSION_BONUS_COINS || "60", 10),
+  tokens: parseInt(process.env.DAILY_MISSION_BONUS_TOKENS || "1", 10),
+};
+
 // Missionu tipiem jābūt atbalstam updateMissionsOn* funkcijās zemāk.
 // baseTarget/baseRewards tiks skalēti pēc spēlētāja rank tier (lai augstākiem rankiem grūtāk).
 const DAILY_MISSION_POOL = [
@@ -392,6 +398,7 @@ function loadUsers() {
 
       if (typeof u.missionsDate !== "string") u.missionsDate = "";
       if (!Array.isArray(u.missions)) u.missions = [];
+      if (typeof u.missionsBonusDate !== "string") u.missionsBonusDate = "";
 
       // Statistika medaļām
       if (typeof u.totalGuesses !== "number") u.totalGuesses = 0;
@@ -399,6 +406,10 @@ function loadUsers() {
       if (typeof u.winsToday !== "number") u.winsToday = 0;
       if (typeof u.winsTodayDate !== "string") u.winsTodayDate = "";
       if (typeof u.dailyLoginDate !== "string") u.dailyLoginDate = "";
+      if (typeof u.weeklyKey !== "string") u.weeklyKey = "";
+      if (typeof u.weeklyWins !== "number") u.weeklyWins = 0;
+      if (typeof u.weeklyXp !== "number") u.weeklyXp = 0;
+      if (typeof u.weeklyScore !== "number") u.weeklyScore = 0;
 
       // Duēļu statistika
       if (typeof u.duelsWon !== "number") u.duelsWon = 0;
@@ -495,6 +506,11 @@ function loadUsers() {
       } catch {
         u.blocks = {};
       }
+
+      // Draugi + ielūgumi
+      if (!Array.isArray(u.friends)) u.friends = [];
+      if (!u.friendInvitesIn || typeof u.friendInvitesIn !== "object") u.friendInvitesIn = {};
+      if (!u.friendInvitesOut || typeof u.friendInvitesOut !== "object") u.friendInvitesOut = {};
 
       // Guess anti-spam
       if (typeof u.lastGuessAt !== "number") u.lastGuessAt = 0;
@@ -1209,6 +1225,35 @@ function todayKey(date = new Date()) {
   return fmt.format(date);
 }
 
+function datePartsInTz(date = new Date(), tz = TZ) {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const [y, m, d] = fmt.format(date).split("-");
+  return { y: Number(y) || 0, m: Number(m) || 0, d: Number(d) || 0 };
+}
+
+function weekKey(date = new Date(), tz = TZ) {
+  const parts = datePartsInTz(date, tz);
+  const base = new Date(Date.UTC(parts.y, parts.m - 1, parts.d));
+  const weekday = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    weekday: "short",
+  }).format(date);
+  const map = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+  const dow = map[weekday] || 1;
+  base.setUTCDate(base.getUTCDate() - (dow - 1));
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(base);
+}
+
 function minutesInTz(date = new Date(), tz = TZ) {
   const fmt = new Intl.DateTimeFormat("en-GB", {
     timeZone: tz,
@@ -1475,6 +1520,7 @@ function ensureDailyMissions(user) {
   if (user.missionsDate !== key || !Array.isArray(user.missions) || !user.missions.length) {
     user.missionsDate = key;
     user.missions = buildDailyMissions(user);
+    user.missionsBonusDate = "";
   } else {
     // Migrācija/upgrade tajā pašā dienā:
     // - ja vecais formāts (nav code/meta) -> pievienojam
@@ -1586,6 +1632,27 @@ function getPublicMissions(user) {
     isClaimed: !!m.isClaimed,
     rewards: m.rewards || {},
   }));
+}
+
+function getMissionBonusStatus(user) {
+  ensureDailyMissions(user);
+  const list = Array.isArray(user.missions) ? user.missions : [];
+  const total = list.length;
+  const completed = list.filter((m) => m && m.isCompleted).length;
+  const today = todayKey();
+  const isClaimed = user.missionsBonusDate === today;
+  const rewards = {
+    xp: Math.max(0, Number(DAILY_MISSION_BONUS_REWARD.xp) || 0),
+    coins: Math.max(0, Number(DAILY_MISSION_BONUS_REWARD.coins) || 0),
+    tokens: Math.max(0, Number(DAILY_MISSION_BONUS_REWARD.tokens) || 0),
+  };
+  return {
+    total,
+    completed,
+    isCompleted: total > 0 && completed >= total,
+    isClaimed,
+    rewards,
+  };
 }
 
 function updateMissionsOnGuess(user, { isWin, xpGain, winTimeMs, wordLen, attemptsUsed }) {
@@ -1723,6 +1790,65 @@ function resetWinsTodayIfNeeded(user) {
     user.winsTodayDate = today;
     user.winsToday = 0;
   }
+}
+
+function ensureWeekly(user) {
+  const key = weekKey();
+  if (user.weeklyKey !== key) {
+    user.weeklyKey = key;
+    user.weeklyWins = 0;
+    user.weeklyXp = 0;
+    user.weeklyScore = 0;
+    return true;
+  }
+  return false;
+}
+
+function computeWeeklyLeaderboard(requester) {
+  const key = weekKey();
+  const list = [];
+  let changed = false;
+
+  for (const u of Object.values(USERS || {})) {
+    if (!u || !u.username || u.isBanned) continue;
+    if (ensureWeekly(u)) changed = true;
+    if (u.weeklyKey !== key) continue;
+    const wins = Math.max(0, Math.floor(Number(u.weeklyWins) || 0));
+    const score = Math.max(0, Math.floor(Number(u.weeklyScore) || 0));
+    const xp = Math.max(0, Math.floor(Number(u.weeklyXp) || 0));
+    if (!wins && !score && !xp) continue;
+    ensureRankFields(u);
+    list.push({
+      username: u.username,
+      wins,
+      score,
+      xp,
+      rankLevel: u.rankLevel || 1,
+      rankColor: u.rankColor || "#9CA3AF",
+      rankTitle: u.rankTitle || "—",
+      avatarUrl: u.avatarUrl || null,
+    });
+  }
+
+  list.sort(
+    (a, b) =>
+      b.wins - a.wins ||
+      b.score - a.score ||
+      b.xp - a.xp ||
+      String(a.username).localeCompare(String(b.username))
+  );
+
+  const top = list.slice(0, 10);
+  let you = null;
+  if (requester && requester.username) {
+    const idx = list.findIndex((x) => x.username === requester.username);
+    if (idx >= 0) {
+      you = { ...list[idx], rank: idx + 1 };
+    }
+  }
+
+  if (changed) saveUsers(USERS);
+  return { weekKey: key, list: top, you };
 }
 
 function awardRegionMvpIfNeeded(today) {
@@ -2639,6 +2765,113 @@ function listBlocks(user) {
   return Object.values(blocks).filter(Boolean);
 }
 
+function ensureFriends(user) {
+  if (!user || typeof user !== "object") return null;
+  if (!Array.isArray(user.friends)) user.friends = [];
+  if (!user.friendInvitesIn || typeof user.friendInvitesIn !== "object") user.friendInvitesIn = {};
+  if (!user.friendInvitesOut || typeof user.friendInvitesOut !== "object") user.friendInvitesOut = {};
+
+  const cleanList = [];
+  const seen = new Set();
+  for (const raw of user.friends) {
+    const name = String(raw || "").trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    cleanList.push(name);
+  }
+  user.friends = cleanList;
+
+  const cleanInvites = (inv) => {
+    const out = {};
+    for (const [k, v] of Object.entries(inv || {})) {
+      let name = "";
+      let ts = 0;
+      if (v && typeof v === "object") {
+        name = String(v.name || k || "").trim();
+        ts = Math.max(0, Number(v.ts) || 0);
+      } else {
+        name = String(v || k || "").trim();
+      }
+      if (!name) continue;
+      out[name.toLowerCase()] = { name, ts };
+    }
+    return out;
+  };
+
+  user.friendInvitesIn = cleanInvites(user.friendInvitesIn);
+  user.friendInvitesOut = cleanInvites(user.friendInvitesOut);
+  return user;
+}
+
+function areFriends(user, otherName) {
+  ensureFriends(user);
+  const key = String(otherName || "").trim().toLowerCase();
+  if (!key) return false;
+  return (user.friends || []).some((n) => String(n || "").toLowerCase() === key);
+}
+
+function addFriend(user, otherName) {
+  ensureFriends(user);
+  const name = String(otherName || "").trim();
+  if (!name) return false;
+  const key = name.toLowerCase();
+  if (user.friends.some((n) => String(n || "").toLowerCase() === key)) return false;
+  user.friends.push(name);
+  return true;
+}
+
+function removeFriend(user, otherName) {
+  ensureFriends(user);
+  const key = String(otherName || "").trim().toLowerCase();
+  if (!key) return false;
+  const before = user.friends.length;
+  user.friends = user.friends.filter((n) => String(n || "").toLowerCase() !== key);
+  return user.friends.length !== before;
+}
+
+function setInvite(map, otherName, ts = Date.now()) {
+  const name = String(otherName || "").trim();
+  if (!name) return false;
+  map[name.toLowerCase()] = { name, ts: Math.max(0, Number(ts) || 0) };
+  return true;
+}
+
+function removeInvite(map, otherName) {
+  const key = String(otherName || "").trim().toLowerCase();
+  if (!key) return false;
+  delete map[key];
+  return true;
+}
+
+function listInvites(map) {
+  const arr = [];
+  for (const v of Object.values(map || {})) {
+    if (!v || !v.name) continue;
+    arr.push({ name: v.name, ts: Math.max(0, Number(v.ts) || 0) });
+  }
+  arr.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  return arr;
+}
+
+function getFriendsPayload(user) {
+  ensureFriends(user);
+  return {
+    friends: (user.friends || []).slice().sort((a, b) => String(a).localeCompare(String(b))),
+    incoming: listInvites(user.friendInvitesIn),
+    outgoing: listInvites(user.friendInvitesOut),
+  };
+}
+
+function emitFriendsUpdate(username) {
+  const key = findUserKeyCaseInsensitive(username);
+  const u = key ? USERS[key] : null;
+  if (!u) return;
+  const socket = getSocketByUsername(u.username);
+  if (socket) socket.emit("friends.update", getFriendsPayload(u));
+}
+
 function dmComputeUnread(dm) {
   const byUser = dm?.unread && typeof dm.unread === "object" ? dm.unread : {};
   let total = 0;
@@ -3194,10 +3427,15 @@ async function signupHandler(req, res) {
     mutedUntil: 0,
     missionsDate: "",
     missions: [],
+    missionsBonusDate: "",
     totalGuesses: 0,
     bestWinTimeMs: 0,
     winsToday: 0,
     winsTodayDate: "",
+    weeklyKey: "",
+    weeklyWins: 0,
+    weeklyXp: 0,
+    weeklyScore: 0,
     dailyLoginDate: "",
     duelsWon: 0,
     duelsLost: 0,
@@ -3219,6 +3457,9 @@ async function signupHandler(req, res) {
     dailyChest: { lastDate: "", streak: 0, totalOpens: 0 },
     specialMedals: [],
     blocks: {},
+    friends: [],
+    friendInvitesIn: {},
+    friendInvitesOut: {},
     lastChatAt: 0,
     lastChatText: "",
     lastChatTextAt: 0,
@@ -3421,6 +3662,143 @@ app.get("/profile/:username", authMiddleware, (req, res) => {
   res.json(buildPublicProfilePayload(user, requester));
 });
 
+// ======== DRAUGI ========
+app.get("/friends", authMiddleware, (req, res) => {
+  const user = req.user;
+  markActivity(user);
+  ensureFriends(user);
+  saveUsers(USERS);
+  res.json(getFriendsPayload(user));
+});
+
+app.post("/friends/request", authMiddleware, (req, res) => {
+  const user = req.user;
+  const toRaw = req.body?.to || req.body?.username || req.body?.user || "";
+  const toName = String(toRaw || "").trim();
+  if (!toName) return res.status(400).json({ message: "Nav norādīts lietotājs." });
+  if (toName === user.username)
+    return res.status(400).json({ message: "Nevari pievienot sevi." });
+
+  const key = findUserKeyCaseInsensitive(toName);
+  const target = key ? USERS[key] : null;
+  if (!target) return res.status(404).json({ message: "Lietotājs nav atrasts." });
+
+  ensureFriends(user);
+  ensureFriends(target);
+  if (areFriends(user, target.username)) {
+    return res.status(400).json({ message: "Jūs jau esat draugi." });
+  }
+  if (isBlocked(user, target.username) || isBlocked(target, user.username)) {
+    return res.status(400).json({ message: "Drauga ielūgums nav pieejams." });
+  }
+
+  const keyLower = target.username.toLowerCase();
+  // ja viņš jau uzaicinājis tevi -> auto accept
+  if (user.friendInvitesIn[keyLower]) {
+    removeInvite(user.friendInvitesIn, target.username);
+    removeInvite(target.friendInvitesOut, user.username);
+    addFriend(user, target.username);
+    addFriend(target, user.username);
+    saveUsers(USERS);
+    emitFriendsUpdate(user.username);
+    emitFriendsUpdate(target.username);
+    return res.json({ ok: true, friends: getFriendsPayload(user) });
+  }
+
+  setInvite(target.friendInvitesIn, user.username);
+  setInvite(user.friendInvitesOut, target.username);
+  saveUsers(USERS);
+  emitFriendsUpdate(user.username);
+  emitFriendsUpdate(target.username);
+  return res.json({ ok: true, friends: getFriendsPayload(user) });
+});
+
+app.post("/friends/accept", authMiddleware, (req, res) => {
+  const user = req.user;
+  const fromRaw = req.body?.from || req.body?.username || req.body?.user || "";
+  const fromName = String(fromRaw || "").trim();
+  if (!fromName) return res.status(400).json({ message: "Nav norādīts lietotājs." });
+
+  const key = findUserKeyCaseInsensitive(fromName);
+  const other = key ? USERS[key] : null;
+  if (!other) return res.status(404).json({ message: "Lietotājs nav atrasts." });
+
+  ensureFriends(user);
+  ensureFriends(other);
+  if (!user.friendInvitesIn[other.username.toLowerCase()]) {
+    return res.status(400).json({ message: "Nav ielūguma no šī lietotāja." });
+  }
+
+  removeInvite(user.friendInvitesIn, other.username);
+  removeInvite(other.friendInvitesOut, user.username);
+  addFriend(user, other.username);
+  addFriend(other, user.username);
+  saveUsers(USERS);
+  emitFriendsUpdate(user.username);
+  emitFriendsUpdate(other.username);
+  res.json({ ok: true, friends: getFriendsPayload(user) });
+});
+
+app.post("/friends/decline", authMiddleware, (req, res) => {
+  const user = req.user;
+  const fromRaw = req.body?.from || req.body?.username || req.body?.user || "";
+  const fromName = String(fromRaw || "").trim();
+  if (!fromName) return res.status(400).json({ message: "Nav norādīts lietotājs." });
+
+  const key = findUserKeyCaseInsensitive(fromName);
+  const other = key ? USERS[key] : null;
+  if (!other) return res.status(404).json({ message: "Lietotājs nav atrasts." });
+
+  ensureFriends(user);
+  ensureFriends(other);
+  removeInvite(user.friendInvitesIn, other.username);
+  removeInvite(other.friendInvitesOut, user.username);
+  saveUsers(USERS);
+  emitFriendsUpdate(user.username);
+  emitFriendsUpdate(other.username);
+  res.json({ ok: true, friends: getFriendsPayload(user) });
+});
+
+app.post("/friends/cancel", authMiddleware, (req, res) => {
+  const user = req.user;
+  const toRaw = req.body?.to || req.body?.username || req.body?.user || "";
+  const toName = String(toRaw || "").trim();
+  if (!toName) return res.status(400).json({ message: "Nav norādīts lietotājs." });
+
+  const key = findUserKeyCaseInsensitive(toName);
+  const other = key ? USERS[key] : null;
+  if (!other) return res.status(404).json({ message: "Lietotājs nav atrasts." });
+
+  ensureFriends(user);
+  ensureFriends(other);
+  removeInvite(user.friendInvitesOut, other.username);
+  removeInvite(other.friendInvitesIn, user.username);
+  saveUsers(USERS);
+  emitFriendsUpdate(user.username);
+  emitFriendsUpdate(other.username);
+  res.json({ ok: true, friends: getFriendsPayload(user) });
+});
+
+app.post("/friends/remove", authMiddleware, (req, res) => {
+  const user = req.user;
+  const otherRaw = req.body?.user || req.body?.username || req.body?.to || "";
+  const otherName = String(otherRaw || "").trim();
+  if (!otherName) return res.status(400).json({ message: "Nav norādīts lietotājs." });
+
+  const key = findUserKeyCaseInsensitive(otherName);
+  const other = key ? USERS[key] : null;
+  if (!other) return res.status(404).json({ message: "Lietotājs nav atrasts." });
+
+  ensureFriends(user);
+  ensureFriends(other);
+  removeFriend(user, other.username);
+  removeFriend(other, user.username);
+  saveUsers(USERS);
+  emitFriendsUpdate(user.username);
+  emitFriendsUpdate(other.username);
+  res.json({ ok: true, friends: getFriendsPayload(user) });
+});
+
 // ======== MISIJU ENDPOINTI ========
 app.get("/missions", authMiddleware, (req, res) => {
   const user = req.user;
@@ -3432,7 +3810,7 @@ app.get("/missions", authMiddleware, (req, res) => {
   ensureSpecialMedals(user);
   ensureRankFields(user);
   saveUsers(USERS);
-  res.json(getPublicMissions(user));
+  res.json({ missions: getPublicMissions(user), bonus: getMissionBonusStatus(user) });
 });
 
 app.post("/missions/claim", authMiddleware, (req, res) => {
@@ -3473,7 +3851,53 @@ app.post("/missions/claim", authMiddleware, (req, res) => {
     wheelEmitUpdate(true);
   }
 
-  res.json({ me: buildMePayload(user), missions: getPublicMissions(user) });
+  res.json({
+    me: buildMePayload(user),
+    missions: getPublicMissions(user),
+    bonus: getMissionBonusStatus(user),
+  });
+});
+
+app.post("/missions/bonus", authMiddleware, (req, res) => {
+  const user = req.user;
+  markActivity(user);
+  ensureDailyMissions(user);
+  resetDailyCountersIfNeeded(user);
+  ensureDailyChest(user);
+  ensureSpecialMedals(user);
+
+  const bonus = getMissionBonusStatus(user);
+  if (!bonus.isCompleted) {
+    return res.status(400).json({ message: "Visas misijas vēl nav pabeigtas." });
+  }
+  if (bonus.isClaimed) {
+    return res.status(400).json({ message: "Dienas bonus balva jau saņemta." });
+  }
+
+  const rw = bonus.rewards || {};
+  const addXp = rw.xp || 0;
+  const addCoins = rw.coins || 0;
+  const addTokens = rw.tokens || 0;
+
+  user.xp = (user.xp || 0) + addXp;
+  user.coins = (user.coins || 0) + addCoins;
+  user.tokens = (user.tokens || 0) + addTokens;
+  user.missionsBonusDate = todayKey();
+  ensureRankFields(user);
+
+  saveUsers(USERS);
+  broadcastLeaderboard(false);
+
+  if (addTokens > 0) {
+    wheelSyncTokenSlots(true);
+    wheelEmitUpdate(true);
+  }
+
+  res.json({
+    me: buildMePayload(user),
+    missions: getPublicMissions(user),
+    bonus: getMissionBonusStatus(user),
+  });
 });
 
 // ======== DAILY CHEST ENDPOINTI ========
@@ -3976,6 +4400,10 @@ app.post("/guess", authMiddleware, (req, res) => {
     user.xp = (user.xp || 0) + xpGain;
     user.score = (user.score || 0) + SCORE_PER_WIN;
     user.coins = (user.coins || 0) + coinsGain;
+    ensureWeekly(user);
+    user.weeklyWins = (user.weeklyWins || 0) + 1;
+    user.weeklyScore = (user.weeklyScore || 0) + SCORE_PER_WIN;
+    user.weeklyXp = (user.weeklyXp || 0) + xpGain;
     if (REGION_POINTS_PER_WIN > 0) {
       let regionPointsGain = REGION_POINTS_PER_WIN;
       if (isRegionBonusActive()) regionPointsGain *= REGION_BONUS_MULTIPLIER;
@@ -4067,6 +4495,14 @@ app.post("/buy-token", authMiddleware, (req, res) => {
 // ===== Leaderboard =====
 app.get("/leaderboard", (_req, res) => {
   res.json(computeTop10Leaderboard());
+});
+
+// ===== Weekly challenge =====
+app.get("/weekly", authMiddleware, (req, res) => {
+  const user = req.user;
+  markActivity(user);
+  ensureWeekly(user);
+  res.json(computeWeeklyLeaderboard(user));
 });
 
 // ===== Regions (Novadi) =====
@@ -4625,6 +5061,7 @@ io.on("connection", (socket) => {
     ensureDm(u);
     socket.emit("dm.unread", dmComputeUnread(u.dm));
     socket.emit("dm.blocked", { list: listBlocks(u) });
+    socket.emit("friends.update", getFriendsPayload(u));
   } catch {}
 
   socket.on("leaderboard:top10", () => {

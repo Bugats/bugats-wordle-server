@@ -837,6 +837,146 @@ input:focus-visible {
   gap: 6px;
 }
 
+/* ===== FRIENDS ===== */
+.vz-friends-add {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0 8px;
+}
+
+#friend-add-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 12px;
+}
+
+#friend-add-btn {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.vz-friends-invites {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.vz-friends-invite {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+}
+
+.vz-friends-invite-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.vz-friends-invite-actions button {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.vz-friends-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vz-friend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+}
+
+.vz-friend-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.vz-friend-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vz-friend-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #6b7280;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+}
+
+.vz-friend-status.vz-friend-online {
+  background: #22c55e;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.9);
+}
+
+.vz-friend-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.vz-friend-actions button {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+/* ===== WEEKLY ===== */
+.vz-weekly-sub {
+  font-size: 12px;
+  opacity: 0.85;
+  margin: 4px 0 8px;
+}
+
+.vz-weekly-you {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
 /* ===== REGION BADGES ===== */
 .vz-region-badge {
   display: inline-flex;
@@ -1972,6 +2112,13 @@ input:focus-visible {
   border-bottom: 1px solid #2a2a2c;
 }
 .mission-item:last-child { border-bottom: none; }
+
+.mission-bonus-item {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(255, 0, 70, 0.35);
+  background: rgba(255, 0, 70, 0.04);
+}
 
 .mission-title { font-weight: 600; margin-bottom: 2px; }
 .mission-progress { color: #bbb; font-size: 11px; margin-bottom: 2px; }

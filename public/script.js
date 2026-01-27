@@ -420,7 +420,8 @@ function renderMissions(missions) {
 async function refreshMissions() {
   if (!missionsListEl || !state.token) return;
   try {
-    const missions = await apiGet("/missions");
+    const data = await apiGet("/missions");
+    const missions = Array.isArray(data) ? data : Array.isArray(data.missions) ? data.missions : [];
     renderMissions(missions);
   } catch (err) {
     console.error("Misiju kļūda:", err);

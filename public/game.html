@@ -35,7 +35,7 @@
     <link rel="dns-prefetch" href="//pagead2.googlesyndication.com" />
     <link rel="preconnect" href="https://pagead2.googlesyndication.com" crossorigin />
 
-   <link rel="stylesheet" href="style.css?v=2026-02-10" />
+   <link rel="stylesheet" href="style.css?v=2026-02-11" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -206,12 +206,26 @@
 
               <button id="share-btn" class="vz-share-btn" type="button">🔗 Dalīties ar VĀRDU ZONU</button>
               <p class="vz-share-note">Uzspied un padalies ar spēli TikTok, WhatsApp vai citur.</p>
+              <button id="share-result-btn" class="vz-share-btn" type="button" style="display: none">
+                📣 Dalīties ar rezultātu
+              </button>
+              <p id="share-result-note" class="vz-share-note" style="display: none">
+                Uztaisu uzlīmīti ar tavu rezultātu un VĀRDU ZONU.
+              </p>
             </div>
 
             <!-- TOP 10 -->
             <div class="vz-leaderboard-card">
               <div class="vz-card-header">TOP 10 spēlētāji</div>
               <ol id="lb-list" class="vz-lb-list"></ol>
+            </div>
+
+            <!-- WEEKLY CHALLENGE -->
+            <div class="vz-leaderboard-card" id="weekly-card">
+              <div class="vz-card-header">Weekly challenge</div>
+              <div class="vz-weekly-sub" id="weekly-sub">Šonedēļ</div>
+              <ol id="weekly-list" class="vz-lb-list"></ol>
+              <div id="weekly-you" class="vz-weekly-you"></div>
             </div>
 
             <!-- HALL OF FAME -->
@@ -224,6 +238,17 @@
             <div class="vz-online-card">
               <div class="vz-card-header">Online: <span id="online-count">0</span></div>
               <ul id="online-list" class="vz-online-list"></ul>
+            </div>
+
+            <!-- DRAUGI -->
+            <div class="vz-online-card" id="friends-card">
+              <div class="vz-card-header">Draugi</div>
+              <div class="vz-friends-add">
+                <input id="friend-add-input" type="text" placeholder="Lietotājvārds" />
+                <button id="friend-add-btn" type="button">Pievienot</button>
+              </div>
+              <div id="friends-invites" class="vz-friends-invites"></div>
+              <ul id="friends-list" class="vz-friends-list"></ul>
             </div>
 
             <!-- ATBALSTS -->
@@ -513,10 +538,10 @@
 </script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-02-10"></script>
+    <script defer src="game.js?v=2026-02-11"></script>
 
     <!-- GRID FX (jauns fails, neķeram game.js) -->
-    <script defer src="grid-fx.js?v=2026-02-10"></script>
+    <script defer src="grid-fx.js?v=2026-02-11"></script>
 
     <!-- PWA -->
     <script defer src="pwa.js"></script>
