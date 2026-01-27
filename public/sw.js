@@ -1,4 +1,4 @@
-const CACHE_VERSION = "vz-pwa-v1";
+const CACHE_VERSION = "vz-pwa-v2";
 const CORE_ASSETS = [
   "./",
   "./index.html",
