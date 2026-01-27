@@ -62,6 +62,41 @@ const REGION_POINTS_MAX_ACTION = (() => {
   const v = parseInt(process.env.REGION_POINTS_MAX_ACTION || "10", 10);
   return Number.isFinite(v) && v >= 1 && v <= 100 ? v : 10;
 })();
+const REGION_BONUS_MULTIPLIER = (() => {
+  const v = parseInt(process.env.REGION_BONUS_MULTIPLIER || "2", 10);
+  return Number.isFinite(v) && v >= 1 && v <= 5 ? v : 2;
+})();
+const REGION_BONUS_WINDOWS = (() => {
+  const raw = String(process.env.REGION_BONUS_WINDOWS || "20:00-21:00").trim();
+  const parts = raw
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const windows = [];
+  for (const p of parts) {
+    const [a, b] = p.split("-").map((x) => x.trim());
+    if (!a || !b) continue;
+    const toMin = (s) => {
+      const m = /^(\d{1,2}):(\d{2})$/.exec(s);
+      if (!m) return null;
+      const hh = parseInt(m[1], 10);
+      const mm = parseInt(m[2], 10);
+      if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+      if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+      return hh * 60 + mm;
+    };
+    const start = toMin(a);
+    const end = toMin(b);
+    if (start == null || end == null) continue;
+    if (start === end) continue;
+    windows.push({ start, end });
+  }
+  return windows;
+})();
+const REGION_MVP_BOOST = (() => {
+  const v = parseInt(process.env.REGION_MVP_BOOST || "20", 10);
+  return Number.isFinite(v) && v >= 0 && v <= 1000 ? v : 20;
+})();
 
 // ======== Season rollover: coins/tokens reset (ENV slēdzis) ========
 const RESET_COINS_TOKENS_ON_ROLLOVER =
@@ -477,6 +512,7 @@ function buildInitialSeasonStore() {
       endAt: SEASON1_END_AT,
     },
     hallOfFame: [],
+    regionMvp: { lastDate: "", winners: {} },
   };
 }
 
@@ -488,6 +524,9 @@ if (!seasonStore || typeof seasonStore !== "object") {
   if (!seasonStore.current)
     seasonStore.current = buildInitialSeasonStore().current;
   if (!Array.isArray(seasonStore.hallOfFame)) seasonStore.hallOfFame = [];
+  if (!seasonStore.regionMvp || typeof seasonStore.regionMvp !== "object") {
+    seasonStore.regionMvp = { lastDate: "", winners: {} };
+  }
 }
 
 let seasonState = seasonStore.current;
@@ -1119,6 +1158,34 @@ function todayKey(date = new Date()) {
   return fmt.format(date);
 }
 
+function minutesInTz(date = new Date(), tz = TZ) {
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = fmt.formatToParts(date);
+  const h = parseInt(parts.find((p) => p.type === "hour")?.value || "0", 10);
+  const m = parseInt(parts.find((p) => p.type === "minute")?.value || "0", 10);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return 0;
+  return h * 60 + m;
+}
+
+function isRegionBonusActive(date = new Date()) {
+  if (!REGION_BONUS_WINDOWS.length) return false;
+  if (REGION_BONUS_MULTIPLIER <= 1) return false;
+  const t = minutesInTz(date, TZ);
+  for (const w of REGION_BONUS_WINDOWS) {
+    if (w.start < w.end) {
+      if (t >= w.start && t < w.end) return true;
+    } else {
+      if (t >= w.start || t < w.end) return true;
+    }
+  }
+  return false;
+}
+
 // ======== Daily Chest helperi ========
 function ensureDailyChest(user) {
   if (!user.dailyChest || typeof user.dailyChest !== "object")
@@ -1601,8 +1668,65 @@ function updateMissionsOnChestOpen(user) {
 function resetWinsTodayIfNeeded(user) {
   const today = todayKey();
   if (user.winsTodayDate !== today) {
+    awardRegionMvpIfNeeded(today);
     user.winsTodayDate = today;
     user.winsToday = 0;
+  }
+}
+
+function awardRegionMvpIfNeeded(today) {
+  if (!seasonStore.regionMvp || typeof seasonStore.regionMvp !== "object") {
+    seasonStore.regionMvp = { lastDate: "", winners: {} };
+  }
+  if (seasonStore.regionMvp.lastDate === today) return;
+
+  const yesterdayKey = todayKey(new Date(Date.now() - 24 * 3600 * 1000));
+  const bestByRegion = new Map(
+    REGION_NAMES.map((r) => [r, { username: "", wins: 0, score: 0 }])
+  );
+
+  for (const u of Object.values(USERS || {})) {
+    if (!u || !u.username || u.isBanned) continue;
+    if (u.winsTodayDate !== yesterdayKey) continue;
+    const region = normalizeRegion(u.region);
+    if (!region) continue;
+    const wins = Number(u.winsToday || 0);
+    if (wins <= 0) continue;
+    const score = Number(u.score || 0);
+    const cur = bestByRegion.get(region);
+    if (!cur) continue;
+    if (
+      wins > cur.wins ||
+      (wins === cur.wins && score > cur.score) ||
+      (wins === cur.wins && score === cur.score && u.username < cur.username)
+    ) {
+      bestByRegion.set(region, { username: u.username, wins, score });
+    }
+  }
+
+  const winners = {};
+  const winList = [];
+  let didChange = false;
+  for (const [region, best] of bestByRegion.entries()) {
+    if (!best.username) continue;
+    winners[region] = { username: best.username, wins: best.wins };
+    const u = USERS[best.username];
+    if (u && REGION_MVP_BOOST > 0) {
+      u.regionBoost = Math.max(0, Math.floor(u.regionBoost || 0)) + REGION_MVP_BOOST;
+      didChange = true;
+    }
+    winList.push(`${region}: ${best.username} (${best.wins})`);
+  }
+
+  seasonStore.regionMvp.lastDate = today;
+  seasonStore.regionMvp.winners = winners;
+  saveJsonAtomic(SEASONS_FILE, seasonStore);
+  if (didChange) saveUsers(USERS);
+
+  if (winList.length) {
+    const bonusMsg =
+      REGION_MVP_BOOST > 0 ? ` (+${REGION_MVP_BOOST} novada punkti)` : "";
+    broadcastSystemMessage(`🏅 Novadu MVP (${yesterdayKey}): ${winList.join(" • ")}${bonusMsg}`);
   }
 }
 
@@ -3727,7 +3851,10 @@ app.post("/guess", authMiddleware, (req, res) => {
     user.score = (user.score || 0) + SCORE_PER_WIN;
     user.coins = (user.coins || 0) + coinsGain;
     if (REGION_POINTS_PER_WIN > 0) {
-      user.regionPoints = Math.max(0, Math.floor(user.regionPoints || 0)) + REGION_POINTS_PER_WIN;
+      let regionPointsGain = REGION_POINTS_PER_WIN;
+      if (isRegionBonusActive()) regionPointsGain *= REGION_BONUS_MULTIPLIER;
+      user.regionPoints =
+        Math.max(0, Math.floor(user.regionPoints || 0)) + regionPointsGain;
     }
 
     user.bestStreak = Math.max(user.bestStreak || 0, user.streak || 0);

@@ -777,6 +777,12 @@ function updateRegionPointsUi(points, region) {
     if (shouldRender) {
       renderRegionAttackOptions(region, state.regionAttackTarget);
     }
+  } else if (regionAttackSelect && !region) {
+    regionAttackSelect.innerHTML = "";
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Izvēlies novadu";
+    regionAttackSelect.appendChild(opt);
   }
   const canSpend = p > 0;
   if (regionBoostBtn) regionBoostBtn.disabled = !canSpend;

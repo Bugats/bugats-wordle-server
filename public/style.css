@@ -2350,7 +2350,6 @@ input:focus-visible {
   .vz-left-area, .vz-right-area { max-width: 100%; flex: 1 1 auto; }
   .vz-top-panels { justify-content: center; }
   .vz-player-card, .vz-leaderboard-card, .vz-online-card, .vz-missions-card, .vz-support-card, .vz-radio-card { max-width: 100%; }
-  .vz-region-list { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 768px) {
