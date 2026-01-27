@@ -196,6 +196,7 @@ async function readJsonOrThrow(res) {
 const state = {
   token: null,
   username: null,
+  region: "",
 // DM (privāts čats)
   dmOpenWith: null,
   dmThreads: new Map(), // username -> [{id,from,to,text,ts}]
@@ -269,6 +270,7 @@ const seasonStartBtn = $("#season-start-btn");
 // Profila karte
 const playerNameEl = $("#player-name");
 const playerTitleEl = $("#player-title");
+const playerRegionEl = $("#player-region");
 const playerRankEl = $("#player-rank");
 const playerXpEl = $("#player-xp");
 const playerScoreEl = $("#player-score");
@@ -310,6 +312,7 @@ const duelOkBtn = document.getElementById("duel-result-close");
 
 // TOP10 + ONLINE
 const lbListEl = $("#lb-list");
+const regionListEl = $("#region-list");
 const onlineCountEl = $("#online-count");
 const onlineListEl = $("#online-list");
 
@@ -389,6 +392,7 @@ const profilePopupEl = $("#player-profile-popup");
 const profileCloseBtn = $("#profile-popup-close");
 const ppUsernameEl = $("#pp-username");
 const ppTitleEl = $("#pp-title");
+const ppRegionEl = $("#pp-region");
 const ppRankEl = $("#pp-rank");
 const ppXpEl = $("#pp-xp");
 const ppScoreEl = $("#pp-score");
@@ -397,6 +401,12 @@ const ppTokensEl = $("#pp-tokens");
 const ppBestEl = $("#pp-best");
 const ppMedalsEl = $("#pp-medals");
 const ppMsgBtnEl = document.getElementById("pp-msg-btn");
+
+// Novads (modal)
+const regionModalEl = document.getElementById("region-modal");
+const regionModalBtns = regionModalEl
+  ? Array.from(regionModalEl.querySelectorAll("[data-region]"))
+  : [];
 
 // Audio MP3
 const sClick = $("#s-click");
@@ -707,6 +717,12 @@ function updatePlayerCard(me) {
     playerNameEl.textContent = me.username;
     applyNameTierClass(playerNameEl, me.rankLevel);
   }
+  if (playerRegionEl) {
+    const region = String(me.region || "").trim();
+    playerRegionEl.textContent = region || "—";
+    playerRegionEl.classList.toggle("vz-title-empty", !region);
+    state.region = region || "";
+  }
   if (playerTitleEl) {
     const title = String(me.title || "").trim();
     playerTitleEl.textContent = title || "—";
@@ -788,6 +804,110 @@ if (card) {
   
 }
 
+// ==================== NOVADI (klani) ====================
+let _postLoginInitDone = false;
+function isRegionMissing(me) {
+  return !me || !String(me.region || "").trim();
+}
+
+function showRegionModal() {
+  if (!regionModalEl) return;
+  regionModalEl.classList.remove("hidden");
+}
+
+function hideRegionModal() {
+  if (!regionModalEl) return;
+  regionModalEl.classList.add("hidden");
+}
+
+async function setRegionChoice(region) {
+  const value = String(region || "").trim();
+  if (!value) return;
+  if (!state.token) return;
+
+  regionModalBtns.forEach((b) => (b.disabled = true));
+  try {
+    const data = await apiPost("/region", { region: value });
+    if (data?.me) updatePlayerCard(data.me);
+    appendSystemMessage(`Novads saglabāts: ${value}`);
+    hideRegionModal();
+    await runPostLoginInit();
+  } catch (err) {
+    console.error("Novada izvēles kļūda:", err);
+    appendSystemMessage(err.message || "Neizdevās saglabāt novadu.");
+  } finally {
+    regionModalBtns.forEach((b) => (b.disabled = false));
+  }
+}
+
+function bindRegionModal() {
+  if (!regionModalEl || !regionModalBtns.length) return;
+  if (regionModalEl.dataset.bound === "1") return;
+  regionModalEl.dataset.bound = "1";
+  regionModalBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const region = btn.getAttribute("data-region") || "";
+      setRegionChoice(region);
+    });
+  });
+}
+
+async function refreshRegionStats() {
+  if (!regionListEl || !state.token) return;
+  try {
+    const raw = await apiGet("/regions/stats");
+    const list = Array.isArray(raw) ? raw : raw?.regions || raw?.list || [];
+    if (!Array.isArray(list)) return;
+
+    regionListEl.innerHTML = "";
+    list.forEach((item, idx) => {
+      const li = createEl("li", "vz-region-item");
+      if (item.region && item.region === (state?.region || "")) {
+        li.classList.add("vz-region-self");
+      }
+
+      const place = createEl("span", "vz-region-place");
+      place.textContent = `${idx + 1}.`;
+      li.appendChild(place);
+
+      const name = createEl("span", "vz-region-name");
+      name.textContent = item.region || "—";
+      li.appendChild(name);
+
+      const meta = createEl("span", "vz-region-meta");
+      meta.textContent = `(${item.players || 0} spēl.)`;
+      li.appendChild(meta);
+
+      const score = createEl("span", "vz-region-score");
+      score.textContent = `${item.score || 0} p.`;
+      li.appendChild(score);
+
+      regionListEl.appendChild(li);
+    });
+  } catch (err) {
+    console.error("Novadu stats kļūda:", err);
+  }
+}
+
+async function runPostLoginInit() {
+  if (_postLoginInitDone) return;
+  _postLoginInitDone = true;
+
+  await refreshSeasonHttp();
+  await refreshHof();
+  await startNewRound();
+  await refreshLeaderboard();
+  await refreshMissions();
+  await refreshRegionStats();
+  ensureDailyChestUi();
+  await refreshDailyChestStatus();
+  if (_chestTickTimer) clearInterval(_chestTickTimer);
+  _chestTickTimer = setInterval(refreshDailyChestStatus, 60_000);
+  setInterval(() => { if (_chestStatus) renderDailyChestUi(_chestStatus); }, 1000);
+  setInterval(refreshRegionStats, 60_000);
+  initSocket();
+}
+
 // ==================== PROFILA POPUP + DM ====================
 function handlePersonalMessageClick() {
   const u =
@@ -811,6 +931,11 @@ function showPlayerProfile(data) {
   if (ppUsernameEl) {
     ppUsernameEl.textContent = data.username;
     applyNameTierClass(ppUsernameEl, data.rankLevel);
+  }
+  if (ppRegionEl) {
+    const region = String(data.region || "").trim();
+    ppRegionEl.textContent = region || "—";
+    ppRegionEl.classList.toggle("vz-title-empty", !region);
   }
   if (ppTitleEl) {
     const title = String(data.title || "").trim();
@@ -3496,6 +3621,7 @@ socket.on("chatMessage", (payload) => {
   socket.on("playerWin", (info) => {
     updateWinTicker(info);
     refreshLeaderboard();
+    refreshRegionStats();
   });
 
   socket.on("tokenBuy", (info) => {
@@ -4524,6 +4650,8 @@ setTimeout(() => {
     appendSystemMessage("⚠️ Kļūda: " + msg);
   });
 
+  bindRegionModal();
+
   try {
     const me = await apiGet("/me");
     updatePlayerCard(me);
@@ -4547,17 +4675,12 @@ setTimeout(() => {
       console.warn("Avatāra auto-sync kļūda init laikā:", e);
     }
 
-    await refreshSeasonHttp();
-    await refreshHof();
-    await startNewRound();
-    await refreshLeaderboard();
-    await refreshMissions();
-    ensureDailyChestUi();
-await refreshDailyChestStatus();
-if (_chestTickTimer) clearInterval(_chestTickTimer);
-_chestTickTimer = setInterval(refreshDailyChestStatus, 60_000);
-setInterval(() => { if (_chestStatus) renderDailyChestUi(_chestStatus); }, 1000);
-    initSocket();
+    if (isRegionMissing(me)) {
+      showRegionModal();
+      return;
+    }
+
+    await runPostLoginInit();
   } catch (err) {
     console.error("Init /me kļūda:", err);
     clearStoredAuth();

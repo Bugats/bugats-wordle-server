@@ -146,6 +146,7 @@
               </div>
 
               <div class="vz-card-row"><span>Nickname:</span><span id="player-name"></span></div>
+              <div class="vz-card-row"><span>Novads:</span><span id="player-region">—</span></div>
               <div class="vz-card-row vz-title-row">
                 <span>Tituls:</span><span id="player-title" class="vz-title-value">—</span>
               </div>
@@ -180,6 +181,12 @@
             <div class="vz-leaderboard-card">
               <div class="vz-card-header">TOP 10 spēlētāji</div>
               <ol id="lb-list" class="vz-lb-list"></ol>
+            </div>
+
+            <!-- NOVADU TOP -->
+            <div class="vz-leaderboard-card" id="region-box">
+              <div class="vz-card-header">Novadu TOP</div>
+              <ul id="region-list" class="vz-region-list"></ul>
             </div>
 
             <!-- HALL OF FAME -->
@@ -411,6 +418,7 @@
           Tituls: <span id="pp-title" class="vz-title-value">—</span>
         </div>
 
+        <div class="profile-row"><span>Novads:</span><span id="pp-region">—</span></div>
         <div class="profile-row"><span>Rank:</span><span id="pp-rank"></span></div>
         <div class="profile-row"><span>XP:</span><span id="pp-xp"></span></div>
         <div class="profile-row"><span>Punkti:</span><span id="pp-score"></span></div>
@@ -426,6 +434,23 @@
         <div class="profile-row" style="margin-top: 10px; justify-content: center">
           <button id="pp-msg-btn" class="vz-profile-msg-btn" type="button">Rakstīt personiski</button>
         </div>
+      </div>
+    </div>
+
+    <!-- NOVADA IZVĒLE -->
+    <div id="region-modal" class="vz-region-modal hidden">
+      <div class="vz-region-modal-inner">
+        <h3>Izvēlies savu novadu</h3>
+        <p class="vz-region-modal-sub">
+          Novads ir tavs klans. To vēlāk nevar mainīt.
+        </p>
+        <div class="vz-region-grid">
+          <button class="vz-region-btn" type="button" data-region="Zemgale">Zemgale</button>
+          <button class="vz-region-btn" type="button" data-region="Latgale">Latgale</button>
+          <button class="vz-region-btn" type="button" data-region="Vidzeme">Vidzeme</button>
+          <button class="vz-region-btn" type="button" data-region="Kurzeme">Kurzeme</button>
+        </div>
+        <div class="vz-region-modal-note">Izvēle tiek saglabāta uzreiz.</div>
       </div>
     </div>
 

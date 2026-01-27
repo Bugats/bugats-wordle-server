@@ -91,7 +91,8 @@ label {
 }
 
 input[type="text"],
-input[type="password"] {
+input[type="password"],
+select {
   width: 100%;
   padding: 8px 10px;
   border-radius: 4px;
@@ -687,6 +688,27 @@ input:focus-visible {
 .vz-lb-list {
   padding-left: 18px;
   margin: 2px 0 0;
+}
+
+/* ===== NOVADI (TOP) ===== */
+.vz-region-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 2px 0 0;
+}
+.vz-region-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+.vz-region-place { width: 22px; text-align: right; font-weight: 600; }
+.vz-region-name { font-weight: 700; }
+.vz-region-meta { opacity: 0.7; font-size: 0.85em; }
+.vz-region-score { margin-left: auto; opacity: 0.9; font-size: 0.9em; }
+.vz-region-item.vz-region-self {
+  color: #b3e5fc;
+  text-shadow: 0 0 6px rgba(0, 188, 212, 1), 0 0 10px rgba(0, 0, 0, 0.95);
 }
 
 .vz-lb-item {
@@ -1567,6 +1589,112 @@ input:focus-visible {
 .vz-profile-msg-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 0 16px rgba(255, 111, 0, 1), 0 0 22px rgba(255, 64, 129, 0.95);
+}
+
+/* ===== NOVADA IZVĒLE ===== */
+.vz-region-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10020;
+}
+.vz-region-modal.hidden { display: none; }
+.vz-region-modal-inner {
+  width: min(420px, 92vw);
+  background: #0f1222;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 16px 18px 18px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+}
+.vz-region-modal-inner h3 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+.vz-region-modal-sub {
+  margin: 0 0 12px;
+  opacity: 0.8;
+  font-size: 13px;
+}
+.vz-region-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.vz-region-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-weight: 800;
+  cursor: pointer;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.4);
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+.vz-region-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.vz-region-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.vz-region-modal-note {
+  margin-top: 10px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* ===== NOVADA IZVĒLE ===== */
+.vz-region-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10020;
+}
+.vz-region-modal.hidden { display: none; }
+.vz-region-modal-inner {
+  width: min(420px, 92vw);
+  background: #0f1222;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 16px 18px 18px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+}
+.vz-region-modal-inner h3 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+.vz-region-modal-sub {
+  margin: 0 0 12px;
+  opacity: 0.8;
+  font-size: 13px;
+}
+.vz-region-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.vz-region-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-weight: 800;
+  cursor: pointer;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.4);
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+.vz-region-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.vz-region-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.vz-region-modal-note {
+  margin-top: 10px;
+  font-size: 12px;
+  opacity: 0.7;
 }
 
 /* ===========================

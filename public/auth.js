@@ -82,14 +82,19 @@ if (signupForm) {
     const password = document
       .getElementById("signup-password")
       .value.trim();
+    const region = document.getElementById("signup-region")?.value?.trim() || "";
 
     if (!username || !password) {
       showAuthError("Aizpildi lietotājvārdu un paroli.");
       return;
     }
+    if (!region) {
+      showAuthError("Izvēlies novadu.");
+      return;
+    }
 
     try {
-     const data = await apiPost("/signup", { username, password, deviceId: getOrCreateDeviceId() });
+     const data = await apiPost("/signup", { username, password, region, deviceId: getOrCreateDeviceId() });
       // uzreiz ielogojam un metam uz spēli
       handleAuthSuccess(data);
     } catch (err) {

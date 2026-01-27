@@ -52,6 +52,9 @@ const TITLE_MAX_LEN = (() => {
   return Number.isFinite(v) && v >= 8 && v <= 64 ? v : 32;
 })();
 
+const REGION_NAMES = ["Zemgale", "Latgale", "Vidzeme", "Kurzeme"];
+const REGION_MAP = new Map(REGION_NAMES.map((n) => [n.toLowerCase(), n]));
+
 // ======== Season rollover: coins/tokens reset (ENV slēdzis) ========
 const RESET_COINS_TOKENS_ON_ROLLOVER =
   String(process.env.RESET_COINS_TOKENS_ON_ROLLOVER ?? "1") === "1";
@@ -114,6 +117,10 @@ function normalizeTitle(title) {
     .trim();
   if (!cleaned) return "";
   return cleaned.length > TITLE_MAX_LEN ? cleaned.slice(0, TITLE_MAX_LEN) : cleaned;
+}
+function normalizeRegion(region) {
+  const key = String(region || "").trim().toLowerCase();
+  return REGION_MAP.get(key) || "";
 }
 
 // ======== Laika zona ========
@@ -362,6 +369,10 @@ function loadUsers() {
       // Tituls (cosmetic)
       if (typeof u.title !== "string") u.title = "";
       u.title = normalizeTitle(u.title);
+
+      // Novads (klan)
+      if (typeof u.region !== "string") u.region = "";
+      u.region = normalizeRegion(u.region);
 
       // Daily Chest
       if (!u.dailyChest || typeof u.dailyChest !== "object") u.dailyChest = {};
@@ -1986,6 +1997,7 @@ function buildMePayload(u) {
   return {
     username: u.username,
     title: u.title || "",
+    region: u.region || "",
     xp,
     score: u.score || 0,
     coins: u.coins || 0,
@@ -2165,6 +2177,45 @@ function computeTop10Leaderboard() {
     avatarUrl: u.avatarUrl || null,
     supporter: !!u.supporter,
   }));
+}
+
+function computeRegionStats() {
+  const base = REGION_NAMES.map((name) => ({
+    region: name,
+    players: 0,
+    score: 0,
+    xp: 0,
+  }));
+  const byRegion = new Map(base.map((r) => [r.region, r]));
+
+  for (const u of Object.values(USERS || {})) {
+    if (!u || !u.username || u.isBanned) continue;
+    const region = normalizeRegion(u.region);
+    if (!region) continue;
+    const row = byRegion.get(region);
+    if (!row) continue;
+    row.players += 1;
+    row.score += Number(u.score || 0);
+    row.xp += Number(u.xp || 0);
+  }
+
+  const out = base.map((r) => ({
+    region: r.region,
+    players: r.players,
+    score: r.score,
+    xp: r.xp,
+    avgScore: r.players ? Math.round((r.score / r.players) * 10) / 10 : 0,
+  }));
+
+  out.sort((a, b) => {
+    const ds = (b.score || 0) - (a.score || 0);
+    if (ds !== 0) return ds;
+    const dp = (b.players || 0) - (a.players || 0);
+    if (dp !== 0) return dp;
+    return String(a.region).localeCompare(String(b.region));
+  });
+
+  return out;
 }
 
 let lastLbSig = "";
@@ -2401,7 +2452,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
   }
 
   if (
-    ["ban", "unban", "kick", "mute", "unmute", "title", "settitle"].includes(cmd) &&
+    ["ban", "unban", "kick", "mute", "unmute", "title", "settitle", "region"].includes(cmd) &&
     !targetName
   ) {
     adminSocket.emit("chatMessage", {
@@ -2525,6 +2576,35 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
         text: nextTitle
           ? `OK: ${target.username} tituls = "${nextTitle}".`
           : `OK: ${target.username} titulam noņemts.`,
+        ts: Date.now(),
+      });
+      break;
+    }
+
+    case "region": {
+      if (!target) {
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: `Lietotājs '${targetName}' nav atrasts.`,
+          ts: Date.now(),
+        });
+        return;
+      }
+      const regionRaw = parts.slice(2).join(" ");
+      const nextRegion = normalizeRegion(regionRaw);
+      if (!nextRegion) {
+        adminSocket.emit("chatMessage", {
+          username: "SYSTEM",
+          text: "Nederīgs novads. Pieejams: Zemgale, Latgale, Vidzeme, Kurzeme.",
+          ts: Date.now(),
+        });
+        return;
+      }
+      target.region = nextRegion;
+      saveUsers(USERS);
+      adminSocket.emit("chatMessage", {
+        username: "SYSTEM",
+        text: `OK: ${target.username} novads = ${nextRegion}.`,
         ts: Date.now(),
       });
       break;
@@ -2669,7 +2749,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       adminSocket.emit("chatMessage", {
         username: "SYSTEM",
         text:
-          "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute, /title <user> <tituls>, /seasonstart, /seasononline, /hofset <sid> <username> [score].",
+          "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute, /title <user> <tituls>, /region <user> <novads>, /seasonstart, /seasononline, /hofset <sid> <username> [score].",
         ts: Date.now(),
       });
   }
@@ -2757,7 +2837,7 @@ function applyDuelEloWinLoss(winner, loser) {
 }
 
 async function signupHandler(req, res) {
-  const { username, password } = req.body || {};
+  const { username, password, region } = req.body || {};
   if (!username || !password) {
     return res
       .status(400)
@@ -2784,6 +2864,13 @@ async function signupHandler(req, res) {
         code: "DEVICE_SIGNUP_LIMIT",
       });
     }
+  }
+
+  const canonRegion = normalizeRegion(region);
+  if (!canonRegion) {
+    return res.status(400).json({
+      message: "Izvēlies novadu: Zemgale, Latgale, Vidzeme vai Kurzeme.",
+    });
   }
 
   const hash = await bcrypt.hash(password, 10);
@@ -2825,6 +2912,7 @@ async function signupHandler(req, res) {
     revealUsedTodayDate: "",
     avatarUrl: null,
     title: "",
+    region: canonRegion,
     supporter: false,
     dailyChest: { lastDate: "", streak: 0, totalOpens: 0 },
     specialMedals: [],
@@ -2980,6 +3068,7 @@ function buildPublicProfilePayload(targetUser, requester) {
   const payload = {
     username: targetUser.username,
     title: targetUser.title || "",
+    region: targetUser.region || "",
     xp,
     score: targetUser.score || 0,
     coins: targetUser.coins || 0,
@@ -3669,6 +3758,28 @@ app.post("/buy-token", authMiddleware, (req, res) => {
 // ===== Leaderboard =====
 app.get("/leaderboard", (_req, res) => {
   res.json(computeTop10Leaderboard());
+});
+
+// ===== Regions (Novadi) =====
+app.get("/regions/stats", authMiddleware, (_req, res) => {
+  res.json({ regions: computeRegionStats() });
+});
+
+app.post("/region", authMiddleware, (req, res) => {
+  const user = req.user;
+  const region = normalizeRegion(req.body?.region);
+  if (!region) {
+    return res.status(400).json({
+      message: "Nederīgs novads. Pieejams: Zemgale, Latgale, Vidzeme, Kurzeme.",
+    });
+  }
+  if (user.region) {
+    return res.status(400).json({ message: "Novads jau ir izvēlēts." });
+  }
+  user.region = region;
+  saveUsers(USERS);
+  broadcastOnlineList(true);
+  res.json({ ok: true, me: buildMePayload(user) });
 });
 
 // ===== DUEĻU HELPERI (Socket.IO pusē) =====
