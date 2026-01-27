@@ -1,5 +1,5 @@
 // ======== VĀRDU ZONA — Bugats edition ========
-// Serveris ar login/signup, JWT, XP, RANKIEM (25 līmeņi),
+// Serveris ar login/signup, JWT, XP, RANKIEM (40 līmeņi),
 // streak, coins, žetoniem, pasīvajiem coiniem ar Anti-AFK,
 // TOP10, online sarakstu un čatu + ADMIN komandām + MISIJĀM + MEDAĻĀM + 1v1 DUEĻIEM.
 // + SEZONAS + HOF
@@ -130,27 +130,107 @@ const PASSIVE_INTERVAL_MS = 20 * 60 * 1000; // 20 min
 const AFK_BREAK_MS = 3 * 60 * 1000;
 
 // ========== MISIJAS ==========
-const DAILY_MISSIONS_CONFIG = [
+const DAILY_MISSIONS_COUNT = (() => {
+  const v = parseInt(process.env.DAILY_MISSIONS_COUNT || "6", 10);
+  return Number.isFinite(v) && v >= 3 && v <= 8 ? v : 6;
+})();
+
+// Missionu tipiem jābūt atbalstam updateMissionsOn* funkcijās zemāk.
+// baseTarget/baseRewards tiks skalēti pēc spēlētāja rank tier (lai augstākiem rankiem grūtāk).
+const DAILY_MISSION_POOL = [
+  // pamata
   {
-    id: "win3",
-    title: "Atmini 3 vārdus šodien",
+    id: "wins",
+    title: "Atmini {target} vārdus šodien",
     type: "wins",
-    target: 3,
-    rewards: { xp: 30, coins: 25, tokens: 0 },
+    baseTarget: 3,
+    baseRewards: { xp: 30, coins: 25, tokens: 0 },
+    weight: 6,
   },
   {
-    id: "xp50",
-    title: "Nopelni 50 XP šodien",
+    id: "xp",
+    title: "Nopelni {target} XP šodien",
     type: "xp",
-    target: 50,
-    rewards: { xp: 0, coins: 35, tokens: 0 },
+    baseTarget: 60,
+    baseRewards: { xp: 0, coins: 40, tokens: 0 },
+    weight: 6,
   },
   {
-    id: "guess20",
-    title: "Izdari 20 minējumus",
+    id: "guesses",
+    title: "Izdari {target} minējumus",
     type: "guesses",
-    target: 20,
-    rewards: { xp: 20, coins: 15, tokens: 1 },
+    baseTarget: 25,
+    baseRewards: { xp: 25, coins: 20, tokens: 1 },
+    weight: 6,
+  },
+
+  // grūtākas / dažādākas
+  {
+    id: "streak",
+    title: "Sasniedz streak {target} (nepārtraukta uzvaru sērija)",
+    type: "streak",
+    baseTarget: 3,
+    baseRewards: { xp: 45, coins: 35, tokens: 1 },
+    weight: 5,
+  },
+  {
+    id: "fastwins",
+    title: "Atmini {target} vārdus ātri (≤ {sec}s)",
+    type: "fast_wins",
+    baseTarget: 2,
+    baseRewards: { xp: 50, coins: 30, tokens: 1 },
+    // metadata
+    sec: 75,
+    weight: 4,
+  },
+  {
+    id: "perfect",
+    title: "Atmini {target} vārdus 3 mēģinājumos vai mazāk",
+    type: "perfect_wins",
+    baseTarget: 2,
+    baseRewards: { xp: 55, coins: 30, tokens: 1 },
+    maxAttempts: 3,
+    weight: 4,
+  },
+  {
+    id: "longwins",
+    title: "Atmini {target} garos vārdus (7 burti)",
+    type: "long_wins_7",
+    baseTarget: 2,
+    baseRewards: { xp: 55, coins: 35, tokens: 1 },
+    weight: 4,
+  },
+  {
+    id: "reveal",
+    title: "Izmanto “Atvērt 1 burtu” {target} reizes",
+    type: "reveal_used",
+    baseTarget: 1,
+    baseRewards: { xp: 20, coins: 25, tokens: 0 },
+    weight: 3,
+  },
+  {
+    id: "tokenbuy",
+    title: "Nopērc {target} žetonus",
+    type: "token_buys",
+    baseTarget: 1,
+    baseRewards: { xp: 20, coins: 10, tokens: 0 },
+    weight: 2,
+  },
+  {
+    id: "chest",
+    title: "Atver Daily Chest",
+    type: "chest_open",
+    baseTarget: 1,
+    baseRewards: { xp: 15, coins: 20, tokens: 0 },
+    weight: 5,
+  },
+  {
+    id: "duelwins",
+    title: "Uzvari {target} dueli",
+    type: "duel_wins",
+    baseTarget: 1,
+    baseRewards: { xp: 35, coins: 25, tokens: 1 },
+    weight: 3,
   },
 ];
 
@@ -159,14 +239,31 @@ const DUEL_MAX_ATTEMPTS = 6;
 const DUEL_REWARD_XP = 3;
 const DUEL_REWARD_COINS = 3;
 const DUEL_MAX_DURATION_MS = 2 * 60 * 1000; // 2 min
+// Duel start countdown (frontā rāda 5..1 AIZIET, bet spēles laiks paliek pilnas 2 min)
+const DUEL_COUNTDOWN_MS = 5 * 1000;
+const DUEL_INVITE_TIMEOUT_MS = 30 * 1000; // 30s, lai "pending" dueli neiestrēgst
 
 const duels = new Map(); // duelId -> duel objekts
 const userToDuel = new Map(); // username -> duelId
+
+function getDuelOpponent(duel, username) {
+  if (!duel || !Array.isArray(duel.players)) return null;
+  const [p1, p2] = duel.players;
+  if (username === p1) return p2 || null;
+  if (username === p2) return p1 || null;
+  return null;
+}
 
 // ======== ČATS (mini anti-spam) ========
 const CHAT_MAX_LEN = 200;
 const CHAT_RATE_MS = 900;
 const CHAT_DUP_WINDOW_MS = 4000;
+
+// ======== PRIVĀTAIS ČATS (DM) ========
+const DM_MAX_LEN = 400;
+const DM_RATE_MS = 650;
+const DM_DUP_WINDOW_MS = 5000;
+const DM_THREAD_MAX = 200; // max ziņas vienā sarunā (katram userim)
 
 // ======== GUESS rate-limit (server-side) ========
 const GUESS_RATE_MS = 950; // ~1/sec
@@ -229,6 +326,14 @@ function loadUsers() {
       // Duēļu statistika
       if (typeof u.duelsWon !== "number") u.duelsWon = 0;
       if (typeof u.duelsLost !== "number") u.duelsLost = 0;
+      if (typeof u.duelWinsToday !== "number") u.duelWinsToday = 0;
+      if (typeof u.duelWinsTodayDate !== "string") u.duelWinsTodayDate = "";
+
+      // Ekonomikas / ability dienas skaitītāji (misijām)
+      if (typeof u.tokensBoughtToday !== "number") u.tokensBoughtToday = 0;
+      if (typeof u.tokensBoughtTodayDate !== "string") u.tokensBoughtTodayDate = "";
+      if (typeof u.revealUsedToday !== "number") u.revealUsedToday = 0;
+      if (typeof u.revealUsedTodayDate !== "string") u.revealUsedTodayDate = "";
 
       // Aktīvais raunds
       if (!u.currentRound) u.currentRound = null;
@@ -254,6 +359,16 @@ function loadUsers() {
       if (typeof u.lastChatText !== "string") u.lastChatText = "";
       if (typeof u.lastChatTextAt !== "number") u.lastChatTextAt = 0;
 
+      // Privātais čats (DM) — inbox users.json
+      if (!u.dm || typeof u.dm !== "object") u.dm = {};
+      if (!u.dm.threads || typeof u.dm.threads !== "object") u.dm.threads = {};
+      if (!u.dm.unread || typeof u.dm.unread !== "object") u.dm.unread = {};
+      if (!u.dm.lastRead || typeof u.dm.lastRead !== "object") u.dm.lastRead = {};
+      // DM anti-spam state
+      if (typeof u.lastDmAt !== "number") u.lastDmAt = 0;
+      if (typeof u.lastDmText !== "string") u.lastDmText = "";
+      if (typeof u.lastDmTextAt !== "number") u.lastDmTextAt = 0;
+
       // Guess anti-spam
       if (typeof u.lastGuessAt !== "number") u.lastGuessAt = 0;
       if (typeof u.badLenCount !== "number") u.badLenCount = 0;
@@ -266,6 +381,12 @@ function loadUsers() {
           u.currentRound.revealUsed = false;
         if (!u.currentRound.reveal || typeof u.currentRound.reveal !== "object")
           u.currentRound.reveal = null;
+        // MIGRĀCIJA: pareizi atminēto pozīciju masks (lai reveal neatver jau zināmo)
+        if (!Array.isArray(u.currentRound.knownCorrect)) {
+          const len = Math.max(0, Math.floor(u.currentRound.len || 0));
+          u.currentRound.knownCorrect =
+            len > 0 ? new Array(len).fill(false) : [];
+        }
       }
 
       out[u.username] = u;
@@ -836,44 +957,80 @@ try {
   console.error("Neizdevās ielādēt words.txt:", err);
 }
 
-// ======== Rank loģika (25 līmeņi) ========
-function calcRankFromXp(xp) {
-  const table = [
-    { minXp: 0, title: "Jauniņais" },
-    { minXp: 40, title: "Burtu Skolnieks" },
-    { minXp: 90, title: "Vārdu Mednieks" },
-    { minXp: 160, title: "Burtošanas Aizrautis" },
-    { minXp: 250, title: "Vārdu Taktikis" },
-    { minXp: 360, title: "Leksikas Kareivis" },
-    { minXp: 490, title: "Leksikas Bruņinieks" },
-    { minXp: 640, title: "Erudīcijas Cīnītājs" },
-    { minXp: 810, title: "Erudīcijas Kapteinis" },
-    { minXp: 1000, title: "Erudīcijas Komandieris" },
-    { minXp: 1200, title: "Smadzeņu Atlēts" },
-    { minXp: 1450, title: "Loģikas Inženieris" },
-    { minXp: 1750, title: "Stratēģijas Arhitekts" },
-    { minXp: 2100, title: "Vārdu Burvis" },
-    { minXp: 2500, title: "Vārdu Maģistrs" },
-    { minXp: 2950, title: "Vārdu Profesors" },
-    { minXp: 3450, title: "ZONAS Sargs" },
-    { minXp: 4000, title: "ZONAS Boss" },
-    { minXp: 4600, title: "ZONAS Karalis" },
-    { minXp: 5250, title: "Bugats Māceklis" },
-    { minXp: 5950, title: "Bugats Elites Spēlētājs" },
-    { minXp: 6700, title: "Bugats PRIME" },
-    { minXp: 7500, title: "Bugats Mītiskais" },
-    { minXp: 8350, title: "Kosmiskais Prāts" },
-    { minXp: 9250, title: "Nemirstīgais ZONAS Mīts" },
-  ];
+// ======== Rank loģika (40 līmeņi) ========
+// Rank tabula ir ārpus funkcijas (ātrāk + vieglāk papildināt).
+// Pirmie 25 līmeņi saglabāti kā iepriekš, pievienoti nākamie līmeņi + krāsas.
+const RANK_TABLE = [
+  // 1..25 (legacy)
+  { minXp: 0, title: "Jauniņais", color: "#9CA3AF" },
+  { minXp: 40, title: "Burtu Skolnieks", color: "#94A3B8" },
+  { minXp: 90, title: "Vārdu Mednieks", color: "#60A5FA" },
+  { minXp: 160, title: "Burtošanas Aizrautis", color: "#38BDF8" },
+  { minXp: 250, title: "Vārdu Taktikis", color: "#34D399" },
+  { minXp: 360, title: "Leksikas Kareivis", color: "#22C55E" },
+  { minXp: 490, title: "Leksikas Bruņinieks", color: "#A3E635" },
+  { minXp: 640, title: "Erudīcijas Cīnītājs", color: "#FBBF24" },
+  { minXp: 810, title: "Erudīcijas Kapteinis", color: "#F59E0B" },
+  { minXp: 1000, title: "Erudīcijas Komandieris", color: "#FB7185" },
+  { minXp: 1200, title: "Smadzeņu Atlēts", color: "#F43F5E" },
+  { minXp: 1450, title: "Loģikas Inženieris", color: "#E879F9" },
+  { minXp: 1750, title: "Stratēģijas Arhitekts", color: "#C084FC" },
+  { minXp: 2100, title: "Vārdu Burvis", color: "#A78BFA" },
+  { minXp: 2500, title: "Vārdu Maģistrs", color: "#818CF8" },
+  { minXp: 2950, title: "Vārdu Profesors", color: "#6366F1" },
+  { minXp: 3450, title: "ZONAS Sargs", color: "#22D3EE" },
+  { minXp: 4000, title: "ZONAS Boss", color: "#06B6D4" },
+  { minXp: 4600, title: "ZONAS Karalis", color: "#10B981" },
+  { minXp: 5250, title: "Bugats Māceklis", color: "#14B8A6" },
+  { minXp: 5950, title: "Bugats Elites Spēlētājs", color: "#F97316" },
+  { minXp: 6700, title: "Bugats PRIME", color: "#EF4444" },
+  { minXp: 7500, title: "Bugats Mītiskais", color: "#8B5CF6" },
+  { minXp: 8350, title: "Kosmiskais Prāts", color: "#7C3AED" },
+  { minXp: 9250, title: "Nemirstīgais ZONAS Mīts", color: "#FDE047" },
 
-  const currentXp = xp || 0;
-  let current = table[0];
-  for (const r of table) {
-    if (currentXp >= r.minXp) current = r;
+  // 26..40 (jaunie)
+  { minXp: 10200, title: "ZONAS Leģenda", color: "#FACC15" },
+  { minXp: 11200, title: "ZONAS Titāns", color: "#FDBA74" },
+  { minXp: 12300, title: "ZONAS Arhonts", color: "#FB7185" },
+  { minXp: 13500, title: "ZONAS Imperators", color: "#F43F5E" },
+  { minXp: 14800, title: "Vārdu Sensojs", color: "#38BDF8" },
+  { minXp: 16200, title: "Leksikas Vētra", color: "#22C55E" },
+  { minXp: 17700, title: "Diakritiku Meistars", color: "#A3E635" },
+  { minXp: 19300, title: "Kosmiskais Arhitekts", color: "#A78BFA" },
+  { minXp: 21000, title: "ZONAS Dievība", color: "#E879F9" },
+  { minXp: 22800, title: "Bugats Panteons", color: "#FDE047" },
+  { minXp: 24700, title: "Mūžīgais Vārdu Avots", color: "#FFFFFF" },
+  { minXp: 26700, title: "Absolūtais ZONAS Apex", color: "#00E5FF" },
+  { minXp: 28800, title: "Vārdu Multiverss", color: "#7CFF6B" },
+  { minXp: 31000, title: "Nemirstīgais PRIME Mīts", color: "#FF4DFF" },
+  { minXp: 33300, title: "ZONAS Bezgalība", color: "#FFD166" },
+];
+
+function calcRankFromXp(xp) {
+  const currentXp = Number.isFinite(Number(xp)) ? Number(xp) : 0;
+  let currentIndex = 0;
+  for (let i = 0; i < RANK_TABLE.length; i++) {
+    const r = RANK_TABLE[i];
+    if (currentXp >= r.minXp) currentIndex = i;
     else break;
   }
-  const level = table.indexOf(current) + 1;
-  return { level, title: current.title };
+
+  const current = RANK_TABLE[currentIndex] || RANK_TABLE[0];
+  const next = RANK_TABLE[currentIndex + 1] || null;
+  const level = currentIndex + 1;
+
+  const minXp = Number(current?.minXp) || 0;
+  const nextMinXp = next ? Number(next.minXp) || null : null;
+  const isMax = !next;
+
+  return {
+    level,
+    title: current?.title || "—",
+    color: current?.color || "#9CA3AF",
+    minXp,
+    nextMinXp,
+    isMax,
+  };
 }
 
 function ensureRankFields(u) {
@@ -881,6 +1038,7 @@ function ensureRankFields(u) {
   if (u) {
     u.rankLevel = info.level;
     u.rankTitle = info.title;
+    u.rankColor = info.color;
   }
   return info;
 }
@@ -976,22 +1134,265 @@ function markActivity(user) {
 // ======== MISIJU HELPERI ========
 function ensureDailyMissions(user) {
   const key = todayKey();
-  if (
-    user.missionsDate !== key ||
-    !Array.isArray(user.missions) ||
-    !user.missions.length
-  ) {
+
+  // helperi deterministiskai izvēlei (lai vienam useram vienā dienā nemainās)
+  function xmur3(str) {
+    let h = 1779033703 ^ str.length;
+    for (let i = 0; i < str.length; i++) {
+      h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+      h = (h << 13) | (h >>> 19);
+    }
+    return function () {
+      h = Math.imul(h ^ (h >>> 16), 2246822507);
+      h = Math.imul(h ^ (h >>> 13), 3266489909);
+      h ^= h >>> 16;
+      return h >>> 0;
+    };
+  }
+  function mulberry32(a) {
+    return function () {
+      let t = (a += 0x6d2b79f5);
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function clampInt(n, lo, hi) {
+    const x = Math.floor(Number(n) || 0);
+    return Math.max(lo, Math.min(hi, x));
+  }
+
+  function computeMissionTier(u) {
+    // 0..5 (augstāks => grūtākas misijas). Balstās uz rankLevel.
+    const info = ensureRankFields(u);
+    const lvl = Math.max(1, Number(info?.level || u?.rankLevel || 1));
+    return clampInt(Math.floor((lvl - 1) / 7), 0, 5);
+  }
+
+  // Misiju target “caps” (lai neuzģenerē neizpildāmas vai absurdi lielas misijas).
+  // Piemēri:
+  // - chest_open: var atvērt tikai 1x dienā
+  // - token_buys: lai nav paywall/absurdi targeti
+  // - reveal_used: lai nav pārāk daudz “spied ar pinceti”
+  const MISSION_TARGET_CAPS = {
+    chest_open: 1,
+    token_buys: 3,
+    reveal_used: 2,
+  };
+
+  function scaleTarget(baseTarget, tier, type) {
+    const b = Math.max(1, Math.floor(Number(baseTarget) || 1));
+    // dažiem tipiem lēnāka skale, lai nebūtu absurdi
+    const mult =
+      type === "token_buys" || type === "reveal_used"
+        ? 1 + tier * 0.25
+        : type === "fast_wins" || type === "perfect_wins" || type === "duel_wins"
+        ? 1 + tier * 0.35
+        : 1 + tier * 0.45;
+
+    let target = Math.max(1, Math.round(b * mult));
+    const cap = Number(MISSION_TARGET_CAPS[type]);
+    if (Number.isFinite(cap) && cap >= 1) target = Math.min(target, Math.floor(cap));
+    return target;
+  }
+
+  function scaleRewards(baseRewards, tier) {
+    const rw = baseRewards || {};
+    const mult = 1 + tier * 0.18;
+    return {
+      xp: Math.max(0, Math.round((rw.xp || 0) * mult)),
+      coins: Math.max(0, Math.round((rw.coins || 0) * mult)),
+      tokens: Math.max(0, Math.round((rw.tokens || 0) * (tier >= 4 ? 1.2 : 1))),
+    };
+  }
+
+  function formatTitle(tpl, ctx) {
+    const s = String(tpl || "");
+    return s
+      .replaceAll("{target}", String(ctx.target))
+      .replaceAll("{sec}", String(ctx.sec ?? ""))
+      .replaceAll("{maxAttempts}", String(ctx.maxAttempts ?? ""));
+  }
+
+  function pickWeightedUnique(pool, count, rng) {
+    const out = [];
+    const used = new Set();
+    const items = (Array.isArray(pool) ? pool : []).filter(Boolean);
+
+    function pickOne() {
+      const candidates = items.filter((m) => !used.has(m.id));
+      if (!candidates.length) return null;
+      let total = 0;
+      for (const m of candidates) total += Math.max(0.0001, Number(m.weight) || 1);
+      let r = rng() * total;
+      for (const m of candidates) {
+        r -= Math.max(0.0001, Number(m.weight) || 1);
+        if (r <= 0) return m;
+      }
+      return candidates[candidates.length - 1];
+    }
+
+    for (let i = 0; i < count; i++) {
+      const m = pickOne();
+      if (!m) break;
+      used.add(m.id);
+      out.push(m);
+    }
+    return out;
+  }
+
+  function buildDailyMissions(u) {
+    const tier = computeMissionTier(u);
+    const seed = xmur3(`${key}|${u?.username || "user"}`)();
+    const rng = mulberry32(seed);
+
+    const desired = DAILY_MISSIONS_COUNT;
+
+    // garantējam, ka ir vismaz 1 no pamata tipiem (wins/xp/guesses)
+    const basics = DAILY_MISSION_POOL.filter((m) =>
+      ["wins", "xp", "guesses"].includes(m.type)
+    );
+    const others = DAILY_MISSION_POOL.filter((m) => !basics.includes(m));
+
+    const selected = [];
+    selected.push(...pickWeightedUnique(basics, 1, rng));
+    // vēl 1 basic, lai misijas nav pārāk "eksotiskas"
+    selected.push(...pickWeightedUnique(basics, 1, rng));
+    selected.push(...pickWeightedUnique(others, Math.max(0, desired - selected.length), rng));
+
+    const uniqById = new Map();
+    for (const m of selected) {
+      if (m && m.id && !uniqById.has(m.id)) uniqById.set(m.id, m);
+    }
+    const finalDefs = Array.from(uniqById.values()).slice(0, desired);
+
+    return finalDefs.map((def) => {
+      const target = scaleTarget(def.baseTarget, tier, def.type);
+      const rewards = scaleRewards(def.baseRewards, tier);
+      const title = formatTitle(def.title, {
+        target,
+        sec: def.sec,
+        maxAttempts: def.maxAttempts,
+      });
+      return {
+        id: `${def.id}_${key}`, // unikāls katrai dienai (lai vecas misijas nesajaucas)
+        code: def.id, // stabils kods tipam
+        title,
+        type: def.type,
+        target,
+        progress: 0,
+        isCompleted: false,
+        isClaimed: false,
+        rewards,
+        meta: {
+          sec: def.sec,
+          maxAttempts: def.maxAttempts,
+        },
+      };
+    });
+  }
+
+  if (user.missionsDate !== key || !Array.isArray(user.missions) || !user.missions.length) {
     user.missionsDate = key;
-    user.missions = DAILY_MISSIONS_CONFIG.map((m) => ({
-      id: m.id,
-      title: m.title,
-      type: m.type,
-      target: m.target,
-      progress: 0,
-      isCompleted: false,
-      isClaimed: false,
-      rewards: { ...(m.rewards || {}) },
-    }));
+    user.missions = buildDailyMissions(user);
+  } else {
+    // Migrācija/upgrade tajā pašā dienā:
+    // - ja vecais formāts (nav code/meta) -> pievienojam
+    // - ja misiju ir mazāk nekā DAILY_MISSIONS_COUNT -> pieliekam klāt līdz vēlamajam skaitam
+    let changed = false;
+
+    const codeFromLegacyId = (id) => {
+      const s = String(id || "").toLowerCase();
+      if (s.startsWith("win")) return "wins";
+      if (s.startsWith("xp")) return "xp";
+      if (s.startsWith("guess")) return "guesses";
+      return String(id || "").trim() || "unknown";
+    };
+
+    const defByCodeOrType = (code, type) => {
+      const c = String(code || "");
+      const t = String(type || "");
+      return (
+        DAILY_MISSION_POOL.find((d) => d && (d.id === c || d.type === t || d.id === t)) || null
+      );
+    };
+
+    for (const m of user.missions) {
+      if (!m || typeof m !== "object") continue;
+      if (!m.code) {
+        m.code = codeFromLegacyId(m.id);
+        changed = true;
+      }
+      if (!m.meta || typeof m.meta !== "object") {
+        m.meta = {};
+        changed = true;
+      }
+
+      // Fix: target caps (neizpildāmi / pārāk lieli targeti)
+      const cap = Number(MISSION_TARGET_CAPS[m.type]);
+      const curTarget = Math.max(1, Math.floor(Number(m.target) || 1));
+      if (Number.isFinite(cap) && cap >= 1 && curTarget > cap) {
+        m.target = Math.floor(cap);
+
+        // title var saturēt {target} (reveal/tokenbuy). Pārrakstām to ar jauno target.
+        const def = defByCodeOrType(m.code, m.type);
+        if (def && def.title) {
+          const title = formatTitle(def.title, {
+            target: m.target,
+            sec: def.sec,
+            maxAttempts: def.maxAttempts,
+          });
+          m.title = title;
+
+          // meta saskaņošana (ja vajag)
+          if (def.sec != null) m.meta.sec = def.sec;
+          if (def.maxAttempts != null) m.meta.maxAttempts = def.maxAttempts;
+        }
+
+        // progress tiek turēts kā max value, tāpēc clampā pietiek ar jauno target
+        if ((m.progress || 0) >= m.target) m.isCompleted = true;
+        changed = true;
+      }
+
+      if (typeof m.isCompleted !== "boolean") {
+        m.isCompleted = (m.progress || 0) >= (m.target || 0);
+        changed = true;
+      }
+      if (typeof m.isClaimed !== "boolean") {
+        m.isClaimed = false;
+        changed = true;
+      }
+    }
+
+    const desired = DAILY_MISSIONS_COUNT;
+    if (Array.isArray(user.missions) && user.missions.length < desired) {
+      const existingCodes = new Set(
+        user.missions
+          .map((m) => (m && m.code ? String(m.code) : ""))
+          .filter(Boolean)
+      );
+
+      const fresh = buildDailyMissions(user);
+      const add = [];
+      for (const m of fresh) {
+        if (add.length + user.missions.length >= desired) break;
+        const c = m && m.code ? String(m.code) : "";
+        if (!c) continue;
+        if (existingCodes.has(c)) continue;
+        existingCodes.add(c);
+        add.push(m);
+      }
+
+      if (add.length) {
+        user.missions.push(...add);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      // nekas vairāk; saveUsers notiek pie /me vai /missions endpointiem
+    }
   }
 }
 
@@ -1008,7 +1409,7 @@ function getPublicMissions(user) {
   }));
 }
 
-function updateMissionsOnGuess(user, { isWin, xpGain }) {
+function updateMissionsOnGuess(user, { isWin, xpGain, winTimeMs, wordLen, attemptsUsed }) {
   ensureDailyMissions(user);
   let changed = false;
 
@@ -1031,6 +1432,42 @@ function updateMissionsOnGuess(user, { isWin, xpGain }) {
         m.progress = prevProgress + 1;
         changed = true;
         break;
+      case "streak":
+        // progress ir max sasniegtais streak šodien (nevis +1)
+        if (isWin) {
+          const s = Math.max(0, Math.floor(user.streak || 0));
+          if (s > prevProgress) {
+            m.progress = s;
+            changed = true;
+          }
+        }
+        break;
+      case "fast_wins": {
+        if (!isWin) break;
+        const sec = Number(m?.meta?.sec || 75);
+        const lim = Number.isFinite(sec) && sec > 0 ? sec * 1000 : 75 * 1000;
+        if (Number.isFinite(winTimeMs) && winTimeMs > 0 && winTimeMs <= lim) {
+          m.progress = prevProgress + 1;
+          changed = true;
+        }
+        break;
+      }
+      case "perfect_wins": {
+        if (!isWin) break;
+        const maxA = Number(m?.meta?.maxAttempts || 3);
+        const lim = Number.isFinite(maxA) && maxA >= 1 ? maxA : 3;
+        if (Number.isFinite(attemptsUsed) && attemptsUsed > 0 && attemptsUsed <= lim) {
+          m.progress = prevProgress + 1;
+          changed = true;
+        }
+        break;
+      }
+      case "long_wins_7":
+        if (isWin && Number(wordLen) === 7) {
+          m.progress = prevProgress + 1;
+          changed = true;
+        }
+        break;
       default:
         break;
     }
@@ -1041,6 +1478,63 @@ function updateMissionsOnGuess(user, { isWin, xpGain }) {
   }
 
   return changed;
+}
+
+function resetDailyCountersIfNeeded(user) {
+  const today = todayKey();
+  if (user.duelWinsTodayDate !== today) {
+    user.duelWinsTodayDate = today;
+    user.duelWinsToday = 0;
+  }
+  if (user.tokensBoughtTodayDate !== today) {
+    user.tokensBoughtTodayDate = today;
+    user.tokensBoughtToday = 0;
+  }
+  if (user.revealUsedTodayDate !== today) {
+    user.revealUsedTodayDate = today;
+    user.revealUsedToday = 0;
+  }
+}
+
+function updateMissionsGenericCounter(user, type, nextValue) {
+  ensureDailyMissions(user);
+  let changed = false;
+  for (const m of user.missions) {
+    if (m.type !== type) continue;
+    const prev = m.progress || 0;
+    const nv = Math.max(prev, Math.floor(nextValue || 0));
+    if (nv !== prev) {
+      m.progress = nv;
+      changed = true;
+    }
+    if (m.progress >= m.target && !m.isCompleted) {
+      m.isCompleted = true;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function updateMissionsOnDuelWin(user) {
+  resetDailyCountersIfNeeded(user);
+  user.duelWinsToday = (user.duelWinsToday || 0) + 1;
+  return updateMissionsGenericCounter(user, "duel_wins", user.duelWinsToday);
+}
+
+function updateMissionsOnTokenBuy(user, qty = 1) {
+  resetDailyCountersIfNeeded(user);
+  user.tokensBoughtToday = (user.tokensBoughtToday || 0) + Math.max(1, Math.floor(qty || 1));
+  return updateMissionsGenericCounter(user, "token_buys", user.tokensBoughtToday);
+}
+
+function updateMissionsOnRevealUsed(user) {
+  resetDailyCountersIfNeeded(user);
+  user.revealUsedToday = (user.revealUsedToday || 0) + 1;
+  return updateMissionsGenericCounter(user, "reveal_used", user.revealUsedToday);
+}
+
+function updateMissionsOnChestOpen(user) {
+  return updateMissionsGenericCounter(user, "chest_open", 1);
 }
 
 function resetWinsTodayIfNeeded(user) {
@@ -1453,19 +1947,43 @@ function startSeasonFlow({ byAdminUsername } = {}) {
 // ======== JWT helperi ========
 function buildMePayload(u) {
   const rankInfo = ensureRankFields(u);
+  ensureDuelEloFields(u);
   const dynamicMedals = computeMedalsForUser(u);
   const medals = mergeMedals(dynamicMedals, u.specialMedals);
 
+  const xp = u.xp || 0;
+  const minXp = Number(rankInfo.minXp) || 0;
+  const nextMinXp =
+    rankInfo.nextMinXp === null || rankInfo.nextMinXp === undefined
+      ? null
+      : Number(rankInfo.nextMinXp) || null;
+
+  const need =
+    nextMinXp && Number.isFinite(nextMinXp) && nextMinXp > minXp ? nextMinXp - minXp : 0;
+  const inLevel = Math.max(0, xp - minXp);
+  const pct = need > 0 ? Math.max(0, Math.min(100, (inLevel / need) * 100)) : 100;
+  const toNext = need > 0 ? Math.max(0, nextMinXp - xp) : 0;
+
   return {
     username: u.username,
-    xp: u.xp || 0,
+    xp,
     score: u.score || 0,
     coins: u.coins || 0,
     tokens: u.tokens || 0,
     streak: u.streak || 0,
     bestStreak: u.bestStreak || 0,
+    duelElo: u.duelElo,
+    duelEloGames: u.duelEloGames || 0,
     rankTitle: u.rankTitle || rankInfo.title,
     rankLevel: u.rankLevel || rankInfo.level,
+    rankColor: u.rankColor || rankInfo.color,
+    rankMinXp: minXp,
+    rankNextMinXp: nextMinXp, // null => MAX rank
+    rankInLevelXp: inLevel,
+    rankNeedXp: need, // 0 => MAX rank
+    rankToNextXp: toNext,
+    rankProgressPct: Math.round(pct * 10) / 10,
+    rankIsMax: !!rankInfo.isMax,
     tokenPriceCoins: getTokenPrice(u),
     medals,
     avatarUrl: u.avatarUrl || null,
@@ -1544,6 +2062,7 @@ function getMiniUserPayload(username) {
       avatarUrl: null,
       rankLevel: 1,
       rankTitle: "—",
+      rankColor: "#9CA3AF",
       supporter: false,
     };
   }
@@ -1553,6 +2072,7 @@ function getMiniUserPayload(username) {
     avatarUrl: u.avatarUrl || null,
     rankLevel: u.rankLevel || info.level || 1,
     rankTitle: u.rankTitle || info.title || "—",
+    rankColor: u.rankColor || info.color || "#9CA3AF",
     supporter: !!u.supporter,
   };
 }
@@ -1605,6 +2125,7 @@ function computeTop10Leaderboard() {
     xp: u.xp || 0,
     rankTitle: u.rankTitle || "—",
     rankLevel: u.rankLevel || 1,
+    rankColor: u.rankColor || "#9CA3AF",
     avatarUrl: u.avatarUrl || null,
     supporter: !!u.supporter,
   }));
@@ -1632,6 +2153,180 @@ setInterval(() => broadcastLeaderboard(false), 45 * 1000);
 // === Admin & čata helperi ===
 function broadcastSystemMessage(text) {
   io.emit("chatMessage", { username: "SYSTEM", text, ts: Date.now() });
+}
+
+// ======== DM helperi ========
+function ensureDm(user) {
+  if (!user || typeof user !== "object") return null;
+  if (!user.dm || typeof user.dm !== "object") user.dm = {};
+  if (!user.dm.threads || typeof user.dm.threads !== "object") user.dm.threads = {};
+  if (!user.dm.unread || typeof user.dm.unread !== "object") user.dm.unread = {};
+  if (!user.dm.lastRead || typeof user.dm.lastRead !== "object") user.dm.lastRead = {};
+
+  // migrācija/clean-up: veci bugaini keyi (piem. "[object Object]")
+  try {
+    for (const k of Object.keys(user.dm.threads)) {
+      const ks = String(k || "").trim();
+      if (!ks || ks.startsWith("[object")) delete user.dm.threads[k];
+    }
+    for (const k of Object.keys(user.dm.unread)) {
+      const ks = String(k || "").trim();
+      if (!ks || ks.startsWith("[object")) delete user.dm.unread[k];
+    }
+    for (const k of Object.keys(user.dm.lastRead)) {
+      const ks = String(k || "").trim();
+      if (!ks || ks.startsWith("[object")) delete user.dm.lastRead[k];
+    }
+  } catch {}
+
+  // Normalizācija: apvienojam thread/unread keyus case-insensitive, lai nav dubult-threadi ("Bugats" vs "bugats").
+  try {
+    const canonName = (name) => {
+      const raw = String(name || "").trim();
+      if (!raw) return "";
+      const key = findUserKeyCaseInsensitive(raw);
+      const u = key ? USERS[key] : null;
+      return (u && u.username) || raw;
+    };
+
+    // threads: pārliekam uz kanonisko key + merge
+    const newThreads = {};
+    for (const [k, arr] of Object.entries(user.dm.threads || {})) {
+      const ck = canonName(k);
+      if (!ck) continue;
+      const list = Array.isArray(arr) ? arr.filter(Boolean) : [];
+      if (!newThreads[ck]) newThreads[ck] = [];
+      newThreads[ck].push(...list);
+    }
+    // sakārtojam pēc ts un nogriežam limitu
+    for (const [k, arr] of Object.entries(newThreads)) {
+      arr.sort((a, b) => (Number(a?.ts) || 0) - (Number(b?.ts) || 0));
+      if (arr.length > DM_THREAD_MAX) newThreads[k] = arr.slice(-DM_THREAD_MAX);
+    }
+    user.dm.threads = newThreads;
+
+    // unread: apvienojam (sum) uz kanonisko key
+    const newUnread = {};
+    for (const [k, v] of Object.entries(user.dm.unread || {})) {
+      const ck = canonName(k);
+      if (!ck) continue;
+      newUnread[ck] = Math.max(0, Number(newUnread[ck]) || 0) + Math.max(0, Number(v) || 0);
+    }
+    user.dm.unread = newUnread;
+
+    // lastRead: ņemam max uz kanonisko key
+    const newLastRead = {};
+    for (const [k, v] of Object.entries(user.dm.lastRead || {})) {
+      const ck = canonName(k);
+      if (!ck) continue;
+      const ts = Math.max(0, Number(v) || 0);
+      newLastRead[ck] = Math.max(Number(newLastRead[ck]) || 0, ts);
+    }
+    user.dm.lastRead = newLastRead;
+  } catch {}
+
+  return user.dm;
+}
+
+function dmThreadKeyFor(userA, userB) {
+  // saglabājam thread zem “other username” (string), lai frontā vienkārši atvērt
+  const getName = (x) => {
+    if (typeof x === "string") return x.trim();
+    if (x && typeof x === "object" && typeof x.username === "string") return x.username.trim();
+    return "";
+  };
+  return getName(userB);
+}
+
+function dmZeroUnreadCaseInsensitive(dm, otherUsername) {
+  if (!dm || typeof dm !== "object") return;
+  if (!dm.unread || typeof dm.unread !== "object") dm.unread = {};
+  const target = String(otherUsername || "").trim();
+  if (!target) return;
+  const t = target.toLowerCase();
+  for (const k of Object.keys(dm.unread)) {
+    if (String(k).toLowerCase() === t) dm.unread[k] = 0;
+  }
+  dm.unread[target] = 0;
+}
+
+function dmSanitizeText(raw) {
+  if (typeof raw !== "string") return "";
+  let t = raw.trim();
+  if (!t) return "";
+  if (t.length > DM_MAX_LEN) t = t.slice(0, DM_MAX_LEN);
+  return t;
+}
+
+function dmComputeUnread(dm) {
+  const byUser = dm?.unread && typeof dm.unread === "object" ? dm.unread : {};
+  let total = 0;
+  for (const v of Object.values(byUser)) total += Math.max(0, Number(v) || 0);
+  // bonus: dodam inbox preview (front-end var uzreiz uzbūvēt “Inbox” pēc refresh)
+  let threads = [];
+  try {
+    const th = dm?.threads && typeof dm.threads === "object" ? dm.threads : {};
+    const keys = new Set([...Object.keys(th), ...Object.keys(byUser)]);
+    for (const withUser of keys) {
+      const arr = Array.isArray(th?.[withUser]) ? th[withUser] : [];
+      const last = arr.length ? arr[arr.length - 1] : null;
+      threads.push({
+        with: withUser,
+        unread: Math.max(0, Number(byUser?.[withUser]) || 0),
+        lastTs: Number(last?.ts) || 0,
+        lastFrom: last?.from || "",
+        lastText: last?.text ? String(last.text).slice(0, 80) : "",
+      });
+    }
+    threads.sort(
+      (a, b) =>
+        (b.unread - a.unread) ||
+        (b.lastTs - a.lastTs) ||
+        String(a.with).localeCompare(String(b.with))
+    );
+    threads = threads.slice(0, 60);
+  } catch {}
+  return { total, byUser, threads };
+}
+
+function dmPushMessage(fromUser, toUser, text) {
+  const from = fromUser?.username;
+  const to = toUser?.username;
+  if (!from || !to) return null;
+
+  const dmFrom = ensureDm(fromUser);
+  const dmTo = ensureDm(toUser);
+  if (!dmFrom || !dmTo) return null;
+
+  const msg = {
+    id: crypto.randomBytes(8).toString("hex"),
+    from,
+    to,
+    text,
+    ts: Date.now(),
+  };
+
+  const keyFrom = dmThreadKeyFor(fromUser, toUser);
+  const keyTo = dmThreadKeyFor(toUser, fromUser);
+  if (!keyFrom || !keyTo) return null;
+
+  if (!Array.isArray(dmFrom.threads[keyFrom])) dmFrom.threads[keyFrom] = [];
+  if (!Array.isArray(dmTo.threads[keyTo])) dmTo.threads[keyTo] = [];
+
+  dmFrom.threads[keyFrom].push(msg);
+  dmTo.threads[keyTo].push(msg);
+
+  if (dmFrom.threads[keyFrom].length > DM_THREAD_MAX) {
+    dmFrom.threads[keyFrom] = dmFrom.threads[keyFrom].slice(-DM_THREAD_MAX);
+  }
+  if (dmTo.threads[keyTo].length > DM_THREAD_MAX) {
+    dmTo.threads[keyTo] = dmTo.threads[keyTo].slice(-DM_THREAD_MAX);
+  }
+
+  // increment unread only saņēmējam
+  dmTo.unread[keyTo] = Math.max(0, Number(dmTo.unread[keyTo]) || 0) + 1;
+
+  return msg;
 }
 
 function kickUserByName(username, reason) {
@@ -1917,6 +2612,86 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
 }
 
 // ======== AUTH ENDPOINTI ========
+const DEVICE_SIGNUP_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
+const DEVICE_SIGNUP_MAX = 1; // max konti 24h uz vienu deviceId
+const DUEL_ELO_DEFAULT = 1000;
+const DUEL_ELO_K_BASE = 32;
+const DUEL_ELO_K_NEWBIE = 40; // pirmajās spēlēs ātrāk stabilizējas
+
+function getDeviceIdFromReq(req) {
+  const h =
+    (req && req.headers && (req.headers["x-vz-device-id"] || req.headers["x-device-id"])) || "";
+  const b = req && req.body && (req.body.deviceId || req.body.deviceID || req.body.did);
+  const raw = typeof b === "string" && b.trim() ? b : typeof h === "string" ? h : "";
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  // vienkāršs, drošs formāts (UUID/slug)
+  if (s.length < 8 || s.length > 80) return "";
+  if (!/^[a-zA-Z0-9_-]+$/.test(s)) return "";
+  return s;
+}
+
+function countRecentSignupsForDeviceId(deviceId, now = Date.now()) {
+  if (!deviceId) return 0;
+  let n = 0;
+  for (const u of Object.values(USERS || {})) {
+    if (!u || typeof u !== "object") continue;
+    const createdAt = Number(u.createdAt) || 0;
+    if (!createdAt) continue;
+    if (now - createdAt > DEVICE_SIGNUP_WINDOW_MS) continue;
+    if (u.createdDeviceId && String(u.createdDeviceId) === deviceId) {
+      n++;
+      continue;
+    }
+    const ids = Array.isArray(u.deviceIds) ? u.deviceIds : [];
+    if (ids.includes(deviceId)) n++;
+  }
+  return n;
+}
+
+function ensureDuelEloFields(u) {
+  if (!u) return { elo: DUEL_ELO_DEFAULT, games: 0 };
+  if (!Number.isFinite(u.duelElo)) u.duelElo = DUEL_ELO_DEFAULT;
+  if (!Number.isFinite(u.duelEloGames)) {
+    const w = Number(u.duelsWon) || 0;
+    const l = Number(u.duelsLost) || 0;
+    u.duelEloGames = Math.max(0, w + l);
+  }
+  return { elo: u.duelElo, games: u.duelEloGames };
+}
+
+function duelEloExpected(ra, rb) {
+  // 1 / (1 + 10^((Rb-Ra)/400))
+  return 1 / (1 + Math.pow(10, (rb - ra) / 400));
+}
+
+function duelEloK(u) {
+  const g = Number(u?.duelEloGames) || 0;
+  return g < 20 ? DUEL_ELO_K_NEWBIE : DUEL_ELO_K_BASE;
+}
+
+function applyDuelEloWinLoss(winner, loser) {
+  if (!winner || !loser) return;
+  ensureDuelEloFields(winner);
+  ensureDuelEloFields(loser);
+
+  const ra = Number(winner.duelElo) || DUEL_ELO_DEFAULT;
+  const rb = Number(loser.duelElo) || DUEL_ELO_DEFAULT;
+  const ea = duelEloExpected(ra, rb);
+  const eb = 1 - ea;
+
+  const ka = duelEloK(winner);
+  const kb = duelEloK(loser);
+
+  const ra2 = ra + ka * (1 - ea);
+  const rb2 = rb + kb * (0 - eb);
+
+  winner.duelElo = Math.round(ra2);
+  loser.duelElo = Math.round(rb2);
+  winner.duelEloGames = (Number(winner.duelEloGames) || 0) + 1;
+  loser.duelEloGames = (Number(loser.duelEloGames) || 0) + 1;
+}
+
 async function signupHandler(req, res) {
   const { username, password } = req.body || {};
   if (!username || !password) {
@@ -1935,12 +2710,27 @@ async function signupHandler(req, res) {
     return res.status(400).json({ message: "Šāds lietotājs jau eksistē" });
   }
 
+  // Anti-alt: 24h limits uz ierīci (deviceId)
+  const deviceId = getDeviceIdFromReq(req);
+  if (deviceId) {
+    const recent = countRecentSignupsForDeviceId(deviceId, Date.now());
+    if (recent >= DEVICE_SIGNUP_MAX) {
+      return res.status(429).json({
+        message: "No šīs ierīces pēdējo 24h laikā jau izveidots konts. Pamēģini vēlāk.",
+        code: "DEVICE_SIGNUP_LIMIT",
+      });
+    }
+  }
+
   const hash = await bcrypt.hash(password, 10);
   const now = Date.now();
 
   const user = {
     username: name,
     passwordHash: hash,
+    createdAt: now,
+    createdDeviceId: deviceId || null,
+    deviceIds: deviceId ? [deviceId] : [],
     xp: 0,
     score: 0,
     coins: 0,
@@ -1961,6 +2751,14 @@ async function signupHandler(req, res) {
     dailyLoginDate: "",
     duelsWon: 0,
     duelsLost: 0,
+    duelElo: DUEL_ELO_DEFAULT,
+    duelEloGames: 0,
+    duelWinsToday: 0,
+    duelWinsTodayDate: "",
+    tokensBoughtToday: 0,
+    tokensBoughtTodayDate: "",
+    revealUsedToday: 0,
+    revealUsedTodayDate: "",
     avatarUrl: null,
     supporter: false,
     dailyChest: { lastDate: "", streak: 0, totalOpens: 0 },
@@ -1978,6 +2776,7 @@ async function signupHandler(req, res) {
   ensureDailyMissions(user);
   ensureDailyChest(user);
   ensureSpecialMedals(user);
+  resetDailyCountersIfNeeded(user);
 
   USERS[name] = user;
   saveUsers(USERS);
@@ -2012,9 +2811,18 @@ async function loginHandler(req, res) {
   const ok = await bcrypt.compare(password, user.passwordHash || "");
   if (!ok) return res.status(400).json({ message: "Nepareiza parole" });
 
+  // Ierīces ID (ja ir) – uzkrājam pie user (noder nākotnē anti-abuse)
+  const deviceId = getDeviceIdFromReq(req);
+  if (deviceId) {
+    if (!Array.isArray(user.deviceIds)) user.deviceIds = [];
+    if (!user.deviceIds.includes(deviceId)) user.deviceIds.push(deviceId);
+    while (user.deviceIds.length > 5) user.deviceIds.shift();
+  }
+
   markActivity(user);
   ensureDailyMissions(user);
   resetWinsTodayIfNeeded(user);
+  resetDailyCountersIfNeeded(user);
   ensureDailyChest(user);
   ensureSpecialMedals(user);
   ensureRankFields(user);
@@ -2036,6 +2844,7 @@ app.get("/me", authMiddleware, (req, res) => {
   markActivity(u);
   ensureDailyMissions(u);
   resetWinsTodayIfNeeded(u);
+  resetDailyCountersIfNeeded(u);
   ensureDailyChest(u);
   ensureSpecialMedals(u);
   ensureRankFields(u);
@@ -2086,20 +2895,43 @@ app.post("/avatar", authMiddleware, (req, res) => {
 function buildPublicProfilePayload(targetUser, requester) {
   const rankInfo = ensureRankFields(targetUser);
   const isAdmin = requester && isAdminUser(requester);
+  ensureDuelEloFields(targetUser);
 
   const dynamicMedals = computeMedalsForUser(targetUser);
   const medals = mergeMedals(dynamicMedals, targetUser.specialMedals);
 
+  const xp = targetUser.xp || 0;
+  const minXp = Number(rankInfo.minXp) || 0;
+  const nextMinXp =
+    rankInfo.nextMinXp === null || rankInfo.nextMinXp === undefined
+      ? null
+      : Number(rankInfo.nextMinXp) || null;
+  const need =
+    nextMinXp && Number.isFinite(nextMinXp) && nextMinXp > minXp ? nextMinXp - minXp : 0;
+  const inLevel = Math.max(0, xp - minXp);
+  const pct = need > 0 ? Math.max(0, Math.min(100, (inLevel / need) * 100)) : 100;
+  const toNext = need > 0 ? Math.max(0, nextMinXp - xp) : 0;
+
   const payload = {
     username: targetUser.username,
-    xp: targetUser.xp || 0,
+    xp,
     score: targetUser.score || 0,
     coins: targetUser.coins || 0,
     tokens: targetUser.tokens || 0,
     streak: targetUser.streak || 0,
     bestStreak: targetUser.bestStreak || 0,
+    duelElo: targetUser.duelElo,
+    duelEloGames: targetUser.duelEloGames || 0,
     rankTitle: targetUser.rankTitle || rankInfo.title,
     rankLevel: targetUser.rankLevel || rankInfo.level,
+    rankColor: targetUser.rankColor || rankInfo.color,
+    rankMinXp: minXp,
+    rankNextMinXp: nextMinXp,
+    rankInLevelXp: inLevel,
+    rankNeedXp: need,
+    rankToNextXp: toNext,
+    rankProgressPct: Math.round(pct * 10) / 10,
+    rankIsMax: !!rankInfo.isMax,
     medals,
     duelsWon: targetUser.duelsWon || 0,
     duelsLost: targetUser.duelsLost || 0,
@@ -2137,6 +2969,7 @@ app.get("/missions", authMiddleware, (req, res) => {
   markActivity(user);
   ensureDailyMissions(user);
   resetWinsTodayIfNeeded(user);
+  resetDailyCountersIfNeeded(user);
   ensureDailyChest(user);
   ensureSpecialMedals(user);
   ensureRankFields(user);
@@ -2151,6 +2984,7 @@ app.post("/missions/claim", authMiddleware, (req, res) => {
 
   markActivity(user);
   ensureDailyMissions(user);
+  resetDailyCountersIfNeeded(user);
   ensureDailyChest(user);
   ensureSpecialMedals(user);
 
@@ -2207,6 +3041,8 @@ app.post("/chest/open", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
   ensureDailyChest(user);
+  ensureDailyMissions(user);
+  resetDailyCountersIfNeeded(user);
 
   const today = todayKey();
   const available = user.dailyChest.lastDate !== today;
@@ -2243,6 +3079,7 @@ app.post("/chest/open", authMiddleware, (req, res) => {
   user.xp = (user.xp || 0) + xpGain;
   user.tokens = (user.tokens || 0) + tokensGain;
 
+  updateMissionsOnChestOpen(user);
   ensureRankFields(user);
   saveUsers(USERS);
   broadcastLeaderboard(false);
@@ -2344,6 +3181,12 @@ function startNewRoundForUser(user) {
     // Ability: reveal 1 letter
     revealUsed: false,
     reveal: null,
+
+    // (NEW) Lai reveal-letter neatver jau pareizi zināmu pozīciju
+    knownCorrect: new Array(len).fill(false),
+
+    // (NEW) Solo raunda vēsture, lai var atjaunot pēc refresh/disconnect
+    history: [], // [{ guess, pattern, ts }]
   };
   return user.currentRound;
 }
@@ -2362,6 +3205,11 @@ app.get("/start-round", authMiddleware, (req, res) => {
       user.currentRound.revealUsed = false;
     if (!user.currentRound.reveal || typeof user.currentRound.reveal !== "object")
       user.currentRound.reveal = null;
+    if (!Array.isArray(user.currentRound.knownCorrect)) {
+      const len = Math.max(0, Math.floor(user.currentRound.len || 0));
+      user.currentRound.knownCorrect = len > 0 ? new Array(len).fill(false) : [];
+    }
+    if (!Array.isArray(user.currentRound.history)) user.currentRound.history = [];
 
     saveUsers(USERS);
 
@@ -2378,13 +3226,27 @@ app.get("/start-round", authMiddleware, (req, res) => {
       len: user.currentRound.len,
       revealUsed,
       reveal,
+      attemptsLeft: user.currentRound.attemptsLeft ?? null,
+      startedAt: user.currentRound.startedAt ?? null,
+      history: user.currentRound.history.slice(0, MAX_ATTEMPTS).map((h) => ({
+        guess: h?.guess,
+        pattern: h?.pattern,
+        ts: h?.ts,
+      })),
     });
   }
 
   // citādi sākam jaunu
   const round = startNewRoundForUser(user);
   saveUsers(USERS);
-  return res.json({ len: round.len, revealUsed: false, reveal: null });
+  return res.json({
+    len: round.len,
+    revealUsed: false,
+    reveal: null,
+    attemptsLeft: round.attemptsLeft ?? null,
+    startedAt: round.startedAt ?? null,
+    history: [],
+  });
 });
 
 // ======== Ability: Atvērt 1 burtu (1x katrā raundā) ========
@@ -2393,6 +3255,7 @@ app.get("/start-round", authMiddleware, (req, res) => {
 app.post("/ability/reveal-letter", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
+  resetDailyCountersIfNeeded(user);
 
   // ja nav raunda vai ir beidzies — sākam jaunu
   if (!user.currentRound || user.currentRound.finished) {
@@ -2412,6 +3275,11 @@ app.post("/ability/reveal-letter", authMiddleware, (req, res) => {
       message: "Šajā raundā burts jau tika atvērts.",
       code: "ALREADY_USED",
     });
+  }
+
+  if (!Array.isArray(round.knownCorrect)) {
+    const len = Math.max(0, Math.floor(round.len || 0));
+    round.knownCorrect = len > 0 ? new Array(len).fill(false) : [];
   }
 
   const cost = REVEAL_LETTER_COST_COINS;
@@ -2441,8 +3309,19 @@ app.post("/ability/reveal-letter", authMiddleware, (req, res) => {
   const allPos = [];
   for (let i = 0; i < round.len; i++) allPos.push(i);
 
-  let pool = allPos.filter((i) => !avoid.has(i));
+  // prioritāte: atveram tikai tādu pozīciju, kas vēl nav zināma kā pareiza
+  let pool = allPos.filter((i) => !avoid.has(i) && !round.knownCorrect?.[i]);
   if (!pool.length) pool = allPos;
+
+  // ja pat pēc fallbacka visas pozīcijas jau ir zināmas kā pareizas, nav jēgas atvērt
+  const unknownAny = allPos.some((i) => !round.knownCorrect?.[i]);
+  if (!unknownAny) {
+    saveUsers(USERS);
+    return res.status(400).json({
+      message: "Visi burti jau ir atminēti pareizajās vietās.",
+      code: "ALL_KNOWN",
+    });
+  }
 
   const pos = pool[crypto.randomInt(0, pool.length)];
   const letter = String(round.word[pos] || "").toUpperCase();
@@ -2452,6 +3331,7 @@ app.post("/ability/reveal-letter", authMiddleware, (req, res) => {
   round.revealUsed = true;
   round.reveal = { pos, letter, cost, ts: Date.now() };
 
+  updateMissionsOnRevealUsed(user);
   saveUsers(USERS);
 
   return res.json({
@@ -2535,6 +3415,7 @@ app.post("/guess", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
   ensureDailyMissions(user);
+  resetDailyCountersIfNeeded(user);
   ensureDailyChest(user);
 
   const gate = enforceGuessRate(user);
@@ -2550,6 +3431,11 @@ app.post("/guess", authMiddleware, (req, res) => {
   }
 
   const round = user.currentRound;
+  if (!Array.isArray(round.knownCorrect)) {
+    const len2 = Math.max(0, Math.floor(round.len || 0));
+    round.knownCorrect = len2 > 0 ? new Array(len2).fill(false) : [];
+  }
+  if (!Array.isArray(round.history)) round.history = [];
 
   if (guessRaw.length !== round.len) {
     const blocked = trackBadLength(user);
@@ -2582,6 +3468,14 @@ app.post("/guess", authMiddleware, (req, res) => {
   user.totalGuesses = (user.totalGuesses || 0) + 1;
 
   const pattern = buildPattern(round.word, guessRaw);
+
+  // (NEW) atzīmējam pozīcijas, kur burts jau ir pareizi atminēts
+  for (let i = 0; i < round.len; i++) {
+    if (guessRaw[i] && guessRaw[i] === round.word[i]) {
+      round.knownCorrect[i] = true;
+    }
+  }
+
   round.attemptsLeft -= 1;
 
   const len = round.len;
@@ -2590,6 +3484,8 @@ app.post("/guess", authMiddleware, (req, res) => {
 
   let xpGain = 0;
   let coinsGain = 0;
+  let winTimeMs = 0;
+  let attemptsUsed = 0;
 
   if (isWin) {
     const prevStreak = user.streak || 0;
@@ -2600,6 +3496,7 @@ app.post("/guess", authMiddleware, (req, res) => {
 
     if (round.startedAt) {
       const winTime = Date.now() - round.startedAt;
+      winTimeMs = winTime;
       if (!user.bestWinTimeMs || winTime < user.bestWinTimeMs) {
         user.bestWinTimeMs = winTime;
       }
@@ -2632,6 +3529,7 @@ app.post("/guess", authMiddleware, (req, res) => {
       coinsGain,
       rankTitle: user.rankTitle,
       rankLevel: user.rankLevel,
+      rankColor: user.rankColor || "#9CA3AF",
       avatarUrl: user.avatarUrl || null,
       streak: user.streak || 0,
     });
@@ -2641,7 +3539,19 @@ app.post("/guess", authMiddleware, (req, res) => {
 
   round.finished = finished;
 
-  updateMissionsOnGuess(user, { isWin, xpGain });
+  try {
+    round.history.push({ guess: guessRaw, pattern, ts: Date.now() });
+    if (round.history.length > MAX_ATTEMPTS) round.history = round.history.slice(-MAX_ATTEMPTS);
+  } catch {}
+
+  attemptsUsed = Math.max(1, MAX_ATTEMPTS - (round.attemptsLeft || 0));
+  updateMissionsOnGuess(user, {
+    isWin,
+    xpGain,
+    winTimeMs,
+    wordLen: len,
+    attemptsUsed,
+  });
 
   saveUsers(USERS);
 
@@ -2661,6 +3571,7 @@ app.post("/buy-token", authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
   ensureDailyMissions(user);
+  resetDailyCountersIfNeeded(user);
   ensureDailyChest(user);
 
   const price = getTokenPrice(user);
@@ -2671,6 +3582,8 @@ app.post("/buy-token", authMiddleware, (req, res) => {
 
   user.coins = (user.coins || 0) - price;
   user.tokens = (user.tokens || 0) + 1;
+
+  updateMissionsOnTokenBuy(user, 1);
 
   saveUsers(USERS);
   broadcastLeaderboard(false);
@@ -2717,7 +3630,22 @@ function finishDuel(duel, winnerName, reason) {
   const u1 = USERS[p1];
   const u2 = USERS[p2];
 
+  const rows1 = duel.rowsUsed?.[p1] ?? 0;
+  const rows2 = duel.rowsUsed?.[p2] ?? 0;
+  const left1 = duel.attemptsLeft?.[p1] ?? 0;
+  const left2 = duel.attemptsLeft?.[p2] ?? 0;
+  const scoreText = `${p1}: ${rows1}/${DUEL_MAX_ATTEMPTS} (left ${left1}) — ${p2}: ${rows2}/${DUEL_MAX_ATTEMPTS} (left ${left2})`;
+
   if (winnerName && u1 && u2) {
+    const isRanked = duel.ranked !== false;
+    // ELO snapshot pirms izmaiņām
+    let eloBefore = null;
+    if (isRanked) {
+      ensureDuelEloFields(u1);
+      ensureDuelEloFields(u2);
+      eloBefore = { [p1]: u1.duelElo, [p2]: u2.duelElo };
+    }
+
     const winner = USERS[winnerName];
     const loser = winnerName === p1 ? u2 : u1;
 
@@ -2725,14 +3653,29 @@ function finishDuel(duel, winnerName, reason) {
       winner.duelsWon = (winner.duelsWon || 0) + 1;
       winner.xp = (winner.xp || 0) + DUEL_REWARD_XP;
       winner.coins = (winner.coins || 0) + DUEL_REWARD_COINS;
+      updateMissionsOnDuelWin(winner);
       ensureRankFields(winner);
     }
     if (loser) {
       loser.duelsLost = (loser.duelsLost || 0) + 1;
     }
 
+    // Ranked ELO update (tikai, ja ir uzvarētājs)
+    if (isRanked && winner && loser) {
+      applyDuelEloWinLoss(winner, loser);
+    }
+
     saveUsers(USERS);
     broadcastLeaderboard(false);
+
+    const eloAfter = (duel.ranked !== false && u1 && u2)
+      ? { [p1]: u1.duelElo, [p2]: u2.duelElo }
+      : null;
+
+    const eloDelta1 =
+      eloBefore && eloAfter ? Number(eloAfter[p1] || 0) - Number(eloBefore[p1] || 0) : 0;
+    const eloDelta2 =
+      eloBefore && eloAfter ? Number(eloAfter[p2] || 0) - Number(eloBefore[p2] || 0) : 0;
 
     if (s1)
       s1.emit("duel.end", {
@@ -2740,6 +3683,15 @@ function finishDuel(duel, winnerName, reason) {
         winner: winnerName,
         youWin: winnerName === p1,
         reason,
+        opponent: p2,
+        scoreText,
+        len: duel.len,
+        startedAt: duel.startedAt || null,
+        expiresAt: duel.expiresAt || null,
+        ranked: duel.ranked !== false,
+        yourElo: eloAfter ? eloAfter[p1] : null,
+        opponentElo: eloAfter ? eloAfter[p2] : null,
+        eloDelta: eloAfter ? eloDelta1 : null,
       });
     if (s2)
       s2.emit("duel.end", {
@@ -2747,6 +3699,15 @@ function finishDuel(duel, winnerName, reason) {
         winner: winnerName,
         youWin: winnerName === p2,
         reason,
+        opponent: p1,
+        scoreText,
+        len: duel.len,
+        startedAt: duel.startedAt || null,
+        expiresAt: duel.expiresAt || null,
+        ranked: duel.ranked !== false,
+        yourElo: eloAfter ? eloAfter[p2] : null,
+        opponentElo: eloAfter ? eloAfter[p1] : null,
+        eloDelta: eloAfter ? eloDelta2 : null,
       });
 
     const other = winnerName === p1 ? p2 : p1;
@@ -2758,6 +3719,12 @@ function finishDuel(duel, winnerName, reason) {
         winner: null,
         youWin: false,
         reason,
+        opponent: p2,
+        scoreText,
+        len: duel.len,
+        startedAt: duel.startedAt || null,
+        expiresAt: duel.expiresAt || null,
+        ranked: duel.ranked !== false,
       });
     if (s2)
       s2.emit("duel.end", {
@@ -2765,6 +3732,12 @@ function finishDuel(duel, winnerName, reason) {
         winner: null,
         youWin: false,
         reason,
+        opponent: p1,
+        scoreText,
+        len: duel.len,
+        startedAt: duel.startedAt || null,
+        expiresAt: duel.expiresAt || null,
+        ranked: duel.ranked !== false,
       });
   }
 
@@ -2777,6 +3750,11 @@ function finishDuel(duel, winnerName, reason) {
 setInterval(() => {
   const now = Date.now();
   for (const duel of duels.values()) {
+    // Pending invite timeout (citādi userToDuel var iestrēgt pēc ignorēta invite/refresh)
+    if (duel.status === "pending" && duel.expiresAt && now >= duel.expiresAt) {
+      finishDuel(duel, null, "declined");
+      continue;
+    }
     if (duel.status === "active" && duel.expiresAt && now >= duel.expiresAt) {
       finishDuel(duel, null, "timeout");
     }
@@ -3076,6 +4054,27 @@ io.on("connection", (socket) => {
   }
 
   const passiveChanged = markActivity(user);
+
+  // Ja lietotājs ir aktīvā duelī un viņš pārlādē lapu, dodam iespēju turpināt
+  try {
+    const duelId = userToDuel.get(user.username);
+    const duel = duelId ? duels.get(duelId) : null;
+    if (duel && duel.status === "active") {
+      socket.emit("duel.resume", {
+        duelId: duel.id,
+        len: duel.len,
+        opponent: getDuelOpponent(duel, user.username),
+        startedAt: duel.startedAt || null,
+        expiresAt: duel.expiresAt || null,
+        serverNow: Date.now(),
+        countdownMs: DUEL_COUNTDOWN_MS,
+        ranked: duel.ranked !== false,
+        attemptsLeft: duel.attemptsLeft?.[user.username] ?? null,
+        rowsUsed: duel.rowsUsed?.[user.username] ?? null,
+        history: Array.isArray(duel.history?.[user.username]) ? duel.history[user.username] : [],
+      });
+    }
+  } catch {}
   ensureDailyMissions(user);
   ensureDailyChest(user);
   ensureSpecialMedals(user);
@@ -3099,6 +4098,13 @@ io.on("connection", (socket) => {
 
   socket.emit("seasonUpdate", seasonState);
   socket.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
+
+  // DM: uzreiz iedodam neizlasīto skaitu (badge sync)
+  try {
+    const u = USERS[user.username] || user;
+    ensureDm(u);
+    socket.emit("dm.unread", dmComputeUnread(u.dm));
+  } catch {}
 
   socket.on("leaderboard:top10", () => {
     socket.emit("leaderboard:update", computeTop10Leaderboard());
@@ -3176,15 +4182,166 @@ io.on("connection", (socket) => {
       avatarUrl: u.avatarUrl || null,
       rankTitle: u.rankTitle || "—",
       rankLevel: u.rankLevel || 1,
+      rankColor: u.rankColor || "#9CA3AF",
       supporter: !!u.supporter,
     });
+  });
+
+  // ========== PRIVĀTAIS ČATS (DM) ==========
+  socket.on("dm.send", (payload) => {
+    const sender = USERS[user.username] || user;
+    const now = Date.now();
+
+    const toRaw =
+      typeof payload === "string"
+        ? ""
+        : payload?.to ?? payload?.username ?? payload?.target ?? "";
+    const textRaw = typeof payload === "string" ? payload : payload?.text ?? "";
+
+    const toName = String(toRaw || "").trim();
+    const text = dmSanitizeText(textRaw);
+    if (!toName) return socket.emit("dm.error", { message: "Nav norādīts saņēmējs." });
+    if (!text) return socket.emit("dm.error", { message: "Ziņa ir tukša." });
+
+    if (sender.isBanned) {
+      return socket.emit("dm.error", { message: "Tu esi nobanots." });
+    }
+    if (sender.mutedUntil && sender.mutedUntil > now) {
+      const until = new Date(sender.mutedUntil).toLocaleTimeString("lv-LV", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      return socket.emit("dm.error", { message: `Tev ir mute līdz ${until}.` });
+    }
+
+    // anti-spam
+    if (sender.lastDmAt && now - sender.lastDmAt < DM_RATE_MS) return;
+    sender.lastDmAt = now;
+    if (
+      sender.lastDmText &&
+      sender.lastDmText === text &&
+      sender.lastDmTextAt &&
+      now - sender.lastDmTextAt < DM_DUP_WINDOW_MS
+    ) {
+      return;
+    }
+    sender.lastDmText = text;
+    sender.lastDmTextAt = now;
+
+    const key = findUserKeyCaseInsensitive(toName);
+    const target = key ? USERS[key] : null;
+    if (!target) return socket.emit("dm.error", { message: "Lietotājs nav atrasts." });
+    if (target.username === sender.username)
+      return socket.emit("dm.error", { message: "Nevari rakstīt sev." });
+
+    // aktivitāte (anti-afk)
+    markActivity(sender);
+    markActivity(target);
+
+    const msg = dmPushMessage(sender, target, text);
+    if (!msg) return socket.emit("dm.error", { message: "Neizdevās nosūtīt ziņu." });
+
+    saveUsers(USERS);
+
+    // sūtītājam apstiprinājums
+    socket.emit("dm.sent", { message: msg, with: target.username });
+
+    // saņēmējam ziņa + unread sync (netraucē spēlei; frontā var rādīt toast)
+    const targetSocket = getSocketByUsername(target.username);
+    if (targetSocket) {
+      targetSocket.emit("dm.message", {
+        message: msg,
+        fromUser: getMiniUserPayload(sender.username),
+      });
+      try {
+        ensureDm(target);
+        targetSocket.emit("dm.unread", dmComputeUnread(target.dm));
+      } catch {}
+    }
+  });
+
+  socket.on("dm.history", (payload) => {
+    const me = USERS[user.username] || user;
+    const otherRaw =
+      typeof payload === "string" ? payload : payload?.with ?? payload?.username ?? payload?.user ?? "";
+    const otherName = String(otherRaw || "").trim();
+    if (!otherName) return socket.emit("dm.history", { with: "", messages: [] });
+
+    ensureDm(me);
+    const key = findUserKeyCaseInsensitive(otherName);
+    const other = key ? USERS[key] : null;
+    const otherUsername = other?.username || otherName;
+
+    const threadKey = dmThreadKeyFor(me, otherUsername);
+    const arr = Array.isArray(me.dm.threads?.[threadKey]) ? me.dm.threads[threadKey] : [];
+
+    // sūtam pēdējās 60 ziņas, lai nav milzīgs payload
+    socket.emit("dm.history", {
+      with: otherUsername,
+      messages: arr.slice(-60),
+    });
+  });
+
+  socket.on("dm.read", (payload) => {
+    const me = USERS[user.username] || user;
+    const otherRaw =
+      typeof payload === "string" ? payload : payload?.with ?? payload?.username ?? payload?.user ?? "";
+    const otherName = String(otherRaw || "").trim();
+    if (!otherName) return;
+
+    ensureDm(me);
+    const key = findUserKeyCaseInsensitive(otherName);
+    const other = key ? USERS[key] : null;
+    const otherUsername = other?.username || otherName;
+
+    me.dm.lastRead[otherUsername] = Date.now();
+    dmZeroUnreadCaseInsensitive(me.dm, otherUsername);
+    saveUsers(USERS);
+    socket.emit("dm.unread", dmComputeUnread(me.dm));
+  });
+
+  // Dzēst visu DM sarunu (tikai šim lietotājam / "delete for me")
+  // payload: { with: "OtherUser" }
+  socket.on("dm.clearThread", (payload) => {
+    const me = USERS[user.username] || user;
+    const otherRaw =
+      typeof payload === "string" ? payload : payload?.with ?? payload?.username ?? payload?.user ?? "";
+    const otherName = String(otherRaw || "").trim();
+    if (!otherName) return socket.emit("dm.error", { message: "Nav norādīta saruna." });
+
+    ensureDm(me);
+    const key = findUserKeyCaseInsensitive(otherName);
+    const other = key ? USERS[key] : null;
+    const otherUsername = other?.username || otherName;
+    if (!otherUsername || otherUsername === me.username)
+      return socket.emit("dm.error", { message: "Nederīga saruna." });
+
+    const threadKey = dmThreadKeyFor(me, otherUsername);
+    try {
+      if (me.dm.threads && typeof me.dm.threads === "object") delete me.dm.threads[threadKey];
+    } catch {}
+    try {
+      if (me.dm.lastRead && typeof me.dm.lastRead === "object") delete me.dm.lastRead[otherUsername];
+    } catch {}
+    dmZeroUnreadCaseInsensitive(me.dm, otherUsername);
+
+    saveUsers(USERS);
+    socket.emit("dm.cleared", { with: otherUsername });
+    socket.emit("dm.unread", dmComputeUnread(me.dm));
   });
 
   // ========== DUEĻI ==========
   socket.on("duel.challenge", (targetNameRaw) => {
     const challenger = socket.data.user;
     const challengerName = challenger.username;
-    const targetName = String(targetNameRaw || "").trim();
+    const isObj = targetNameRaw && typeof targetNameRaw === "object";
+    const targetName = String(
+      isObj
+        ? targetNameRaw.target || targetNameRaw.username || targetNameRaw.opponent || ""
+        : targetNameRaw || ""
+    ).trim();
+    // default: ranked (back-compat ar veco klientu, kas sūta tikai string)
+    const ranked = isObj ? targetNameRaw.ranked !== false : true;
 
     if (!targetName)
       return socket.emit("duel.error", { message: "Nav norādīts pretinieks." });
@@ -3215,17 +4372,21 @@ io.on("connection", (socket) => {
     const duel = {
       id: duelId,
       players: [challengerName, targetUser.username],
+      challenger: challengerName,
+      target: targetUser.username,
       word,
       len,
+      ranked,
       status: "pending",
       createdAt: Date.now(),
       startedAt: null,
-      expiresAt: null,
+      expiresAt: Date.now() + DUEL_INVITE_TIMEOUT_MS,
       attemptsLeft: {
         [challengerName]: DUEL_MAX_ATTEMPTS,
         [targetUser.username]: DUEL_MAX_ATTEMPTS,
       },
       rowsUsed: { [challengerName]: 0, [targetUser.username]: 0 },
+      history: { [challengerName]: [], [targetUser.username]: [] }, // [{ guess, pattern, ts }]
       winner: null,
       finishedReason: null,
     };
@@ -3238,11 +4399,13 @@ io.on("connection", (socket) => {
       duelId,
       opponent: targetUser.username,
       len,
+      ranked,
     });
     targetSocket.emit("duel.invite", {
       duelId,
       from: challengerName,
       len,
+      ranked,
     });
   });
 
@@ -3257,13 +4420,9 @@ io.on("connection", (socket) => {
 
     if (u.username !== p1 && u.username !== p2) return;
 
-    const other = u.username === p1 ? p2 : p1;
-    const otherSock = getSocketByUsername(other);
-    if (otherSock) otherSock.emit("duel.declined", { duelId, by: u.username });
-
-    userToDuel.delete(p1);
-    userToDuel.delete(p2);
-    duels.delete(duelId);
+    // vienmēr beidzam caur finishDuel, lai abiem klientiem atnāk duel.end
+    // (pretējā gadījumā izaicinātājam var palikt "gaidām atbildi..." karājoties)
+    finishDuel(duel, null, "declined");
   });
 
   socket.on("duel.accept", (payload) => {
@@ -3278,14 +4437,24 @@ io.on("connection", (socket) => {
     if (u.username !== p1 && u.username !== p2) return;
 
     duel.status = "active";
-    duel.startedAt = Date.now();
+    // spēle sākas pēc īsas atskaites, bet faktiskais laiks ir pilnas 2 min
+    duel.startedAt = Date.now() + DUEL_COUNTDOWN_MS;
     duel.expiresAt = duel.startedAt + DUEL_MAX_DURATION_MS;
 
     const s1 = getSocketByUsername(p1);
     const s2 = getSocketByUsername(p2);
 
-    if (s1) s1.emit("duel.start", { duelId, opponent: p2, len: duel.len });
-    if (s2) s2.emit("duel.start", { duelId, opponent: p1, len: duel.len });
+    const basePayload = {
+      duelId,
+      len: duel.len,
+      startedAt: duel.startedAt,
+      expiresAt: duel.expiresAt,
+      serverNow: Date.now(),
+      countdownMs: DUEL_COUNTDOWN_MS,
+      ranked: duel.ranked !== false,
+    };
+    if (s1) s1.emit("duel.start", { ...basePayload, opponent: p2 });
+    if (s2) s2.emit("duel.start", { ...basePayload, opponent: p1 });
   });
 
   socket.on("duel.guess", (payload) => {
@@ -3297,6 +4466,11 @@ io.on("connection", (socket) => {
 
     if (duel.status !== "active") return;
     if (!duel.players.includes(u.username)) return;
+
+    // neļaujam minēt pirms atskaites beigām (fair play)
+    if (duel.startedAt && Date.now() < duel.startedAt) {
+      return socket.emit("duel.error", { message: "Duelis vēl nav sācies. Pagaidi atskaiti!" });
+    }
 
     if (!guess || guess.length !== duel.len) {
       return socket.emit("duel.error", { message: `Vārdam jābūt ${duel.len} burtiem.` });
@@ -3313,13 +4487,26 @@ io.on("connection", (socket) => {
 
     const pattern = buildPattern(duel.word, guess);
     const win = guess === duel.word;
+    const attemptsLeftNow = duel.attemptsLeft[u.username] ?? 0;
+    const finished = attemptsLeftNow <= 0 && !win;
 
-    socket.emit("duel.result", {
+    try {
+      if (!duel.history) duel.history = {};
+      if (!Array.isArray(duel.history[u.username])) duel.history[u.username] = [];
+      duel.history[u.username].push({ guess, pattern, ts: Date.now() });
+    } catch {}
+
+    // Backward/forward compat: daži klienti klausās "duel.result", citi "duel.guessResult"
+    const resultPayload = {
       duelId,
+      guess,
       pattern,
       win,
-      attemptsLeft: duel.attemptsLeft[u.username],
-    });
+      finished,
+      attemptsLeft: attemptsLeftNow,
+    };
+    socket.emit("duel.result", resultPayload);
+    socket.emit("duel.guessResult", resultPayload);
 
     if (win) {
       finishDuel(duel, u.username, "win");
@@ -3334,6 +4521,19 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    // Pending invite tīram, bet ACTIVE dueli NEbeidzam (lai refresh gadījumā var turpināt).
+    // ACTIVE duelis tāpat beigsies ar 2min timeout.
+    try {
+      const u = socket.data.user;
+      const uname = u && u.username ? u.username : null;
+      if (uname && userToDuel.has(uname)) {
+        const duelId = userToDuel.get(uname);
+        const duel = duelId ? duels.get(duelId) : null;
+
+        if (duel && duel.status === "pending") finishDuel(duel, null, "declined");
+      }
+    } catch {}
+
     onlineBySocket.delete(socket.id);
     broadcastOnlineList(true);
   });
