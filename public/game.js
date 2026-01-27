@@ -249,6 +249,7 @@ revealCostCoins: 25,
 
   // coins animācijas helperis
   lastCoins: null,
+  lastXp: null,
 
   // 1v1 duelis
   duelMode: false,
@@ -900,6 +901,11 @@ if (minXp === null) minXp = rankMinXpByLevel(level);
 if (nextMinXp === null && level < 40) nextMinXp = rankMinXpByLevel(level + 1);
  
  const xp = typeof me.xp === "number" ? me.xp : 0;
+ if (state.lastXp !== null && xp > state.lastXp) {
+   playerXpBarEl.classList.add("vz-xp-bump");
+   setTimeout(() => playerXpBarEl.classList.remove("vz-xp-bump"), 420);
+ }
+ state.lastXp = xp;
  
   if (nextMinXp && nextMinXp > minXp) {
     const inLevel = Math.max(0, xp - minXp);

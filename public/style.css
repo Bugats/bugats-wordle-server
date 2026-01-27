@@ -622,6 +622,16 @@ input:focus-visible {
   transition: width 0.35s ease-out;
 }
 
+.vz-xp-bar-fill.vz-xp-bump {
+  animation: vzXpBump 0.45s ease-out;
+}
+
+@keyframes vzXpBump {
+  0% { filter: brightness(1); box-shadow: 0 0 8px rgba(255, 152, 0, 0.7); }
+  50% { filter: brightness(1.25); box-shadow: 0 0 16px rgba(255, 200, 90, 0.9); }
+  100% { filter: brightness(1); box-shadow: 0 0 8px rgba(255, 152, 0, 0.7); }
+}
+
 .vz-xp-bar-label {
   margin-top: 2px;
   font-size: 11px;
@@ -889,6 +899,8 @@ input:focus-visible {
   background: linear-gradient(90deg, #7cf7ff, #ffb74d);
   box-shadow: 0 0 12px rgba(124, 247, 255, 0.45);
   transition: width 220ms ease;
+  background-size: 200% 100%;
+  animation: vzFlow 4s linear infinite;
 }
 .vz-region-actions {
   display: flex;
@@ -964,6 +976,30 @@ input:focus-visible {
   height: 100%;
   width: 0%;
   transition: width 220ms ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.vz-region-bar-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.35) 45%, transparent 80%);
+  transform: translateX(-120%);
+  animation: vzBarShine 3.2s ease-in-out infinite;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+@keyframes vzFlow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}
+
+@keyframes vzBarShine {
+  0% { transform: translateX(-120%); }
+  45% { transform: translateX(10%); }
+  100% { transform: translateX(120%); }
 }
 .vz-region-item.vz-region-self {
   color: #b3e5fc;
@@ -1282,6 +1318,8 @@ input:focus-visible {
   border-color: #00ff7f;
   color: #02140a;
   text-shadow: none;
+  box-shadow: 0 0 14px rgba(0, 255, 127, 0.55), 0 0 24px rgba(0, 200, 83, 0.35);
+  animation: vzRewardPulseGreen 1.2s ease-out 2;
 }
 
 .tile.present,
@@ -1290,6 +1328,8 @@ input:focus-visible {
   border-color: #ffb300;
   color: #201000;
   text-shadow: none;
+  box-shadow: 0 0 14px rgba(255, 213, 79, 0.55), 0 0 24px rgba(255, 145, 0, 0.35);
+  animation: vzRewardPulseYellow 1.2s ease-out 2;
 }
 
 .tile.absent,
@@ -1298,6 +1338,18 @@ input:focus-visible {
   border-color: #30324a;
   color: #757aa2;
   text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+}
+
+@keyframes vzRewardPulseGreen {
+  0% { box-shadow: 0 0 0 rgba(0, 255, 127, 0); }
+  50% { box-shadow: 0 0 18px rgba(0, 255, 127, 0.75), 0 0 28px rgba(0, 200, 83, 0.55); }
+  100% { box-shadow: 0 0 0 rgba(0, 255, 127, 0); }
+}
+
+@keyframes vzRewardPulseYellow {
+  0% { box-shadow: 0 0 0 rgba(255, 213, 79, 0); }
+  50% { box-shadow: 0 0 18px rgba(255, 213, 79, 0.75), 0 0 28px rgba(255, 145, 0, 0.55); }
+  100% { box-shadow: 0 0 0 rgba(255, 213, 79, 0); }
 }
 
 .tile.shake { animation: vzShake 0.25s ease; }
@@ -1474,6 +1526,12 @@ input:focus-visible {
   filter: brightness(1.2);
 }
 
+.vz-key:active,
+.kb-key:active {
+  transform: translateY(1px) scale(0.98);
+  filter: brightness(1.1);
+}
+
 .vz-key-wide { min-width: 64px; }
 
 .vz-key-shift,
@@ -1488,6 +1546,9 @@ input:focus-visible {
 .kb-key.correct { background: linear-gradient(135deg, #00ff7f, #00c853); border-color: #00ff7f; color: #02140a; text-shadow: none; box-shadow: var(--vz-glow-green); }
 .kb-key.present { background: linear-gradient(135deg, #ffd54f, #ff9100); border-color: #ffb300; color: #201000; text-shadow: none; box-shadow: var(--vz-glow-yellow); }
 .kb-key.absent  { background: #1a1b2e; border-color: #333652; color: #6f7398; box-shadow: var(--vz-glow-gray); }
+
+.kb-key.correct { animation: vzRewardPulseGreen 1.1s ease-out 2; }
+.kb-key.present { animation: vzRewardPulseYellow 1.1s ease-out 2; }
 
 .kb-shift.kb-shift-on { background: #ff4081; border-color: #ff80ab; color: #fff; }
 
@@ -1609,7 +1670,13 @@ input:focus-visible {
 #winTicker.vz-win-active,
 .vz-win-ticker.vz-win-active {
   opacity: 0.92;
-  animation: none;
+  animation: vzWinPop 0.55s ease-out;
+}
+
+@keyframes vzWinPop {
+  0% { transform: translateY(-6px); opacity: 0; }
+  70% { transform: translateY(0); opacity: 0.95; }
+  100% { transform: translateY(0); opacity: 0.92; }
 }
 
 @media (max-width: 600px) {
@@ -1636,6 +1703,13 @@ input:focus-visible {
   font-weight: 700;
   color: #ff9800;
   text-shadow: 0 0 10px rgba(255, 152, 0, 1), 0 0 18px rgba(255, 87, 34, 0.9);
+  animation: vzHotPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes vzHotPulse {
+  0% { text-shadow: 0 0 8px rgba(255, 152, 0, 0.7), 0 0 16px rgba(255, 87, 34, 0.5); }
+  50% { text-shadow: 0 0 16px rgba(255, 152, 0, 1), 0 0 26px rgba(255, 87, 34, 0.9); }
+  100% { text-shadow: 0 0 8px rgba(255, 152, 0, 0.7), 0 0 16px rgba(255, 87, 34, 0.5); }
 }
 
 /* Coin bump */
@@ -2450,7 +2524,18 @@ input:focus-visible {
   #grid.win-glow,
   .vz-tile-win-bounce,
   .vz-player-card.vz-player-self .vz-avatar-circle::after,
-  .vz-logo-title {
+  .vz-logo-title,
+  .tile.correct,
+  .tile.present,
+  .kb-key.correct,
+  .kb-key.present,
+  .vz-hot-banner,
+  .vz-xp-bar-fill.vz-xp-bump,
+  #win-ticker.vz-win-active,
+  #winTicker.vz-win-active,
+  .vz-win-ticker.vz-win-active,
+  .vz-region-total-fill,
+  .vz-region-bar-fill::after {
     animation: none !important;
     transition: none !important;
   }
