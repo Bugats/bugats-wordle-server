@@ -1188,6 +1188,7 @@ input:focus-visible {
   justify-content: center;
   gap: 6px;
   margin-bottom: 6px;
+  perspective: 900px;
 }
 
 .vz-tile,
@@ -1209,6 +1210,20 @@ input:focus-visible {
   font-size: 30px;
   text-shadow: 0 0 6px rgba(0, 0, 0, 0.85);
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
+}
+
+.tile.flip,
+.vz-tile.flip {
+  animation: vzTileFlip 0.52s ease-in-out;
+}
+
+@keyframes vzTileFlip {
+  0% { transform: rotateX(0); }
+  49% { transform: rotateX(90deg); }
+  50% { transform: rotateX(90deg); }
+  100% { transform: rotateX(0); }
 }
 
 .vz-tile-pop,
@@ -2389,6 +2404,7 @@ input:focus-visible {
   .vz-tile-pop,
   .tile.vz-tile-pop,
   .tile.shake,
+  .tile.flip,
   #grid.win-glow,
   .vz-tile-win-bounce,
   .vz-player-card.vz-player-self .vz-avatar-circle::after,

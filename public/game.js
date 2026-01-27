@@ -35,6 +35,12 @@ const DISALLOWED_KEYS = new Set(["Q", "W", "X", "Y"]);
 
 // Fetch timeout (lai UI neiestrēgst pie “karājošiem” requestiem)
 const FETCH_TIMEOUT_MS = 12_000;
+const FLIP_DELAY_MS = 120;
+const FLIP_DURATION_MS = 520;
+const PREFERS_REDUCED_MOTION =
+  typeof window !== "undefined" &&
+  window.matchMedia &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // ================== AUTH STORAGE (kompatibilitāte) ==================
 const AUTH_KEYS = {
@@ -1428,7 +1434,7 @@ if (Array.isArray(data.history) && data.history.length) {
       tile.dataset.letter = guess[c];
       tile.textContent = guess[c];
     }
-    revealRow(r, h?.pattern || []);
+    revealRow(r, h?.pattern || [], { animate: false });
   });
  
   state.currentRow = data.history.length;
@@ -1678,25 +1684,40 @@ function updateKeyboardColor(letter, status) {
   btn.classList.add(status);
 }
 
-function revealRow(rowIndex, pattern) {
+function revealRow(rowIndex, pattern, opts = {}) {
+  const animate = opts.animate !== false && !PREFERS_REDUCED_MOTION;
+  const half = Math.floor(FLIP_DURATION_MS / 2);
+
   for (let c = 0; c < state.cols; c++) {
     const tile = state.gridTiles[rowIndex]?.[c];
     if (!tile) continue;
 
     const res = pattern[c] || "absent";
-    setTimeout(() => {
-      tile.classList.add("flip");
-      tile.classList.remove("correct", "present", "absent");
+    const delay = c * FLIP_DELAY_MS;
+
+    if (!animate) {
+      tile.classList.remove("correct", "present", "absent", "flip");
       tile.classList.add(res);
       updateKeyboardColor(tile.dataset.letter, res);
-    }, c * 120);
+      continue;
+    }
+
+    setTimeout(() => {
+      tile.classList.remove("flip");
+      tile.classList.remove("correct", "present", "absent");
+      tile.classList.add("flip");
+      setTimeout(() => {
+        tile.classList.remove("correct", "present", "absent");
+        tile.classList.add(res);
+        updateKeyboardColor(tile.dataset.letter, res);
+      }, half);
+    }, delay);
   }
 }
 
 function revealDurationMs() {
-  const per = 120;
-  const tail = 260;
-  return Math.max(260, (Math.max(1, state.cols) - 1) * per + tail);
+  const cols = Math.max(1, state.cols);
+  return Math.max(260, (cols - 1) * FLIP_DELAY_MS + FLIP_DURATION_MS);
 }
 
 function showWinEffects() {
@@ -3886,7 +3907,7 @@ if (playStartsAt && nowSrv < playStartsAt) {
       tile.dataset.letter = guess[c];
       tile.textContent = guess[c];
     }
-    revealRow(r, h?.pattern || []);
+    revealRow(r, h?.pattern || [], { animate: false });
   });
  state.currentRow = (history || []).length;
 state.currentCol = 0;
@@ -3897,7 +3918,7 @@ const onDuelGuessResult = async (payload) => {
   const { duelId, pattern, win, finished } = payload || {};
   if (!state.duelMode || duelId !== state.duelId) return;
  
-  revealRow(state.currentRow, pattern || []);
+    revealRow(state.currentRow, pattern || []);
   const unlockAfter = revealDurationMs();
  
   if (win) {
