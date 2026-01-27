@@ -347,6 +347,10 @@ const REPORTS_MAX = (() => {
   const v = parseInt(process.env.REPORTS_MAX || "2000", 10);
   return Number.isFinite(v) && v >= 100 && v <= 20000 ? v : 2000;
 })();
+const REPORT_RETENTION_DAYS = (() => {
+  const v = parseInt(process.env.REPORT_RETENTION_DAYS || "180", 10);
+  return Number.isFinite(v) && v >= 7 && v <= 3650 ? v : 180;
+})();
 
 // ======== GUESS rate-limit (server-side) ========
 const GUESS_RATE_MS = 950; // ~1/sec
@@ -548,13 +552,22 @@ function saveUsers(users) {
 
 let USERS = loadUsers();
 
+function pruneReports(list) {
+  const days = Math.max(1, REPORT_RETENTION_DAYS);
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  return (Array.isArray(list) ? list : []).filter((r) => {
+    const ts = Math.max(0, Number(r?.ts) || 0);
+    return !ts || ts >= cutoff;
+  });
+}
+
 function loadReports() {
   if (!fs.existsSync(REPORTS_FILE)) return [];
   try {
     const raw = fs.readFileSync(REPORTS_FILE, "utf8");
     if (!raw.trim()) return [];
     const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr.filter(Boolean) : [];
+    return pruneReports(Array.isArray(arr) ? arr.filter(Boolean) : []);
   } catch (err) {
     console.error("Kļūda lasot reports.json:", err);
     return [];
@@ -562,7 +575,7 @@ function loadReports() {
 }
 
 function saveReports(list) {
-  const arr = Array.isArray(list) ? list.slice(-REPORTS_MAX) : [];
+  const arr = pruneReports(Array.isArray(list) ? list.slice(-REPORTS_MAX) : []);
   saveJsonAtomic(REPORTS_FILE, arr);
 }
 
