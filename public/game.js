@@ -226,6 +226,8 @@ const state = {
   dmEdit: null, // { id, text }
   dmPeerRead: {}, // username -> ts (peer last read)
   dmTypingByUser: {}, // username -> bool
+  dmBlockedUsers: [],
+  dmBlockedSet: new Set(),
   rows: 6,
   cols: 5,
   currentRow: 0,
@@ -853,6 +855,10 @@ function updatePlayerCard(me) {
     playerTitleEl.classList.toggle("vz-title-empty", !title);
   }
   updateRegionPointsUi(me.regionPoints || 0, me.region || "");
+  if (Array.isArray(me.blockedUsers)) {
+    dmSetBlockedUsers(me.blockedUsers);
+    dmUpdateBlockUi();
+  }
 
   if (playerRankEl) playerRankEl.textContent = `${me.rankTitle} (L${me.rankLevel})`;
   applyRankColor(playerNameEl, me.rankColor);
@@ -1089,6 +1095,22 @@ function handlePersonalMessageClick() {
   hidePlayerProfile();
 }
 
+function updateProfileBlockButtons() {
+  const name = String(currentProfileName || "").trim();
+  const blockBtn = document.getElementById("vz-profile-block-btn");
+  const reportBtn = document.getElementById("vz-profile-report-btn");
+  if (!blockBtn && !reportBtn) return;
+
+  const isSelf = name && name === state.username;
+  if (blockBtn) {
+    blockBtn.style.display = isSelf ? "none" : "inline-block";
+    blockBtn.textContent = dmIsBlocked(name) ? "🔓 Atbloķēt" : "🚫 Bloķēt";
+  }
+  if (reportBtn) {
+    reportBtn.style.display = isSelf ? "none" : "inline-block";
+  }
+}
+
 function showPlayerProfile(data) {
   if (!data || !profilePopupEl) return;
 
@@ -1148,6 +1170,38 @@ applyRankColor(ppRankEl, data.rankColor);
     duelBtn.style.display =
       state.username && data.username === state.username ? "none" : "inline-block";
   }
+
+  let blockBtn = document.getElementById("vz-profile-block-btn");
+  let reportBtn = document.getElementById("vz-profile-report-btn");
+
+  if (!blockBtn && inner) {
+    blockBtn = document.createElement("button");
+    blockBtn.id = "vz-profile-block-btn";
+    blockBtn.className = "mission-claim-btn";
+    blockBtn.style.marginTop = "8px";
+    blockBtn.addEventListener("click", () => {
+      const name = String(currentProfileName || "").trim();
+      if (!name || !state.socket) return;
+      if (dmIsBlocked(name)) state.socket.emit("dm.unblock", { with: name });
+      else state.socket.emit("dm.block", { with: name });
+    });
+    inner.appendChild(blockBtn);
+  }
+
+  if (!reportBtn && inner) {
+    reportBtn = document.createElement("button");
+    reportBtn.id = "vz-profile-report-btn";
+    reportBtn.className = "mission-claim-btn";
+    reportBtn.style.marginTop = "8px";
+    reportBtn.textContent = "⚠️ Ziņot";
+    reportBtn.addEventListener("click", () => {
+      const name = String(currentProfileName || "").trim();
+      dmReportUserWith(name);
+    });
+    inner.appendChild(reportBtn);
+  }
+
+  updateProfileBlockButtons();
 
   profilePopupEl.classList.remove("hidden");
 }
@@ -2482,6 +2536,8 @@ function buildChatRowElement(msg) {
 
 function appendChatMessage(msg, opts = {}) {
   if (!chatMessagesEl || !msg) return;
+  const uname = String(msg.username || "").trim();
+  if (uname && uname !== "SYSTEM" && dmIsBlocked(uname)) return;
 
   const key = chatDedupeKey(msg);
   if (chatSeen.has(key)) return;
@@ -2527,6 +2583,8 @@ function appendChatMessagesBulk(list, opts = {}) {
   const frag = document.createDocumentFragment();
   for (const msg of list) {
     if (!msg) continue;
+    const uname = String(msg.username || "").trim();
+    if (uname && uname !== "SYSTEM" && dmIsBlocked(uname)) continue;
 
     const key = chatDedupeKey(msg);
     if (chatSeen.has(key)) continue;
@@ -2647,6 +2705,42 @@ fab.style.top = "74px";
   title.style.color = "#fff";
   title.textContent = "Privātais čats";
  
+  const actions = document.createElement("div");
+  actions.style.display = "flex";
+  actions.style.alignItems = "center";
+  actions.style.gap = "6px";
+
+  const report = document.createElement("button");
+  report.id = "vz-dm-report-user";
+  report.type = "button";
+  report.textContent = "⚠️";
+  report.title = "Ziņot par lietotāju";
+  report.style.width = "34px";
+  report.style.height = "34px";
+  report.style.borderRadius = "10px";
+  report.style.border = "1px solid rgba(255,255,255,0.12)";
+  report.style.background = "rgba(255,255,255,0.06)";
+  report.style.color = "#fff";
+  report.addEventListener("click", () => dmReportUser());
+
+  const block = document.createElement("button");
+  block.id = "vz-dm-block";
+  block.type = "button";
+  block.textContent = "🚫";
+  block.title = "Bloķēt lietotāju";
+  block.style.width = "34px";
+  block.style.height = "34px";
+  block.style.borderRadius = "10px";
+  block.style.border = "1px solid rgba(255,255,255,0.12)";
+  block.style.background = "rgba(255,255,255,0.06)";
+  block.style.color = "#fff";
+  block.addEventListener("click", () => {
+    const u = String(state.dmOpenWith || "").trim();
+    if (!u || !state.socket) return dmToast("Atver sarunu, lai bloķētu.");
+    if (dmIsBlocked(u)) state.socket.emit("dm.unblock", { with: u });
+    else state.socket.emit("dm.block", { with: u });
+  });
+
   const close = document.createElement("button");
   close.type = "button";
   close.textContent = "✕";
@@ -2688,9 +2782,13 @@ fab.style.top = "74px";
     dmToast("Spied vēlreiz 3s laikā, lai dzēstu sarunu.", "");
   });
   
+  actions.appendChild(report);
+  actions.appendChild(block);
+  actions.appendChild(close);
+  actions.appendChild(del);
+
   header.appendChild(title);
-header.appendChild(close);
-header.appendChild(del);
+  header.appendChild(actions);
  
   const msgs = document.createElement("div");
   msgs.id = "vz-dm-messages";
@@ -2993,6 +3091,89 @@ function dmUpdateTypingIndicator() {
   bar.style.display = "block";
 }
 
+function dmSetBlockedUsers(list) {
+  const arr = Array.isArray(list) ? list : [];
+  state.dmBlockedUsers = arr.filter(Boolean);
+  const set = new Set();
+  for (const u of state.dmBlockedUsers) {
+    const k = String(u || "").trim().toLowerCase();
+    if (k) set.add(k);
+  }
+  state.dmBlockedSet = set;
+  try {
+    updateProfileBlockButtons();
+  } catch {}
+}
+
+function dmIsBlocked(username) {
+  const k = String(username || "").trim().toLowerCase();
+  if (!k) return false;
+  return state.dmBlockedSet && state.dmBlockedSet.has(k);
+}
+
+function dmUpdateBlockUi() {
+  const u = String(state.dmOpenWith || "").trim();
+  const btn = document.getElementById("vz-dm-block");
+  const reportBtn = document.getElementById("vz-dm-report-user");
+  const inp = document.getElementById("vz-dm-input");
+  const send = document.getElementById("vz-dm-send");
+  if (!btn) return;
+
+  if (!u) {
+    btn.disabled = true;
+    btn.title = "Atver sarunu, lai bloķētu";
+    btn.textContent = "🚫";
+    if (reportBtn) {
+      reportBtn.disabled = true;
+      reportBtn.title = "Atver sarunu, lai ziņotu";
+    }
+    if (inp) inp.disabled = true;
+    if (send) send.disabled = true;
+    return;
+  }
+
+  const blocked = dmIsBlocked(u);
+  btn.disabled = false;
+  btn.textContent = blocked ? "🔓" : "🚫";
+  btn.title = blocked ? "Atbloķēt lietotāju" : "Bloķēt lietotāju";
+  if (reportBtn) {
+    reportBtn.disabled = false;
+    reportBtn.title = "Ziņot par lietotāju";
+  }
+
+  if (inp && send) {
+    inp.disabled = blocked;
+    send.disabled = blocked;
+    inp.placeholder = blocked
+      ? "Tu esi nobloķējis šo lietotāju"
+      : "Raksti ziņu…";
+  }
+}
+
+function dmReportUserWith(username) {
+  const u = String(username || "").trim();
+  if (!u || !state.socket) return;
+  const reason = window.prompt("Kāpēc ziņo? (neobligāti)") || "";
+  state.socket.emit("dm.report", { with: u, reason });
+}
+
+function dmReportUser() {
+  dmReportUserWith(state.dmOpenWith);
+}
+
+function dmReportMessage(msg) {
+  if (!msg || !state.socket) return;
+  const u = String(state.dmOpenWith || msg.from || "").trim();
+  if (!u || u === state.username) return;
+  const reason = window.prompt("Kāpēc ziņo par šo ziņu? (neobligāti)") || "";
+  state.socket.emit("dm.report", {
+    with: u,
+    id: msg.id,
+    text: msg.text,
+    reason,
+  });
+}
+
 function dmGetThread(withUser) {
   const key = String(withUser || "").trim();
   if (!key) return [];
@@ -3033,6 +3214,7 @@ function dmRenderThread(withUser) {
   const peerReadTs = Math.max(0, Number(state.dmPeerRead?.[withUser]) || 0);
   const lastMy = [...thread].reverse().find((m) => m && m.from === state.username && !m.deleted);
   const lastMyId = lastMy ? String(lastMy.id || "") : "";
+  const blocked = dmIsBlocked(withUser);
  
   thread.forEach((m) => {
     if (!m) return;
@@ -3084,16 +3266,31 @@ function dmRenderThread(withUser) {
     const actions = document.createElement("div");
     actions.className = "dm-actions";
 
-    const replyBtn = document.createElement("button");
-    replyBtn.type = "button";
-    replyBtn.className = "dm-action-btn";
-    replyBtn.textContent = "↩️";
-    replyBtn.title = "Atbildēt";
-    replyBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      dmSetReply(m);
-    });
-    actions.appendChild(replyBtn);
+    if (!blocked) {
+      const replyBtn = document.createElement("button");
+      replyBtn.type = "button";
+      replyBtn.className = "dm-action-btn";
+      replyBtn.textContent = "↩️";
+      replyBtn.title = "Atbildēt";
+      replyBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        dmSetReply(m);
+      });
+      actions.appendChild(replyBtn);
+    }
+
+    if (!isMe && !m.deleted) {
+      const reportBtn = document.createElement("button");
+      reportBtn.type = "button";
+      reportBtn.className = "dm-action-btn";
+      reportBtn.textContent = "⚠️";
+      reportBtn.title = "Ziņot par ziņu";
+      reportBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        dmReportMessage(m);
+      });
+      actions.appendChild(reportBtn);
+    }
 
     if (isMe && !m.deleted) {
       const editBtn = document.createElement("button");
@@ -3399,6 +3596,7 @@ function dmShowInbox() {
   dmSendTyping(false);
   dmClearContext();
   dmUpdateTypingIndicator();
+  dmUpdateBlockUi();
   dmRenderInbox();
 }
 function openDmWith(username) {
@@ -3430,7 +3628,8 @@ dmMarkReadLocal(u);
  const inputRow = document.getElementById("vz-dm-input-row");
 if (inputRow) inputRow.style.display = "flex";
 
-  dmRenderThread(u);
+dmRenderThread(u);
+dmUpdateBlockUi();
  
   const inp = document.getElementById("vz-dm-input");
   if (inp) {
@@ -3461,6 +3660,10 @@ function dmUpsertMessages(withUser, messages) {
 function dmSendCurrent() {
   const u = String(state.dmOpenWith || "").trim();
   if (!u || !state.socket) return;
+  if (dmIsBlocked(u)) {
+    dmToast("Tu esi nobloķējis šo lietotāju.");
+    return;
+  }
  
   const inp = document.getElementById("vz-dm-input");
   const text = inp ? String(inp.value || "").trim() : "";
@@ -3985,6 +4188,12 @@ socket.on("chatMessage", (payload) => {
     }
   }
 });
+
+  socket.on("dm.blocked", (payload) => {
+    const list = Array.isArray(payload?.list) ? payload.list : [];
+    dmSetBlockedUsers(list);
+    if (state.dmOpenWith) dmUpdateBlockUi();
+  });
  
   socket.on("dm.history", (payload) => {
     const withUser = String(payload?.with || "").trim();
@@ -4002,6 +4211,7 @@ socket.on("chatMessage", (payload) => {
     const msg = payload?.message;
     const from = String(msg?.from || "").trim();
     if (!from) return;
+    if (dmIsBlocked(from)) return;
     state.dmLastFrom = from;
     state.dmTypingByUser[from] = false;
 
@@ -4073,6 +4283,9 @@ socket.on("chatMessage", (payload) => {
   socket.on("dm.error", (payload) => {
     const m = payload?.message || "DM kļūda.";
     dmToast("❌ " + m);
+  });
+  socket.on("dm.reported", () => {
+    dmToast("✅ Paldies! Ziņojums nosūtīts.");
   });
   socket.on("dm.cleared", (payload) => {
   const u = String(payload?.with || "").trim();

@@ -77,6 +77,30 @@ body:not(.vz-body-game) {
   text-align: left;
 }
 
+.auth-footer {
+  margin-top: 12px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.auth-footer a {
+  color: #3b82f6;
+  text-decoration: none;
+}
+
+.auth-footer a:hover {
+  text-decoration: underline;
+}
+
+.privacy-container {
+  max-width: 720px;
+  text-align: left;
+}
+
+.privacy-container h2 {
+  margin-top: 18px;
+}
+
 .form-block h2 {
   margin: 0 0 10px;
   font-size: 18px;
@@ -270,6 +294,24 @@ input:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.vz-topbar-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e5e7eb;
+  font-weight: 800;
+  text-decoration: none;
+  font-size: 12px;
+}
+
+.vz-topbar-link:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 /* NOTE: noņemts margin-right, lai gap nav dubultā */

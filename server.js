@@ -26,6 +26,7 @@ const JWT_SECRET =
   process.env.JWT_SECRET || "BUGATS_VARDU_ZONA_SUPER_SLEPENS_JWT";
 
 const USERS_FILE = process.env.USERS_FILE || path.join(__dirname, "users.json");
+const REPORTS_FILE = process.env.REPORTS_FILE || path.join(__dirname, "reports.json");
 const WORDS_FILE = path.join(__dirname, "words.txt");
 
 // Seasons storage
@@ -334,6 +335,12 @@ const DM_MAX_LEN = 400;
 const DM_RATE_MS = 650;
 const DM_DUP_WINDOW_MS = 5000;
 const DM_THREAD_MAX = 200; // max ziņas vienā sarunā (katram userim)
+const REPORT_REASON_MAX_LEN = 220;
+const REPORT_TEXT_MAX_LEN = 200;
+const REPORTS_MAX = (() => {
+  const v = parseInt(process.env.REPORTS_MAX || "2000", 10);
+  return Number.isFinite(v) && v >= 100 && v <= 20000 ? v : 2000;
+})();
 
 // ======== GUESS rate-limit (server-side) ========
 const GUESS_RATE_MS = 950; // ~1/sec
@@ -465,6 +472,30 @@ function loadUsers() {
       if (typeof u.lastDmText !== "string") u.lastDmText = "";
       if (typeof u.lastDmTextAt !== "number") u.lastDmTextAt = 0;
 
+      // Bloķētie lietotāji (case-insensitive map)
+      if (!u.blocks || typeof u.blocks !== "object" || Array.isArray(u.blocks)) {
+        const next = {};
+        if (Array.isArray(u.blocks)) {
+          for (const item of u.blocks) {
+            const raw = String(item || "").trim();
+            if (!raw) continue;
+            next[raw.toLowerCase()] = raw;
+          }
+        }
+        u.blocks = next;
+      }
+      try {
+        const cleaned = {};
+        for (const [k, v] of Object.entries(u.blocks || {})) {
+          const raw = String(v || k || "").trim();
+          if (!raw) continue;
+          cleaned[raw.toLowerCase()] = raw;
+        }
+        u.blocks = cleaned;
+      } catch {
+        u.blocks = {};
+      }
+
       // Guess anti-spam
       if (typeof u.lastGuessAt !== "number") u.lastGuessAt = 0;
       if (typeof u.badLenCount !== "number") u.badLenCount = 0;
@@ -500,6 +531,26 @@ function saveUsers(users) {
 }
 
 let USERS = loadUsers();
+
+function loadReports() {
+  if (!fs.existsSync(REPORTS_FILE)) return [];
+  try {
+    const raw = fs.readFileSync(REPORTS_FILE, "utf8");
+    if (!raw.trim()) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter(Boolean) : [];
+  } catch (err) {
+    console.error("Kļūda lasot reports.json:", err);
+    return [];
+  }
+}
+
+function saveReports(list) {
+  const arr = Array.isArray(list) ? list.slice(-REPORTS_MAX) : [];
+  saveJsonAtomic(REPORTS_FILE, arr);
+}
+
+let REPORTS = loadReports();
 
 // ======== SEASON STORE (persistents) ========
 function buildInitialSeasonStore() {
@@ -2177,6 +2228,7 @@ function buildMePayload(u) {
     avatarUrl: u.avatarUrl || null,
     supporter: !!u.supporter,
     revealLetterCostCoins: REVEAL_LETTER_COST_COINS,
+    blockedUsers: listBlocks(u),
   };
 }
 
@@ -2542,6 +2594,49 @@ function dmGetLastRead(dm, otherUsername) {
     if (String(k || "").toLowerCase() === t) return Math.max(0, Number(v) || 0);
   }
   return 0;
+}
+
+function blockKey(name) {
+  return String(name || "").trim().toLowerCase();
+}
+
+function ensureBlocks(user) {
+  if (!user || typeof user !== "object") return null;
+  if (!user.blocks || typeof user.blocks !== "object" || Array.isArray(user.blocks)) {
+    user.blocks = {};
+  }
+  return user.blocks;
+}
+
+function isBlocked(user, otherName) {
+  const key = blockKey(otherName);
+  if (!key) return false;
+  const blocks = ensureBlocks(user);
+  return !!(blocks && blocks[key]);
+}
+
+function addBlock(user, otherName, displayName) {
+  const key = blockKey(otherName);
+  if (!key) return false;
+  const blocks = ensureBlocks(user);
+  if (!blocks) return false;
+  blocks[key] = displayName || String(otherName || "").trim();
+  return true;
+}
+
+function removeBlock(user, otherName) {
+  const key = blockKey(otherName);
+  if (!key) return false;
+  const blocks = ensureBlocks(user);
+  if (!blocks) return false;
+  delete blocks[key];
+  return true;
+}
+
+function listBlocks(user) {
+  const blocks = ensureBlocks(user);
+  if (!blocks) return [];
+  return Object.values(blocks).filter(Boolean);
 }
 
 function dmComputeUnread(dm) {
@@ -3123,6 +3218,7 @@ async function signupHandler(req, res) {
     supporter: false,
     dailyChest: { lastDate: "", streak: 0, totalOpens: 0 },
     specialMedals: [],
+    blocks: {},
     lastChatAt: 0,
     lastChatText: "",
     lastChatTextAt: 0,
@@ -4528,6 +4624,7 @@ io.on("connection", (socket) => {
     const u = USERS[user.username] || user;
     ensureDm(u);
     socket.emit("dm.unread", dmComputeUnread(u.dm));
+    socket.emit("dm.blocked", { list: listBlocks(u) });
   } catch {}
 
   socket.on("leaderboard:top10", () => {
@@ -4659,6 +4756,13 @@ io.on("connection", (socket) => {
     if (target.username === sender.username)
       return socket.emit("dm.error", { message: "Nevari rakstīt sev." });
 
+    if (isBlocked(sender, target.username)) {
+      return socket.emit("dm.error", { message: "Tu esi nobloķējis šo lietotāju." });
+    }
+    if (isBlocked(target, sender.username)) {
+      return socket.emit("dm.error", { message: "Lietotājs tevi ir nobloķējis." });
+    }
+
     // aktivitāte (anti-afk)
     markActivity(sender);
     markActivity(target);
@@ -4707,6 +4811,7 @@ io.on("connection", (socket) => {
     if (!target || target.username === sender.username) return;
     const targetSocket = getSocketByUsername(target.username);
     if (!targetSocket) return;
+    if (isBlocked(sender, target.username) || isBlocked(target, sender.username)) return;
     const typing = !!(payload && typeof payload === "object" ? payload.typing : false);
     targetSocket.emit("dm.typing", { from: sender.username, typing });
   });
@@ -4763,6 +4868,89 @@ io.on("connection", (socket) => {
     socket.emit("dm.deleted", { with: otherUsername, id });
   });
 
+  socket.on("dm.block", (payload) => {
+    const me = USERS[user.username] || user;
+    const otherRaw =
+      typeof payload === "string" ? payload : payload?.with ?? payload?.username ?? payload?.user ?? "";
+    const otherName = String(otherRaw || "").trim();
+    if (!otherName) return socket.emit("dm.error", { message: "Nav norādīts lietotājs." });
+    if (otherName === me.username) {
+      return socket.emit("dm.error", { message: "Nevari bloķēt sevi." });
+    }
+
+    const key = findUserKeyCaseInsensitive(otherName);
+    const other = key ? USERS[key] : null;
+    const otherUsername = other?.username || otherName;
+
+    addBlock(me, otherUsername, other?.username || otherName);
+    ensureDm(me);
+    dmZeroUnreadCaseInsensitive(me.dm, otherUsername);
+    saveUsers(USERS);
+    socket.emit("dm.blocked", { list: listBlocks(me), with: otherUsername, blocked: true });
+    socket.emit("dm.unread", dmComputeUnread(me.dm));
+  });
+
+  socket.on("dm.unblock", (payload) => {
+    const me = USERS[user.username] || user;
+    const otherRaw =
+      typeof payload === "string" ? payload : payload?.with ?? payload?.username ?? payload?.user ?? "";
+    const otherName = String(otherRaw || "").trim();
+    if (!otherName) return socket.emit("dm.error", { message: "Nav norādīts lietotājs." });
+
+    const key = findUserKeyCaseInsensitive(otherName);
+    const other = key ? USERS[key] : null;
+    const otherUsername = other?.username || otherName;
+
+    removeBlock(me, otherUsername);
+    saveUsers(USERS);
+    socket.emit("dm.blocked", { list: listBlocks(me), with: otherUsername, blocked: false });
+  });
+
+  socket.on("dm.report", (payload) => {
+    const me = USERS[user.username] || user;
+    const otherRaw =
+      typeof payload === "string" ? payload : payload?.with ?? payload?.username ?? payload?.user ?? "";
+    const otherName = String(otherRaw || "").trim();
+    if (!otherName) return socket.emit("dm.error", { message: "Nav norādīts lietotājs." });
+    if (otherName === me.username) {
+      return socket.emit("dm.error", { message: "Nevari ziņot par sevi." });
+    }
+
+    const key = findUserKeyCaseInsensitive(otherName);
+    const other = key ? USERS[key] : null;
+    const otherUsername = other?.username || otherName;
+
+    let reason = "";
+    if (payload && typeof payload === "object" && payload.reason) {
+      reason = String(payload.reason || "").trim();
+      if (reason.length > REPORT_REASON_MAX_LEN) reason = reason.slice(0, REPORT_REASON_MAX_LEN);
+    }
+
+    let messageText = "";
+    const rawText = payload && typeof payload === "object" ? payload.text : "";
+    if (rawText) {
+      messageText = String(rawText || "").trim();
+      if (messageText.length > REPORT_TEXT_MAX_LEN) {
+        messageText = messageText.slice(0, REPORT_TEXT_MAX_LEN);
+      }
+    }
+
+    const report = {
+      id: crypto.randomBytes(8).toString("hex"),
+      ts: Date.now(),
+      reporter: me.username,
+      reported: otherUsername,
+      reason,
+      messageId: String(payload?.id || "").trim() || null,
+      messageText: messageText || null,
+      source: "dm",
+    };
+    REPORTS.push(report);
+    if (REPORTS.length > REPORTS_MAX) REPORTS = REPORTS.slice(-REPORTS_MAX);
+    saveReports(REPORTS);
+    socket.emit("dm.reported", { ok: true });
+  });
+
   socket.on("dm.history", (payload) => {
     const me = USERS[user.username] || user;
     const otherRaw =
@@ -4806,7 +4994,11 @@ io.on("connection", (socket) => {
     socket.emit("dm.unread", dmComputeUnread(me.dm));
 
     const otherSocket = getSocketByUsername(otherUsername);
-    if (otherSocket) {
+    if (
+      otherSocket &&
+      !isBlocked(me, otherUsername) &&
+      !(other && isBlocked(other, me.username))
+    ) {
       otherSocket.emit("dm.read", { with: me.username, ts: readAt });
     }
   });
