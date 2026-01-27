@@ -28,6 +28,7 @@ const REGION_META = {
   Vidzeme: { code: "V", cls: "vz-region-vidzeme", label: "Vidzeme" },
   Kurzeme: { code: "K", cls: "vz-region-kurzeme", label: "Kurzeme" },
 };
+const REGION_TOTAL_CAP = 500000;
 
 // Nedrīkst rādīt uz ekrāna klaviatūras + ignorējam arī no fiziskās
 const DISALLOWED_KEYS = new Set(["Q", "W", "X", "Y"]);
@@ -944,10 +945,12 @@ function updateRegionMap(list) {
     if (!el) return;
     const score = scores.get(region) || 0;
     const ratio = total > 0 ? Math.max(0, Math.min(1, score / total)) : 0;
-    const opacity = 0.25 + ratio * 0.75;
+    const fillFactor = total > 0 ? Math.max(0, Math.min(1, total / REGION_TOTAL_CAP)) : 0;
+    const power = ratio * fillFactor;
+    const opacity = 0.18 + power * 0.82;
     el.style.opacity = opacity.toFixed(3);
-    el.style.setProperty("--power", ratio.toFixed(3));
-    const scale = 0.85 + ratio * 0.6;
+    el.style.setProperty("--power", power.toFixed(3));
+    const scale = 0.7 + power * 0.9;
     el.style.transform = `scale(${scale.toFixed(3)})`;
     const titleEl = el.querySelector("title");
     if (titleEl) {

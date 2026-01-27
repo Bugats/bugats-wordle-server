@@ -121,7 +121,8 @@
           <div class="vz-map-card" id="region-map-card">
             <div class="vz-card-header">Latvijas karte</div>
             <div class="vz-map-wrap">
-              <svg id="region-map" viewBox="0 0 800 600" role="img" aria-label="Latvijas novadu karte">
+              <div class="vz-map-frame">
+                <svg id="region-map" viewBox="0 0 800 600" role="img" aria-label="Latvijas novadu karte">
                 <defs>
                   <filter id="lv-mask-filter" color-interpolation-filters="sRGB">
                     <feColorMatrix type="matrix" values="
@@ -179,15 +180,8 @@
                     <title>Zemgale</title>
                   </polygon>
                 </g>
-                <path
-                  class="vz-map-outline"
-                  d="M48 245 L104 130 L236 75 L380 90 L488 55 L632 105 L728 225 L764 345 L712 500 L600 560 L444 550 L300 580 L184 525 L96 440 L36 330 Z"
-                />
-                <text class="vz-map-label" x="156" y="295">K</text>
-                <text class="vz-map-label" x="410" y="195">V</text>
-                <text class="vz-map-label" x="636" y="388">L</text>
-                <text class="vz-map-label" x="330" y="475">Z</text>
-              </svg>
+                </svg>
+              </div>
             </div>
             <ul id="region-list" class="vz-region-list"></ul>
           </div>
