@@ -35,8 +35,8 @@ const DISALLOWED_KEYS = new Set(["Q", "W", "X", "Y"]);
 
 // Fetch timeout (lai UI neiestrēgst pie “karājošiem” requestiem)
 const FETCH_TIMEOUT_MS = 12_000;
-const FLIP_DELAY_MS = 120;
-const FLIP_DURATION_MS = 520;
+const FLIP_DELAY_MS = 160;
+const FLIP_DURATION_MS = 800;
 const PREFERS_REDUCED_MOTION =
   typeof window !== "undefined" &&
   window.matchMedia &&

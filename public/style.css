@@ -1216,13 +1216,13 @@ input:focus-visible {
 
 .tile.flip,
 .vz-tile.flip {
-  animation: vzTileFlip 0.52s ease-in-out;
+  animation: vzTileFlip 0.8s ease-in-out;
 }
 
 @keyframes vzTileFlip {
   0% { transform: rotateX(0); }
-  49% { transform: rotateX(90deg); }
-  50% { transform: rotateX(90deg); }
+  45% { transform: rotateX(90deg); }
+  55% { transform: rotateX(90deg); }
   100% { transform: rotateX(0); }
 }
 
