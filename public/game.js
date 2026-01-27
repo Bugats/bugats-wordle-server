@@ -417,6 +417,7 @@ const regionModalBtns = regionModalEl
 
 // Karte
 const regionMapEl = document.getElementById("region-map");
+const regionLayerEl = document.getElementById("region-layer");
 const regionShapeEls = {
   Zemgale: document.getElementById("map-zemgale"),
   Latgale: document.getElementById("map-latgale"),
@@ -927,13 +928,27 @@ function updateRegionMap(list) {
     total += score;
   });
 
-  Object.entries(regionShapeEls).forEach(([region, el]) => {
+  const ordered = Object.entries(regionShapeEls).sort((a, b) => {
+    const sa = scores.get(a[0]) || 0;
+    const sb = scores.get(b[0]) || 0;
+    return sa - sb;
+  });
+
+  if (regionLayerEl) {
+    ordered.forEach(([, el]) => {
+      if (el) regionLayerEl.appendChild(el);
+    });
+  }
+
+  ordered.forEach(([region, el]) => {
     if (!el) return;
     const score = scores.get(region) || 0;
     const ratio = total > 0 ? Math.max(0, Math.min(1, score / total)) : 0;
     const opacity = 0.25 + ratio * 0.75;
     el.style.opacity = opacity.toFixed(3);
     el.style.setProperty("--power", ratio.toFixed(3));
+    const scale = 0.85 + ratio * 0.6;
+    el.style.transform = `scale(${scale.toFixed(3)})`;
     const titleEl = el.querySelector("title");
     if (titleEl) {
       titleEl.textContent = `${region} — ${score} p. (${Math.round(ratio * 100)}%)`;

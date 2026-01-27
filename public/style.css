@@ -690,27 +690,6 @@ input:focus-visible {
   margin: 2px 0 0;
 }
 
-/* ===== NOVADI (TOP) ===== */
-.vz-region-list {
-  list-style: none;
-  padding-left: 0;
-  margin: 2px 0 0;
-}
-.vz-region-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 0;
-}
-.vz-region-place { width: 22px; text-align: right; font-weight: 600; }
-.vz-region-name { font-weight: 700; }
-.vz-region-meta { opacity: 0.7; font-size: 0.85em; }
-.vz-region-score { margin-left: auto; opacity: 0.9; font-size: 0.9em; }
-.vz-region-item.vz-region-self {
-  color: #b3e5fc;
-  text-shadow: 0 0 6px rgba(0, 188, 212, 1), 0 0 10px rgba(0, 0, 0, 0.95);
-}
-
 .vz-lb-item {
   display: flex;
   align-items: center;
@@ -892,6 +871,8 @@ input:focus-visible {
   stroke-width: 2;
   opacity: 0.3;
   --power: 0;
+  transform-box: fill-box;
+  transform-origin: center;
   filter: drop-shadow(0 0 calc(4px + 12px * var(--power)) var(--region-glow, rgba(255,255,255,0.3)));
   transition: opacity 160ms ease, filter 160ms ease;
 }

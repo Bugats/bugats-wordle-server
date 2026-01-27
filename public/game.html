@@ -122,42 +122,52 @@
             <div class="vz-card-header">Latvijas karte</div>
             <div class="vz-map-wrap">
               <svg id="region-map" viewBox="0 0 400 240" role="img" aria-label="Latvijas novadu karte">
+                <defs>
+                  <clipPath id="lv-clip">
+                    <path
+                      id="lv-outline-path"
+                      d="M24 98 L52 52 L118 30 L190 36 L244 22 L316 42 L364 90 L382 138 L356 200 L300 224 L222 220 L150 232 L92 210 L48 176 L18 132 Z"
+                    />
+                  </clipPath>
+                </defs>
+                <g id="region-layer" clip-path="url(#lv-clip)">
+                  <polygon
+                    id="map-kurzeme"
+                    class="vz-region-shape vz-region-kurzeme"
+                    points="28,98 54,58 118,34 150,70 128,120 70,152 34,132"
+                  >
+                    <title>Kurzeme</title>
+                  </polygon>
+                  <polygon
+                    id="map-vidzeme"
+                    class="vz-region-shape vz-region-vidzeme"
+                    points="118,34 244,22 316,42 338,88 256,104 170,82 150,70"
+                  >
+                    <title>Vidzeme</title>
+                  </polygon>
+                  <polygon
+                    id="map-latgale"
+                    class="vz-region-shape vz-region-latgale"
+                    points="256,104 338,88 364,90 382,138 356,200 300,224 238,198 232,150"
+                  >
+                    <title>Latgale</title>
+                  </polygon>
+                  <polygon
+                    id="map-zemgale"
+                    class="vz-region-shape vz-region-zemgale"
+                    points="70,152 128,120 170,82 256,104 232,150 238,198 150,232 92,210 48,176 34,132"
+                  >
+                    <title>Zemgale</title>
+                  </polygon>
+                </g>
                 <path
                   class="vz-map-outline"
-                  d="M20 45 L130 20 L260 15 L310 70 L370 130 L320 200 L140 205 L60 190 L10 115 Z"
+                  d="M24 98 L52 52 L118 30 L190 36 L244 22 L316 42 L364 90 L382 138 L356 200 L300 224 L222 220 L150 232 L92 210 L48 176 L18 132 Z"
                 />
-                <polygon
-                  id="map-kurzeme"
-                  class="vz-region-shape vz-region-kurzeme"
-                  points="20,45 130,20 160,70 120,140 40,160 10,115"
-                >
-                  <title>Kurzeme</title>
-                </polygon>
-                <polygon
-                  id="map-vidzeme"
-                  class="vz-region-shape vz-region-vidzeme"
-                  points="130,20 260,15 310,70 230,95 160,70"
-                >
-                  <title>Vidzeme</title>
-                </polygon>
-                <polygon
-                  id="map-latgale"
-                  class="vz-region-shape vz-region-latgale"
-                  points="230,95 310,70 370,130 320,200 240,185 210,140"
-                >
-                  <title>Latgale</title>
-                </polygon>
-                <polygon
-                  id="map-zemgale"
-                  class="vz-region-shape vz-region-zemgale"
-                  points="120,140 160,70 230,95 210,140 240,185 140,205 60,190 40,160"
-                >
-                  <title>Zemgale</title>
-                </polygon>
-                <text class="vz-map-label" x="85" y="115">K</text>
-                <text class="vz-map-label" x="210" y="70">V</text>
-                <text class="vz-map-label" x="305" y="150">L</text>
-                <text class="vz-map-label" x="165" y="175">Z</text>
+                <text class="vz-map-label" x="78" y="118">K</text>
+                <text class="vz-map-label" x="205" y="78">V</text>
+                <text class="vz-map-label" x="318" y="155">L</text>
+                <text class="vz-map-label" x="165" y="190">Z</text>
               </svg>
             </div>
             <ul id="region-list" class="vz-region-list"></ul>
