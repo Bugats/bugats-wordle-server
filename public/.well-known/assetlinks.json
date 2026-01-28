@@ -4,9 +4,9 @@
     "target": {
       "namespace": "android_app",
       "package_name": "lv.thezone.wordle",
-      "sha256_cert_fingerprints": [
-        "REPLACE_WITH_SHA256_FINGERPRINT"
-      ]
+    "sha256_cert_fingerprints": [
+      "BA:14:A9:A4:A4:5E:E7:C2:D2:CA:8B:FD:91:F8:AF:C4:15:30:93:AE:BF:B8:93:2D:CA:40:88:41:F6:0A:BD:3D"
+    ]
     }
   }
 ]
