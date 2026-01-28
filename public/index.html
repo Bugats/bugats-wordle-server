@@ -31,7 +31,7 @@
       <div class="container">
         <h1>VĀRDU ZONA</h1>
         <p class="subtitle">
-          Ienāc ar savu lietotājvārdu vai izveido jaunu profilu.
+          Ienāc ar lietotājvārdu vai e-pastu, vai izveido jaunu profilu.
         </p>
 
         <div class="form-block">
@@ -43,6 +43,12 @@
               id="signup-username"
               autocomplete="username"
               required
+            />
+            <label for="signup-email">E-pasts (nav obligāts)</label>
+            <input
+              type="email"
+              id="signup-email"
+              autocomplete="email"
             />
             <label for="signup-password">Parole</label>
             <input
@@ -66,7 +72,7 @@
         <div class="form-block">
           <h2>Pierakstīšanās</h2>
           <form id="login-form">
-            <label for="login-username">Lietotājvārds</label>
+            <label for="login-username">Lietotājvārds vai e-pasts</label>
             <input
               type="text"
               id="login-username"

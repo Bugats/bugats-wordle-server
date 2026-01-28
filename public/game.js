@@ -210,6 +210,7 @@ async function readJsonOrThrow(res) {
 const state = {
   token: null,
   username: null,
+  email: "",
   region: "",
   regionPoints: 0,
   regionAttackTarget: "",
@@ -441,6 +442,10 @@ const ppTokensEl = $("#pp-tokens");
 const ppBestEl = $("#pp-best");
 const ppMedalsEl = $("#pp-medals");
 const ppMsgBtnEl = document.getElementById("pp-msg-btn");
+const ppEmailBlockEl = $("#pp-email-block");
+const ppEmailInputEl = $("#pp-email-input");
+const ppEmailSaveBtn = $("#pp-email-save");
+const ppEmailStatusEl = $("#pp-email-status");
 
 // Novads (modal)
 const regionModalEl = document.getElementById("region-modal");
@@ -866,6 +871,9 @@ function updatePlayerCard(me) {
     playerRegionEl.classList.toggle("vz-title-empty", !region);
     state.region = region || "";
   }
+  if (typeof me.email === "string") {
+    state.email = me.email;
+  }
   if (playerTitleEl) {
     const title = String(me.title || "").trim();
     playerTitleEl.textContent = title || "—";
@@ -1135,6 +1143,35 @@ function updateProfileBlockButtons() {
   }
 }
 
+function setProfileEmailStatus(message, kind) {
+  if (!ppEmailStatusEl) return;
+  ppEmailStatusEl.textContent = message || "";
+  ppEmailStatusEl.classList.remove("vz-ok", "vz-error");
+  if (kind === "ok") ppEmailStatusEl.classList.add("vz-ok");
+  if (kind === "error") ppEmailStatusEl.classList.add("vz-error");
+}
+
+async function handleProfileEmailSave() {
+  if (!state.token || !ppEmailInputEl) return;
+  const raw = String(ppEmailInputEl.value || "").trim();
+  if (!raw) {
+    setProfileEmailStatus("Ievadi e-pastu.", "error");
+    return;
+  }
+  if (ppEmailSaveBtn) ppEmailSaveBtn.disabled = true;
+  try {
+    const data = await apiPost("/email", { email: raw });
+    const saved = data?.email || raw;
+    state.email = saved;
+    ppEmailInputEl.value = saved;
+    setProfileEmailStatus("Saglabāts.", "ok");
+  } catch (err) {
+    setProfileEmailStatus(err.message || "Neizdevās saglabāt e-pastu.", "error");
+  } finally {
+    if (ppEmailSaveBtn) ppEmailSaveBtn.disabled = false;
+  }
+}
+
 function showPlayerProfile(data) {
   if (!data || !profilePopupEl) return;
 
@@ -1176,6 +1213,15 @@ applyRankColor(ppRankEl, data.rankColor);
     }
   }
   setAvatar(ppAvatarImgEl, ppAvatarInitialsEl, avatarForPopup, data.username);
+
+  const isSelf = data.username === state.username;
+  if (ppEmailBlockEl) {
+    ppEmailBlockEl.classList.toggle("hidden", !isSelf);
+  }
+  if (isSelf && ppEmailInputEl) {
+    ppEmailInputEl.value = data.email || state.email || "";
+  }
+  setProfileEmailStatus("", "");
 
   let duelBtn = document.getElementById("vz-profile-duel-btn");
   const inner = profilePopupEl.querySelector(".vz-profile-popup-inner") || profilePopupEl;
@@ -1244,6 +1290,7 @@ applyRankColor(ppRankEl, data.rankColor);
 function hidePlayerProfile() {
   if (!profilePopupEl) return;
   profilePopupEl.classList.add("hidden");
+  setProfileEmailStatus("", "");
 }
 
 async function openProfile(username) {
@@ -5886,6 +5933,12 @@ setTimeout(() => {
   }
 
   if (ppMsgBtnEl) ppMsgBtnEl.addEventListener("click", handlePersonalMessageClick);
+  if (ppEmailSaveBtn) ppEmailSaveBtn.addEventListener("click", handleProfileEmailSave);
+  if (ppEmailInputEl) {
+    ppEmailInputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") handleProfileEmailSave();
+    });
+  }
 
   if (duelOkBtn) {
   duelOkBtn.type = "button";

@@ -52,6 +52,8 @@ const TITLE_MAX_LEN = (() => {
   const v = parseInt(process.env.TITLE_MAX_LEN || "32", 10);
   return Number.isFinite(v) && v >= 8 && v <= 64 ? v : 32;
 })();
+const EMAIL_MAX_LEN = 254;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const REGION_NAMES = ["Zemgale", "Latgale", "Vidzeme", "Kurzeme"];
 const REGION_MAP = new Map(REGION_NAMES.map((n) => [n.toLowerCase(), n]));
@@ -165,6 +167,13 @@ function normalizeTitle(title) {
 function normalizeRegion(region) {
   const key = String(region || "").trim().toLowerCase();
   return REGION_MAP.get(key) || "";
+}
+function normalizeEmail(raw) {
+  const email = String(raw || "").trim().toLowerCase();
+  if (!email) return "";
+  if (email.length > EMAIL_MAX_LEN) return "";
+  if (!EMAIL_RE.test(email)) return "";
+  return email;
 }
 function clampInt(n, lo, hi, fallback = lo) {
   const x = Math.floor(Number(n));
@@ -390,6 +399,7 @@ function loadUsers() {
 
     const list = Array.isArray(arr) ? arr : Object.values(arr || {});
     const out = {};
+    const seenEmails = new Set();
 
     for (const u of list) {
       if (!u || !u.username) continue;
@@ -432,6 +442,16 @@ function loadUsers() {
 
       // Avatārs
       if (typeof u.avatarUrl !== "string") u.avatarUrl = null;
+
+      // E-pasts (nav obligāts)
+      if (typeof u.email !== "string") u.email = "";
+      const cleanedEmail = normalizeEmail(u.email);
+      if (cleanedEmail && !seenEmails.has(cleanedEmail)) {
+        u.email = cleanedEmail;
+        seenEmails.add(cleanedEmail);
+      } else {
+        u.email = "";
+      }
 
       // Supporter flag
       if (typeof u.supporter !== "boolean") u.supporter = false;
@@ -893,6 +913,15 @@ function findUserKeyCaseInsensitive(nameRaw) {
   if (USERS[nameRaw]) return nameRaw;
   for (const k of Object.keys(USERS || {})) {
     if (String(k).toLowerCase() === q) return k;
+  }
+  return null;
+}
+function findUserKeyByEmail(emailRaw) {
+  const email = normalizeEmail(emailRaw);
+  if (!email) return null;
+  for (const [k, u] of Object.entries(USERS || {})) {
+    if (!u || typeof u !== "object") continue;
+    if (u.email && u.email === email) return k;
   }
   return null;
 }
@@ -2341,6 +2370,7 @@ function buildMePayload(u) {
 
   return {
     username: u.username,
+    email: u.email || "",
     title: u.title || "",
     region: u.region || "",
     regionPoints: Math.max(0, Math.floor(u.regionPoints || 0)),
@@ -3382,7 +3412,7 @@ function applyDuelEloWinLoss(winner, loser) {
 }
 
 async function signupHandler(req, res) {
-  const { username, password, region } = req.body || {};
+  const { username, password, region, email } = req.body || {};
   if (!username || !password) {
     return res
       .status(400)
@@ -3418,11 +3448,23 @@ async function signupHandler(req, res) {
     });
   }
 
+  const cleanedEmail = normalizeEmail(email);
+  if (email && !cleanedEmail) {
+    return res.status(400).json({ message: "Nekorekts e-pasts." });
+  }
+  if (cleanedEmail) {
+    const existingEmailKey = findUserKeyByEmail(cleanedEmail);
+    if (existingEmailKey) {
+      return res.status(400).json({ message: "Šis e-pasts jau izmantots." });
+    }
+  }
+
   const hash = await bcrypt.hash(password, 10);
   const now = Date.now();
 
   const user = {
     username: name,
+    email: cleanedEmail || "",
     passwordHash: hash,
     createdAt: now,
     createdDeviceId: deviceId || null,
@@ -3500,16 +3542,28 @@ async function signupHandler(req, res) {
 app.post("/signup", signupHandler);
 
 async function loginHandler(req, res) {
-  const { username, password } = req.body || {};
-  if (!username || !password) {
+  const { username, password, email, identifier, login } = req.body || {};
+  const rawId = String(username || email || identifier || login || "").trim();
+  if (!rawId || !password) {
     return res
       .status(400)
-      .json({ message: "Nepieciešams username un password" });
+      .json({ message: "Nepieciešams lietotājvārds vai e-pasts un parole" });
   }
 
-  const name = String(username).trim();
-  const user = USERS[name];
+  let user = null;
+  if (rawId.includes("@")) {
+    const cleanedEmail = normalizeEmail(rawId);
+    if (!cleanedEmail) {
+      return res.status(400).json({ message: "Nekorekts e-pasts." });
+    }
+    const key = findUserKeyByEmail(cleanedEmail);
+    user = key ? USERS[key] : null;
+  } else {
+    const key = findUserKeyCaseInsensitive(rawId);
+    user = key ? USERS[key] : null;
+  }
   if (!user) return res.status(400).json({ message: "Lietotājs nav atrasts" });
+  const name = user.username;
 
   if (user.isBanned) {
     return res.status(403).json({
@@ -3561,6 +3615,23 @@ app.get("/me", authMiddleware, (req, res) => {
   if (typeof u.supporter !== "boolean") u.supporter = false;
   saveUsers(USERS);
   res.json(buildMePayload(u));
+});
+
+// ======== E-pasta piesaiste (tikai savam profilam) ========
+app.post("/email", authMiddleware, (req, res) => {
+  const user = req.user;
+  const rawEmail = req.body?.email ?? "";
+  const cleanedEmail = normalizeEmail(rawEmail);
+  if (!cleanedEmail) {
+    return res.status(400).json({ message: "Nekorekts e-pasts." });
+  }
+  const existingKey = findUserKeyByEmail(cleanedEmail);
+  if (existingKey && USERS[existingKey] && USERS[existingKey].username !== user.username) {
+    return res.status(400).json({ message: "Šis e-pasts jau izmantots." });
+  }
+  user.email = cleanedEmail;
+  saveUsers(USERS);
+  return res.json({ ok: true, email: user.email });
 });
 
 // ======== AVATĀRA ENDPOINTS ========
@@ -3650,6 +3721,10 @@ function buildPublicProfilePayload(targetUser, requester) {
     avatarUrl: targetUser.avatarUrl || null,
     supporter: !!targetUser.supporter,
   };
+
+  if (requester && requester.username === targetUser.username) {
+    payload.email = targetUser.email || "";
+  }
 
   if (isAdmin) {
     payload.isBanned = !!targetUser.isBanned;

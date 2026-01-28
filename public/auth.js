@@ -79,6 +79,9 @@ if (signupForm) {
     const username = document
       .getElementById("signup-username")
       .value.trim();
+    const email = document
+      .getElementById("signup-email")
+      ?.value?.trim() || "";
     const password = document
       .getElementById("signup-password")
       .value.trim();
@@ -94,7 +97,7 @@ if (signupForm) {
     }
 
     try {
-     const data = await apiPost("/signup", { username, password, region, deviceId: getOrCreateDeviceId() });
+     const data = await apiPost("/signup", { username, email, password, region, deviceId: getOrCreateDeviceId() });
       // uzreiz ielogojam un metam uz spēli
       handleAuthSuccess(data);
     } catch (err) {
@@ -110,20 +113,20 @@ if (loginForm) {
     e.preventDefault();
     showAuthError("");
 
-    const username = document
+    const identifier = document
       .getElementById("login-username")
       .value.trim();
     const password = document
       .getElementById("login-password")
       .value.trim();
 
-    if (!username || !password) {
-      showAuthError("Aizpildi lietotājvārdu un paroli.");
+    if (!identifier || !password) {
+      showAuthError("Aizpildi lietotājvārdu vai e-pastu un paroli.");
       return;
     }
 
     try {
-     const data = await apiPost("/login", { username, password, deviceId: getOrCreateDeviceId() });
+     const data = await apiPost("/login", { username: identifier, password, deviceId: getOrCreateDeviceId() });
       handleAuthSuccess(data);
     } catch (err) {
       console.error("Login error:", err);

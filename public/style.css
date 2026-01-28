@@ -1948,6 +1948,38 @@ input:focus-visible {
   margin: 2px 0;
   color: #ddd;
 }
+.vz-profile-email-block {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.vz-profile-email-label {
+  font-size: 11px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.7);
+}
+.vz-profile-email-row {
+  display: flex;
+  gap: 8px;
+}
+.vz-profile-email-row input {
+  flex: 1;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0f1222;
+  color: #fff;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.vz-profile-email-status {
+  min-height: 14px;
+  text-align: center;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+}
+.vz-profile-email-status.vz-ok { color: #7bff9a; }
+.vz-profile-email-status.vz-error { color: #ff6b6b; }
 
 .profile-popup-close,
 .vz-profile-popup-close {
