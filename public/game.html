@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="lv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VĀRDU ZONA – spēle</title>
+
+    <meta name="theme-color" content="#0b0f2a" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <meta
+      name="description"
+      content="VĀRDU ZONA — latviešu vārdu minēšanas spēle ar rankiem, XP, čatu, misijām un dueļiem."
+    />
+
+    <!-- Perf: preconnect -->
+    <link rel="dns-prefetch" href="//bugats-wordle-server.onrender.com" />
+    <link rel="preconnect" href="https://bugats-wordle-server.onrender.com" crossorigin />
+
+    <link rel="dns-prefetch" href="//cdn.jsdelivr.net" />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+
+    <link rel="dns-prefetch" href="//fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="//fonts.gstatic.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <link rel="dns-prefetch" href="//pagead2.googlesyndication.com" />
+    <link rel="preconnect" href="https://pagead2.googlesyndication.com" crossorigin />
+
+   <link rel="stylesheet" href="style.css?v=2026-02-11" />
+
+    <!-- AdSense (site verification + ads loader) -->
+    <script
+      async
+      src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5535543949516195"
+      crossorigin="anonymous"></script>
+  </head>
+
+  <body class="vz-body-game">
+    <noscript>
+      <div style="padding: 12px; margin: 12px; border-radius: 12px; background: rgba(0,0,0,.35); color: #fff;">
+        Lai spēle darbotos, pārlūkā jābūt ieslēgtam JavaScript.
+      </div>
+    </noscript>
+
+    <!-- Ekrāna flash overlay (baseline saderība) -->
+    <div id="screen-flash" class="vz-screen-flash" aria-hidden="true"></div>
+
+    <div class="vz-game-container">
+      <!-- TOPBAR -->
+      <div class="vz-topbar">
+        <div class="vz-topbar-left">
+          <span id="vz-topbar-date"></span>
+          <span id="vz-topbar-time"></span>
+          <span id="vz-topbar-nameday"></span>
+        </div>
+        <div class="vz-topbar-right">
+          <span id="vz-topbar-weather"></span>
+
+          <!-- DUEL INBOX BTN (jauni) -->
+          <button
+            id="duel-inbox-btn"
+            class="vz-duel-inbox-btn"
+            type="button"
+            title="Dueļu aicinājumi"
+            aria-label="Dueļu aicinājumi">
+            ⚔️ Duelis
+            <span id="duel-inbox-badge" class="vz-duel-badge hidden" aria-label="Aicinājumu skaits">0</span>
+          </button>
+
+          <button id="sound-toggle-btn" class="vz-sound-btn" type="button">🔊 Skaņa: ON</button>
+          <a class="vz-topbar-link" href="privacy.html" target="_blank" rel="noopener">Privatums</a>
+        </div>
+      </div>
+
+      <!-- LOGO -->
+      <div class="vz-logo-main">
+        <span class="vz-logo-title" data-text="VĀRDU ZONA">VĀRDU ZONA</span>
+        <span class="vz-logo-sub">LATVIEŠU VĀRDU BATTLE</span>
+      </div>
+
+      <!-- SEZONA -->
+      <div class="vz-season-bar" id="season-box">
+        <span class="vz-season-label" id="season-title">Sezona ielādējas…</span>
+        <span id="season-countdown" class="vz-season-timer">—</span>
+
+        <!-- šo pogu rādām tikai adminam ar JS -->
+        <button id="season-start-btn" class="vz-season-start-btn" type="button" style="display: none">
+          Startēt sezonu
+        </button>
+      </div>
+
+      <!-- HOT STREAK -->
+      <div id="hot-streak-banner" class="vz-hot-banner" style="display: none">
+        🔥 HOT STREAK! 🔥
+      </div>
+
+      <div class="vz-main-layout">
+        <!-- KREISĀ PUSE -->
+        <div class="vz-left-area">
+          <div class="vz-mobile-toggle">
+            <button id="mobile-fullscreen-btn" type="button">📱 Pilnekrāna spēle</button>
+          </div>
+
+          <div id="win-ticker" class="vz-win-ticker" aria-live="polite" aria-atomic="true"></div>
+          <p id="game-message" class="vz-game-message" role="status" aria-live="polite" aria-atomic="true"></p>
+
+          <div id="grid" class="vz-grid">
+  <div id="vz-grid-fx" aria-hidden="true"></div>
+</div>
+
+          <div id="keyboard" class="vz-keyboard"></div>
+
+          <div class="vz-region-race-card" id="region-race-card">
+            <div class="vz-card-header">Novadu sacīkste</div>
+            <div class="vz-region-total">
+              <div class="vz-region-total-label">
+                Latvija kopā:
+                <span id="region-total-score">0</span>
+                / 500000
+              </div>
+              <div class="vz-region-total-bar">
+                <div id="region-total-fill" class="vz-region-total-fill"></div>
+              </div>
+            </div>
+            <div class="vz-region-actions">
+              <div class="vz-region-actions-row">
+                Novadu punkti:
+                <span id="region-points">0</span>
+              </div>
+              <div class="vz-region-actions-row">
+                <button id="region-boost-btn" type="button" class="vz-region-action-btn">
+                  +1 savam novadam
+                </button>
+                <select id="region-attack-target" class="vz-region-action-select"></select>
+                <button id="region-attack-btn" type="button" class="vz-region-action-btn vz-region-action-danger">
+                  -1 pretiniekam
+                </button>
+              </div>
+            </div>
+            <ul id="region-list" class="vz-region-list"></ul>
+          </div>
+
+          <div class="vz-bottom-buttons">
+            <button id="new-round-btn" type="button" style="display: none">Jauns raunds</button>
+            <button id="logout-btn" type="button">Izlogoties</button>
+          </div>
+        </div>
+
+        <!-- LABĀ PUSE -->
+        <div class="vz-right-area">
+          <div class="vz-top-panels">
+            <!-- PROFILS -->
+            <div class="vz-player-card">
+              <div class="vz-card-header">Tavs profils</div>
+
+              <div class="vz-card-avatar-row">
+                <div class="vz-avatar-circle">
+                  <img id="player-avatar-img" alt="Avatar" decoding="async" />
+                  <span id="player-avatar-initials">B</span>
+                </div>
+
+                <div class="vz-avatar-controls">
+                  <button id="player-avatar-upload-btn" type="button" class="vz-avatar-upload-btn">
+                    Mainīt bildi
+                  </button>
+                  <input id="player-avatar-file" type="file" accept="image/*" style="display: none" />
+                </div>
+              </div>
+
+              <div class="vz-card-row"><span>Nickname:</span><span id="player-name"></span></div>
+              <div class="vz-card-row"><span>Novads:</span><span id="player-region">—</span></div>
+              <div class="vz-card-row vz-title-row">
+                <span>Tituls:</span><span id="player-title" class="vz-title-value">—</span>
+              </div>
+              <div class="vz-card-row"><span>Rank:</span><span id="player-rank"></span></div>
+              <div class="vz-card-row"><span>XP:</span><span id="player-xp"></span></div>
+
+              <div class="vz-xp-bar-wrapper">
+                <div class="vz-xp-bar-bg">
+                  <div id="player-xp-bar" class="vz-xp-bar-fill"></div>
+                </div>
+                <div id="player-xp-label" class="vz-xp-bar-label"></div>
+              </div>
+
+              <div class="vz-card-row"><span>Punkti:</span><span id="player-score"></span></div>
+              <div class="vz-card-row"><span>Streak:</span><span id="player-streak"></span></div>
+              <div class="vz-card-row"><span>Lab. streak:</span><span id="player-best-streak"></span></div>
+              <div class="vz-card-row"><span>Coins:</span><span id="player-coins"></span></div>
+              <div class="vz-card-row"><span>Žetoni:</span><span id="player-tokens"></span></div>
+
+              <div class="vz-card-row vz-card-row-medals">
+                <span>Medaļas:</span>
+                <div id="player-medals" class="vz-medals-strip"></div>
+              </div>
+
+              <hr class="vz-divider" />
+
+              <button id="share-btn" class="vz-share-btn" type="button">🔗 Dalīties ar VĀRDU ZONU</button>
+              <p class="vz-share-note">Uzspied un padalies ar spēli TikTok, WhatsApp vai citur.</p>
+              <button id="share-result-btn" class="vz-share-btn" type="button" style="display: none">
+                📣 Dalīties ar rezultātu
+              </button>
+              <p id="share-result-note" class="vz-share-note" style="display: none">
+                Uztaisu uzlīmīti ar tavu rezultātu un VĀRDU ZONU.
+              </p>
+            </div>
+
+            <!-- TOP 10 -->
+            <div class="vz-leaderboard-card">
+              <div class="vz-card-header">TOP 10 spēlētāji</div>
+              <ol id="lb-list" class="vz-lb-list"></ol>
+            </div>
+
+            <!-- WEEKLY CHALLENGE -->
+            <div class="vz-leaderboard-card" id="weekly-card">
+              <div class="vz-card-header">Weekly challenge</div>
+              <div class="vz-weekly-sub" id="weekly-sub">Šonedēļ</div>
+              <ol id="weekly-list" class="vz-lb-list"></ol>
+              <div id="weekly-you" class="vz-weekly-you"></div>
+            </div>
+
+            <!-- HALL OF FAME -->
+            <div class="vz-leaderboard-card hidden" id="hof-box">
+              <div class="vz-card-header">🏆 Hall of Fame</div>
+              <div id="hof-season1" class="vz-hof-row"></div>
+            </div>
+
+            <!-- ONLINE -->
+            <div class="vz-online-card">
+              <div class="vz-card-header">Online: <span id="online-count">0</span></div>
+              <ul id="online-list" class="vz-online-list"></ul>
+            </div>
+
+            <!-- DRAUGI -->
+            <div class="vz-online-card" id="friends-card">
+              <div class="vz-card-header">Draugi</div>
+              <div class="vz-friends-add">
+                <input id="friend-add-input" type="text" placeholder="Lietotājvārds" />
+                <button id="friend-add-btn" type="button">Pievienot</button>
+              </div>
+              <div id="friends-invites" class="vz-friends-invites"></div>
+              <ul id="friends-list" class="vz-friends-list"></ul>
+            </div>
+
+            <!-- ATBALSTS -->
+            <div class="vz-support-card">
+              <div class="vz-card-header">Atbalsti VĀRDU ZONU</div>
+
+              <p class="vz-support-text"></p>
+              <p class="vz-support-text">
+              
+              </p>
+
+              <button
+                class="vz-support-btn"
+                type="button"
+                onclick="window.open('https://streamlabs.com/bugats1', '_blank', 'noopener,noreferrer')">
+                Atbalstīt projektu
+              </button>
+
+              <p class="vz-support-note">Žetoni ir pateicības bonuss par atbalstu, nevis oficiāls pirkums.</p>
+
+              <hr class="vz-divider" />
+
+              <div class="vz-card-header-sub">Žetonu veikals (par coins)</div>
+              <p class="vz-support-text">1 žetons = 150 coins.</p>
+
+              <button id="buy-token-btn" class="vz-support-btn" type="button">Pirkt 1 žetonu (150 coins)</button>
+
+              <p class="vz-support-note">Coins tiks automātiski noņemti, kad nopērc žetonu.</p>
+            </div>
+
+            <!-- RADIO -->
+            <div class="vz-radio-card">
+              <div class="vz-card-header">BUGATS RADIO</div>
+              <div id="radio-status" class="vz-radio-status">Radio izslēgts</div>
+
+              <div class="vz-radio-controls">
+                <button id="radio-toggle-btn" class="vz-radio-btn" type="button">▶ Spēlēt</button>
+                <div class="vz-radio-volume-wrap">
+                  <span class="vz-radio-volume-label">Skaļums</span>
+                  <input id="radio-volume" type="range" min="0" max="1" step="0.01" value="0.6" />
+                </div>
+              </div>
+
+              <div class="vz-radio-note">Radio nesākas automātiski – nospied “Spēlēt”.</div>
+            </div>
+
+            <!-- MISIJAS -->
+            <div class="vz-leaderboard-card">
+              <div class="vz-card-header">Dienas misijas</div>
+              <ul id="missions-list" class="vz-missions-list"></ul>
+            </div>
+          </div>
+
+          <!-- ČATS -->
+          <div class="vz-chat" id="chat-card">
+            <div class="vz-card-header">
+              Čats
+              <span id="chat-unread-badge" class="hidden">JAUNAS</span>
+              <span
+                id="chat-mention-badge"
+                style="margin-left: 10px; cursor: pointer"
+                role="button"
+                tabindex="0"
+                aria-label="Atvērt pieminējumus">
+                🔔
+              </span>
+            </div>
+
+            <div id="chat-messages" class="vz-chat-messages"></div>
+
+           <div class="vz-chat-input-row">
+  <input
+    id="chat-input"
+    type="text"
+    maxlength="200"
+    placeholder="Raksti ziņu..."
+    autocomplete="off"
+    inputmode="text"
+    enterkeyhint="send" />
+ 
+  <button id="chat-emoji-btn" type="button" title="Emoji">🙂</button>
+  <div id="chat-emoji-panel" class="hidden" aria-label="Emoji panelis"></div>
+ 
+  <button id="chat-send-btn" type="button">Sūtīt</button>
+</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TikTok links -->
+      <div class="vz-footer-link">
+        <a href="https://www.tiktok.com/@bugats" target="_blank" rel="noopener noreferrer">TikTok: @bugats</a>
+      </div>
+    </div>
+
+    <!-- ========================= -->
+    <!-- DUEL UI (jauns scaffolds) -->
+    <!-- ========================= -->
+
+    <!-- Toast zona (klusie aicinājumi, netraucē ievadi) -->
+    <div id="duel-toast-area" class="vz-duel-toast-area" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- Duel Inbox (saraksts ar pending aicinājumiem) -->
+    <div id="duel-inbox" class="vz-duel-inbox hidden" role="dialog" aria-label="Dueļu aicinājumi">
+      <div class="vz-duel-inbox-head">
+        <div class="vz-duel-inbox-title">⚔️ Dueļu aicinājumi</div>
+        <button id="duel-inbox-close" class="vz-duel-x" type="button" aria-label="Aizvērt">✕</button>
+      </div>
+
+      <div id="duel-inbox-list" class="vz-duel-inbox-list"></div>
+
+      <div class="vz-duel-inbox-foot">
+        <label class="vz-duel-dnd">
+          <input id="duel-dnd-toggle" type="checkbox" />
+          Netraucēt spēlē (aicinājumi tikai sarakstā)
+        </label>
+        <button id="duel-inbox-clear" class="vz-duel-ghost-btn" type="button">Notīrīt</button>
+      </div>
+    </div>
+
+    <!-- Pilnais invite modal (atveras tikai, kad lietotājs uzspiež uz toast / inbox) -->
+    <div id="duel-invite-modal" class="vz-duel-modal hidden" role="dialog" aria-modal="true" aria-label="Dueļa aicinājums">
+      <div class="vz-duel-modal-inner">
+        <button id="duel-invite-close" class="vz-duel-x" type="button" aria-label="Aizvērt">✕</button>
+
+        <div class="vz-duel-modal-top">
+          <div class="vz-duel-avatar">
+            <img id="duel-from-avatar" alt="Avatar" decoding="async" />
+            <span id="duel-from-initials">?</span>
+          </div>
+
+          <div class="vz-duel-meta">
+            <div class="vz-duel-title">
+              <span id="duel-from-name">Spēlētājs</span> aicina uz dueli
+            </div>
+            <div id="duel-from-sub" class="vz-duel-sub">—</div>
+
+            <div class="vz-duel-timer">
+              <div id="duel-timer-bar" class="vz-duel-timer-bar"></div>
+            </div>
+            <div id="duel-timer-text" class="vz-duel-timer-text">Atlikušas — s</div>
+          </div>
+        </div>
+
+        <div class="vz-duel-modal-actions">
+          <button id="duel-accept-btn" class="vz-duel-accept" type="button">Pieņemt</button>
+          <button id="duel-decline-btn" class="vz-duel-decline" type="button">Noraidīt</button>
+          <button id="duel-ignore-btn" class="vz-duel-ghost-btn" type="button">Ignorēt 5 min</button>
+        </div>
+
+        <div id="duel-invite-note" class="vz-duel-note"></div>
+      </div>
+    </div>
+
+    <!-- Ready / gatavošanās (lai duelis nesākas momentā) -->
+    <div id="duel-ready-modal" class="vz-duel-modal hidden" role="dialog" aria-modal="true" aria-label="Duelis pieņemts">
+      <div class="vz-duel-modal-inner">
+        <button id="duel-ready-close" class="vz-duel-x" type="button" aria-label="Aizvērt">✕</button>
+
+        <div class="vz-duel-ready-title">Duelis pieņemts</div>
+        <div id="duel-ready-opponent" class="vz-duel-sub">Pretinieks: —</div>
+
+        <div id="duel-ready-status" class="vz-duel-note">Gaidām, kad abi būs gatavi…</div>
+
+        <div class="vz-duel-modal-actions">
+          <button id="duel-ready-btn" class="vz-duel-accept" type="button">Esmu gatavs</button>
+          <button id="duel-cancel-btn" class="vz-duel-decline" type="button">Atcelt</button>
+          <button id="duel-after-round-btn" class="vz-duel-ghost-btn" type="button">Sākt pēc šī raunda</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Countdown (3..2..1) -->
+    <div id="duel-countdown" class="vz-duel-countdown hidden" aria-live="assertive">
+      <div id="duel-countdown-num" class="vz-duel-countdown-num">3</div>
+      <div id="duel-countdown-text" class="vz-duel-countdown-text">Duelis sākas…</div>
+    </div>
+
+    <!-- Result overlay (uzvarētājs + “ieziešana”) -->
+    <div id="duel-result-overlay" class="vz-duel-result hidden" role="dialog" aria-modal="true" aria-label="Dueļa rezultāts">
+      <div class="vz-duel-result-inner">
+        <div id="duel-result-title" class="vz-duel-result-title">DUELIS — UZVARĒTĀJS</div>
+
+        <div class="vz-duel-result-row">
+          <div class="vz-duel-avatar vz-duel-avatar-big">
+            <img id="duel-winner-avatar" alt="Avatar" decoding="async" />
+            <span id="duel-winner-initials">?</span>
+          </div>
+          <div class="vz-duel-result-meta">
+            <div id="duel-winner-name" class="vz-duel-result-name">—</div>
+            <div id="duel-result-reason" class="vz-duel-sub">—</div>
+          </div>
+        </div>
+
+        <div id="duel-result-rewards" class="vz-duel-note"></div>
+
+        <div class="vz-duel-modal-actions">
+          <button id="duel-result-close" class="vz-duel-accept" type="button">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROFILA POPUP -->
+    <div id="player-profile-popup" class="vz-profile-popup hidden">
+      <div class="vz-profile-popup-inner">
+        <button id="profile-popup-close" class="vz-profile-popup-close" type="button">✕</button>
+
+        <div class="vz-profile-avatar-row">
+          <div class="vz-avatar-circle vz-avatar-popup">
+            <img id="pp-avatar-img" alt="Avatar" decoding="async" />
+            <span id="pp-avatar-initials">B</span>
+          </div>
+        </div>
+
+        <h3 id="pp-username">Spēlētājs</h3>
+        <div class="vz-profile-title">
+          Tituls: <span id="pp-title" class="vz-title-value">—</span>
+        </div>
+
+        <div class="profile-row"><span>Novads:</span><span id="pp-region">—</span></div>
+        <div class="profile-row"><span>Rank:</span><span id="pp-rank"></span></div>
+        <div class="profile-row"><span>XP:</span><span id="pp-xp"></span></div>
+        <div class="profile-row"><span>Punkti:</span><span id="pp-score"></span></div>
+        <div class="profile-row"><span>Coins:</span><span id="pp-coins"></span></div>
+        <div class="profile-row"><span>Žetoni:</span><span id="pp-tokens"></span></div>
+        <div class="profile-row"><span>Labākais streak:</span><span id="pp-best"></span></div>
+
+        <div class="profile-row">
+          <span>Medaļas:</span>
+          <span id="pp-medals" class="vz-medals-strip"></span>
+        </div>
+
+        <div id="pp-email-block" class="vz-profile-email-block hidden">
+          <div class="vz-profile-email-label">E-pasts (tikai tev redzams)</div>
+          <div class="vz-profile-email-row">
+            <input
+              id="pp-email-input"
+              type="email"
+              autocomplete="email"
+              placeholder="ievadi e-pastu"
+            />
+            <button id="pp-email-save" class="mission-claim-btn" type="button">Saglabāt</button>
+          </div>
+          <div id="pp-email-status" class="vz-profile-email-status"></div>
+        </div>
+
+        <div class="profile-row" style="margin-top: 10px; justify-content: center">
+          <button id="pp-msg-btn" class="vz-profile-msg-btn" type="button">Rakstīt personiski</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- NOVADA IZVĒLE -->
+    <div id="region-modal" class="vz-region-modal hidden">
+      <div class="vz-region-modal-inner">
+        <h3>Izvēlies savu novadu</h3>
+        <p class="vz-region-modal-sub">
+          Novads ir tavs klans. To vēlāk nevar mainīt.
+        </p>
+        <div class="vz-region-grid">
+          <button class="vz-region-btn" type="button" data-region="Zemgale">Zemgale</button>
+          <button class="vz-region-btn" type="button" data-region="Latgale">Latgale</button>
+          <button class="vz-region-btn" type="button" data-region="Vidzeme">Vidzeme</button>
+          <button class="vz-region-btn" type="button" data-region="Kurzeme">Kurzeme</button>
+        </div>
+        <div class="vz-region-modal-note">Izvēle tiek saglabāta uzreiz.</div>
+      </div>
+    </div>
+
+    <!-- Mention popup -->
+    <div id="chat-mention-popup" role="status" aria-live="polite" aria-atomic="true">
+      <div id="chat-mention-popup-text"></div>
+    </div>
+
+    <!-- AUDIO -->
+    <audio id="s-click" src="sounds/click.mp3" preload="auto"></audio>
+    <audio id="s-type" src="sounds/type.mp3" preload="auto"></audio>
+    <audio id="s-error" src="sounds/error.mp3" preload="auto"></audio>
+    <audio id="s-win" src="sounds/win.mp3" preload="auto"></audio>
+    <audio id="s-lose" src="sounds/lose.mp3" preload="auto"></audio>
+    <audio id="s-coin" src="sounds/coin.mp3" preload="auto"></audio>
+    <audio id="s-token" src="sounds/token.mp3" preload="auto"></audio>
+
+    <!-- Radio -->
+    <audio id="vz-radio" preload="none" crossorigin="anonymous"></audio>
+
+    <!-- confetti -->
+    <script defer src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+    <!-- Socket.IO -->
+    <script defer src="https://bugats-wordle-server.onrender.com/socket.io/socket.io.js"></script>
+
+    <!-- PIXI (grid FX overlay) -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.js"></script>
+<script>
+  if (!window.PIXI) {
+    var s = document.createElement("script");
+    s.src = "https://unpkg.com/pixi.js@7/dist/pixi.min.js";
+    document.head.appendChild(s);
+  }
+</script>
+
+    <!-- Galvenais JS -->
+    <script defer src="game.js?v=2026-02-11"></script>
+
+    <!-- GRID FX (jauns fails, neķeram game.js) -->
+    <script defer src="grid-fx.js?v=2026-02-11"></script>
+
+    <!-- PWA -->
+    <script defer src="pwa.js"></script>
+
+    <!-- SEZONAS + HOF UI (bez 2. socket savienojuma) -->
+    <script defer>
+      (function () {
+        const API_BASE = "https://bugats-wordle-server.onrender.com";
+        const TZ = "Europe/Riga";
+
+        const seasonTitleEl = document.getElementById("season-title");
+        const seasonCountdownEl = document.getElementById("season-countdown");
+        const seasonStartBtn = document.getElementById("season-start-btn");
+
+        const hofBox = document.getElementById("hof-box");
+        const hofRow = document.getElementById("hof-season1");
+
+        const ADMIN_USERNAMES = ["Bugats", "BugatsLV"];
+        const ADMIN_SET = new Set(ADMIN_USERNAMES.map((x) => String(x).toLowerCase()));
+
+        function getToken() {
+          return localStorage.getItem("vzToken") || localStorage.getItem("token") || "";
+        }
+        function getUsername() {
+          return (
+            localStorage.getItem("vzUsername") ||
+            localStorage.getItem("username") ||
+            localStorage.getItem("nick") ||
+            ""
+          );
+        }
+
+        function fmtDateTime(ts) {
+          try {
+            return new Date(ts).toLocaleString("lv-LV", { timeZone: TZ });
+          } catch {
+            return new Date(ts).toLocaleString();
+          }
+        }
+
+        function formatRemaining(ms) {
+          const totalSec = Math.max(0, Math.floor(ms / 1000));
+          const days = Math.floor(totalSec / (24 * 3600));
+          const hours = Math.floor((totalSec % (24 * 3600)) / 3600);
+          const mins = Math.floor((totalSec % 3600) / 60);
+          const parts = [];
+          if (days) parts.push(days + " d.");
+          if (hours) parts.push(hours + " h");
+          parts.push(mins + " min");
+          return parts.join(" ");
+        }
+
+        function renderHofTop(entry) {
+          if (!hofBox || !hofRow) return;
+
+          if (!entry || !entry.username) {
+            hofBox.classList.add("hidden");
+            hofRow.textContent = "";
+            return;
+          }
+
+          hofBox.classList.remove("hidden");
+
+          const name = String(entry.username || "");
+          const score = Number(entry.score || 0);
+          const xp = Number(entry.xp || 0);
+
+          hofRow.textContent = `Sezona ${entry.seasonId} čempions: ${name} (${score} punkti, ${xp} XP)`;
+        }
+
+        function renderSeason(season, hofTop) {
+          if (!seasonTitleEl || !seasonCountdownEl) return;
+
+          if (!season) {
+            seasonTitleEl.textContent = "Sezona ielādējas…";
+            seasonCountdownEl.textContent = "—";
+            return;
+          }
+
+          const name = season.name || `SEZONA ${season.id ?? ""}`.trim();
+          const endAt = Number(season.endAt || 0);
+
+          if (endAt > 0) seasonTitleEl.textContent = `${name} līdz ${fmtDateTime(endAt)}`;
+          else seasonTitleEl.textContent = name;
+
+          if (!season.active) {
+            if (endAt > 0 && Date.now() >= endAt) {
+              seasonCountdownEl.textContent = "Sezona ir beigusies";
+            } else {
+              seasonCountdownEl.textContent = "Sezona vēl nav sākusies";
+            }
+            renderHofTop(hofTop);
+            return;
+          }
+
+          if (!endAt) {
+            seasonCountdownEl.textContent = "Sezona aktīva (bez beigu datuma)";
+            renderHofTop(hofTop);
+            return;
+          }
+
+          const diff = endAt - Date.now();
+          if (diff <= 0) {
+            seasonCountdownEl.textContent = "Sezona ir beigusies";
+          } else {
+            seasonCountdownEl.textContent = "Palikušas " + formatRemaining(diff);
+          }
+
+          renderHofTop(hofTop);
+        }
+
+        async function fetchSeasonAndHof() {
+          const token = getToken();
+          if (!token) {
+            renderSeason(null, null);
+            return;
+          }
+
+          try {
+            const [seasonRes, hofRes] = await Promise.all([
+              fetch(API_BASE + "/season", {
+                headers: { Authorization: "Bearer " + token },
+              }),
+              fetch(API_BASE + "/season/hof", {
+                headers: { Authorization: "Bearer " + token },
+              }),
+            ]);
+
+            let season = null;
+            let hof = [];
+
+            if (seasonRes.ok) season = await seasonRes.json();
+            if (hofRes.ok) hof = await hofRes.json();
+
+            const hofTop = Array.isArray(hof) && hof[0] ? hof[0] : season?.hallOfFameTop || null;
+
+            renderSeason(season, hofTop);
+          } catch (e) {
+            console.error("season/hof fetch error:", e);
+          }
+        }
+
+        async function startSeason() {
+          const token = getToken();
+          if (!token || !seasonStartBtn) return;
+
+          seasonStartBtn.disabled = true;
+          try {
+            const res = await fetch(API_BASE + "/season/start", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: "Bearer " + token,
+              },
+            });
+            if (!res.ok) {
+              console.error("season/start failed:", await res.text());
+              return;
+            }
+            await fetchSeasonAndHof();
+          } catch (e) {
+            console.error("season/start error:", e);
+          } finally {
+            seasonStartBtn.disabled = false;
+          }
+        }
+
+        // show admin button (case-insensitive)
+        const u = String(getUsername() || "").toLowerCase();
+        if (u && ADMIN_SET.has(u) && seasonStartBtn) {
+          seasonStartBtn.style.display = "inline-block";
+          seasonStartBtn.addEventListener("click", startSeason);
+        }
+
+        // initial + poll
+        fetchSeasonAndHof();
+        setInterval(fetchSeasonAndHof, 60 * 1000);
+      })();
+    </script>
+
+  </body>
+</html>
