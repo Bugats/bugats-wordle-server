@@ -15,8 +15,12 @@
   "startUrl": "/",
   "iconUrl": "https://wordle.thezone.lv/branding/vardu-zona-dev-icon-512.png",
   "splashScreenFadeOutDuration": 300,
-  "appVersionName": "1.0.0",
-  "appVersionCode": 1,
+  "signingKey": {
+    "path": "keystore/wordle.jks",
+    "alias": "varduzona"
+  },
+  "appVersionName": "1.0.1",
+  "appVersionCode": 4,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://wordle.thezone.lv/manifest.json",
@@ -34,9 +38,5 @@
   "additionalTrustedOrigins": [],
   "retainedBundles": [],
   "displayOverride": [],
-  "signingKey": {
-    "path": "keystore/wordle.jks",
-    "alias": "varduzona"
-  },
-  "appVersion": "1.0.0"
+  "appVersion": "1.0.1"
 }
