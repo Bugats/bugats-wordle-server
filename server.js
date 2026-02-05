@@ -3597,6 +3597,9 @@ app.post("/buy-token", authMiddleware, (req, res) => {
     coins: user.coins,
     tokens: user.tokens,
     tokenPriceCoins: getTokenPrice(user),
+    // Papildus sync klientam (UI: rank/xp/mission progress utt.)
+    me: buildMePayload(user),
+    missions: getPublicMissions(user),
   });
 });
 
