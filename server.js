@@ -136,6 +136,12 @@ const AVATAR_MAX_CHARS = (() => {
   if (Number.isFinite(v) && v > 200000) return v;
   return 6 * 1024 * 1024; // ~6.29M chars
 })();
+// Broadcast-safe avatar size (avoid massive base64 in events)
+const AVATAR_BROADCAST_MAX_CHARS = (() => {
+  const v = parseInt(process.env.AVATAR_BROADCAST_MAX_CHARS || "", 10);
+  if (Number.isFinite(v) && v >= 20000 && v <= AVATAR_MAX_CHARS) return v;
+  return 200000; // ~200k chars by default
+})();
 
 // Admin lietotāji
 const ADMIN_USERNAMES = (() => {
@@ -163,6 +169,15 @@ function normalizeTitle(title) {
     .trim();
   if (!cleaned) return "";
   return cleaned.length > TITLE_MAX_LEN ? cleaned.slice(0, TITLE_MAX_LEN) : cleaned;
+}
+function avatarForBroadcast(u) {
+  if (!u || typeof u !== "object") return null;
+  const url = typeof u.avatarUrl === "string" ? u.avatarUrl : "";
+  if (!url) return null;
+  if (url.startsWith("data:image/") && url.length > AVATAR_BROADCAST_MAX_CHARS) {
+    return null;
+  }
+  return url;
 }
 function normalizeRegion(region) {
   const key = String(region || "").trim().toLowerCase();
@@ -1868,7 +1883,7 @@ function computeWeeklyLeaderboard(requester) {
       rankLevel: u.rankLevel || 1,
       rankColor: u.rankColor || "#9CA3AF",
       rankTitle: u.rankTitle || "—",
-      avatarUrl: u.avatarUrl || null,
+      avatarUrl: avatarForBroadcast(u),
     });
   }
 
@@ -2172,7 +2187,7 @@ function upsertHallOfFameWinner(
     xp: champ.xp || 0,
     rankTitle: champ.rankTitle || rankInfo.title || "",
     rankLevel: champ.rankLevel || rankInfo.level || 1,
-    avatarUrl: champ.avatarUrl || null,
+    avatarUrl: avatarForBroadcast(champ),
     finishedAt,
     overriddenAt: Date.now(),
   };
@@ -2238,7 +2253,7 @@ function finalizeSeasonIfNeeded(seasonId) {
     xp: champ.xp || 0,
     rankTitle: champ.rankTitle || rankInfo.title || "",
     rankLevel: champ.rankLevel || rankInfo.level || 1,
-    avatarUrl: champ.avatarUrl || null,
+    avatarUrl: avatarForBroadcast(champ),
     finishedAt,
   };
 
@@ -2495,7 +2510,7 @@ function getMiniUserPayload(username) {
   const info = ensureRankFields(u);
   return {
     username,
-    avatarUrl: u.avatarUrl || null,
+    avatarUrl: avatarForBroadcast(u),
     rankLevel: u.rankLevel || info.level || 1,
     rankTitle: u.rankTitle || info.title || "—",
     rankColor: u.rankColor || info.color || "#9CA3AF",
@@ -2553,7 +2568,7 @@ function computeTop10Leaderboard() {
     rankTitle: u.rankTitle || "—",
     rankLevel: u.rankLevel || 1,
     rankColor: u.rankColor || "#9CA3AF",
-    avatarUrl: u.avatarUrl || null,
+    avatarUrl: avatarForBroadcast(u),
     supporter: !!u.supporter,
   }));
 }
@@ -2748,7 +2763,7 @@ function dmBuildMeta(u) {
     rankTitle: u.rankTitle || info.title || "—",
     rankColor: u.rankColor || info.color || "#9CA3AF",
     region: u.region || "",
-    avatarUrl: u.avatarUrl || null,
+    avatarUrl: avatarForBroadcast(u),
     supporter: !!u.supporter,
   };
 }
@@ -3718,7 +3733,7 @@ function buildPublicProfilePayload(targetUser, requester) {
     medals,
     duelsWon: targetUser.duelsWon || 0,
     duelsLost: targetUser.duelsLost || 0,
-    avatarUrl: targetUser.avatarUrl || null,
+    avatarUrl: avatarForBroadcast(targetUser),
     supporter: !!targetUser.supporter,
   };
 
@@ -4510,7 +4525,7 @@ app.post("/guess", authMiddleware, (req, res) => {
       rankTitle: user.rankTitle,
       rankLevel: user.rankLevel,
       rankColor: user.rankColor || "#9CA3AF",
-      avatarUrl: user.avatarUrl || null,
+      avatarUrl: avatarForBroadcast(user),
       streak: user.streak || 0,
     });
   } else {
@@ -5225,7 +5240,6 @@ io.on("connection", (socket) => {
       username: u.username,
       text: msg,
       ts: Date.now(),
-      avatarUrl: u.avatarUrl || null,
       rankTitle: u.rankTitle || "—",
       rankLevel: u.rankLevel || 1,
       rankColor: u.rankColor || "#9CA3AF",
