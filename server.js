@@ -16,6 +16,7 @@ import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import { createClient } from "@supabase/supabase-js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,6 +37,26 @@ const SEASONS_FILE =
 // Static frontend (Render)
 const STATIC_DIR = process.env.STATIC_DIR || path.join(__dirname, "public");
 const STATIC_INDEX = path.join(STATIC_DIR, "index.html");
+
+// ====== Supabase (avatars/storage) ======
+const SUPABASE_URL = String(process.env.SUPABASE_URL || "").trim();
+const SUPABASE_SERVICE_ROLE_KEY = String(
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+).trim();
+const SUPABASE_STORAGE_BUCKET = String(
+  process.env.SUPABASE_STORAGE_BUCKET || "avatars"
+).trim();
+const SUPABASE_STORAGE_PUBLIC =
+  String(process.env.SUPABASE_STORAGE_PUBLIC ?? "1") === "1";
+const SUPABASE_AVATAR_CACHE_CONTROL = String(
+  process.env.SUPABASE_AVATAR_CACHE_CONTROL || "3600"
+).trim();
+const SUPABASE_ENABLED = !!(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
+const supabase = SUPABASE_ENABLED
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+  : null;
 
 // ====== Word config ======
 const MIN_WORD_LEN = 5;
@@ -136,11 +157,14 @@ const AVATAR_MAX_CHARS = (() => {
   if (Number.isFinite(v) && v > 200000) return v;
   return 6 * 1024 * 1024; // ~6.29M chars
 })();
-// Broadcast-safe avatar size (avoid massive base64 in events)
-const AVATAR_BROADCAST_MAX_CHARS = (() => {
-  const v = parseInt(process.env.AVATAR_BROADCAST_MAX_CHARS || "", 10);
-  if (Number.isFinite(v) && v >= 20000 && v <= AVATAR_MAX_CHARS) return v;
-  return 200000; // ~200k chars by default
+// Inline avatārs (base64) broadcastiem / meta — sargājam RAM
+const AVATAR_INLINE_MAX_CHARS = (() => {
+  const v = parseInt(process.env.AVATAR_INLINE_MAX_CHARS || "120000", 10);
+  return Number.isFinite(v) && v >= 0 ? v : 120000;
+})();
+const DM_META_AVATAR_MAX_CHARS = (() => {
+  const v = parseInt(process.env.DM_META_AVATAR_MAX_CHARS || "0", 10);
+  return Number.isFinite(v) && v >= 0 ? v : 0;
 })();
 
 // Admin lietotāji
@@ -172,12 +196,7 @@ function normalizeTitle(title) {
 }
 function avatarForBroadcast(u) {
   if (!u || typeof u !== "object") return null;
-  const url = typeof u.avatarUrl === "string" ? u.avatarUrl : "";
-  if (!url) return null;
-  if (url.startsWith("data:image/") && url.length > AVATAR_BROADCAST_MAX_CHARS) {
-    return null;
-  }
-  return url;
+  return compactAvatarUrl(resolveAvatarUrl(u), AVATAR_INLINE_MAX_CHARS);
 }
 function normalizeRegion(region) {
   const key = String(region || "").trim().toLowerCase();
@@ -189,6 +208,100 @@ function normalizeEmail(raw) {
   if (email.length > EMAIL_MAX_LEN) return "";
   if (!EMAIL_RE.test(email)) return "";
   return email;
+}
+function compactAvatarUrl(raw, maxChars = AVATAR_INLINE_MAX_CHARS) {
+  if (typeof raw !== "string") return null;
+  const url = raw.trim();
+  if (!url) return null;
+  if (url.startsWith("data:image/")) {
+    if (!Number.isFinite(maxChars) || maxChars <= 0) return null;
+    return url.length <= maxChars ? url : null;
+  }
+  return url;
+}
+function sanitizeStorageKeySegment(raw) {
+  return String(raw || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .slice(0, 80);
+}
+function mimeToExt(mime) {
+  switch (String(mime || "").toLowerCase()) {
+    case "image/jpeg":
+      return "jpg";
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    case "image/gif":
+      return "gif";
+    case "image/svg+xml":
+      return "svg";
+    default:
+      return "";
+  }
+}
+function parseAvatarDataUrl(dataUrl) {
+  if (typeof dataUrl !== "string") return null;
+  const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUrl.trim());
+  if (!m) return null;
+  const mime = m[1];
+  const b64 = m[2];
+  try {
+    const buffer = Buffer.from(b64, "base64");
+    if (!buffer || !buffer.length) return null;
+    return { mime, buffer };
+  } catch {
+    return null;
+  }
+}
+let supabaseBucketReady = false;
+async function ensureSupabaseBucket() {
+  if (!SUPABASE_ENABLED || !supabase) return false;
+  if (supabaseBucketReady) return true;
+  const bucket = SUPABASE_STORAGE_BUCKET || "avatars";
+  try {
+    const { data, error } = await supabase.storage.getBucket(bucket);
+    if (!error && data) {
+      supabaseBucketReady = true;
+      return true;
+    }
+  } catch {}
+  try {
+    const { error } = await supabase.storage.createBucket(bucket, {
+      public: !!SUPABASE_STORAGE_PUBLIC,
+    });
+    if (error && !String(error.message || "").includes("already exists")) {
+      console.error("Supabase bucket create error:", error);
+      return false;
+    }
+    supabaseBucketReady = true;
+    return true;
+  } catch (err) {
+    console.error("Supabase bucket ensure error:", err);
+    return false;
+  }
+}
+function getSupabasePublicUrl(path) {
+  if (!SUPABASE_ENABLED || !supabase || !SUPABASE_STORAGE_PUBLIC) return null;
+  if (!path) return null;
+  try {
+    const res = supabase.storage.from(SUPABASE_STORAGE_BUCKET).getPublicUrl(path);
+    return res?.data?.publicUrl || null;
+  } catch {
+    return null;
+  }
+}
+function resolveAvatarUrl(user) {
+  if (!user) return null;
+  if (SUPABASE_ENABLED && user.avatarPath) {
+    const url = getSupabasePublicUrl(user.avatarPath);
+    if (url) return url;
+  }
+  if (typeof user.avatarUrl === "string" && user.avatarUrl.trim()) {
+    return user.avatarUrl.trim();
+  }
+  return null;
 }
 function clampInt(n, lo, hi, fallback = lo) {
   const x = Math.floor(Number(n));
@@ -365,6 +478,11 @@ const DM_MAX_LEN = 400;
 const DM_RATE_MS = 650;
 const DM_DUP_WINDOW_MS = 5000;
 const DM_THREAD_MAX = 200; // max ziņas vienā sarunā (katram userim)
+// DM storage mode: "client" (default) = netiek glabāts serverī
+const DM_STORE_MODE = String(process.env.DM_STORE_MODE || "client")
+  .trim()
+  .toLowerCase();
+const DM_STORE_ON_SERVER = DM_STORE_MODE === "server";
 const REPORT_REASON_MAX_LEN = 220;
 const REPORT_TEXT_MAX_LEN = 200;
 const REPORTS_MAX = (() => {
@@ -457,6 +575,12 @@ function loadUsers() {
 
       // Avatārs
       if (typeof u.avatarUrl !== "string") u.avatarUrl = null;
+      if (typeof u.avatarPath !== "string") u.avatarPath = "";
+      if (typeof u.avatarUpdatedAt !== "number") u.avatarUpdatedAt = 0;
+      if (SUPABASE_ENABLED && u.avatarPath && !u.avatarUrl) {
+        const pub = getSupabasePublicUrl(u.avatarPath);
+        if (pub) u.avatarUrl = pub;
+      }
 
       // E-pasts (nav obligāts)
       if (typeof u.email !== "string") u.email = "";
@@ -512,11 +636,16 @@ function loadUsers() {
       if (typeof u.lastChatText !== "string") u.lastChatText = "";
       if (typeof u.lastChatTextAt !== "number") u.lastChatTextAt = 0;
 
-      // Privātais čats (DM) — inbox users.json
-      if (!u.dm || typeof u.dm !== "object") u.dm = {};
-      if (!u.dm.threads || typeof u.dm.threads !== "object") u.dm.threads = {};
-      if (!u.dm.unread || typeof u.dm.unread !== "object") u.dm.unread = {};
-      if (!u.dm.lastRead || typeof u.dm.lastRead !== "object") u.dm.lastRead = {};
+      // Privātais čats (DM) — only if server-side storage enabled
+      if (DM_STORE_ON_SERVER) {
+        if (!u.dm || typeof u.dm !== "object") u.dm = {};
+        if (!u.dm.threads || typeof u.dm.threads !== "object") u.dm.threads = {};
+        if (!u.dm.unread || typeof u.dm.unread !== "object") u.dm.unread = {};
+        if (!u.dm.lastRead || typeof u.dm.lastRead !== "object") u.dm.lastRead = {};
+      } else if (u.dm) {
+        // drop stored DM payload to avoid loading big history
+        delete u.dm;
+      }
       // DM anti-spam state
       if (typeof u.lastDmAt !== "number") u.lastDmAt = 0;
       if (typeof u.lastDmText !== "string") u.lastDmText = "";
@@ -581,11 +710,80 @@ function loadUsers() {
 }
 
 function saveUsers(users) {
-  const arr = Object.values(users);
+  const arr = Object.values(users).map((u) => {
+    if (!u || typeof u !== "object") return u;
+    let out = u;
+    if (!DM_STORE_ON_SERVER && u.dm) {
+      out = { ...u };
+      delete out.dm;
+    }
+    if (
+      SUPABASE_ENABLED &&
+      out.avatarPath &&
+      typeof out.avatarUrl === "string" &&
+      out.avatarUrl.startsWith("data:image/")
+    ) {
+      if (out === u) out = { ...u };
+      out.avatarUrl = null;
+    }
+    return out;
+  });
   saveJsonAtomic(USERS_FILE, arr);
 }
 
+function pruneUsersForMemory(users) {
+  let changed = false;
+  if (!DM_STORE_ON_SERVER) return false;
+  if (!users || typeof users !== "object") return false;
+  for (const key in users) {
+    if (!Object.prototype.hasOwnProperty.call(users, key)) continue;
+    const u = users[key];
+    if (!u || typeof u !== "object") continue;
+    const dm = u.dm;
+    const threads = dm?.threads;
+    if (!threads || typeof threads !== "object") continue;
+    for (const arr of Object.values(threads)) {
+      if (!Array.isArray(arr)) continue;
+      for (const msg of arr) {
+        if (!msg || typeof msg !== "object") continue;
+        const meta = msg.meta;
+        if (!meta || typeof meta !== "object") continue;
+        if (Object.prototype.hasOwnProperty.call(meta, "avatarUrl")) {
+          const compacted = compactAvatarUrl(meta.avatarUrl, DM_META_AVATAR_MAX_CHARS);
+          if (compacted) {
+            if (meta.avatarUrl !== compacted) {
+              meta.avatarUrl = compacted;
+              changed = true;
+            }
+          } else {
+            delete meta.avatarUrl;
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+  return changed;
+}
+
 let USERS = loadUsers();
+if (!DM_STORE_ON_SERVER) {
+  try {
+    saveUsers(USERS);
+    console.log("DM storage mode=client: users.json saved without DM history.");
+  } catch (err) {
+    console.error("Neizdevās iztīrīt DM no users.json:", err);
+  }
+}
+const usersPruned = DM_STORE_ON_SERVER && pruneUsersForMemory(USERS);
+if (usersPruned) {
+  try {
+    saveUsers(USERS);
+    console.log("Pruned heavy DM avatar metadata on boot.");
+  } catch (err) {
+    console.error("Neizdevās saglabāt lietotāju clean-up:", err);
+  }
+}
 
 function pruneReports(list) {
   const days = Math.max(1, REPORT_RETENTION_DAYS);
@@ -2409,7 +2607,7 @@ function buildMePayload(u) {
     rankIsMax: !!rankInfo.isMax,
     tokenPriceCoins: getTokenPrice(u),
     medals,
-    avatarUrl: u.avatarUrl || null,
+    avatarUrl: resolveAvatarUrl(u),
     supporter: !!u.supporter,
     revealLetterCostCoins: REVEAL_LETTER_COST_COINS,
     blockedUsers: listBlocks(u),
@@ -2508,9 +2706,10 @@ function getMiniUserPayload(username) {
     };
   }
   const info = ensureRankFields(u);
+  const avatarUrl = avatarForBroadcast(u);
   return {
     username,
-    avatarUrl: avatarForBroadcast(u),
+    avatarUrl: avatarUrl || null,
     rankLevel: u.rankLevel || info.level || 1,
     rankTitle: u.rankTitle || info.title || "—",
     rankColor: u.rankColor || info.color || "#9CA3AF",
@@ -2655,6 +2854,13 @@ function broadcastSystemMessage(text) {
 // ======== DM helperi ========
 function ensureDm(user) {
   if (!user || typeof user !== "object") return null;
+  if (!DM_STORE_ON_SERVER) {
+    if (!user.dm || typeof user.dm !== "object") user.dm = {};
+    if (!user.dm.threads || typeof user.dm.threads !== "object") user.dm.threads = {};
+    if (!user.dm.unread || typeof user.dm.unread !== "object") user.dm.unread = {};
+    if (!user.dm.lastRead || typeof user.dm.lastRead !== "object") user.dm.lastRead = {};
+    return user.dm;
+  }
   if (!user.dm || typeof user.dm !== "object") user.dm = {};
   if (!user.dm.threads || typeof user.dm.threads !== "object") user.dm.threads = {};
   if (!user.dm.unread || typeof user.dm.unread !== "object") user.dm.unread = {};
@@ -2758,14 +2964,19 @@ function dmSanitizeText(raw) {
 function dmBuildMeta(u) {
   if (!u) return null;
   const info = ensureRankFields(u);
-  return {
+  const meta = {
     rankLevel: u.rankLevel || info.level || 1,
     rankTitle: u.rankTitle || info.title || "—",
     rankColor: u.rankColor || info.color || "#9CA3AF",
     region: u.region || "",
-    avatarUrl: avatarForBroadcast(u),
     supporter: !!u.supporter,
   };
+  const avatarUrl = compactAvatarUrl(
+    resolveAvatarUrl(u),
+    DM_META_AVATAR_MAX_CHARS
+  );
+  if (avatarUrl) meta.avatarUrl = avatarUrl;
+  return meta;
 }
 
 function dmGetLastRead(dm, otherUsername) {
@@ -2931,6 +3142,9 @@ function emitFriendsUpdate(username) {
 }
 
 function dmComputeUnread(dm) {
+  if (!DM_STORE_ON_SERVER) {
+    return { total: 0, byUser: {}, threads: [], mode: "client" };
+  }
   const byUser = dm?.unread && typeof dm.unread === "object" ? dm.unread : {};
   let total = 0;
   for (const v of Object.values(byUser)) total += Math.max(0, Number(v) || 0);
@@ -2958,17 +3172,13 @@ function dmComputeUnread(dm) {
     );
     threads = threads.slice(0, 60);
   } catch {}
-  return { total, byUser, threads };
+  return { total, byUser, threads, mode: "server" };
 }
 
 function dmPushMessage(fromUser, toUser, text, extra = {}) {
   const from = fromUser?.username;
   const to = toUser?.username;
   if (!from || !to) return null;
-
-  const dmFrom = ensureDm(fromUser);
-  const dmTo = ensureDm(toUser);
-  if (!dmFrom || !dmTo) return null;
 
   const base = {
     id: crypto.randomBytes(8).toString("hex"),
@@ -2982,6 +3192,14 @@ function dmPushMessage(fromUser, toUser, text, extra = {}) {
   const meta = dmBuildMeta(fromUser);
   const msgFrom = { ...base, meta };
   const msgTo = { ...base, meta };
+
+  if (!DM_STORE_ON_SERVER) {
+    return msgFrom;
+  }
+
+  const dmFrom = ensureDm(fromUser);
+  const dmTo = ensureDm(toUser);
+  if (!dmFrom || !dmTo) return null;
 
   const keyFrom = dmThreadKeyFor(fromUser, toUser);
   const keyTo = dmThreadKeyFor(toUser, fromUser);
@@ -3518,6 +3736,8 @@ async function signupHandler(req, res) {
     revealUsedToday: 0,
     revealUsedTodayDate: "",
     avatarUrl: null,
+    avatarPath: "",
+    avatarUpdatedAt: 0,
     title: "",
     region: canonRegion,
     regionPoints: 0,
@@ -3671,14 +3891,60 @@ app.post("/avatar", authMiddleware, (req, res) => {
         )}MB base64. Ieteikums: samazini bildi (piem. 512x512) un saglabā WEBP/JPG.`,
       });
     }
+    const parsed = parseAvatarDataUrl(avatar);
+    if (!parsed) {
+      return res.status(400).json({ message: "Nekorekts avatāra formāts." });
+    }
 
-    user.avatarUrl = avatar;
+    if (SUPABASE_ENABLED) {
+      const okBucket = await ensureSupabaseBucket();
+      if (!okBucket) {
+        return res.status(500).json({
+          message: "Supabase storage nav pieejams. Pārbaudi konfigurāciju.",
+        });
+      }
+
+      const ext = mimeToExt(parsed.mime);
+      const safe = sanitizeStorageKeySegment(user.username);
+      const filePath = ext ? `avatars/${safe}.${ext}` : `avatars/${safe}`;
+      const prevPath =
+        user.avatarPath && user.avatarPath !== filePath ? user.avatarPath : null;
+
+      const { error: uploadError } = await supabase.storage
+        .from(SUPABASE_STORAGE_BUCKET)
+        .upload(filePath, parsed.buffer, {
+          upsert: true,
+          contentType: parsed.mime,
+          cacheControl: SUPABASE_AVATAR_CACHE_CONTROL,
+        });
+
+      if (uploadError) {
+        console.error("Supabase avatar upload error:", uploadError);
+        return res
+          .status(500)
+          .json({ message: "Servera kļūda avatāra augšupielādē." });
+      }
+
+      if (prevPath) {
+        try {
+          await supabase.storage.from(SUPABASE_STORAGE_BUCKET).remove([prevPath]);
+        } catch {}
+      }
+
+      user.avatarPath = filePath;
+      const publicUrl = getSupabasePublicUrl(filePath);
+      user.avatarUrl = publicUrl || user.avatarUrl || null;
+    } else {
+      user.avatarUrl = avatar;
+    }
+
+    user.avatarUpdatedAt = Date.now();
     saveUsers(USERS);
 
     broadcastOnlineList(true);
     broadcastLeaderboard(false);
 
-    return res.json({ ok: true, avatarUrl: user.avatarUrl });
+    return res.json({ ok: true, avatarUrl: resolveAvatarUrl(user) });
   } catch (err) {
     console.error("POST /avatar kļūda:", err);
     return res
@@ -5161,8 +5427,8 @@ io.on("connection", (socket) => {
   // DM: uzreiz iedodam neizlasīto skaitu (badge sync)
   try {
     const u = USERS[user.username] || user;
-    ensureDm(u);
-    socket.emit("dm.unread", dmComputeUnread(u.dm));
+    if (DM_STORE_ON_SERVER) ensureDm(u);
+    socket.emit("dm.unread", dmComputeUnread(u?.dm));
     socket.emit("dm.blocked", { list: listBlocks(u) });
     socket.emit("friends.update", getFriendsPayload(u));
   } catch {}
@@ -5240,6 +5506,7 @@ io.on("connection", (socket) => {
       username: u.username,
       text: msg,
       ts: Date.now(),
+      avatarUrl: avatarForBroadcast(u),
       rankTitle: u.rankTitle || "—",
       rankLevel: u.rankLevel || 1,
       rankColor: u.rankColor || "#9CA3AF",
@@ -5320,7 +5587,9 @@ io.on("connection", (socket) => {
     const msg = dmPushMessage(sender, target, text, { reply });
     if (!msg) return socket.emit("dm.error", { message: "Neizdevās nosūtīt ziņu." });
 
-    saveUsers(USERS);
+    if (DM_STORE_ON_SERVER) {
+      saveUsers(USERS);
+    }
 
     // sūtītājam apstiprinājums
     socket.emit("dm.sent", { message: msg, with: target.username });
@@ -5332,10 +5601,12 @@ io.on("connection", (socket) => {
         message: msg,
         fromUser: getMiniUserPayload(sender.username),
       });
-      try {
-        ensureDm(target);
-        targetSocket.emit("dm.unread", dmComputeUnread(target.dm));
-      } catch {}
+      if (DM_STORE_ON_SERVER) {
+        try {
+          ensureDm(target);
+          targetSocket.emit("dm.unread", dmComputeUnread(target.dm));
+        } catch {}
+      }
     }
   });
 
@@ -5365,10 +5636,32 @@ io.on("connection", (socket) => {
     if (!otherName || !id) return socket.emit("dm.error", { message: "Nederīga ziņa." });
     if (!text) return socket.emit("dm.error", { message: "Ziņa ir tukša." });
 
-    ensureDm(me);
     const key = findUserKeyCaseInsensitive(otherName);
     const other = key ? USERS[key] : null;
     const otherUsername = other?.username || otherName;
+
+    if (!DM_STORE_ON_SERVER) {
+      const msg = {
+        id,
+        from: me.username,
+        to: otherUsername,
+        text,
+        edited: true,
+        editedAt: Date.now(),
+      };
+      socket.emit("dm.edited", { with: otherUsername, message: msg });
+      const otherSocket = getSocketByUsername(otherUsername);
+      if (
+        otherSocket &&
+        !isBlocked(me, otherUsername) &&
+        !(other && isBlocked(other, me.username))
+      ) {
+        otherSocket.emit("dm.edited", { with: me.username, message: msg });
+      }
+      return;
+    }
+
+    ensureDm(me);
     const threadKey = dmThreadKeyFor(me, otherUsername);
     const arr = Array.isArray(me.dm.threads?.[threadKey]) ? me.dm.threads[threadKey] : [];
     const idx = arr.findIndex((m) => m && m.id === id);
@@ -5390,10 +5683,24 @@ io.on("connection", (socket) => {
     const id = String(payload?.id || "").trim();
     if (!otherName || !id) return socket.emit("dm.error", { message: "Nederīga ziņa." });
 
-    ensureDm(me);
     const key = findUserKeyCaseInsensitive(otherName);
     const other = key ? USERS[key] : null;
     const otherUsername = other?.username || otherName;
+
+    if (!DM_STORE_ON_SERVER) {
+      socket.emit("dm.deleted", { with: otherUsername, id });
+      const otherSocket = getSocketByUsername(otherUsername);
+      if (
+        otherSocket &&
+        !isBlocked(me, otherUsername) &&
+        !(other && isBlocked(other, me.username))
+      ) {
+        otherSocket.emit("dm.deleted", { with: me.username, id });
+      }
+      return;
+    }
+
+    ensureDm(me);
     const threadKey = dmThreadKeyFor(me, otherUsername);
     const arr = Array.isArray(me.dm.threads?.[threadKey]) ? me.dm.threads[threadKey] : [];
     const idx = arr.findIndex((m) => m && m.id === id);
@@ -5422,11 +5729,15 @@ io.on("connection", (socket) => {
     const otherUsername = other?.username || otherName;
 
     addBlock(me, otherUsername, other?.username || otherName);
-    ensureDm(me);
-    dmZeroUnreadCaseInsensitive(me.dm, otherUsername);
+    if (DM_STORE_ON_SERVER) {
+      ensureDm(me);
+      dmZeroUnreadCaseInsensitive(me.dm, otherUsername);
+    }
     saveUsers(USERS);
     socket.emit("dm.blocked", { list: listBlocks(me), with: otherUsername, blocked: true });
-    socket.emit("dm.unread", dmComputeUnread(me.dm));
+    if (DM_STORE_ON_SERVER) {
+      socket.emit("dm.unread", dmComputeUnread(me.dm));
+    }
   });
 
   socket.on("dm.unblock", (payload) => {
@@ -5497,11 +5808,20 @@ io.on("connection", (socket) => {
     const otherName = String(otherRaw || "").trim();
     if (!otherName) return socket.emit("dm.history", { with: "", messages: [] });
 
-    ensureDm(me);
     const key = findUserKeyCaseInsensitive(otherName);
     const other = key ? USERS[key] : null;
     const otherUsername = other?.username || otherName;
 
+    if (!DM_STORE_ON_SERVER) {
+      return socket.emit("dm.history", {
+        with: otherUsername,
+        messages: [],
+        peerLastRead: 0,
+        mode: "client",
+      });
+    }
+
+    ensureDm(me);
     const threadKey = dmThreadKeyFor(me, otherUsername);
     const arr = Array.isArray(me.dm.threads?.[threadKey]) ? me.dm.threads[threadKey] : [];
     const peerLastRead = other ? dmGetLastRead(other.dm, me.username) : 0;
@@ -5521,11 +5841,24 @@ io.on("connection", (socket) => {
     const otherName = String(otherRaw || "").trim();
     if (!otherName) return;
 
-    ensureDm(me);
     const key = findUserKeyCaseInsensitive(otherName);
     const other = key ? USERS[key] : null;
     const otherUsername = other?.username || otherName;
 
+    if (!DM_STORE_ON_SERVER) {
+      const readAt = Date.now();
+      const otherSocket = getSocketByUsername(otherUsername);
+      if (
+        otherSocket &&
+        !isBlocked(me, otherUsername) &&
+        !(other && isBlocked(other, me.username))
+      ) {
+        otherSocket.emit("dm.read", { with: me.username, ts: readAt });
+      }
+      return;
+    }
+
+    ensureDm(me);
     const readAt = Date.now();
     me.dm.lastRead[otherUsername] = readAt;
     dmZeroUnreadCaseInsensitive(me.dm, otherUsername);
@@ -5551,13 +5884,18 @@ io.on("connection", (socket) => {
     const otherName = String(otherRaw || "").trim();
     if (!otherName) return socket.emit("dm.error", { message: "Nav norādīta saruna." });
 
-    ensureDm(me);
     const key = findUserKeyCaseInsensitive(otherName);
     const other = key ? USERS[key] : null;
     const otherUsername = other?.username || otherName;
     if (!otherUsername || otherUsername === me.username)
       return socket.emit("dm.error", { message: "Nederīga saruna." });
 
+    if (!DM_STORE_ON_SERVER) {
+      socket.emit("dm.cleared", { with: otherUsername });
+      return;
+    }
+
+    ensureDm(me);
     const threadKey = dmThreadKeyFor(me, otherUsername);
     try {
       if (me.dm.threads && typeof me.dm.threads === "object") delete me.dm.threads[threadKey];

@@ -220,6 +220,7 @@ const state = {
   dmThreads: new Map(), // username -> [{id,from,to,text,ts}]
   dmUnreadTotal: 0,
   dmUnreadByUser: {}, // username -> count
+  dmStorageMode: "client", // "client" = glabājam lokāli
   dmNotifyOn: true,
   dmLastFrom: null,
   dmInboxPreview: [], // servera inbox preview (no dm.unread)
@@ -3047,6 +3048,169 @@ function clearUnreadIfNeeded() {
     setUnreadBadge(false);
   }
 }
+// ==================== DM (privāts čats) storage ====================
+const DM_THREAD_MAX_LOCAL = 200;
+const DM_LOCAL_STORAGE_VERSION = 1;
+let _dmPersistTimer = null;
+
+function dmStorageKey(suffix) {
+  const u = String(state.username || "").trim();
+  if (!u) return "";
+  return `vz_dm_${suffix}_v${DM_LOCAL_STORAGE_VERSION}_${u}`;
+}
+
+function dmSanitizeMeta(meta) {
+  if (!meta || typeof meta !== "object") return null;
+  return {
+    rankLevel: meta.rankLevel,
+    rankTitle: meta.rankTitle,
+    rankColor: meta.rankColor,
+    region: meta.region,
+    supporter: !!meta.supporter,
+  };
+}
+
+function dmNormalizeMessageForStore(msg) {
+  if (!msg || typeof msg !== "object") return null;
+  const id = String(msg.id || "").trim();
+  if (!id) return null;
+  const out = {
+    id,
+    from: String(msg.from || "").trim(),
+    to: String(msg.to || "").trim(),
+    text: String(msg.text || ""),
+    ts: Number(msg.ts) || Date.now(),
+  };
+  if (msg.deleted) out.deleted = true;
+  if (msg.edited) out.edited = true;
+  if (msg.editedAt) out.editedAt = Number(msg.editedAt) || Date.now();
+  if (msg.reply && typeof msg.reply === "object") {
+    const rid = String(msg.reply.id || "").trim();
+    const rfrom = String(msg.reply.from || "").trim();
+    let rtext = String(msg.reply.text || "").trim();
+    if (rtext.length > 80) rtext = rtext.slice(0, 80);
+    if (rid && rfrom && rtext) out.reply = { id: rid, from: rfrom, text: rtext };
+  }
+  const meta = dmSanitizeMeta(msg.meta);
+  if (meta) out.meta = meta;
+  return out;
+}
+
+function dmThreadsToObject() {
+  const out = {};
+  for (const [nameRaw, arr] of state.dmThreads.entries()) {
+    const name = String(nameRaw || "").trim();
+    if (!name) continue;
+    const list = Array.isArray(arr) ? arr : [];
+    const cleaned = [];
+    for (const m of list) {
+      const norm = dmNormalizeMessageForStore(m);
+      if (norm) cleaned.push(norm);
+    }
+    if (!cleaned.length) continue;
+    out[name] = cleaned.slice(-DM_THREAD_MAX_LOCAL);
+  }
+  return out;
+}
+
+function dmObjectToThreads(obj) {
+  const map = new Map();
+  if (!obj || typeof obj !== "object") return map;
+  for (const [nameRaw, arr] of Object.entries(obj)) {
+    const name = String(nameRaw || "").trim();
+    if (!name) continue;
+    if (!Array.isArray(arr)) continue;
+    const list = [];
+    for (const m of arr) {
+      const norm = dmNormalizeMessageForStore(m);
+      if (norm) list.push(norm);
+    }
+    if (!list.length) continue;
+    map.set(name, list.slice(-DM_THREAD_MAX_LOCAL));
+  }
+  return map;
+}
+
+function dmPersistNow() {
+  _dmPersistTimer = null;
+  const keyThreads = dmStorageKey("threads");
+  const keyUnread = dmStorageKey("unread");
+  const keyPeer = dmStorageKey("peer");
+  const keyLast = dmStorageKey("last");
+  if (!keyThreads) return;
+  try {
+    localStorage.setItem(keyThreads, JSON.stringify(dmThreadsToObject()));
+    localStorage.setItem(keyUnread, JSON.stringify(state.dmUnreadByUser || {}));
+    localStorage.setItem(keyPeer, JSON.stringify(state.dmPeerRead || {}));
+    if (state.dmLastFrom) localStorage.setItem(keyLast, String(state.dmLastFrom));
+    else localStorage.removeItem(keyLast);
+  } catch (e) {
+    console.warn("DM localStorage saglabāšana neizdevās:", e);
+  }
+}
+
+function dmSchedulePersist() {
+  if (_dmPersistTimer) return;
+  _dmPersistTimer = setTimeout(dmPersistNow, 400);
+}
+
+function dmLoadLocalState() {
+  const keyThreads = dmStorageKey("threads");
+  const keyUnread = dmStorageKey("unread");
+  const keyPeer = dmStorageKey("peer");
+  const keyLast = dmStorageKey("last");
+  if (!keyThreads) return;
+  state.dmInboxPreview = [];
+  try {
+    const raw = localStorage.getItem(keyThreads);
+    if (raw) {
+      const obj = JSON.parse(raw);
+      state.dmThreads = dmObjectToThreads(obj);
+    }
+  } catch (e) {
+    console.warn("DM threads parse kļūda:", e);
+    try { localStorage.removeItem(keyThreads); } catch {}
+  }
+  try {
+    const raw = localStorage.getItem(keyUnread);
+    if (raw) state.dmUnreadByUser = JSON.parse(raw) || {};
+  } catch (e) {
+    console.warn("DM unread parse kļūda:", e);
+  }
+  try {
+    const raw = localStorage.getItem(keyPeer);
+    if (raw) state.dmPeerRead = JSON.parse(raw) || {};
+  } catch (e) {
+    console.warn("DM peerRead parse kļūda:", e);
+  }
+  try {
+    const raw = localStorage.getItem(keyLast);
+    if (raw) state.dmLastFrom = String(raw || "").trim() || null;
+  } catch {}
+
+  let total = 0;
+  for (const v of Object.values(state.dmUnreadByUser || {})) {
+    total += Math.max(0, Number(v) || 0);
+  }
+  dmSetBadge(total, state.dmUnreadByUser || {});
+}
+
+function dmIncrementUnread(withUser) {
+  const u = String(withUser || "").trim();
+  if (!u) return;
+  const by =
+    state.dmUnreadByUser && typeof state.dmUnreadByUser === "object"
+      ? { ...state.dmUnreadByUser }
+      : {};
+  for (const k of Object.keys(by)) {
+    if (String(k).toLowerCase() === u.toLowerCase()) by[k] = Math.max(0, Number(by[k]) || 0);
+  }
+  by[u] = Math.max(0, Number(by[u]) || 0) + 1;
+  let total = 0;
+  for (const v of Object.values(by)) total += Math.max(0, Number(v) || 0);
+  dmSetBadge(total, by);
+  dmSchedulePersist();
+}
 // ==================== DM (privāts čats) UI + loģika ====================
 let dmTypingLastSent = 0;
 let dmTypingStopTimer = null;
@@ -3398,6 +3562,7 @@ function dmSetBadge(total, byUser) {
     badge.style.display = "none";
     badge.textContent = "";
   }
+  dmSchedulePersist();
 }
 function dmMarkReadLocal(withUser) {
   const u = String(withUser || "").trim();
@@ -4050,9 +4215,9 @@ function openDmWith(username) {
   if (title) title.textContent = "Privātais čats ar " + u;
   if (drawer) drawer.style.display = "flex";
  
-  // ielādējam history + uzreiz notīram unread šai sarunai
- state.socket.emit("dm.history", { with: u });
-state.socket.emit("dm.read", { with: u });
+  // ielādējam history (ja glabājas serverī) + uzreiz notīram unread šai sarunai
+  if (state.dmStorageMode !== "client") state.socket.emit("dm.history", { with: u });
+  state.socket.emit("dm.read", { with: u });
 dmMarkReadLocal(u);
  const inputRow = document.getElementById("vz-dm-input-row");
 if (inputRow) inputRow.style.display = "flex";
@@ -4073,7 +4238,9 @@ function dmUpsertMessages(withUser, messages) {
   const thread = dmGetThread(u);
   const byId = new Map(thread.map((m, idx) => [String(m?.id || ""), idx]));
  
-  (messages || []).forEach((m) => {
+  (messages || []).forEach((raw) => {
+    const m = dmNormalizeMessageForStore(raw);
+    if (!m) return;
     const id = String(m && m.id ? m.id : "");
     if (id && byId.has(id)) {
       const idx = byId.get(id);
@@ -4083,7 +4250,8 @@ function dmUpsertMessages(withUser, messages) {
     thread.push(m);
   });
  
-  while (thread.length > 200) thread.shift();
+  while (thread.length > DM_THREAD_MAX_LOCAL) thread.shift();
+  dmSchedulePersist();
 }
  
 function dmSendCurrent() {
@@ -4572,6 +4740,17 @@ socket.on("chatMessage", (payload) => {
  socket.on("dm.unread", (payload) => {
   ensureDmUi();
  
+  const hasServerCounts =
+    payload &&
+    (payload.total != null || payload.count != null || payload.byUser || Array.isArray(payload?.threads));
+  const mode = payload?.mode || (hasServerCounts ? "server" : "client");
+  if (mode) state.dmStorageMode = mode;
+  if (mode === "client") {
+    // serveris neglabā DM — saglabājam lokālos skaitītājus
+    if (Array.isArray(payload?.threads)) state.dmInboxPreview = payload.threads;
+    return;
+  }
+
   const total = payload?.total ?? payload?.count ?? 0;
   const byUser = payload?.byUser || {};
   dmSetBadge(total, byUser);
@@ -4647,6 +4826,7 @@ socket.on("chatMessage", (payload) => {
     if (dmIsBlocked(from)) return;
     state.dmLastFrom = from;
     state.dmTypingByUser[from] = false;
+    dmSchedulePersist();
 
     if (msg && !msg.meta && payload?.fromUser) {
       const fu = payload.fromUser;
@@ -4664,6 +4844,10 @@ socket.on("chatMessage", (payload) => {
  
     // kluss paziņojums (netraucē spēlei)
     if (state.dmOpenWith !== from) dmToast(`✉️ Jauna ziņa no ${from}: ${String(msg?.text || "")}`, from);
+
+    if (state.dmOpenWith !== from && state.dmStorageMode === "client") {
+      dmIncrementUnread(from);
+    }
  
     // ja saruna ir atvērta, uzreiz atzīmējam kā izlasītu
    if (state.dmOpenWith === from) {
@@ -4679,6 +4863,8 @@ socket.on("chatMessage", (payload) => {
     if (!withUser || !msg) return;
  
     dmUpsertMessages(withUser, [msg]);
+    state.dmLastFrom = withUser;
+    dmSchedulePersist();
     if (state.dmOpenWith === withUser) dmRenderThread(withUser);
   });
 
@@ -4686,7 +4872,10 @@ socket.on("chatMessage", (payload) => {
     const withUser = String(payload?.with || "").trim();
     if (!withUser) return;
     const ts = Math.max(0, Number(payload?.ts) || 0);
-    if (ts) state.dmPeerRead[withUser] = ts;
+    if (ts) {
+      state.dmPeerRead[withUser] = ts;
+      dmSchedulePersist();
+    }
     if (state.dmOpenWith === withUser) dmRenderThread(withUser);
   });
 
@@ -4725,6 +4914,7 @@ socket.on("chatMessage", (payload) => {
   if (!u) return;
   state.dmThreads.delete(u);
   dmMarkReadLocal(u);
+  dmSchedulePersist();
   if (state.dmOpenWith === u) {
     state.dmOpenWith = null;
     dmShowInbox();
@@ -5751,6 +5941,8 @@ try {
 } catch {}
   initRadioUi();
 ensureDmUi();
+dmLoadLocalState();
+window.addEventListener("beforeunload", () => dmPersistNow());
 // DM FAB long-press: toggle paziņojumus (ieliekam 1x)
 setTimeout(() => {
   const fab = document.getElementById("vz-dm-fab");
@@ -5805,6 +5997,7 @@ setTimeout(() => {
 
   if (logoutBtn) {
     logoutBtn.addEventListener("click", () => {
+      dmPersistNow();
       if (state.socket) {
         state.socket.disconnect();
         state.socket = null;
