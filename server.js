@@ -472,6 +472,14 @@ function getDuelOpponent(duel, username) {
 const CHAT_MAX_LEN = 200;
 const CHAT_RATE_MS = 900;
 const CHAT_DUP_WINDOW_MS = 4000;
+const CHAT_STORE_MODE = String(process.env.CHAT_STORE_MODE || "none")
+  .trim()
+  .toLowerCase();
+const CHAT_STORE_ON_SUPABASE = CHAT_STORE_MODE === "supabase";
+const CHAT_HISTORY_LIMIT = (() => {
+  const v = parseInt(process.env.CHAT_HISTORY_LIMIT || "120", 10);
+  return Number.isFinite(v) && v >= 0 && v <= 500 ? v : 120;
+})();
 
 // ======== PRIVĀTAIS ČATS (DM) ========
 const DM_MAX_LEN = 400;
@@ -2851,6 +2859,86 @@ function broadcastSystemMessage(text) {
   io.emit("chatMessage", { username: "SYSTEM", text, ts: Date.now() });
 }
 
+// ======== Čata vēsture (Supabase, optional) ========
+const CHAT_STORE_TABLE = String(process.env.CHAT_STORE_TABLE || "chat_messages").trim();
+let chatStoreErrorLogged = false;
+let chatHistoryErrorLogged = false;
+
+function buildChatStoreRow(payload) {
+  const username = String(payload?.username || "").trim();
+  const text = String(payload?.text || "").trim();
+  if (!username || !text) return null;
+  return {
+    username,
+    text,
+    ts: Math.max(0, Number(payload?.ts) || Date.now()),
+    rank_level: Number(payload?.rankLevel) || 0,
+    rank_color: payload?.rankColor || null,
+    rank_title: payload?.rankTitle || null,
+    supporter: !!payload?.supporter,
+    region: payload?.region || null,
+  };
+}
+
+async function chatStoreMessage(payload) {
+  if (!CHAT_STORE_ON_SUPABASE || !SUPABASE_ENABLED || !supabase) return;
+  const row = buildChatStoreRow(payload);
+  if (!row) return;
+  try {
+    const { error } = await supabase.from(CHAT_STORE_TABLE).insert(row);
+    if (error && !chatStoreErrorLogged) {
+      console.error("Supabase chat store error:", error);
+      chatStoreErrorLogged = true;
+    }
+  } catch (err) {
+    if (!chatStoreErrorLogged) {
+      console.error("Supabase chat store error:", err);
+      chatStoreErrorLogged = true;
+    }
+  }
+}
+
+async function loadChatHistory(limit = CHAT_HISTORY_LIMIT) {
+  if (!CHAT_STORE_ON_SUPABASE || !SUPABASE_ENABLED || !supabase) return [];
+  if (!Number.isFinite(limit) || limit <= 0) return [];
+  try {
+    const { data, error } = await supabase
+      .from(CHAT_STORE_TABLE)
+      .select("id,username,text,ts,rank_level,rank_color,rank_title,supporter,region")
+      .order("ts", { ascending: false })
+      .limit(limit);
+    if (error) {
+      if (!chatHistoryErrorLogged) {
+        console.error("Supabase chat history error:", error);
+        chatHistoryErrorLogged = true;
+      }
+      return [];
+    }
+    const list = Array.isArray(data)
+      ? data
+          .map((row) => ({
+            id: row?.id ?? undefined,
+            username: row?.username || "",
+            text: row?.text || "",
+            ts: Number(row?.ts) || 0,
+            rankLevel: row?.rank_level || 0,
+            rankColor: row?.rank_color || "#9CA3AF",
+            rankTitle: row?.rank_title || "—",
+            supporter: !!row?.supporter,
+            region: row?.region || "",
+          }))
+          .filter((m) => m.username && m.text)
+      : [];
+    return list.reverse();
+  } catch (err) {
+    if (!chatHistoryErrorLogged) {
+      console.error("Supabase chat history error:", err);
+      chatHistoryErrorLogged = true;
+    }
+    return [];
+  }
+}
+
 // ======== DM helperi ========
 function ensureDm(user) {
   if (!user || typeof user !== "object") return null;
@@ -3870,7 +3958,7 @@ app.post("/email", authMiddleware, (req, res) => {
 });
 
 // ======== AVATĀRA ENDPOINTS ========
-app.post("/avatar", authMiddleware, (req, res) => {
+app.post("/avatar", authMiddleware, async (req, res) => {
   try {
     const user = req.user;
     const { avatar } = req.body || {};
@@ -5433,6 +5521,16 @@ io.on("connection", (socket) => {
     socket.emit("friends.update", getFriendsPayload(u));
   } catch {}
 
+  if (CHAT_STORE_ON_SUPABASE && CHAT_HISTORY_LIMIT > 0) {
+    loadChatHistory(CHAT_HISTORY_LIMIT)
+      .then((messages) => {
+        if (messages && messages.length) {
+          socket.emit("chatHistory", { messages });
+        }
+      })
+      .catch(() => {});
+  }
+
   socket.on("leaderboard:top10", () => {
     socket.emit("leaderboard:update", computeTop10Leaderboard());
   });
@@ -5502,7 +5600,7 @@ io.on("connection", (socket) => {
 
     if (passiveChanged2) saveUsers(USERS);
 
-    io.emit("chatMessage", {
+    const chatPayload = {
       username: u.username,
       text: msg,
       ts: Date.now(),
@@ -5512,7 +5610,11 @@ io.on("connection", (socket) => {
       rankColor: u.rankColor || "#9CA3AF",
       supporter: !!u.supporter,
       region: u.region || "",
-    });
+    };
+    io.emit("chatMessage", chatPayload);
+    if (CHAT_STORE_ON_SUPABASE) {
+      chatStoreMessage(chatPayload).catch(() => {});
+    }
   });
 
   // ========== PRIVĀTAIS ČATS (DM) ==========
