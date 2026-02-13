@@ -1840,12 +1840,16 @@ const safe = (window.visualViewport && window.visualViewport.height)
 const bottomReserve = Math.max(84, Math.ceil(actionsH) + 12 + safe);
  
   const keyboardH = keyboardEl ? keyboardEl.getBoundingClientRect().height : 0;
+  const gridTop = gridEl.getBoundingClientRect().top || 0;
+  const keyboardTop = keyboardEl ? keyboardEl.getBoundingClientRect().top : 0;
  
   const vw = Math.min(window.innerWidth, document.documentElement.clientWidth || window.innerWidth);
   const vh = window.innerHeight;
  
   const availW = vw - 24;
-  const availH = vh - keyboardH - bottomReserve - 12;
+  const availHViewport = vh - keyboardH - bottomReserve - gridTop - 12;
+  const availHBetween = keyboardTop > gridTop ? keyboardTop - gridTop - 12 : availHViewport;
+  const availH = Math.max(0, Math.min(availHViewport, availHBetween));
  
   const maxByW = Math.floor((availW - (cols - 1) * gap) / cols);
   const maxByH = Math.floor((availH - (rows - 1) * gap) / rows);
