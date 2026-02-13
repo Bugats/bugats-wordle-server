@@ -1449,7 +1449,26 @@ input:focus-visible {
 @keyframes vzElectricRun {
   to { transform: rotate(360deg); }
 }
-.vz-grid { margin: 12px auto 8px; }
+.vz-grid {
+  margin: 12px auto 8px;
+  position: relative;
+  --glow-x: 50%;
+  --glow-y: 40%;
+  --glow-alpha: 0;
+}
+.vz-grid::after {
+  content: "";
+  position: absolute;
+  inset: -14px;
+  border-radius: 16px;
+  pointer-events: none;
+  opacity: var(--glow-alpha);
+  background:
+    radial-gradient(200px circle at var(--glow-x) var(--glow-y), rgba(90, 200, 255, 0.22), transparent 60%),
+    radial-gradient(120px circle at calc(var(--glow-x) + 40px) calc(var(--glow-y) - 30px), rgba(255, 100, 200, 0.18), transparent 65%);
+  mix-blend-mode: screen;
+  transition: opacity 0.25s ease;
+}
 
 /* grid anchor PIXI overlay */
 #grid { position: relative; }

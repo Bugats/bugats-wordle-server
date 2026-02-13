@@ -1817,6 +1817,60 @@ function resetKeyboardForNewRound() {
   clearKeyboardStatuses();
   updateShiftVisual();
 }
+let _gridGlowInit = false;
+let _gridGlowRaf = 0;
+let _gridGlowPulseTimer = null;
+let _gridGlowPos = { x: 0, y: 0, has: false };
+
+function setGridGlow(x, y, alpha) {
+  if (!gridEl) return;
+  if (Number.isFinite(x)) gridEl.style.setProperty("--glow-x", `${x}px`);
+  if (Number.isFinite(y)) gridEl.style.setProperty("--glow-y", `${y}px`);
+  if (Number.isFinite(alpha)) gridEl.style.setProperty("--glow-alpha", String(alpha));
+}
+
+function updateGridGlowFromPoint(clientX, clientY, alpha = 0.35) {
+  if (!gridEl) return;
+  const rect = gridEl.getBoundingClientRect();
+  const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
+  const y = Math.max(0, Math.min(rect.height, clientY - rect.top));
+  _gridGlowPos = { x, y, has: true };
+  cancelAnimationFrame(_gridGlowRaf);
+  _gridGlowRaf = requestAnimationFrame(() => setGridGlow(x, y, alpha));
+}
+
+function clearGridGlow() {
+  setGridGlow(_gridGlowPos.x, _gridGlowPos.y, 0);
+}
+
+function pulseGridGlow() {
+  if (!gridEl) return;
+  const rect = gridEl.getBoundingClientRect();
+  const x = _gridGlowPos.has ? _gridGlowPos.x : rect.width * 0.5;
+  const y = _gridGlowPos.has ? _gridGlowPos.y : rect.height * 0.4;
+  setGridGlow(x, y, 0.45);
+  if (_gridGlowPulseTimer) clearTimeout(_gridGlowPulseTimer);
+  _gridGlowPulseTimer = setTimeout(() => setGridGlow(x, y, 0.18), 180);
+  setTimeout(() => setGridGlow(x, y, 0), 650);
+}
+
+function initGridGlow() {
+  if (_gridGlowInit || !gridEl) return;
+  _gridGlowInit = true;
+
+  gridEl.addEventListener("pointermove", (e) => updateGridGlowFromPoint(e.clientX, e.clientY, 0.32));
+  gridEl.addEventListener("pointerdown", (e) => updateGridGlowFromPoint(e.clientX, e.clientY, 0.45));
+  gridEl.addEventListener("pointerleave", clearGridGlow);
+  gridEl.addEventListener(
+    "touchmove",
+    (e) => {
+      const t = e.touches && e.touches[0];
+      if (t) updateGridGlowFromPoint(t.clientX, t.clientY, 0.3);
+    },
+    { passive: true }
+  );
+  gridEl.addEventListener("touchend", clearGridGlow, { passive: true });
+}
 let _fitGridRaf = 0;
  
 function fitGridToViewport() {
@@ -2141,6 +2195,7 @@ if (state.currentCol >= state.cols) return;
   state.currentCol++;
   skipHintLockedForward();
   playKeyNote(ch);
+  pulseGridGlow();
 }
 
 function deleteLetter() {
@@ -2162,6 +2217,7 @@ function deleteLetter() {
   tile.classList.remove("correct", "present", "absent", "shake", "flip");
 
   playControlNote("backspace");
+  pulseGridGlow();
 }
 
 
@@ -2195,6 +2251,7 @@ function revealRow(rowIndex, pattern, opts = {}) {
   const animate =
     opts.animate !== false && (!PREFERS_REDUCED_MOTION || FORCE_TILE_SWIRL);
   const half = Math.floor(FLIP_DURATION_MS / 2);
+  if (animate) pulseGridGlow();
 
   for (let c = 0; c < state.cols; c++) {
     const tile = state.gridTiles[rowIndex]?.[c];
@@ -5960,6 +6017,7 @@ async function initGame() {
   }
 
   buildKeyboard();
+  initGridGlow();
   keepActionButtonsTogether();
   window.addEventListener("resize", scheduleFitGrid);
   // mobilajā pārlūkā "adreses joslas" lēkāšana maina viewport -> pārrēķinam režģi
