@@ -114,9 +114,9 @@
       dot.generateTexture("vzLogoSpark", 6, 6);
       dot.destroy();
 
-      const glowCount = (isMobile || lowMem) ? 4 : 7;
-      const sparkleCount = (isMobile || lowMem) ? 6 : 11;
-      const colors = [0xff4081, 0x7c4dff, 0x2196f3, 0xff6d00, 0x00e5ff];
+      const glowCount = (isMobile || lowMem) ? 5 : 9;
+      const sparkleCount = (isMobile || lowMem) ? 8 : 14;
+      const colors = [0xff4081, 0xff1744, 0x7c4dff, 0x2196f3, 0x00e5ff, 0xff6d00];
 
       glows = [];
       for (let i = 0; i < glowCount; i++) {
@@ -127,12 +127,12 @@
         );
         g.setBlendMode(Phaser.BlendModes.ADD);
         g.setTint(colors[i % colors.length]);
-        g._baseAlpha = rand(0.08, 0.16);
+        g._baseAlpha = rand(0.12, 0.24);
         g.alpha = g._baseAlpha;
-        g._baseScale = rand(0.9, 1.7);
+        g._baseScale = rand(1.1, 2.2);
         g.setScale(g._baseScale);
-        g._vx = rand(-6, 6) * ((isMobile || lowMem) ? 0.55 : 1);
-        g._vy = rand(-2, 2) * ((isMobile || lowMem) ? 0.5 : 1);
+        g._vx = rand(-7, 7) * ((isMobile || lowMem) ? 0.55 : 1);
+        g._vy = rand(-3, 3) * ((isMobile || lowMem) ? 0.5 : 1);
         g._pulse = rand(0, Math.PI * 2);
         g._pulseSpeed = rand(0.25, 0.5);
         glows.push(g);
@@ -147,9 +147,9 @@
         );
         s.setBlendMode(Phaser.BlendModes.ADD);
         s.setTint(colors[(i + 2) % colors.length]);
-        s._baseAlpha = rand(0.18, 0.45);
+        s._baseAlpha = rand(0.25, 0.6);
         s.alpha = s._baseAlpha;
-        s._baseScale = rand(0.4, 0.9);
+        s._baseScale = rand(0.5, 1.1);
         s.setScale(s._baseScale);
         s._phase = rand(0, Math.PI * 2);
         s._pulseSpeed = rand(0.8, 1.35);

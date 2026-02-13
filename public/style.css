@@ -2944,7 +2944,8 @@ input:focus-visible {
     animation: none !important;
     transition: none !important;
   }
-  #vz-logo-fx { display: none !important; }
+  #vz-logo-fx canvas { display: none !important; }
+  #vz-logo-fx::before { animation: none !important; opacity: 0.2; }
 }
 /* ================== DUEL RESULT: EPIC OVERLAY ================== */
 #duel-result-overlay {
@@ -3150,11 +3151,28 @@ input:focus-visible {
   z-index: 0;
   mix-blend-mode: screen;
   opacity: 0.9;
+  overflow: hidden;
+  background:
+    radial-gradient(140px 70px at 18% 50%, rgba(255, 0, 90, 0.35), transparent 65%),
+    radial-gradient(180px 90px at 82% 45%, rgba(0, 200, 255, 0.28), transparent 68%);
+  filter: blur(0.4px);
+}
+#vz-logo-fx::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  opacity: 0.35;
+  transform: translateX(-70%);
+  animation: vzLogoSweep 6.5s ease-in-out infinite;
+  mix-blend-mode: screen;
 }
 #vz-logo-fx canvas {
   width: 100% !important;
   height: 100% !important;
   display: block;
+  position: absolute;
+  inset: 0;
 }
 
 .vz-logo-title{
@@ -3244,6 +3262,12 @@ input:focus-visible {
       0 0 16px rgba(255, 0, 70, 0.9),
       0 0 30px rgba(255, 0, 70, 0.6);
   }
+}
+
+@keyframes vzLogoSweep {
+  0% { transform: translateX(-70%); opacity: 0.2; }
+  50% { transform: translateX(25%); opacity: 0.55; }
+  100% { transform: translateX(140%); opacity: 0.2; }
 }
  
 /* reduced motion */
