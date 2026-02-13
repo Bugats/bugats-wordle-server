@@ -354,7 +354,7 @@ const TZ = "Europe/Riga";
 
 // ======== SEZONA 1 / 2 endAt ========
 const SEASON1_END_AT = new Date("2025-12-26T23:59:59+02:00").getTime();
-const SEASON2_END_AT_DEFAULT = new Date("2026-02-15T23:59:59+02:00").getTime();
+const SEASON2_END_AT_DEFAULT = new Date("2026-03-21T23:59:59+02:00").getTime();
 
 const SEASON_DAYS = (() => {
   const v = parseInt(process.env.SEASON_DAYS || "30", 10);
@@ -1134,7 +1134,7 @@ let seasonState = seasonStore.current;
   }
 })();
 
-// Boot fix: ja Sezona 2 jau ir startēta, bet endAt nav “februāra vidus”
+// Boot fix: ja Sezona 2 jau ir startēta, bet endAt nav “marta beigas”
 (() => {
   const envEnd = process.env.SEASON_END_AT;
   if (envEnd) return;
@@ -1145,7 +1145,7 @@ let seasonState = seasonStore.current;
     seasonState.endAt = SEASON2_END_AT_DEFAULT;
     seasonStore.current = seasonState;
     saveJsonAtomic(SEASONS_FILE, seasonStore);
-    console.log("Season 2 endAt adjusted to mid-Feb (default).");
+    console.log("Season 2 endAt adjusted to late-March (default).");
   }
 })();
 
