@@ -2652,6 +2652,14 @@ input:focus-visible {
   -webkit-tap-highlight-color: transparent;
 }
 
+.vz-share-btn.vz-share-btn-wa {
+  background: linear-gradient(90deg, #25d366, #1ebe57);
+  box-shadow: 0 0 12px rgba(37, 211, 102, 0.6), 0 0 18px rgba(0, 0, 0, 0.85);
+}
+.vz-share-btn.vz-share-btn-wa:hover {
+  filter: brightness(1.08);
+}
+
 .vz-share-note { margin-top: 3px; font-size: 10px; color: #bbbbbb; opacity: 0.9; }
 
 /* ===========================

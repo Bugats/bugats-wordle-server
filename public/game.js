@@ -354,7 +354,9 @@ const logoutBtn = $("#logout-btn");
 const buyTokenBtn = $("#buy-token-btn");
 const mobileFsBtn = $("#mobile-fullscreen-btn");
 const shareBtn = $("#share-btn");
+const shareWhatsappBtn = $("#share-whatsapp-btn");
 const shareResultBtn = $("#share-result-btn");
+const shareResultWhatsappBtn = $("#share-result-wa-btn");
 const shareResultNote = $("#share-result-note");
 
 // SEZONA UI
@@ -5640,6 +5642,11 @@ async function handleAvatarUpload(e) {
 }
 
 // ==================== SHARE ====================
+function openWhatsappShare(text) {
+  const url = "https://wa.me/?text=" + encodeURIComponent(text || "");
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 async function handleShare() {
   const url = window.location.href;
   const text = "VĀRDU ZONA – nāc uzspēlē latviešu Word battle!";
@@ -5660,8 +5667,16 @@ async function handleShare() {
   }
 }
 
+function handleShareWhatsapp() {
+  const url = window.location.href;
+  const text = "VĀRDU ZONA – nāc uzspēlē latviešu Word battle!";
+  openWhatsappShare(`${text} ${url}`);
+}
+
 function setShareResultVisible(on) {
   if (shareResultBtn) shareResultBtn.style.display = on ? "block" : "none";
+  if (shareResultWhatsappBtn)
+    shareResultWhatsappBtn.style.display = on ? "block" : "none";
   if (shareResultNote) shareResultNote.style.display = on ? "block" : "none";
 }
 
@@ -5840,6 +5855,13 @@ async function handleShareResult() {
   }
 }
 
+function handleShareResultWhatsapp() {
+  const data = state.lastShareResult;
+  if (!data) return;
+  const text = buildShareText(data);
+  openWhatsappShare(text);
+}
+
 // ==================== RADIO INIT (vienreiz) ====================
 function initRadioUi() {
   const radioAudio = document.getElementById("vz-radio");
@@ -5994,7 +6016,10 @@ async function initGame() {
   }
 
   if (shareBtn) shareBtn.addEventListener("click", handleShare);
+  if (shareWhatsappBtn) shareWhatsappBtn.addEventListener("click", handleShareWhatsapp);
   if (shareResultBtn) shareResultBtn.addEventListener("click", handleShareResult);
+  if (shareResultWhatsappBtn)
+    shareResultWhatsappBtn.addEventListener("click", handleShareResultWhatsapp);
 
   if (friendAddBtnEl && friendAddInputEl) {
     friendAddBtnEl.addEventListener("click", () => {
