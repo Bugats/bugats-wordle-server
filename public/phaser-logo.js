@@ -57,10 +57,6 @@
       navigator.deviceMemory &&
       navigator.deviceMemory <= 4;
 
-    overlay.style.position = "absolute";
-    overlay.style.inset = "-8px 0 -10px";
-    overlay.style.pointerEvents = "none";
-
     const cs = getComputedStyle(host);
     if (cs.position === "static") host.style.position = "relative";
 

@@ -1,4 +1,4 @@
-const CACHE_VERSION = "vz-pwa-v8";
+const CACHE_VERSION = "vz-pwa-v10";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -16,6 +16,19 @@ const CORE_ASSETS = [
 ];
 
 const STATIC_DESTINATIONS = new Set(["style", "script", "image", "font", "audio"]);
+const NETWORK_FIRST_PATHS = new Set([
+  "/",
+  "/index.html",
+  "/game.html",
+  "/style.css",
+  "/auth.js",
+  "/game.js",
+  "/phaser-fx.js",
+  "/phaser-logo.js",
+  "/grid-fx.js",
+  "/manifest.json",
+  "/pwa.js"
+]);
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -52,7 +65,12 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/socket.io")) return;
 
   if (req.mode === "navigate") {
-    event.respondWith(networkFirst(req));
+    event.respondWith(networkFirstNoCache(req));
+    return;
+  }
+
+  if (NETWORK_FIRST_PATHS.has(url.pathname)) {
+    event.respondWith(networkFirstNoCache(req));
     return;
   }
 
@@ -63,6 +81,21 @@ self.addEventListener("fetch", (event) => {
 async function networkFirst(req) {
   try {
     const res = await fetch(req);
+    const cache = await caches.open(CACHE_VERSION);
+    cache.put(req, res.clone());
+    return res;
+  } catch {
+    const cache = await caches.open(CACHE_VERSION);
+    const cached = await cache.match(req);
+    if (cached) return cached;
+    return cache.match("./index.html");
+  }
+}
+
+async function networkFirstNoCache(req) {
+  try {
+    const freshReq = new Request(req, { cache: "no-store" });
+    const res = await fetch(freshReq);
     const cache = await caches.open(CACHE_VERSION);
     cache.put(req, res.clone());
     return res;

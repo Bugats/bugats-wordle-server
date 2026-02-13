@@ -3217,16 +3217,19 @@ input:focus-visible {
   100% { transform: translateX(140%); opacity: 0.2; }
 }
  
-/* reduced motion */
-@media (prefers-reduced-motion: reduce){
-  .vz-logo-title::before{ display: none; }
-}
- 
-@media (max-width: 480px){
+@media (max-width: 560px){
   .vz-logo-main{ margin: 16px auto 8px; }
   .vz-logo-main::after{ width: 75%; }
-  .vz-logo-title{ font-size: clamp(2.2rem, 8vw, 3rem); letter-spacing: 0.18em; }
-  .vz-logo-sub{ font-size: 0.8rem; letter-spacing: 0.18em; }
+  .vz-logo-title{
+    font-size: clamp(2.2rem, 8vw, 3rem);
+    letter-spacing: 0.18em;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.35) !important;
+  }
+  .vz-logo-sub{
+    font-size: 0.8rem;
+    letter-spacing: 0.18em;
+    display: none;
+  }
 }
 /* ===== MOBILE/FULLSCREEN: nekas netraucē režģim + klaviatūrai ===== */
  
@@ -3235,25 +3238,6 @@ body.vz-mobile-game-only{
   height: 100vh;
   overflow: hidden;
   overscroll-behavior: none;
-}
- 
-/* pilnekrāna režīmā: izslēdz “shine sweep” (tas visbiežāk rausta) */
-body.vz-mobile-game-only .vz-logo-title::before{
-  animation: none !important;
-  opacity: 0 !important;
-}
- 
-/* telefonos: arī izslēdz shine + samazina smago ēnu */
-@media (max-width: 560px){
-  .vz-logo-title::before{
-    animation: none !important;
-    opacity: 0 !important;
-  }
-  .vz-logo-title{
-    text-shadow: 0 2px 10px rgba(0,0,0,0.35) !important;
-  }
-  /* ja gribi vēl stabilāk: paslēp apakš-tekstu */
-  .vz-logo-sub{ display: none; }
 }
 /* ===== PILNEKRĀNS: rādam tikai režģi + klaviatūru ===== */
 body.vz-mobile-game-only .vz-topbar,
