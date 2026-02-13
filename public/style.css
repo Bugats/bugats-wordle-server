@@ -314,6 +314,21 @@ input:focus-visible {
   background: rgba(255, 255, 255, 0.12);
 }
 
+.vz-topbar-right #logout-btn {
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffe0e6;
+  font-weight: 800;
+  font-size: 12px;
+  box-shadow: none;
+}
+.vz-topbar-right #logout-btn:hover {
+  background: rgba(255, 0, 64, 0.2);
+  box-shadow: 0 0 10px rgba(255, 0, 64, 0.45);
+}
+
 /* NOTE: noņemts margin-right, lai gap nav dubultā */
 .vz-topbar-left span,
 .vz-topbar-right span {
@@ -1706,13 +1721,14 @@ input:focus-visible {
    =========================== */
 
 .vz-bottom-buttons {
-  margin-top: 12px;
+  margin-top: 6px;
   display: flex;
   justify-content: center;
   gap: 10px;
 }
 
-.vz-bottom-buttons button {
+#new-round-btn,
+#logout-btn {
   padding: 8px 16px;
   border-radius: 6px;
   border: none;
@@ -1724,18 +1740,25 @@ input:focus-visible {
   -webkit-tap-highlight-color: transparent;
 }
 
-.vz-bottom-buttons button:hover {
+#new-round-btn:hover,
+#logout-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.2), 0 0 18px rgba(83, 141, 78, 0.9);
 }
 
 #new-round-btn { background-color: #538d4e; color: #ffffff; }
-#new-round-btn:hover { background-color: #6aaa64; }
+#new-round-btn:hover {
+  background-color: #6aaa64;
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.2), 0 0 18px rgba(83, 141, 78, 0.9);
+}
 
 #logout-btn { background-color: #ff0040; color: #ffffff; }
-#logout-btn:hover { background-color: #e60039; }
+#logout-btn:hover {
+  background-color: #e60039;
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.18), 0 0 18px rgba(255, 0, 64, 0.9);
+}
 
-.vz-bottom-buttons button:disabled { opacity: 0.5; cursor: not-allowed; }
+#new-round-btn:disabled,
+#logout-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ===========================
    Spēles ziņojums

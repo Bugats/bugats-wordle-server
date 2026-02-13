@@ -5836,7 +5836,7 @@ function ensureFsBottomBar() {
 }
  
 function setFullscreenBottomButtons(on) {
-  if (!newRoundBtn || !logoutBtn) return;
+  if (!newRoundBtn) return;
  
   const bar = ensureFsBottomBar();
  
@@ -5844,13 +5844,11 @@ function setFullscreenBottomButtons(on) {
     if (!_fsBtnHomes) {
       _fsBtnHomes = [
         { btn: newRoundBtn, parent: newRoundBtn.parentNode, next: newRoundBtn.nextSibling },
-        { btn: logoutBtn, parent: logoutBtn.parentNode, next: logoutBtn.nextSibling },
       ];
     }
  
     bar.style.display = "flex";
     bar.appendChild(newRoundBtn);
-    bar.appendChild(logoutBtn);
   } else {
     bar.style.display = "none";
     if (_fsBtnHomes) {
@@ -5864,20 +5862,12 @@ function setFullscreenBottomButtons(on) {
 }let _logoutHome = null;
  
 function keepActionButtonsTogether() {
-  if (!newRoundBtn || !logoutBtn) return;
+  if (!newRoundBtn) return;
  
   const wrap = document.querySelector(".vz-bottom-buttons");
   if (!wrap) return;
  
-  if (!_logoutHome) {
-    _logoutHome = { parent: logoutBtn.parentNode, next: logoutBtn.nextSibling };
-  }
- 
-  // vienmēr turam logout blakus “Jauns raunds”
-  if (!wrap.contains(logoutBtn)) wrap.appendChild(logoutBtn);
- 
-  // ja kāds CSS bija uzlicis “stumj pa labi”
-  logoutBtn.style.marginLeft = "";
+  if (!wrap.contains(newRoundBtn)) wrap.appendChild(newRoundBtn);
 }
  
 function restoreLogoutButtonHome() {
