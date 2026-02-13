@@ -129,6 +129,20 @@ button {
   font-family: inherit;
 }
 
+/* ===== Micro-interactions (spēles pogām) ===== */
+.vz-body-game button {
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+  will-change: transform;
+}
+.vz-body-game button:not(:disabled):not(.no-micro):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.14);
+}
+.vz-body-game button:not(:disabled):not(.no-micro):active {
+  transform: translateY(1px) scale(0.98);
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.45) inset;
+}
+
 /* Focus (accessibility) */
 button:focus-visible,
 input:focus-visible {
