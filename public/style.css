@@ -1915,8 +1915,10 @@ input:focus-visible {
   gap: 10px;
 }
 
-#new-round-btn,
-#logout-btn {
+.vz-bottom-buttons #new-round-btn,
+.vz-bottom-buttons #logout-btn,
+#vz-fs-bottom-bar #new-round-btn,
+#vz-fs-bottom-bar #logout-btn {
   padding: 8px 16px;
   border-radius: 6px;
   border: none;
@@ -1928,25 +1930,39 @@ input:focus-visible {
   -webkit-tap-highlight-color: transparent;
 }
 
-#new-round-btn:hover,
-#logout-btn:hover {
+.vz-bottom-buttons #new-round-btn:hover,
+.vz-bottom-buttons #logout-btn:hover,
+#vz-fs-bottom-bar #new-round-btn:hover,
+#vz-fs-bottom-bar #logout-btn:hover {
   transform: translateY(-1px);
 }
 
-#new-round-btn { background-color: #538d4e; color: #ffffff; }
-#new-round-btn:hover {
+.vz-bottom-buttons #new-round-btn,
+#vz-fs-bottom-bar #new-round-btn {
+  background-color: #538d4e;
+  color: #ffffff;
+}
+.vz-bottom-buttons #new-round-btn:hover,
+#vz-fs-bottom-bar #new-round-btn:hover {
   background-color: #6aaa64;
   box-shadow: 0 0 16px rgba(255, 255, 255, 0.2), 0 0 18px rgba(83, 141, 78, 0.9);
 }
 
-#logout-btn { background-color: #ff0040; color: #ffffff; }
-#logout-btn:hover {
+.vz-bottom-buttons #logout-btn,
+#vz-fs-bottom-bar #logout-btn {
+  background-color: #ff0040;
+  color: #ffffff;
+}
+.vz-bottom-buttons #logout-btn:hover,
+#vz-fs-bottom-bar #logout-btn:hover {
   background-color: #e60039;
   box-shadow: 0 0 16px rgba(255, 255, 255, 0.18), 0 0 18px rgba(255, 0, 64, 0.9);
 }
 
-#new-round-btn:disabled,
-#logout-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.vz-bottom-buttons #new-round-btn:disabled,
+.vz-bottom-buttons #logout-btn:disabled,
+#vz-fs-bottom-bar #new-round-btn:disabled,
+#vz-fs-bottom-bar #logout-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ===========================
    Spēles ziņojums
@@ -2286,59 +2302,6 @@ input:focus-visible {
   opacity: 0.7;
 }
 
-/* ===== NOVADA IZVĒLE ===== */
-.vz-region-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.72);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10020;
-}
-.vz-region-modal.hidden { display: none; }
-.vz-region-modal-inner {
-  width: min(420px, 92vw);
-  background: #0f1222;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 14px;
-  padding: 16px 18px 18px;
-  text-align: center;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
-}
-.vz-region-modal-inner h3 {
-  margin: 0 0 6px;
-  font-size: 18px;
-}
-.vz-region-modal-sub {
-  margin: 0 0 12px;
-  opacity: 0.8;
-  font-size: 13px;
-}
-.vz-region-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-.vz-region-btn {
-  border: none;
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-weight: 800;
-  cursor: pointer;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 0 12px rgba(0, 0, 0, 0.4);
-  transition: transform 0.12s ease, filter 0.12s ease;
-}
-.vz-region-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
-.vz-region-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-.vz-region-modal-note {
-  margin-top: 10px;
-  font-size: 12px;
-  opacity: 0.7;
-}
-
 /* ===========================
    Dienas misijas
    =========================== */
@@ -2617,7 +2580,8 @@ input:focus-visible {
   animation: vzDuelOverlayPop 0.35s ease-out;
 }
 
-.vz-duel-title {
+.vz-duel-overlay-inner .vz-duel-title,
+.vz-duel-card .vz-duel-title {
   font-size: 13px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -2626,7 +2590,8 @@ input:focus-visible {
   font-weight: 900;
 }
 
-.vz-duel-sub {
+.vz-duel-overlay-inner .vz-duel-sub,
+.vz-duel-card .vz-duel-sub {
   opacity: 0.9;
   margin: 0 0 12px 0;
   line-height: 1.35;
@@ -3285,7 +3250,8 @@ body.vz-mobile-game-only #grid{
   font-size: calc(var(--tile-size) * 0.56);
 }
 /* Pilnekrānā: apakšā vienmēr viena rinda ar 2 pogām */
-body.vz-mobile-game-only .vz-bottom-buttons{
+body.vz-mobile-game-only .vz-bottom-buttons,
+body.vz-mobile-game-only #vz-fs-bottom-bar{
   position: fixed;
   left: 0;
   right: 0;
@@ -3301,7 +3267,9 @@ body.vz-mobile-game-only .vz-bottom-buttons{
 }
  
 body.vz-mobile-game-only .vz-bottom-buttons #new-round-btn,
-body.vz-mobile-game-only .vz-bottom-buttons #logout-btn{
+body.vz-mobile-game-only #vz-fs-bottom-bar #new-round-btn,
+body.vz-mobile-game-only .vz-bottom-buttons #logout-btn,
+body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex: 1 1 0;
   max-width: 220px;
 }
@@ -3453,12 +3421,12 @@ body.vz-mobile-game-only .vz-bottom-buttons #logout-btn{
   height: 72px;
 }
 
-.vz-duel-title {
+.vz-duel-modal-inner .vz-duel-title {
   font-weight: 1000;
   font-size: 18px;
   line-height: 1.15;
 }
-.vz-duel-sub {
+.vz-duel-modal-inner .vz-duel-sub {
   opacity: 0.85;
   font-size: 13px;
   margin-top: 4px;
@@ -3764,28 +3732,4 @@ body.vz-mobile-game-only .vz-bottom-buttons #logout-btn{
 
 #vz-dm-typing {
   color: rgba(255, 255, 255, 0.8);
-}
-/* FULLSCREEN: bottom bar nedrīkst būt flex-item body layoutā */
-body.vz-mobile-game-only #vz-fs-bottom-bar{
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
- 
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  
-  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
-  background: rgba(0,0,0,0.25);
-  backdrop-filter: blur(6px);
-  
-  z-index: 1000000;
-}
- 
-/* pogas vienā rindā, vienādos platumos */
-body.vz-mobile-game-only .vz-bottom-buttons #new-round-btn,
-body.vz-mobile-game-only .vz-bottom-buttons #logout-btn{
-  flex: 1 1 0;
-  max-width: 220px;
 }
