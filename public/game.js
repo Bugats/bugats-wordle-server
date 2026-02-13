@@ -1038,6 +1038,7 @@ if (card) {
  
   const aura = getAuraRankFromLevel(me.rankLevel);
   if (aura) card.classList.add("vz-rank-" + aura);
+  card.classList.toggle("vz-player-supporter", !!me.supporter);
  
   // hot streak
   if ((me.streak || 0) >= 3) {
@@ -1306,6 +1307,14 @@ applyRankColor(ppRankEl, data.rankColor);
     }
   }
   setAvatar(ppAvatarImgEl, ppAvatarInitialsEl, avatarForPopup, data.username);
+
+  if (profilePopupEl) {
+    profilePopupEl.classList.remove("vz-rank-low", "vz-rank-mid", "vz-rank-high");
+    for (let i = 1; i <= 10; i++) profilePopupEl.classList.remove("vz-rank-" + i);
+    const aura = getAuraRankFromLevel(data.rankLevel);
+    if (aura) profilePopupEl.classList.add("vz-rank-" + aura);
+    profilePopupEl.classList.toggle("vz-player-supporter", !!data.supporter);
+  }
 
   const isSelf = data.username === state.username;
   if (ppEmailBlockEl) {

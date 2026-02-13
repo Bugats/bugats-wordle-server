@@ -692,6 +692,118 @@ input:focus-visible {
   align-items: center;
   justify-content: center;
 }
+.vz-avatar-circle::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    var(--aura-c1, rgba(0, 188, 212, 0.9)),
+    var(--aura-c2, rgba(255, 0, 85, 0.85)),
+    var(--aura-c1, rgba(0, 188, 212, 0.9))
+  );
+  -webkit-mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 4px),
+    #000 calc(100% - 3px)
+  );
+  mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 4px),
+    #000 calc(100% - 3px)
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+@keyframes vzAuraSpin {
+  to { transform: rotate(360deg); }
+}
+
+.vz-player-card.vz-rank-1 .vz-avatar-circle,
+#player-profile-popup.vz-rank-1 .vz-avatar-circle {
+  --aura-c1: rgba(0, 200, 255, 0.95);
+  --aura-c2: rgba(120, 220, 255, 0.8);
+}
+.vz-player-card.vz-rank-2 .vz-avatar-circle,
+#player-profile-popup.vz-rank-2 .vz-avatar-circle {
+  --aura-c1: rgba(0, 230, 118, 0.95);
+  --aura-c2: rgba(120, 255, 180, 0.8);
+}
+.vz-player-card.vz-rank-3 .vz-avatar-circle,
+#player-profile-popup.vz-rank-3 .vz-avatar-circle {
+  --aura-c1: rgba(118, 255, 3, 0.95);
+  --aura-c2: rgba(210, 255, 120, 0.85);
+}
+.vz-player-card.vz-rank-4 .vz-avatar-circle,
+#player-profile-popup.vz-rank-4 .vz-avatar-circle {
+  --aura-c1: rgba(255, 235, 59, 0.95);
+  --aura-c2: rgba(255, 200, 80, 0.85);
+}
+.vz-player-card.vz-rank-5 .vz-avatar-circle,
+#player-profile-popup.vz-rank-5 .vz-avatar-circle {
+  --aura-c1: rgba(255, 152, 0, 0.98);
+  --aura-c2: rgba(255, 100, 0, 0.85);
+}
+.vz-player-card.vz-rank-6 .vz-avatar-circle,
+#player-profile-popup.vz-rank-6 .vz-avatar-circle {
+  --aura-c1: rgba(255, 23, 68, 0.95);
+  --aura-c2: rgba(255, 100, 160, 0.85);
+}
+.vz-player-card.vz-rank-7 .vz-avatar-circle,
+#player-profile-popup.vz-rank-7 .vz-avatar-circle {
+  --aura-c1: rgba(255, 64, 129, 0.95);
+  --aura-c2: rgba(255, 140, 210, 0.85);
+}
+.vz-player-card.vz-rank-8 .vz-avatar-circle,
+#player-profile-popup.vz-rank-8 .vz-avatar-circle {
+  --aura-c1: rgba(156, 39, 176, 0.98);
+  --aura-c2: rgba(210, 120, 255, 0.85);
+}
+.vz-player-card.vz-rank-9 .vz-avatar-circle,
+#player-profile-popup.vz-rank-9 .vz-avatar-circle {
+  --aura-c1: rgba(63, 81, 181, 0.98);
+  --aura-c2: rgba(130, 160, 255, 0.85);
+}
+.vz-player-card.vz-rank-10 .vz-avatar-circle,
+#player-profile-popup.vz-rank-10 .vz-avatar-circle {
+  --aura-c1: rgba(255, 215, 0, 1);
+  --aura-c2: rgba(255, 120, 0, 0.9);
+}
+.vz-player-card.vz-rank-1 .vz-avatar-circle::after,
+.vz-player-card.vz-rank-2 .vz-avatar-circle::after,
+.vz-player-card.vz-rank-3 .vz-avatar-circle::after,
+.vz-player-card.vz-rank-4 .vz-avatar-circle::after,
+.vz-player-card.vz-rank-5 .vz-avatar-circle::after,
+.vz-player-card.vz-rank-6 .vz-avatar-circle::after,
+.vz-player-card.vz-rank-7 .vz-avatar-circle::after,
+.vz-player-card.vz-rank-8 .vz-avatar-circle::after,
+.vz-player-card.vz-rank-9 .vz-avatar-circle::after,
+.vz-player-card.vz-rank-10 .vz-avatar-circle::after,
+#player-profile-popup.vz-rank-1 .vz-avatar-circle::after,
+#player-profile-popup.vz-rank-2 .vz-avatar-circle::after,
+#player-profile-popup.vz-rank-3 .vz-avatar-circle::after,
+#player-profile-popup.vz-rank-4 .vz-avatar-circle::after,
+#player-profile-popup.vz-rank-5 .vz-avatar-circle::after,
+#player-profile-popup.vz-rank-6 .vz-avatar-circle::after,
+#player-profile-popup.vz-rank-7 .vz-avatar-circle::after,
+#player-profile-popup.vz-rank-8 .vz-avatar-circle::after,
+#player-profile-popup.vz-rank-9 .vz-avatar-circle::after,
+#player-profile-popup.vz-rank-10 .vz-avatar-circle::after {
+  opacity: 0.85;
+}
+.vz-player-card.vz-rank-7 .vz-avatar-circle::after,
+.vz-player-card.vz-rank-8 .vz-avatar-circle::after,
+.vz-player-card.vz-rank-9 .vz-avatar-circle::after,
+.vz-player-card.vz-rank-10 .vz-avatar-circle::after,
+#player-profile-popup.vz-rank-7 .vz-avatar-circle::after,
+#player-profile-popup.vz-rank-8 .vz-avatar-circle::after,
+#player-profile-popup.vz-rank-9 .vz-avatar-circle::after,
+#player-profile-popup.vz-rank-10 .vz-avatar-circle::after {
+  animation: vzAuraSpin 6s linear infinite;
+}
 
 .vz-avatar-popup {
   width: 64px;
@@ -2798,7 +2910,7 @@ input:focus-visible {
   .tile.shake,
   #grid.win-glow,
   .vz-tile-win-bounce,
-  .vz-player-card.vz-player-self .vz-avatar-circle::after,
+  .vz-avatar-circle::after,
   .vz-logo-title,
   .tile.correct,
   .tile.present,
