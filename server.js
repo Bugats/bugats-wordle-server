@@ -534,6 +534,7 @@ const CHAT_CLEANUP_INTERVAL_MS = (() => {
 const DM_MAX_LEN = 400;
 const DM_RATE_MS = 650;
 const DM_DUP_WINDOW_MS = 5000;
+const DM_TYPING_RATE_MS = 800;
 const DM_THREAD_MAX = 200; // max ziņas vienā sarunā (katram userim)
 // DM storage mode: "client" (default) = netiek glabāts serverī
 const DM_STORE_MODE = String(process.env.DM_STORE_MODE || "client")
@@ -3025,6 +3026,16 @@ function broadcastOnlineList(force = false) {
   io.emit("onlineList", { count: users.length, users });
 }
 setInterval(() => broadcastOnlineList(false), 30 * 1000);
+
+function socketRateLimited(socket, key, minMs) {
+  if (!socket || !minMs || minMs <= 0) return false;
+  const now = Date.now();
+  const store = socket.data._rate || (socket.data._rate = {});
+  const last = store[key] || 0;
+  if (now - last < minMs) return true;
+  store[key] = now;
+  return false;
+}
 
 // ======== LEADERBOARD (TOP10) ========
 function computeTop10Leaderboard() {
@@ -5812,11 +5823,13 @@ io.on("connection", (socket) => {
   }
 
   socket.on("leaderboard:top10", () => {
+    if (socketRateLimited(socket, "lbTop10", 2000)) return;
     socket.emit("leaderboard:update", computeTop10Leaderboard());
   });
 
   // ========== ČATS ==========
   socket.on("chatMessage", (text) => {
+    if (socketRateLimited(socket, "chatMessage", CHAT_RATE_MS)) return;
     if (typeof text !== "string") return;
     let msg = text.trim();
     if (!msg) return;
@@ -6014,6 +6027,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("dm.typing", (payload) => {
+    if (socketRateLimited(socket, "dmTyping", DM_TYPING_RATE_MS)) return;
     const sender = USERS[user.username] || user;
     const toRaw =
       typeof payload === "string" ? payload : payload?.with ?? payload?.to ?? payload?.username ?? "";
