@@ -35,7 +35,7 @@
     <link rel="dns-prefetch" href="//pagead2.googlesyndication.com" />
     <link rel="preconnect" href="https://pagead2.googlesyndication.com" crossorigin />
 
-   <link rel="stylesheet" href="style.css?v=2026-03-13" />
+   <link rel="stylesheet" href="style.css?v=2026-03-16" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -115,6 +115,7 @@
           <p id="game-message" class="vz-game-message" role="status" aria-live="polite" aria-atomic="true"></p>
 
           <div id="grid" class="vz-grid">
+  <div id="vz-phaser-fx" aria-hidden="true"></div>
   <div id="vz-grid-fx" aria-hidden="true"></div>
 </div>
 
@@ -561,6 +562,16 @@
     <!-- Socket.IO -->
     <script defer src="https://bugats-wordle-server.onrender.com/socket.io/socket.io.js"></script>
 
+    <!-- Phaser 3 (grid FX background) -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
+    <script>
+      if (!window.Phaser) {
+        var p = document.createElement("script");
+        p.src = "https://unpkg.com/phaser@3/dist/phaser.min.js";
+        document.head.appendChild(p);
+      }
+    </script>
+
     <!-- PIXI (grid FX overlay) -->
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.js"></script>
 <script>
@@ -573,6 +584,9 @@
 
     <!-- Galvenais JS -->
     <script defer src="game.js?v=2026-03-14"></script>
+
+    <!-- PHASER GRID FX (backdrop) -->
+    <script defer src="phaser-fx.js?v=2026-03-16"></script>
 
     <!-- GRID FX (jauns fails, neķeram game.js) -->
     <script defer src="grid-fx.js?v=2026-03-14"></script>

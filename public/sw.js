@@ -1,4 +1,4 @@
-const CACHE_VERSION = "vz-pwa-v5";
+const CACHE_VERSION = "vz-pwa-v6";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -6,6 +6,7 @@ const CORE_ASSETS = [
   "./style.css",
   "./auth.js",
   "./game.js",
+  "./phaser-fx.js",
   "./grid-fx.js",
   "./manifest.json",
   "./icon.svg",
