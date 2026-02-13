@@ -845,6 +845,31 @@ input:focus-visible {
   padding: 3px 6px;
 }
 
+/* TOP 3 spotlight */
+.vz-lb-item.vz-lb-top {
+  padding: 4px 8px;
+  border-radius: 10px;
+}
+.vz-lb-item.vz-lb-top .vz-lb-avatar {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.55);
+}
+.vz-lb-item.vz-lb-top .vz-lb-avatar-initials { font-size: 12px; }
+.vz-lb-item.vz-lb-top-1 .vz-lb-avatar {
+  border-color: rgba(255, 215, 64, 0.95);
+  box-shadow: 0 0 12px rgba(255, 215, 64, 0.8), 0 0 18px rgba(0, 0, 0, 0.7);
+}
+.vz-lb-item.vz-lb-top-2 .vz-lb-avatar {
+  border-color: rgba(210, 210, 210, 0.95);
+  box-shadow: 0 0 12px rgba(210, 210, 210, 0.65), 0 0 18px rgba(0, 0, 0, 0.7);
+}
+.vz-lb-item.vz-lb-top-3 .vz-lb-avatar {
+  border-color: rgba(255, 183, 77, 0.95);
+  box-shadow: 0 0 12px rgba(255, 183, 77, 0.7), 0 0 18px rgba(0, 0, 0, 0.7);
+}
+
 /* Ja game.js jau ieliek <span class="vz-lb-medal">…</span>, izslēdzam auto-ikonu */
 @supports selector(.a:has(.b)) {
   .vz-lb-list .vz-lb-item:has(.vz-lb-medal)::before { content: none; display: none; }

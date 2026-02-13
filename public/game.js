@@ -2653,8 +2653,11 @@ async function refreshLeaderboard() {
     if (!lbListEl) return;
     lbListEl.innerHTML = "";
 
-    list.forEach((item) => {
+    list.forEach((item, idx) => {
       const li = createEl("li", "vz-lb-item");
+      if (idx < 3) {
+        li.classList.add("vz-lb-top", `vz-lb-top-${idx + 1}`);
+      }
 
       const placeSpan = createEl("span", "vz-lb-place");
       placeSpan.textContent = item.place + ".";
@@ -2705,6 +2708,9 @@ function renderWeekly(payload) {
   } else {
     list.forEach((item, idx) => {
       const li = createEl("li", "vz-lb-item");
+      if (idx < 3) {
+        li.classList.add("vz-lb-top", `vz-lb-top-${idx + 1}`);
+      }
 
       const placeSpan = createEl("span", "vz-lb-place");
       placeSpan.textContent = String(idx + 1) + ".";
