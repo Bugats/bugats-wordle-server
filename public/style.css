@@ -2944,6 +2944,7 @@ input:focus-visible {
     animation: none !important;
     transition: none !important;
   }
+  #vz-logo-fx { display: none !important; }
 }
 /* ================== DUEL RESULT: EPIC OVERLAY ================== */
 #duel-result-overlay {
@@ -3136,6 +3137,24 @@ input:focus-visible {
 .vz-logo-main{
   margin: 18px auto 10px;
   padding: 10px 0 16px;
+  position: relative;
+  z-index: 1;
+}
+
+#vz-logo-fx {
+  position: absolute;
+  inset: -8px 0 -10px;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  mix-blend-mode: screen;
+  opacity: 0.9;
+}
+#vz-logo-fx canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
 }
 
 .vz-logo-title{
@@ -3163,6 +3182,7 @@ input:focus-visible {
   display: inline-block;
   transform: skewX(-10deg);
   animation: vzLogoNeon 3s ease-in-out infinite;
+  z-index: 2;
 }
 
 .vz-logo-title::after{
@@ -3197,6 +3217,7 @@ input:focus-visible {
   );
   box-shadow: 0 0 12px rgba(255, 0, 70, 0.55), 0 0 18px rgba(5, 10, 30, 0.9);
   opacity: 0.95;
+  z-index: 1;
 }
 
 .vz-logo-sub{
@@ -3206,6 +3227,8 @@ input:focus-visible {
   letter-spacing: 0.22em;
   color: rgba(180, 200, 255, 0.78);
   text-shadow: 0 0 10px rgba(255, 0, 70, 0.45), 0 0 8px rgba(0,0,0,0.9);
+  position: relative;
+  z-index: 2;
 }
 
 @keyframes vzLogoNeon {
