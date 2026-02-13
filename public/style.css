@@ -2660,6 +2660,14 @@ input:focus-visible {
   filter: brightness(1.08);
 }
 
+.vz-share-btn.vz-share-btn-discord {
+  background: linear-gradient(90deg, #5865f2, #7b83ff);
+  box-shadow: 0 0 12px rgba(88, 101, 242, 0.6), 0 0 18px rgba(0, 0, 0, 0.85);
+}
+.vz-share-btn.vz-share-btn-discord:hover {
+  filter: brightness(1.08);
+}
+
 .vz-share-note { margin-top: 3px; font-size: 10px; color: #bbbbbb; opacity: 0.9; }
 
 /* ===========================

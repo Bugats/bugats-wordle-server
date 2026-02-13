@@ -355,8 +355,10 @@ const buyTokenBtn = $("#buy-token-btn");
 const mobileFsBtn = $("#mobile-fullscreen-btn");
 const shareBtn = $("#share-btn");
 const shareWhatsappBtn = $("#share-whatsapp-btn");
+const shareDiscordBtn = $("#share-discord-btn");
 const shareResultBtn = $("#share-result-btn");
 const shareResultWhatsappBtn = $("#share-result-wa-btn");
+const shareResultDiscordBtn = $("#share-result-discord-btn");
 const shareResultNote = $("#share-result-note");
 
 // SEZONA UI
@@ -5647,6 +5649,18 @@ function openWhatsappShare(text) {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
+async function openDiscordShare(text) {
+  const payload = String(text || "").trim();
+  if (!payload) return;
+  try {
+    await navigator.clipboard.writeText(payload);
+    appendSystemMessage("✅ Teksts nokopēts. Atver Discord un ielīmē.");
+  } catch {
+    prompt("Nokopē tekstu Discord:", payload);
+  }
+  window.open("https://discord.com/channels/@me", "_blank", "noopener,noreferrer");
+}
+
 async function handleShare() {
   const url = window.location.href;
   const text = "VĀRDU ZONA – nāc uzspēlē latviešu Word battle!";
@@ -5673,10 +5687,18 @@ function handleShareWhatsapp() {
   openWhatsappShare(`${text} ${url}`);
 }
 
+function handleShareDiscord() {
+  const url = window.location.href;
+  const text = "VĀRDU ZONA – nāc uzspēlē latviešu Word battle!";
+  openDiscordShare(`${text} ${url}`);
+}
+
 function setShareResultVisible(on) {
   if (shareResultBtn) shareResultBtn.style.display = on ? "block" : "none";
   if (shareResultWhatsappBtn)
     shareResultWhatsappBtn.style.display = on ? "block" : "none";
+  if (shareResultDiscordBtn)
+    shareResultDiscordBtn.style.display = on ? "block" : "none";
   if (shareResultNote) shareResultNote.style.display = on ? "block" : "none";
 }
 
@@ -5862,6 +5884,13 @@ function handleShareResultWhatsapp() {
   openWhatsappShare(text);
 }
 
+function handleShareResultDiscord() {
+  const data = state.lastShareResult;
+  if (!data) return;
+  const text = buildShareText(data);
+  openDiscordShare(text);
+}
+
 // ==================== RADIO INIT (vienreiz) ====================
 function initRadioUi() {
   const radioAudio = document.getElementById("vz-radio");
@@ -6017,9 +6046,12 @@ async function initGame() {
 
   if (shareBtn) shareBtn.addEventListener("click", handleShare);
   if (shareWhatsappBtn) shareWhatsappBtn.addEventListener("click", handleShareWhatsapp);
+  if (shareDiscordBtn) shareDiscordBtn.addEventListener("click", handleShareDiscord);
   if (shareResultBtn) shareResultBtn.addEventListener("click", handleShareResult);
   if (shareResultWhatsappBtn)
     shareResultWhatsappBtn.addEventListener("click", handleShareResultWhatsapp);
+  if (shareResultDiscordBtn)
+    shareResultDiscordBtn.addEventListener("click", handleShareResultDiscord);
 
   if (friendAddBtnEl && friendAddInputEl) {
     friendAddBtnEl.addEventListener("click", () => {
