@@ -605,6 +605,7 @@ function playControlNote(kind) {
 
   const key = kind === "enter" ? "C" : "G";
   playKeyNote(key, options);
+  if (kind === "enter") pulseSoundFx("enter");
 }
 
 // ==================== API HELPERI ====================
@@ -635,8 +636,35 @@ function playSound(audioEl) {
   if (state.soundOn === false) return;
   try {
     audioEl.currentTime = 0;
-    audioEl.play().catch(() => {});
+    const playPromise = audioEl.play();
+    pulseSoundFx(audioEl.id || "");
+    if (playPromise && typeof playPromise.catch === "function") {
+      playPromise.catch(() => {});
+    }
   } catch {}
+}
+
+function pulseSoundFx(kind, pos) {
+  if (state.soundOn === false) return;
+  const fx = window.vzPhaserFx;
+  if (!fx || typeof fx.pulseSound !== "function") return;
+  try {
+    fx.pulseSound(kind, pos || null);
+  } catch {}
+}
+
+function fxPointFromTile(tile) {
+  if (!gridEl || !tile || typeof tile.getBoundingClientRect !== "function") return null;
+  try {
+    const gridRect = gridEl.getBoundingClientRect();
+    const tileRect = tile.getBoundingClientRect();
+    return {
+      x: tileRect.left - gridRect.left + tileRect.width / 2,
+      y: tileRect.top - gridRect.top + tileRect.height / 2,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function applySoundState() {
@@ -2208,6 +2236,7 @@ if (state.currentCol >= state.cols) return;
   state.currentCol++;
   skipHintLockedForward();
   playKeyNote(ch);
+  pulseSoundFx("type", fxPointFromTile(tile));
   pulseGridGlow();
 }
 
@@ -2230,6 +2259,7 @@ function deleteLetter() {
   tile.classList.remove("correct", "present", "absent", "shake", "flip");
 
   playControlNote("backspace");
+  pulseSoundFx("backspace", fxPointFromTile(tile));
   pulseGridGlow();
 }
 
