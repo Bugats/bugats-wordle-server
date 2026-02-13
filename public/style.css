@@ -2585,64 +2585,6 @@ input:focus-visible {
 }
 
 /* ===========================
-   LOGO
-   =========================== */
-
-.vz-logo-main {
-  text-align: center;
-  margin: 22px auto 10px;
-  position: relative;
-  padding: 8px 0 18px;
-}
-
-.vz-logo-title {
-  display: inline-block;
-  font-weight: 900;
-  font-size: clamp(3.2rem, 7vw, 5.2rem);
-  letter-spacing: 0.42em;
-  text-transform: uppercase;
-  color: #fdfdfd;
-  -webkit-text-stroke: 1px rgba(0, 0, 0, 0.9);
-  text-shadow: 0 0 4px rgba(0, 0, 0, 1), 0 0 16px rgba(255, 255, 255, 0.7), 0 0 26px rgba(139, 0, 0, 0.85);
-  animation: vzLogoPulse 3.2s ease-in-out infinite;
-}
-
-.vz-logo-main::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 0;
-  width: min(380px, 80vw);
-  height: 3px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #ffffff 0%, #b71c1c 50%, #ffffff 100%);
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.9), 0 0 14px rgba(183, 28, 28, 0.9);
-}
-
-.vz-logo-sub {
-  display: block;
-  margin-top: 6px;
-  font-size: 0.9rem;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-  color: rgba(240, 240, 240, 0.95);
-  text-shadow: 0 0 6px rgba(0, 0, 0, 0.9), 0 0 10px rgba(120, 144, 156, 0.7);
-}
-
-@keyframes vzLogoPulse {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-1px); }
-}
-
-@media (max-width: 480px) {
-  .vz-logo-title { font-size: clamp(2.2rem, 8vw, 3rem); letter-spacing: 0.3em; }
-  .vz-logo-main { margin: 16px auto 8px; }
-  .vz-logo-main::after { width: 75%; }
-  .vz-logo-sub { font-size: 0.8rem; letter-spacing: 0.22em; }
-}
-
-/* ===========================
    DUELIS – OVERLAY
    =========================== */
 
@@ -3140,6 +3082,7 @@ input:focus-visible {
   padding: 10px 0 16px;
   position: relative;
   z-index: 1;
+  text-align: center;
 }
 
 #vz-logo-fx {
@@ -3179,6 +3122,7 @@ input:focus-visible {
   font-family: "Cinzel", "Times New Roman", serif;
   font-weight: 700;
   font-style: italic;
+  font-size: clamp(3.2rem, 7vw, 5.2rem);
   letter-spacing: 0.22em;
   text-transform: uppercase;
   line-height: 1.05;
@@ -3239,10 +3183,13 @@ input:focus-visible {
 }
 
 .vz-logo-sub{
+  display: block;
   margin-top: 8px;
+  font-size: 0.9rem;
   font-weight: 600;
   font-style: italic;
   letter-spacing: 0.22em;
+  text-transform: uppercase;
   color: rgba(180, 200, 255, 0.78);
   text-shadow: 0 0 10px rgba(255, 0, 70, 0.45), 0 0 8px rgba(0,0,0,0.9);
   position: relative;
@@ -3276,8 +3223,10 @@ input:focus-visible {
 }
  
 @media (max-width: 480px){
-  .vz-logo-title{ letter-spacing: 0.18em; }
-  .vz-logo-sub{ letter-spacing: 0.18em; }
+  .vz-logo-main{ margin: 16px auto 8px; }
+  .vz-logo-main::after{ width: 75%; }
+  .vz-logo-title{ font-size: clamp(2.2rem, 8vw, 3rem); letter-spacing: 0.18em; }
+  .vz-logo-sub{ font-size: 0.8rem; letter-spacing: 0.18em; }
 }
 /* ===== MOBILE/FULLSCREEN: nekas netraucē režģim + klaviatūrai ===== */
  
