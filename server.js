@@ -38,7 +38,7 @@ const SEASONS_FILE =
 const STATIC_DIR = process.env.STATIC_DIR || path.join(__dirname, "public");
 const STATIC_INDEX = path.join(STATIC_DIR, "index.html");
 
-// ====== Supabase (avatars/storage) ======
+// ====== Supabase (storage + optional DB) ======
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").trim();
 const SUPABASE_SERVICE_ROLE_KEY = String(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ""
@@ -47,10 +47,14 @@ const SUPABASE_STORAGE_BUCKET = String(
   process.env.SUPABASE_STORAGE_BUCKET || "avatars"
 ).trim();
 const SUPABASE_STORAGE_PUBLIC =
-  String(process.env.SUPABASE_STORAGE_PUBLIC ?? "1") === "1";
+  String(process.env.SUPABASE_STORAGE_PUBLIC ?? "0") === "1";
 const SUPABASE_AVATAR_CACHE_CONTROL = String(
   process.env.SUPABASE_AVATAR_CACHE_CONTROL || "3600"
 ).trim();
+const SUPABASE_AVATAR_SIGNED_TTL = (() => {
+  const v = parseInt(process.env.SUPABASE_AVATAR_SIGNED_TTL || "3600", 10);
+  return Number.isFinite(v) && v >= 60 && v <= 86400 ? v : 3600;
+})();
 const SUPABASE_ENABLED = !!(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
 const supabase = SUPABASE_ENABLED
   ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -292,16 +296,52 @@ function getSupabasePublicUrl(path) {
     return null;
   }
 }
+const avatarSignedCache = new Map(); // path -> { url, expiresAt }
+async function getSupabaseSignedUrl(path) {
+  if (!SUPABASE_ENABLED || !supabase || !path) return { url: null, expiresAt: 0 };
+  if (SUPABASE_STORAGE_PUBLIC) {
+    return { url: getSupabasePublicUrl(path), expiresAt: 0 };
+  }
+  const cached = avatarSignedCache.get(path);
+  if (cached && cached.url && cached.expiresAt - Date.now() > 60 * 1000) {
+    return cached;
+  }
+  try {
+    const { data, error } = await supabase.storage
+      .from(SUPABASE_STORAGE_BUCKET)
+      .createSignedUrl(path, SUPABASE_AVATAR_SIGNED_TTL);
+    if (error || !data?.signedUrl) return { url: null, expiresAt: 0 };
+    const expiresAt = Date.now() + SUPABASE_AVATAR_SIGNED_TTL * 1000;
+    const entry = { url: data.signedUrl, expiresAt };
+    avatarSignedCache.set(path, entry);
+    return entry;
+  } catch {
+    return { url: null, expiresAt: 0 };
+  }
+}
 function resolveAvatarUrl(user) {
   if (!user) return null;
   if (SUPABASE_ENABLED && user.avatarPath) {
-    const url = getSupabasePublicUrl(user.avatarPath);
-    if (url) return url;
+    if (SUPABASE_STORAGE_PUBLIC) return getSupabasePublicUrl(user.avatarPath);
+    return null;
   }
   if (typeof user.avatarUrl === "string" && user.avatarUrl.trim()) {
     return user.avatarUrl.trim();
   }
   return null;
+}
+async function resolveAvatarUrlAsync(user) {
+  if (!user) return { url: null, expiresAt: 0 };
+  if (SUPABASE_ENABLED && user.avatarPath) {
+    if (SUPABASE_STORAGE_PUBLIC) {
+      return { url: getSupabasePublicUrl(user.avatarPath), expiresAt: 0 };
+    }
+    return getSupabaseSignedUrl(user.avatarPath);
+  }
+  if (typeof user.avatarUrl === "string" && user.avatarUrl.trim()) {
+    return { url: user.avatarUrl.trim(), expiresAt: 0 };
+  }
+  return { url: null, expiresAt: 0 };
 }
 function clampInt(n, lo, hi, fallback = lo) {
   const x = Math.floor(Number(n));
@@ -475,10 +515,19 @@ const CHAT_DUP_WINDOW_MS = 4000;
 const CHAT_STORE_MODE = String(process.env.CHAT_STORE_MODE || "none")
   .trim()
   .toLowerCase();
-const CHAT_STORE_ON_SUPABASE = CHAT_STORE_MODE === "supabase";
+const CHAT_STORE_ON_SUPABASE = CHAT_STORE_MODE === "supabase" && SUPABASE_ENABLED;
+const CHAT_STORE_TABLE = String(process.env.CHAT_STORE_TABLE || "chat_messages").trim();
 const CHAT_HISTORY_LIMIT = (() => {
   const v = parseInt(process.env.CHAT_HISTORY_LIMIT || "120", 10);
   return Number.isFinite(v) && v >= 0 && v <= 500 ? v : 120;
+})();
+const CHAT_RETENTION_DAYS = (() => {
+  const v = parseInt(process.env.CHAT_RETENTION_DAYS || "30", 10);
+  return Number.isFinite(v) && v >= 1 && v <= 3650 ? v : 30;
+})();
+const CHAT_CLEANUP_INTERVAL_MS = (() => {
+  const v = parseInt(process.env.CHAT_CLEANUP_INTERVAL_MS || "21600000", 10); // 6h
+  return Number.isFinite(v) && v >= 60000 ? v : 21600000;
 })();
 
 // ======== PRIVĀTAIS ČATS (DM) ========
@@ -500,6 +549,29 @@ const REPORTS_MAX = (() => {
 const REPORT_RETENTION_DAYS = (() => {
   const v = parseInt(process.env.REPORT_RETENTION_DAYS || "180", 10);
   return Number.isFinite(v) && v >= 7 && v <= 3650 ? v : 180;
+})();
+
+// ======== Storage mode (users/reports) ========
+const USERS_STORE_MODE = String(process.env.USERS_STORE_MODE || "file")
+  .trim()
+  .toLowerCase();
+const USERS_STORE_ON_SUPABASE =
+  USERS_STORE_MODE === "supabase" && SUPABASE_ENABLED;
+const USERS_STORE_TABLE = String(process.env.USERS_STORE_TABLE || "vz_users").trim();
+const USERS_STORE_BATCH = (() => {
+  const v = parseInt(process.env.USERS_STORE_BATCH || "500", 10);
+  return Number.isFinite(v) && v >= 50 && v <= 2000 ? v : 500;
+})();
+
+const REPORTS_STORE_MODE = String(process.env.REPORTS_STORE_MODE || "file")
+  .trim()
+  .toLowerCase();
+const REPORTS_STORE_ON_SUPABASE =
+  REPORTS_STORE_MODE === "supabase" && SUPABASE_ENABLED;
+const REPORTS_STORE_TABLE = String(process.env.REPORTS_STORE_TABLE || "vz_reports").trim();
+const REPORTS_STORE_BATCH = (() => {
+  const v = parseInt(process.env.REPORTS_STORE_BATCH || "500", 10);
+  return Number.isFinite(v) && v >= 50 && v <= 2000 ? v : 500;
 })();
 
 // ======== GUESS rate-limit (server-side) ========
@@ -531,12 +603,17 @@ function saveJsonAtomic(file, data) {
   fs.renameSync(tmp, file);
 }
 
-function loadUsers() {
-  if (!fs.existsSync(USERS_FILE)) return {};
+function loadUsers(listOverride) {
   try {
-    const raw = fs.readFileSync(USERS_FILE, "utf8");
-    if (!raw.trim()) return {};
-    const arr = JSON.parse(raw);
+    let arr = null;
+    if (typeof listOverride !== "undefined") {
+      arr = listOverride;
+    } else {
+      if (!fs.existsSync(USERS_FILE)) return {};
+      const raw = fs.readFileSync(USERS_FILE, "utf8");
+      if (!raw.trim()) return {};
+      arr = JSON.parse(raw);
+    }
 
     const list = Array.isArray(arr) ? arr : Object.values(arr || {});
     const out = {};
@@ -544,6 +621,10 @@ function loadUsers() {
 
     for (const u of list) {
       if (!u || !u.username) continue;
+
+      if (!DM_STORE_ON_SERVER && u.dm) {
+        delete u.dm;
+      }
 
       if (typeof u.isBanned !== "boolean") u.isBanned = false;
       if (typeof u.mutedUntil !== "number") u.mutedUntil = 0;
@@ -585,7 +666,7 @@ function loadUsers() {
       if (typeof u.avatarUrl !== "string") u.avatarUrl = null;
       if (typeof u.avatarPath !== "string") u.avatarPath = "";
       if (typeof u.avatarUpdatedAt !== "number") u.avatarUpdatedAt = 0;
-      if (SUPABASE_ENABLED && u.avatarPath && !u.avatarUrl) {
+      if (SUPABASE_ENABLED && u.avatarPath && SUPABASE_STORAGE_PUBLIC && !u.avatarUrl) {
         const pub = getSupabasePublicUrl(u.avatarPath);
         if (pub) u.avatarUrl = pub;
       }
@@ -644,20 +725,19 @@ function loadUsers() {
       if (typeof u.lastChatText !== "string") u.lastChatText = "";
       if (typeof u.lastChatTextAt !== "number") u.lastChatTextAt = 0;
 
-      // Privātais čats (DM) — only if server-side storage enabled
+      // Privātais čats (DM) — inbox users.json
       if (DM_STORE_ON_SERVER) {
         if (!u.dm || typeof u.dm !== "object") u.dm = {};
         if (!u.dm.threads || typeof u.dm.threads !== "object") u.dm.threads = {};
         if (!u.dm.unread || typeof u.dm.unread !== "object") u.dm.unread = {};
         if (!u.dm.lastRead || typeof u.dm.lastRead !== "object") u.dm.lastRead = {};
+        // DM anti-spam state
+        if (typeof u.lastDmAt !== "number") u.lastDmAt = 0;
+        if (typeof u.lastDmText !== "string") u.lastDmText = "";
+        if (typeof u.lastDmTextAt !== "number") u.lastDmTextAt = 0;
       } else if (u.dm) {
-        // drop stored DM payload to avoid loading big history
         delete u.dm;
       }
-      // DM anti-spam state
-      if (typeof u.lastDmAt !== "number") u.lastDmAt = 0;
-      if (typeof u.lastDmText !== "string") u.lastDmText = "";
-      if (typeof u.lastDmTextAt !== "number") u.lastDmTextAt = 0;
 
       // Bloķētie lietotāji (case-insensitive map)
       if (!u.blocks || typeof u.blocks !== "object" || Array.isArray(u.blocks)) {
@@ -717,54 +797,69 @@ function loadUsers() {
   }
 }
 
-function saveUsers(users) {
-  const arr = Object.values(users).map((u) => {
-    if (!u || typeof u !== "object") return u;
-    let out = u;
-    if (!DM_STORE_ON_SERVER && u.dm) {
-      out = { ...u };
-      delete out.dm;
-    }
-    if (
-      SUPABASE_ENABLED &&
-      out.avatarPath &&
+let usersSavePending = null;
+let usersSaveTimer = null;
+let usersSaveInFlight = false;
+let usersStoreErrorLogged = false;
+
+function sanitizeUserForStorage(user) {
+  if (!user || typeof user !== "object") return null;
+  let out = user;
+  if (!DM_STORE_ON_SERVER && out.dm) {
+    out = { ...out };
+    delete out.dm;
+  }
+  if (SUPABASE_ENABLED && out.avatarPath) {
+    if (!SUPABASE_STORAGE_PUBLIC && out.avatarUrl) {
+      out = { ...out, avatarUrl: null };
+    } else if (
       typeof out.avatarUrl === "string" &&
       out.avatarUrl.startsWith("data:image/")
     ) {
-      if (out === u) out = { ...u };
-      out.avatarUrl = null;
+      out = { ...out, avatarUrl: null };
     }
-    return out;
-  });
-  saveJsonAtomic(USERS_FILE, arr);
+  }
+  return out;
+}
+
+function buildUsersStorageList(users) {
+  const list = [];
+  for (const u of Object.values(users || {})) {
+    const out = sanitizeUserForStorage(u);
+    if (out && out.username) list.push(out);
+  }
+  return list;
 }
 
 function pruneUsersForMemory(users) {
-  let changed = false;
-  if (!DM_STORE_ON_SERVER) return false;
   if (!users || typeof users !== "object") return false;
-  for (const key in users) {
-    if (!Object.prototype.hasOwnProperty.call(users, key)) continue;
-    const u = users[key];
+  let changed = false;
+  for (const u of Object.values(users)) {
     if (!u || typeof u !== "object") continue;
-    const dm = u.dm;
-    const threads = dm?.threads;
-    if (!threads || typeof threads !== "object") continue;
+    if (SUPABASE_ENABLED && u.avatarPath && !SUPABASE_STORAGE_PUBLIC && u.avatarUrl) {
+      u.avatarUrl = null;
+      changed = true;
+    }
+    if (
+      typeof u.avatarUrl === "string" &&
+      u.avatarUrl.startsWith("data:image/") &&
+      u.avatarUrl.length > AVATAR_INLINE_MAX_CHARS
+    ) {
+      u.avatarUrl = null;
+      changed = true;
+    }
+    if (!DM_STORE_ON_SERVER) continue;
+    const threads = u.dm?.threads && typeof u.dm.threads === "object" ? u.dm.threads : null;
+    if (!threads) continue;
     for (const arr of Object.values(threads)) {
       if (!Array.isArray(arr)) continue;
       for (const msg of arr) {
-        if (!msg || typeof msg !== "object") continue;
-        const meta = msg.meta;
+        const meta = msg?.meta;
         if (!meta || typeof meta !== "object") continue;
-        if (Object.prototype.hasOwnProperty.call(meta, "avatarUrl")) {
-          const compacted = compactAvatarUrl(meta.avatarUrl, DM_META_AVATAR_MAX_CHARS);
-          if (compacted) {
-            if (meta.avatarUrl !== compacted) {
-              meta.avatarUrl = compacted;
-              changed = true;
-            }
-          } else {
-            delete meta.avatarUrl;
+        const av = meta.avatarUrl;
+        if (typeof av === "string" && av.startsWith("data:image/")) {
+          if (!DM_META_AVATAR_MAX_CHARS || av.length > DM_META_AVATAR_MAX_CHARS) {
+            meta.avatarUrl = null;
             changed = true;
           }
         }
@@ -774,24 +869,96 @@ function pruneUsersForMemory(users) {
   return changed;
 }
 
-let USERS = loadUsers();
-if (!DM_STORE_ON_SERVER) {
+async function loadUsersFromSupabase() {
+  if (!USERS_STORE_ON_SUPABASE || !supabase) return null;
   try {
-    saveUsers(USERS);
-    console.log("DM storage mode=client: users.json saved without DM history.");
+    const { data, error } = await supabase
+      .from(USERS_STORE_TABLE)
+      .select("username,data");
+    if (error) {
+      if (!usersStoreErrorLogged) {
+        console.error("Supabase users load error:", error);
+        usersStoreErrorLogged = true;
+      }
+      return null;
+    }
+    const list = Array.isArray(data)
+      ? data.map((row) => {
+          const obj = row?.data && typeof row.data === "object" ? row.data : {};
+          if (!obj.username && row?.username) obj.username = row.username;
+          return obj;
+        })
+      : [];
+    return loadUsers(list);
   } catch (err) {
-    console.error("Neizdevās iztīrīt DM no users.json:", err);
+    if (!usersStoreErrorLogged) {
+      console.error("Supabase users load error:", err);
+      usersStoreErrorLogged = true;
+    }
+    return null;
   }
 }
-const usersPruned = DM_STORE_ON_SERVER && pruneUsersForMemory(USERS);
-if (usersPruned) {
+
+async function saveUsersToSupabase(list) {
+  if (!USERS_STORE_ON_SUPABASE || !supabase) return;
+  const rows = Array.isArray(list)
+    ? list
+        .filter((u) => u && u.username)
+        .map((u) => ({ username: u.username, data: u }))
+    : [];
+  if (!rows.length) return;
   try {
-    saveUsers(USERS);
-    console.log("Pruned heavy DM avatar metadata on boot.");
+    for (let i = 0; i < rows.length; i += USERS_STORE_BATCH) {
+      const chunk = rows.slice(i, i + USERS_STORE_BATCH);
+      const { error } = await supabase
+        .from(USERS_STORE_TABLE)
+        .upsert(chunk, { onConflict: "username" });
+      if (error && !usersStoreErrorLogged) {
+        console.error("Supabase users save error:", error);
+        usersStoreErrorLogged = true;
+      }
+    }
   } catch (err) {
-    console.error("Neizdevās saglabāt lietotāju clean-up:", err);
+    if (!usersStoreErrorLogged) {
+      console.error("Supabase users save error:", err);
+      usersStoreErrorLogged = true;
+    }
   }
 }
+
+async function flushUsersSave() {
+  if (usersSaveInFlight || !usersSavePending) return;
+  const list = usersSavePending;
+  usersSavePending = null;
+  usersSaveInFlight = true;
+  try {
+    await saveUsersToSupabase(list);
+  } finally {
+    usersSaveInFlight = false;
+  }
+  if (usersSavePending) flushUsersSave();
+}
+
+function queueUsersSave(list) {
+  if (!USERS_STORE_ON_SUPABASE || !supabase) return;
+  usersSavePending = list;
+  if (usersSaveTimer) return;
+  usersSaveTimer = setTimeout(() => {
+    usersSaveTimer = null;
+    flushUsersSave();
+  }, 1500);
+}
+
+function saveUsers(users) {
+  const arr = buildUsersStorageList(users);
+  if (USERS_STORE_ON_SUPABASE && supabase) {
+    queueUsersSave(arr);
+    return;
+  }
+  saveJsonAtomic(USERS_FILE, arr);
+}
+
+let USERS = {};
 
 function pruneReports(list) {
   const days = Math.max(1, REPORT_RETENTION_DAYS);
@@ -815,12 +982,117 @@ function loadReports() {
   }
 }
 
+let reportsSavePending = null;
+let reportsSaveTimer = null;
+let reportsSaveInFlight = false;
+let reportsStoreErrorLogged = false;
+
+async function loadReportsFromSupabase() {
+  if (!REPORTS_STORE_ON_SUPABASE || !supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from(REPORTS_STORE_TABLE)
+      .select("id,ts,reporter,reported,reason,message_id,message_text,source")
+      .order("ts", { ascending: false })
+      .limit(REPORTS_MAX);
+    if (error) {
+      if (!reportsStoreErrorLogged) {
+        console.error("Supabase reports load error:", error);
+        reportsStoreErrorLogged = true;
+      }
+      return null;
+    }
+    const list = Array.isArray(data)
+      ? data.map((row) => ({
+          id: row?.id ?? "",
+          ts: Math.max(0, Number(row?.ts) || 0),
+          reporter: row?.reporter || "",
+          reported: row?.reported || "",
+          reason: row?.reason || "",
+          messageId: row?.message_id || "",
+          messageText: row?.message_text || "",
+          source: row?.source || "",
+        }))
+      : [];
+    return pruneReports(list);
+  } catch (err) {
+    if (!reportsStoreErrorLogged) {
+      console.error("Supabase reports load error:", err);
+      reportsStoreErrorLogged = true;
+    }
+    return null;
+  }
+}
+
+async function saveReportsToSupabase(list) {
+  if (!REPORTS_STORE_ON_SUPABASE || !supabase) return;
+  const rows = Array.isArray(list)
+    ? list
+        .filter((r) => r && r.id)
+        .map((r) => ({
+          id: r.id,
+          ts: Math.max(0, Number(r.ts) || 0),
+          reporter: r.reporter || "",
+          reported: r.reported || "",
+          reason: r.reason || "",
+          message_id: r.messageId || "",
+          message_text: r.messageText || "",
+          source: r.source || "",
+        }))
+    : [];
+  if (!rows.length) return;
+  try {
+    for (let i = 0; i < rows.length; i += REPORTS_STORE_BATCH) {
+      const chunk = rows.slice(i, i + REPORTS_STORE_BATCH);
+      const { error } = await supabase
+        .from(REPORTS_STORE_TABLE)
+        .upsert(chunk, { onConflict: "id" });
+      if (error && !reportsStoreErrorLogged) {
+        console.error("Supabase reports save error:", error);
+        reportsStoreErrorLogged = true;
+      }
+    }
+  } catch (err) {
+    if (!reportsStoreErrorLogged) {
+      console.error("Supabase reports save error:", err);
+      reportsStoreErrorLogged = true;
+    }
+  }
+}
+
+async function flushReportsSave() {
+  if (reportsSaveInFlight || !reportsSavePending) return;
+  const list = reportsSavePending;
+  reportsSavePending = null;
+  reportsSaveInFlight = true;
+  try {
+    await saveReportsToSupabase(list);
+  } finally {
+    reportsSaveInFlight = false;
+  }
+  if (reportsSavePending) flushReportsSave();
+}
+
+function queueReportsSave(list) {
+  if (!REPORTS_STORE_ON_SUPABASE || !supabase) return;
+  reportsSavePending = list;
+  if (reportsSaveTimer) return;
+  reportsSaveTimer = setTimeout(() => {
+    reportsSaveTimer = null;
+    flushReportsSave();
+  }, 1500);
+}
+
 function saveReports(list) {
   const arr = pruneReports(Array.isArray(list) ? list.slice(-REPORTS_MAX) : []);
+  if (REPORTS_STORE_ON_SUPABASE && supabase) {
+    queueReportsSave(arr);
+    return;
+  }
   saveJsonAtomic(REPORTS_FILE, arr);
 }
 
-let REPORTS = loadReports();
+let REPORTS = [];
 
 // ======== SEASON STORE (persistents) ========
 function buildInitialSeasonStore() {
@@ -2570,7 +2842,7 @@ function startSeasonFlow({ byAdminUsername } = {}) {
 }
 
 // ======== JWT helperi ========
-function buildMePayload(u) {
+async function buildMePayload(u) {
   const rankInfo = ensureRankFields(u);
   ensureDuelEloFields(u);
   const dynamicMedals = computeMedalsForUser(u);
@@ -2588,6 +2860,9 @@ function buildMePayload(u) {
   const inLevel = Math.max(0, xp - minXp);
   const pct = need > 0 ? Math.max(0, Math.min(100, (inLevel / need) * 100)) : 100;
   const toNext = need > 0 ? Math.max(0, nextMinXp - xp) : 0;
+
+  const { url: avatarUrl, expiresAt: avatarUrlExpiresAt } =
+    await resolveAvatarUrlAsync(u);
 
   return {
     username: u.username,
@@ -2615,7 +2890,8 @@ function buildMePayload(u) {
     rankIsMax: !!rankInfo.isMax,
     tokenPriceCoins: getTokenPrice(u),
     medals,
-    avatarUrl: resolveAvatarUrl(u),
+    avatarUrl: avatarUrl || null,
+    avatarUrlExpiresAt: avatarUrlExpiresAt || null,
     supporter: !!u.supporter,
     revealLetterCostCoins: REVEAL_LETTER_COST_COINS,
     blockedUsers: listBlocks(u),
@@ -2714,10 +2990,9 @@ function getMiniUserPayload(username) {
     };
   }
   const info = ensureRankFields(u);
-  const avatarUrl = avatarForBroadcast(u);
   return {
     username,
-    avatarUrl: avatarUrl || null,
+    avatarUrl: avatarForBroadcast(u),
     rankLevel: u.rankLevel || info.level || 1,
     rankTitle: u.rankTitle || info.title || "—",
     rankColor: u.rankColor || info.color || "#9CA3AF",
@@ -2860,9 +3135,9 @@ function broadcastSystemMessage(text) {
 }
 
 // ======== Čata vēsture (Supabase, optional) ========
-const CHAT_STORE_TABLE = String(process.env.CHAT_STORE_TABLE || "chat_messages").trim();
 let chatStoreErrorLogged = false;
 let chatHistoryErrorLogged = false;
+let chatCleanupErrorLogged = false;
 
 function buildChatStoreRow(payload) {
   const username = String(payload?.username || "").trim();
@@ -2881,7 +3156,7 @@ function buildChatStoreRow(payload) {
 }
 
 async function chatStoreMessage(payload) {
-  if (!CHAT_STORE_ON_SUPABASE || !SUPABASE_ENABLED || !supabase) return;
+  if (!CHAT_STORE_ON_SUPABASE || !supabase) return;
   const row = buildChatStoreRow(payload);
   if (!row) return;
   try {
@@ -2899,7 +3174,7 @@ async function chatStoreMessage(payload) {
 }
 
 async function loadChatHistory(limit = CHAT_HISTORY_LIMIT) {
-  if (!CHAT_STORE_ON_SUPABASE || !SUPABASE_ENABLED || !supabase) return [];
+  if (!CHAT_STORE_ON_SUPABASE || !supabase) return [];
   if (!Number.isFinite(limit) || limit <= 0) return [];
   try {
     const { data, error } = await supabase
@@ -2939,16 +3214,29 @@ async function loadChatHistory(limit = CHAT_HISTORY_LIMIT) {
   }
 }
 
+async function cleanupChatHistory() {
+  if (!CHAT_STORE_ON_SUPABASE || !supabase || CHAT_RETENTION_DAYS <= 0) return;
+  const cutoff = Date.now() - CHAT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  try {
+    const { error } = await supabase
+      .from(CHAT_STORE_TABLE)
+      .delete()
+      .lt("ts", cutoff);
+    if (error && !chatCleanupErrorLogged) {
+      console.error("Supabase chat cleanup error:", error);
+      chatCleanupErrorLogged = true;
+    }
+  } catch (err) {
+    if (!chatCleanupErrorLogged) {
+      console.error("Supabase chat cleanup error:", err);
+      chatCleanupErrorLogged = true;
+    }
+  }
+}
+
 // ======== DM helperi ========
 function ensureDm(user) {
   if (!user || typeof user !== "object") return null;
-  if (!DM_STORE_ON_SERVER) {
-    if (!user.dm || typeof user.dm !== "object") user.dm = {};
-    if (!user.dm.threads || typeof user.dm.threads !== "object") user.dm.threads = {};
-    if (!user.dm.unread || typeof user.dm.unread !== "object") user.dm.unread = {};
-    if (!user.dm.lastRead || typeof user.dm.lastRead !== "object") user.dm.lastRead = {};
-    return user.dm;
-  }
   if (!user.dm || typeof user.dm !== "object") user.dm = {};
   if (!user.dm.threads || typeof user.dm.threads !== "object") user.dm.threads = {};
   if (!user.dm.unread || typeof user.dm.unread !== "object") user.dm.unread = {};
@@ -3052,19 +3340,14 @@ function dmSanitizeText(raw) {
 function dmBuildMeta(u) {
   if (!u) return null;
   const info = ensureRankFields(u);
-  const meta = {
+  return {
     rankLevel: u.rankLevel || info.level || 1,
     rankTitle: u.rankTitle || info.title || "—",
     rankColor: u.rankColor || info.color || "#9CA3AF",
     region: u.region || "",
+    avatarUrl: compactAvatarUrl(resolveAvatarUrl(u), DM_META_AVATAR_MAX_CHARS),
     supporter: !!u.supporter,
   };
-  const avatarUrl = compactAvatarUrl(
-    resolveAvatarUrl(u),
-    DM_META_AVATAR_MAX_CHARS
-  );
-  if (avatarUrl) meta.avatarUrl = avatarUrl;
-  return meta;
 }
 
 function dmGetLastRead(dm, otherUsername) {
@@ -3268,6 +3551,10 @@ function dmPushMessage(fromUser, toUser, text, extra = {}) {
   const to = toUser?.username;
   if (!from || !to) return null;
 
+  const dmFrom = ensureDm(fromUser);
+  const dmTo = ensureDm(toUser);
+  if (!dmFrom || !dmTo) return null;
+
   const base = {
     id: crypto.randomBytes(8).toString("hex"),
     from,
@@ -3280,14 +3567,6 @@ function dmPushMessage(fromUser, toUser, text, extra = {}) {
   const meta = dmBuildMeta(fromUser);
   const msgFrom = { ...base, meta };
   const msgTo = { ...base, meta };
-
-  if (!DM_STORE_ON_SERVER) {
-    return msgFrom;
-  }
-
-  const dmFrom = ensureDm(fromUser);
-  const dmTo = ensureDm(toUser);
-  if (!dmFrom || !dmTo) return null;
 
   const keyFrom = dmThreadKeyFor(fromUser, toUser);
   const keyTo = dmThreadKeyFor(toUser, fromUser);
@@ -3859,7 +4138,7 @@ async function signupHandler(req, res) {
   broadcastLeaderboard(false);
 
   const token = jwt.sign({ username: name }, JWT_SECRET, { expiresIn: "30d" });
-  return res.json({ ...buildMePayload(user), token });
+  return res.json({ ...(await buildMePayload(user)), token });
 }
 
 app.post("/signup", signupHandler);
@@ -3919,14 +4198,14 @@ async function loginHandler(req, res) {
   saveUsers(USERS);
 
   const token = jwt.sign({ username: name }, JWT_SECRET, { expiresIn: "30d" });
-  return res.json({ ...buildMePayload(user), token });
+  return res.json({ ...(await buildMePayload(user)), token });
 }
 
 app.post("/login", loginHandler);
 app.post("/signin", loginHandler);
 
 // ======== /me ========
-app.get("/me", authMiddleware, (req, res) => {
+app.get("/me", authMiddleware, async (req, res) => {
   const u = req.user;
   markActivity(u);
   ensureDailyMissions(u);
@@ -3937,7 +4216,7 @@ app.get("/me", authMiddleware, (req, res) => {
   ensureRankFields(u);
   if (typeof u.supporter !== "boolean") u.supporter = false;
   saveUsers(USERS);
-  res.json(buildMePayload(u));
+  res.json(await buildMePayload(u));
 });
 
 // ======== E-pasta piesaiste (tikai savam profilam) ========
@@ -3979,60 +4258,57 @@ app.post("/avatar", authMiddleware, async (req, res) => {
         )}MB base64. Ieteikums: samazini bildi (piem. 512x512) un saglabā WEBP/JPG.`,
       });
     }
-    const parsed = parseAvatarDataUrl(avatar);
-    if (!parsed) {
-      return res.status(400).json({ message: "Nekorekts avatāra formāts." });
-    }
 
     if (SUPABASE_ENABLED) {
       const okBucket = await ensureSupabaseBucket();
       if (!okBucket) {
-        return res.status(500).json({
+        return res.status(503).json({
           message: "Supabase storage nav pieejams. Pārbaudi konfigurāciju.",
         });
       }
-
-      const ext = mimeToExt(parsed.mime);
-      const safe = sanitizeStorageKeySegment(user.username);
-      const filePath = ext ? `avatars/${safe}.${ext}` : `avatars/${safe}`;
-      const prevPath =
-        user.avatarPath && user.avatarPath !== filePath ? user.avatarPath : null;
+      const parsed = parseAvatarDataUrl(avatar);
+      if (!parsed) {
+        return res.status(400).json({ message: "Nekorekts avatāra formāts." });
+      }
+      const ext = mimeToExt(parsed.mime) || "png";
+      const safeUser = sanitizeStorageKeySegment(user.username || "user");
+      const filePath = `${safeUser}/${Date.now()}.${ext}`;
+      const prevPath = user.avatarPath || "";
 
       const { error: uploadError } = await supabase.storage
         .from(SUPABASE_STORAGE_BUCKET)
         .upload(filePath, parsed.buffer, {
-          upsert: true,
           contentType: parsed.mime,
           cacheControl: SUPABASE_AVATAR_CACHE_CONTROL,
+          upsert: true,
         });
-
       if (uploadError) {
         console.error("Supabase avatar upload error:", uploadError);
-        return res
-          .status(500)
-          .json({ message: "Servera kļūda avatāra augšupielādē." });
+        return res.status(500).json({ message: "Neizdevās augšupielādēt avatāru." });
       }
-
-      if (prevPath) {
-        try {
-          await supabase.storage.from(SUPABASE_STORAGE_BUCKET).remove([prevPath]);
-        } catch {}
+      if (prevPath && prevPath !== filePath) {
+        supabase.storage.from(SUPABASE_STORAGE_BUCKET).remove([prevPath]).catch(() => {});
       }
-
       user.avatarPath = filePath;
-      const publicUrl = getSupabasePublicUrl(filePath);
-      user.avatarUrl = publicUrl || user.avatarUrl || null;
+      user.avatarUpdatedAt = Date.now();
+      user.avatarUrl = SUPABASE_STORAGE_PUBLIC ? getSupabasePublicUrl(filePath) : null;
     } else {
       user.avatarUrl = avatar;
+      user.avatarPath = "";
+      user.avatarUpdatedAt = Date.now();
     }
 
-    user.avatarUpdatedAt = Date.now();
     saveUsers(USERS);
-
     broadcastOnlineList(true);
     broadcastLeaderboard(false);
 
-    return res.json({ ok: true, avatarUrl: resolveAvatarUrl(user) });
+    const { url: avatarUrl, expiresAt: avatarUrlExpiresAt } =
+      await resolveAvatarUrlAsync(user);
+    return res.json({
+      ok: true,
+      avatarUrl: avatarUrl || null,
+      avatarUrlExpiresAt: avatarUrlExpiresAt || null,
+    });
   } catch (err) {
     console.error("POST /avatar kļūda:", err);
     return res
@@ -4042,7 +4318,7 @@ app.post("/avatar", authMiddleware, async (req, res) => {
 });
 
 // ======== Publiska profila API ========
-function buildPublicProfilePayload(targetUser, requester) {
+async function buildPublicProfilePayload(targetUser, requester) {
   const rankInfo = ensureRankFields(targetUser);
   const isAdmin = requester && isAdminUser(requester);
   ensureDuelEloFields(targetUser);
@@ -4061,6 +4337,9 @@ function buildPublicProfilePayload(targetUser, requester) {
   const inLevel = Math.max(0, xp - minXp);
   const pct = need > 0 ? Math.max(0, Math.min(100, (inLevel / need) * 100)) : 100;
   const toNext = need > 0 ? Math.max(0, nextMinXp - xp) : 0;
+
+  const { url: avatarUrl, expiresAt: avatarUrlExpiresAt } =
+    await resolveAvatarUrlAsync(targetUser);
 
   const payload = {
     username: targetUser.username,
@@ -4087,7 +4366,8 @@ function buildPublicProfilePayload(targetUser, requester) {
     medals,
     duelsWon: targetUser.duelsWon || 0,
     duelsLost: targetUser.duelsLost || 0,
-    avatarUrl: avatarForBroadcast(targetUser),
+    avatarUrl: avatarUrl || null,
+    avatarUrlExpiresAt: avatarUrlExpiresAt || null,
     supporter: !!targetUser.supporter,
   };
 
@@ -4102,21 +4382,21 @@ function buildPublicProfilePayload(targetUser, requester) {
   return payload;
 }
 
-app.get("/player/:username", authMiddleware, (req, res) => {
+app.get("/player/:username", authMiddleware, async (req, res) => {
   const requester = req.user;
   const name = String(req.params.username || "").trim();
   const key = findUserKeyCaseInsensitive(name);
   const user = key ? USERS[key] : null;
   if (!user) return res.status(404).json({ message: "Lietotājs nav atrasts" });
-  res.json(buildPublicProfilePayload(user, requester));
+  res.json(await buildPublicProfilePayload(user, requester));
 });
-app.get("/profile/:username", authMiddleware, (req, res) => {
+app.get("/profile/:username", authMiddleware, async (req, res) => {
   const requester = req.user;
   const name = String(req.params.username || "").trim();
   const key = findUserKeyCaseInsensitive(name);
   const user = key ? USERS[key] : null;
   if (!user) return res.status(404).json({ message: "Lietotājs nav atrasts" });
-  res.json(buildPublicProfilePayload(user, requester));
+  res.json(await buildPublicProfilePayload(user, requester));
 });
 
 // ======== DRAUGI ========
@@ -4132,7 +4412,7 @@ app.post("/friends/request", authMiddleware, (req, res) => {
   const user = req.user;
   const toRaw = req.body?.to || req.body?.username || req.body?.user || "";
   const toName = String(toRaw || "").trim();
-  if (!toName) return res.status(400).json({ message: "Nav norādīts lietotājs." });
+  if (!toName) return res.status(400).json({ message: "Nav nor��dīts lietotājs." });
   if (toName === user.username)
     return res.status(400).json({ message: "Nevari pievienot sevi." });
 
@@ -4270,7 +4550,7 @@ app.get("/missions", authMiddleware, (req, res) => {
   res.json({ missions: getPublicMissions(user), bonus: getMissionBonusStatus(user) });
 });
 
-app.post("/missions/claim", authMiddleware, (req, res) => {
+app.post("/missions/claim", authMiddleware, async (req, res) => {
   const user = req.user;
   const { id } = req.body || {};
   if (!id) return res.status(400).json({ message: "Nav norādīts misijas ID" });
@@ -4309,13 +4589,13 @@ app.post("/missions/claim", authMiddleware, (req, res) => {
   }
 
   res.json({
-    me: buildMePayload(user),
+    me: await buildMePayload(user),
     missions: getPublicMissions(user),
     bonus: getMissionBonusStatus(user),
   });
 });
 
-app.post("/missions/bonus", authMiddleware, (req, res) => {
+app.post("/missions/bonus", authMiddleware, async (req, res) => {
   const user = req.user;
   markActivity(user);
   ensureDailyMissions(user);
@@ -4351,7 +4631,7 @@ app.post("/missions/bonus", authMiddleware, (req, res) => {
   }
 
   res.json({
-    me: buildMePayload(user),
+    me: await buildMePayload(user),
     missions: getPublicMissions(user),
     bonus: getMissionBonusStatus(user),
   });
@@ -4376,7 +4656,7 @@ app.get("/chest/status", authMiddleware, (req, res) => {
   });
 });
 
-app.post("/chest/open", authMiddleware, (req, res) => {
+app.post("/chest/open", authMiddleware, async (req, res) => {
   const user = req.user;
   markActivity(user);
   ensureDailyChest(user);
@@ -4441,7 +4721,7 @@ app.post("/chest/open", authMiddleware, (req, res) => {
     rewards: { coins: coinsGain, xp: xpGain, tokens: tokensGain },
     streak: user.dailyChest.streak,
     nextAt: nextMidnightRigaTs(),
-    me: buildMePayload(user),
+    me: await buildMePayload(user),
   });
 });
 
@@ -4967,7 +5247,7 @@ app.get("/regions/stats", authMiddleware, (_req, res) => {
   res.json({ regions: computeRegionStats() });
 });
 
-app.post("/region", authMiddleware, (req, res) => {
+app.post("/region", authMiddleware, async (req, res) => {
   const user = req.user;
   const region = normalizeRegion(req.body?.region);
   if (!region) {
@@ -4981,10 +5261,10 @@ app.post("/region", authMiddleware, (req, res) => {
   user.region = region;
   saveUsers(USERS);
   broadcastOnlineList(true);
-  res.json({ ok: true, me: buildMePayload(user) });
+  res.json({ ok: true, me: await buildMePayload(user) });
 });
 
-app.post("/region/boost", authMiddleware, (req, res) => {
+app.post("/region/boost", authMiddleware, async (req, res) => {
   const user = req.user;
   const amount = clampInt(req.body?.amount, 1, REGION_POINTS_MAX_ACTION, 1);
   const points = Math.max(0, Math.floor(user.regionPoints || 0));
@@ -4994,10 +5274,10 @@ app.post("/region/boost", authMiddleware, (req, res) => {
   user.regionPoints = points - amount;
   user.regionBoost = Math.max(0, Math.floor(user.regionBoost || 0)) + amount;
   saveUsers(USERS);
-  res.json({ ok: true, me: buildMePayload(user) });
+  res.json({ ok: true, me: await buildMePayload(user) });
 });
 
-app.post("/region/attack", authMiddleware, (req, res) => {
+app.post("/region/attack", authMiddleware, async (req, res) => {
   const user = req.user;
   const target = normalizeRegion(req.body?.region);
   if (!target) {
@@ -5015,7 +5295,7 @@ app.post("/region/attack", authMiddleware, (req, res) => {
   if (!user.regionAttacks || typeof user.regionAttacks !== "object") user.regionAttacks = {};
   user.regionAttacks[target] = (Number(user.regionAttacks[target]) || 0) + amount;
   saveUsers(USERS);
-  res.json({ ok: true, me: buildMePayload(user) });
+  res.json({ ok: true, me: await buildMePayload(user) });
 });
 
 // ===== DUEĻU HELPERI (Socket.IO pusē) =====
@@ -5686,12 +5966,35 @@ io.on("connection", (socket) => {
       }
     }
 
+    if (!DM_STORE_ON_SERVER) {
+      const msg = {
+        id: crypto.randomBytes(8).toString("hex"),
+        from: sender.username,
+        to: target.username,
+        text,
+        ts: Date.now(),
+        meta: dmBuildMeta(sender),
+      };
+      if (reply) msg.reply = reply;
+      saveUsers(USERS);
+
+      socket.emit("dm.sent", { message: msg, with: target.username, mode: "client" });
+      const targetSocket = getSocketByUsername(target.username);
+      if (targetSocket) {
+        targetSocket.emit("dm.message", {
+          message: msg,
+          fromUser: getMiniUserPayload(sender.username),
+          mode: "client",
+        });
+        targetSocket.emit("dm.unread", dmComputeUnread(null));
+      }
+      return;
+    }
+
     const msg = dmPushMessage(sender, target, text, { reply });
     if (!msg) return socket.emit("dm.error", { message: "Neizdevās nosūtīt ziņu." });
 
-    if (DM_STORE_ON_SERVER) {
-      saveUsers(USERS);
-    }
+    saveUsers(USERS);
 
     // sūtītājam apstiprinājums
     socket.emit("dm.sent", { message: msg, with: target.username });
@@ -5703,12 +6006,10 @@ io.on("connection", (socket) => {
         message: msg,
         fromUser: getMiniUserPayload(sender.username),
       });
-      if (DM_STORE_ON_SERVER) {
-        try {
-          ensureDm(target);
-          targetSocket.emit("dm.unread", dmComputeUnread(target.dm));
-        } catch {}
-      }
+      try {
+        ensureDm(target);
+        targetSocket.emit("dm.unread", dmComputeUnread(target.dm));
+      } catch {}
     }
   });
 
@@ -5738,12 +6039,11 @@ io.on("connection", (socket) => {
     if (!otherName || !id) return socket.emit("dm.error", { message: "Nederīga ziņa." });
     if (!text) return socket.emit("dm.error", { message: "Ziņa ir tukša." });
 
-    const key = findUserKeyCaseInsensitive(otherName);
-    const other = key ? USERS[key] : null;
-    const otherUsername = other?.username || otherName;
-
     if (!DM_STORE_ON_SERVER) {
-      const msg = {
+      const key = findUserKeyCaseInsensitive(otherName);
+      const other = key ? USERS[key] : null;
+      const otherUsername = other?.username || otherName;
+      const message = {
         id,
         from: me.username,
         to: otherUsername,
@@ -5751,19 +6051,18 @@ io.on("connection", (socket) => {
         edited: true,
         editedAt: Date.now(),
       };
-      socket.emit("dm.edited", { with: otherUsername, message: msg });
-      const otherSocket = getSocketByUsername(otherUsername);
-      if (
-        otherSocket &&
-        !isBlocked(me, otherUsername) &&
-        !(other && isBlocked(other, me.username))
-      ) {
-        otherSocket.emit("dm.edited", { with: me.username, message: msg });
+      socket.emit("dm.edited", { with: otherUsername, message, mode: "client" });
+      const targetSocket = getSocketByUsername(otherUsername);
+      if (targetSocket) {
+        targetSocket.emit("dm.edited", { with: me.username, message, mode: "client" });
       }
       return;
     }
 
     ensureDm(me);
+    const key = findUserKeyCaseInsensitive(otherName);
+    const other = key ? USERS[key] : null;
+    const otherUsername = other?.username || otherName;
     const threadKey = dmThreadKeyFor(me, otherUsername);
     const arr = Array.isArray(me.dm.threads?.[threadKey]) ? me.dm.threads[threadKey] : [];
     const idx = arr.findIndex((m) => m && m.id === id);
@@ -5785,24 +6084,22 @@ io.on("connection", (socket) => {
     const id = String(payload?.id || "").trim();
     if (!otherName || !id) return socket.emit("dm.error", { message: "Nederīga ziņa." });
 
-    const key = findUserKeyCaseInsensitive(otherName);
-    const other = key ? USERS[key] : null;
-    const otherUsername = other?.username || otherName;
-
     if (!DM_STORE_ON_SERVER) {
-      socket.emit("dm.deleted", { with: otherUsername, id });
-      const otherSocket = getSocketByUsername(otherUsername);
-      if (
-        otherSocket &&
-        !isBlocked(me, otherUsername) &&
-        !(other && isBlocked(other, me.username))
-      ) {
-        otherSocket.emit("dm.deleted", { with: me.username, id });
+      const key = findUserKeyCaseInsensitive(otherName);
+      const other = key ? USERS[key] : null;
+      const otherUsername = other?.username || otherName;
+      socket.emit("dm.deleted", { with: otherUsername, id, mode: "client" });
+      const targetSocket = getSocketByUsername(otherUsername);
+      if (targetSocket) {
+        targetSocket.emit("dm.deleted", { with: me.username, id, mode: "client" });
       }
       return;
     }
 
     ensureDm(me);
+    const key = findUserKeyCaseInsensitive(otherName);
+    const other = key ? USERS[key] : null;
+    const otherUsername = other?.username || otherName;
     const threadKey = dmThreadKeyFor(me, otherUsername);
     const arr = Array.isArray(me.dm.threads?.[threadKey]) ? me.dm.threads[threadKey] : [];
     const idx = arr.findIndex((m) => m && m.id === id);
@@ -5837,9 +6134,7 @@ io.on("connection", (socket) => {
     }
     saveUsers(USERS);
     socket.emit("dm.blocked", { list: listBlocks(me), with: otherUsername, blocked: true });
-    if (DM_STORE_ON_SERVER) {
-      socket.emit("dm.unread", dmComputeUnread(me.dm));
-    }
+    socket.emit("dm.unread", dmComputeUnread(me.dm));
   });
 
   socket.on("dm.unblock", (payload) => {
@@ -5910,13 +6205,9 @@ io.on("connection", (socket) => {
     const otherName = String(otherRaw || "").trim();
     if (!otherName) return socket.emit("dm.history", { with: "", messages: [] });
 
-    const key = findUserKeyCaseInsensitive(otherName);
-    const other = key ? USERS[key] : null;
-    const otherUsername = other?.username || otherName;
-
     if (!DM_STORE_ON_SERVER) {
       return socket.emit("dm.history", {
-        with: otherUsername,
+        with: otherName,
         messages: [],
         peerLastRead: 0,
         mode: "client",
@@ -5924,6 +6215,10 @@ io.on("connection", (socket) => {
     }
 
     ensureDm(me);
+    const key = findUserKeyCaseInsensitive(otherName);
+    const other = key ? USERS[key] : null;
+    const otherUsername = other?.username || otherName;
+
     const threadKey = dmThreadKeyFor(me, otherUsername);
     const arr = Array.isArray(me.dm.threads?.[threadKey]) ? me.dm.threads[threadKey] : [];
     const peerLastRead = other ? dmGetLastRead(other.dm, me.username) : 0;
@@ -5933,6 +6228,7 @@ io.on("connection", (socket) => {
       with: otherUsername,
       messages: arr.slice(-60),
       peerLastRead,
+      mode: "server",
     });
   });
 
@@ -5943,24 +6239,27 @@ io.on("connection", (socket) => {
     const otherName = String(otherRaw || "").trim();
     if (!otherName) return;
 
-    const key = findUserKeyCaseInsensitive(otherName);
-    const other = key ? USERS[key] : null;
-    const otherUsername = other?.username || otherName;
-
     if (!DM_STORE_ON_SERVER) {
       const readAt = Date.now();
-      const otherSocket = getSocketByUsername(otherUsername);
+      socket.emit("dm.unread", dmComputeUnread(null));
+      const otherKey = findUserKeyCaseInsensitive(otherName);
+      const otherUser = otherKey ? USERS[otherKey] : null;
+      const otherSocket = getSocketByUsername(otherUser?.username || otherName);
       if (
         otherSocket &&
-        !isBlocked(me, otherUsername) &&
-        !(other && isBlocked(other, me.username))
+        !isBlocked(me, otherUser?.username || otherName) &&
+        !(otherUser && isBlocked(otherUser, me.username))
       ) {
-        otherSocket.emit("dm.read", { with: me.username, ts: readAt });
+        otherSocket.emit("dm.read", { with: me.username, ts: readAt, mode: "client" });
       }
       return;
     }
 
     ensureDm(me);
+    const key = findUserKeyCaseInsensitive(otherName);
+    const other = key ? USERS[key] : null;
+    const otherUsername = other?.username || otherName;
+
     const readAt = Date.now();
     me.dm.lastRead[otherUsername] = readAt;
     dmZeroUnreadCaseInsensitive(me.dm, otherUsername);
@@ -5986,18 +6285,29 @@ io.on("connection", (socket) => {
     const otherName = String(otherRaw || "").trim();
     if (!otherName) return socket.emit("dm.error", { message: "Nav norādīta saruna." });
 
+    if (!DM_STORE_ON_SERVER) {
+      const key = findUserKeyCaseInsensitive(otherName);
+      const other = key ? USERS[key] : null;
+      const otherUsername = other?.username || otherName;
+      if (!otherUsername || otherUsername === me.username) {
+        return socket.emit("dm.error", { message: "Nederīga saruna." });
+      }
+      socket.emit("dm.cleared", { with: otherUsername, mode: "client" });
+      socket.emit("dm.unread", dmComputeUnread(null));
+      const targetSocket = getSocketByUsername(otherUsername);
+      if (targetSocket) {
+        targetSocket.emit("dm.cleared", { with: me.username, mode: "client" });
+      }
+      return;
+    }
+
+    ensureDm(me);
     const key = findUserKeyCaseInsensitive(otherName);
     const other = key ? USERS[key] : null;
     const otherUsername = other?.username || otherName;
     if (!otherUsername || otherUsername === me.username)
       return socket.emit("dm.error", { message: "Nederīga saruna." });
 
-    if (!DM_STORE_ON_SERVER) {
-      socket.emit("dm.cleared", { with: otherUsername });
-      return;
-    }
-
-    ensureDm(me);
     const threadKey = dmThreadKeyFor(me, otherUsername);
     try {
       if (me.dm.threads && typeof me.dm.threads === "object") delete me.dm.threads[threadKey];
@@ -6221,10 +6531,56 @@ io.on("connection", (socket) => {
   });
 });
 
-// ======== WHEEL server init ========
-wheelSyncTokenSlots(true);
+async function initDataStores() {
+  let usersLoadedFromDb = false;
+  if (USERS_STORE_ON_SUPABASE) {
+    const fromDb = await loadUsersFromSupabase();
+    if (fromDb && Object.keys(fromDb).length) {
+      USERS = fromDb;
+      usersLoadedFromDb = true;
+    } else {
+      USERS = loadUsers();
+    }
+  } else {
+    USERS = loadUsers();
+  }
 
-// ======== HTTP listen ========
-httpServer.listen(PORT, () => {
-  console.log(`VĀRDU ZONA serveris iet uz porta ${PORT}`);
+  if (REPORTS_STORE_ON_SUPABASE) {
+    const fromDb = await loadReportsFromSupabase();
+    REPORTS = fromDb || loadReports();
+  } else {
+    REPORTS = loadReports();
+  }
+  if (REPORTS_STORE_ON_SUPABASE) {
+    saveReports(REPORTS);
+  }
+
+  const pruned = pruneUsersForMemory(USERS);
+  if (pruned || !DM_STORE_ON_SERVER || (USERS_STORE_ON_SUPABASE && !usersLoadedFromDb)) {
+    saveUsers(USERS);
+  }
+}
+
+async function startServer() {
+  await initDataStores();
+
+  // ======== WHEEL server init ========
+  wheelSyncTokenSlots(true);
+
+  if (CHAT_STORE_ON_SUPABASE && CHAT_RETENTION_DAYS > 0) {
+    cleanupChatHistory().catch(() => {});
+    setInterval(() => {
+      cleanupChatHistory().catch(() => {});
+    }, CHAT_CLEANUP_INTERVAL_MS);
+  }
+
+  // ======== HTTP listen ========
+  httpServer.listen(PORT, () => {
+    console.log(`VĀRDU ZONA serveris iet uz porta ${PORT}`);
+  });
+}
+
+startServer().catch((err) => {
+  console.error("Server start failed:", err);
+  process.exit(1);
 });

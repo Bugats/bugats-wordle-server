@@ -93,35 +93,92 @@ function avatarStorageKey(username) {
   const u = String(username || "").trim() || "unknown";
   return "vz_avatar_" + u;
 }
-function getLocalAvatar(username) {
-  const key = avatarStorageKey(username);
-  let v = null;
+function isSignedAvatarUrl(url) {
+  return (
+    typeof url === "string" &&
+    (url.includes("/storage/v1/object/sign/") || url.includes("token="))
+  );
+}
+function readAvatarStorageEntry(key) {
   try {
-    v = localStorage.getItem(key);
-  } catch {}
-  // backward-compat ar veco atslēgu
-  if (!v) {
-    try {
-      v = localStorage.getItem("vz_avatar");
-      // migrējam uz per-user key, lai nesajaucas starp kontiem
-      if (v) {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const trimmed = String(raw).trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith("{")) {
+      const obj = JSON.parse(trimmed);
+      if (!obj || typeof obj !== "object" || !obj.url) return null;
+      const exp = Number(obj.exp) || 0;
+      const ts = Number(obj.ts) || 0;
+      if (exp && Date.now() > exp) {
         try {
-          localStorage.setItem(key, v);
+          localStorage.removeItem(key);
+        } catch {}
+        return null;
+      }
+      return { url: String(obj.url), exp, ts };
+    }
+    return { url: trimmed, exp: 0, ts: 0 };
+  } catch {
+    return null;
+  }
+}
+function writeAvatarStorageEntry(key, url, exp) {
+  try {
+    if (!url) {
+      localStorage.removeItem(key);
+      return;
+    }
+    const payload = { url: String(url), ts: Date.now() };
+    if (exp && Number.isFinite(exp) && exp > 0) payload.exp = exp;
+    localStorage.setItem(key, JSON.stringify(payload));
+  } catch {
+    try {
+      if (url) localStorage.setItem(key, String(url));
+      else localStorage.removeItem(key);
+    } catch {}
+  }
+}
+function getLocalAvatarEntry(username) {
+  const key = avatarStorageKey(username);
+  let entry = readAvatarStorageEntry(key);
+  // backward-compat ar veco atslēgu
+  if (!entry) {
+    try {
+      const legacy = localStorage.getItem("vz_avatar");
+      if (legacy) {
+        entry = { url: String(legacy), exp: 0 };
+        try {
+          writeAvatarStorageEntry(key, entry.url, entry.exp);
         } catch {}
       }
     } catch {}
   }
-  return v || null;
+  return entry;
 }
-function setLocalAvatar(username, dataUrl) {
+function getLocalAvatar(username) {
+  const entry = getLocalAvatarEntry(username);
+  return entry?.url || null;
+}
+function setLocalAvatar(username, dataUrl, expiresAt) {
   const key = avatarStorageKey(username);
+  const exp = Number(expiresAt) || 0;
   try {
-    if (dataUrl) localStorage.setItem(key, dataUrl);
-    else localStorage.removeItem(key);
+    if (dataUrl) {
+      if (isSignedAvatarUrl(dataUrl) && !exp) {
+        localStorage.removeItem(key);
+      } else {
+        writeAvatarStorageEntry(key, dataUrl, exp);
+      }
+    } else {
+      localStorage.removeItem(key);
+    }
   } catch {}
-  // backward-compat
+  // backward-compat (tikai data:image)
   try {
-    if (dataUrl) localStorage.setItem("vz_avatar", dataUrl);
+    if (dataUrl && String(dataUrl).startsWith("data:image/")) {
+      localStorage.setItem("vz_avatar", dataUrl);
+    }
   } catch {}
 }
 
@@ -220,8 +277,8 @@ const state = {
   dmThreads: new Map(), // username -> [{id,from,to,text,ts}]
   dmUnreadTotal: 0,
   dmUnreadByUser: {}, // username -> count
-  dmStorageMode: "client", // "client" = glabājam lokāli
   dmNotifyOn: true,
+  dmStorageMode: "client", // "client" | "server"
   dmLastFrom: null,
   dmInboxPreview: [], // servera inbox preview (no dm.unread)
   dmReply: null, // { id, from, text }
@@ -269,6 +326,10 @@ revealCostCoins: 25,
   // Globālā skaņa
   soundOn: true,
 };
+
+const DM_THREAD_MAX_LOCAL = 200;
+const DM_LOCAL_STORAGE_VERSION = 2;
+const DM_STORAGE_PERSIST_MS = 800;
 
 let seasonTimerId = null;
 let currentProfileName = null; // popupā atvērtais profila vārds
@@ -606,15 +667,30 @@ function setAvatar(imgEl, initialsEl, dataUrl, username) {
   }
 }
 
+function getCachedAvatarEntry(username) {
+  const cached = avatarCache.get(username);
+  if (cached === null) return null;
+  if (cached && typeof cached === "object") {
+    const exp = Number(cached.exp) || 0;
+    if (exp && Date.now() > exp) {
+      avatarCache.delete(username);
+      return undefined;
+    }
+    return cached;
+  }
+  if (typeof cached === "string") return { url: cached, exp: 0 };
+  return undefined;
+}
+
 function applyMiniAvatar(username, imgEl, initialsEl) {
   if (!username || !initialsEl) return;
 
   initialsEl.textContent = username.charAt(0).toUpperCase();
 
   if (username === state.username) {
-    const localAvatar = getLocalAvatar(state.username);
-    if (localAvatar && imgEl) {
-      imgEl.src = localAvatar;
+    const localEntry = getLocalAvatarEntry(state.username);
+    if (localEntry?.url && imgEl) {
+      imgEl.src = localEntry.url;
       imgEl.style.display = "block";
       initialsEl.style.display = "none";
       return;
@@ -623,17 +699,17 @@ function applyMiniAvatar(username, imgEl, initialsEl) {
 
   if (!imgEl) return;
 
-  const cached = avatarCache.get(username);
+  const cachedEntry = getCachedAvatarEntry(username);
 
-  if (cached === null) {
+  if (cachedEntry === null) {
     imgEl.src = "";
     imgEl.style.display = "none";
     initialsEl.style.display = "flex";
     return;
   }
 
-  if (typeof cached === "string" && cached.length > 0) {
-    imgEl.src = cached;
+  if (cachedEntry && cachedEntry.url) {
+    imgEl.src = cachedEntry.url;
     imgEl.style.display = "block";
     initialsEl.style.display = "none";
     return;
@@ -660,8 +736,8 @@ function fetchAvatarForUser(username, imgEl, initialsEl) {
     try {
       const data = await apiGet("/profile/" + encodeURIComponent(username));
       const url = data.avatarUrl || null;
-
-      avatarCache.set(username, url || null);
+      const exp = Number(data.avatarUrlExpiresAt) || 0;
+      avatarCache.set(username, url ? { url, exp } : null);
 
       if (url && imgEl && document.body.contains(imgEl)) {
         imgEl.src = url;
@@ -894,12 +970,15 @@ function updatePlayerCard(me) {
   if (playerBestStreakEl) playerBestStreakEl.textContent = me.bestStreak;
 
   let avatarUrl = me.avatarUrl || null;
-  const storedAvatar = getLocalAvatar(me.username);
+  const avatarExp = Number(me.avatarUrlExpiresAt) || 0;
+  const storedEntry = getLocalAvatarEntry(me.username);
 
   if (avatarUrl) {
-    if (storedAvatar !== avatarUrl) setLocalAvatar(me.username, avatarUrl);
-  } else if (storedAvatar) {
-    avatarUrl = storedAvatar;
+    if (!storedEntry || storedEntry.url !== avatarUrl || (avatarExp && storedEntry.exp !== avatarExp)) {
+      setLocalAvatar(me.username, avatarUrl, avatarExp);
+    }
+  } else if (storedEntry?.url) {
+    avatarUrl = storedEntry.url;
   }
   setAvatar(playerAvatarImgEl, playerAvatarInitialsEl, avatarUrl, me.username);
 
@@ -1205,12 +1284,19 @@ applyRankColor(ppRankEl, data.rankColor);
   if (ppMedalsEl) renderPlayerMedals(data.medals, ppMedalsEl, true);
 
   let avatarForPopup = data.avatarUrl || null;
+  const avatarExp = Number(data.avatarUrlExpiresAt) || 0;
   if (data.username === state.username) {
-    const stored = getLocalAvatar(state.username);
+    const storedEntry = getLocalAvatarEntry(state.username);
     if (avatarForPopup) {
-      if (stored !== avatarForPopup) setLocalAvatar(state.username, avatarForPopup);
-    } else if (stored) {
-      avatarForPopup = stored;
+      if (
+        !storedEntry ||
+        storedEntry.url !== avatarForPopup ||
+        (avatarExp && storedEntry.exp !== avatarExp)
+      ) {
+        setLocalAvatar(state.username, avatarForPopup, avatarExp);
+      }
+    } else if (storedEntry?.url) {
+      avatarForPopup = storedEntry.url;
     }
   }
   setAvatar(ppAvatarImgEl, ppAvatarInitialsEl, avatarForPopup, data.username);
@@ -2354,11 +2440,14 @@ if (winInit) winInit.textContent = winInitial;
 if (winImg) {
   let url = null;
  
-  if (winName === state.username) url = getLocalAvatar(state.username);
+  if (winName === state.username) {
+    const entry = getLocalAvatarEntry(state.username);
+    url = entry?.url || null;
+  }
  
   if (!url && winName) {
-    const cached = avatarCache.get(winName);
-    if (typeof cached === "string" && cached.length) url = cached;
+    const cachedEntry = getCachedAvatarEntry(winName);
+    if (cachedEntry?.url) url = cachedEntry.url;
   }
  
   if (!url && winName) {
@@ -2504,33 +2593,16 @@ window.addEventListener("keydown", (e) => {
 const TOP_AVATAR_TTL_MS = 24 * 60 * 60 * 1000;
 
 function readAvatarCacheEntry(cacheKey) {
-  try {
-    const raw = localStorage.getItem(cacheKey);
-    if (!raw) return null;
-    const obj = JSON.parse(raw);
-    if (!obj || typeof obj !== "object") return null;
-    if (!obj.url) return null;
-    const ts = Number(obj.ts) || 0;
-    if (!ts || Date.now() - ts > TOP_AVATAR_TTL_MS) return null;
-    return String(obj.url);
-  } catch {
-    // fallback: vecais plain string
-    try {
-      const raw = localStorage.getItem(cacheKey);
-      if (raw && String(raw).trim().startsWith("http")) return String(raw).trim();
-    } catch {}
-    return null;
-  }
+  const entry = readAvatarStorageEntry(cacheKey);
+  if (!entry || !entry.url) return null;
+  if (entry.exp && Date.now() > entry.exp) return null;
+  const ts = Number(entry.ts) || 0;
+  if (ts && Date.now() - ts > TOP_AVATAR_TTL_MS) return null;
+  return entry;
 }
 
-function writeAvatarCacheEntry(cacheKey, url) {
-  try {
-    localStorage.setItem(cacheKey, JSON.stringify({ url, ts: Date.now() }));
-  } catch {
-    try {
-      localStorage.setItem(cacheKey, String(url));
-    } catch {}
-  }
+function writeAvatarCacheEntry(cacheKey, url, expiresAt) {
+  writeAvatarStorageEntry(cacheKey, url, expiresAt);
 }
 
 async function loadLeaderboardAvatar(username, imgEl, initialsEl) {
@@ -2539,13 +2611,15 @@ async function loadLeaderboardAvatar(username, imgEl, initialsEl) {
   const cacheKey = "vz_avatar_top_" + username;
   let avatarUrl = null;
 
-  avatarUrl = readAvatarCacheEntry(cacheKey);
+  const cached = readAvatarCacheEntry(cacheKey);
+  avatarUrl = cached?.url || null;
 
   if (!avatarUrl && state.token) {
     try {
       const profile = await apiGet("/profile/" + encodeURIComponent(username));
       avatarUrl = profile.avatarUrl || null;
-      if (avatarUrl) writeAvatarCacheEntry(cacheKey, avatarUrl);
+      const exp = Number(profile.avatarUrlExpiresAt) || 0;
+      if (avatarUrl) writeAvatarCacheEntry(cacheKey, avatarUrl, exp);
     } catch (err) {
       console.warn("TOP avatar /profile kļūda", username, err);
     }
@@ -3048,169 +3122,6 @@ function clearUnreadIfNeeded() {
     setUnreadBadge(false);
   }
 }
-// ==================== DM (privāts čats) storage ====================
-const DM_THREAD_MAX_LOCAL = 200;
-const DM_LOCAL_STORAGE_VERSION = 1;
-let _dmPersistTimer = null;
-
-function dmStorageKey(suffix) {
-  const u = String(state.username || "").trim();
-  if (!u) return "";
-  return `vz_dm_${suffix}_v${DM_LOCAL_STORAGE_VERSION}_${u}`;
-}
-
-function dmSanitizeMeta(meta) {
-  if (!meta || typeof meta !== "object") return null;
-  return {
-    rankLevel: meta.rankLevel,
-    rankTitle: meta.rankTitle,
-    rankColor: meta.rankColor,
-    region: meta.region,
-    supporter: !!meta.supporter,
-  };
-}
-
-function dmNormalizeMessageForStore(msg) {
-  if (!msg || typeof msg !== "object") return null;
-  const id = String(msg.id || "").trim();
-  if (!id) return null;
-  const out = {
-    id,
-    from: String(msg.from || "").trim(),
-    to: String(msg.to || "").trim(),
-    text: String(msg.text || ""),
-    ts: Number(msg.ts) || Date.now(),
-  };
-  if (msg.deleted) out.deleted = true;
-  if (msg.edited) out.edited = true;
-  if (msg.editedAt) out.editedAt = Number(msg.editedAt) || Date.now();
-  if (msg.reply && typeof msg.reply === "object") {
-    const rid = String(msg.reply.id || "").trim();
-    const rfrom = String(msg.reply.from || "").trim();
-    let rtext = String(msg.reply.text || "").trim();
-    if (rtext.length > 80) rtext = rtext.slice(0, 80);
-    if (rid && rfrom && rtext) out.reply = { id: rid, from: rfrom, text: rtext };
-  }
-  const meta = dmSanitizeMeta(msg.meta);
-  if (meta) out.meta = meta;
-  return out;
-}
-
-function dmThreadsToObject() {
-  const out = {};
-  for (const [nameRaw, arr] of state.dmThreads.entries()) {
-    const name = String(nameRaw || "").trim();
-    if (!name) continue;
-    const list = Array.isArray(arr) ? arr : [];
-    const cleaned = [];
-    for (const m of list) {
-      const norm = dmNormalizeMessageForStore(m);
-      if (norm) cleaned.push(norm);
-    }
-    if (!cleaned.length) continue;
-    out[name] = cleaned.slice(-DM_THREAD_MAX_LOCAL);
-  }
-  return out;
-}
-
-function dmObjectToThreads(obj) {
-  const map = new Map();
-  if (!obj || typeof obj !== "object") return map;
-  for (const [nameRaw, arr] of Object.entries(obj)) {
-    const name = String(nameRaw || "").trim();
-    if (!name) continue;
-    if (!Array.isArray(arr)) continue;
-    const list = [];
-    for (const m of arr) {
-      const norm = dmNormalizeMessageForStore(m);
-      if (norm) list.push(norm);
-    }
-    if (!list.length) continue;
-    map.set(name, list.slice(-DM_THREAD_MAX_LOCAL));
-  }
-  return map;
-}
-
-function dmPersistNow() {
-  _dmPersistTimer = null;
-  const keyThreads = dmStorageKey("threads");
-  const keyUnread = dmStorageKey("unread");
-  const keyPeer = dmStorageKey("peer");
-  const keyLast = dmStorageKey("last");
-  if (!keyThreads) return;
-  try {
-    localStorage.setItem(keyThreads, JSON.stringify(dmThreadsToObject()));
-    localStorage.setItem(keyUnread, JSON.stringify(state.dmUnreadByUser || {}));
-    localStorage.setItem(keyPeer, JSON.stringify(state.dmPeerRead || {}));
-    if (state.dmLastFrom) localStorage.setItem(keyLast, String(state.dmLastFrom));
-    else localStorage.removeItem(keyLast);
-  } catch (e) {
-    console.warn("DM localStorage saglabāšana neizdevās:", e);
-  }
-}
-
-function dmSchedulePersist() {
-  if (_dmPersistTimer) return;
-  _dmPersistTimer = setTimeout(dmPersistNow, 400);
-}
-
-function dmLoadLocalState() {
-  const keyThreads = dmStorageKey("threads");
-  const keyUnread = dmStorageKey("unread");
-  const keyPeer = dmStorageKey("peer");
-  const keyLast = dmStorageKey("last");
-  if (!keyThreads) return;
-  state.dmInboxPreview = [];
-  try {
-    const raw = localStorage.getItem(keyThreads);
-    if (raw) {
-      const obj = JSON.parse(raw);
-      state.dmThreads = dmObjectToThreads(obj);
-    }
-  } catch (e) {
-    console.warn("DM threads parse kļūda:", e);
-    try { localStorage.removeItem(keyThreads); } catch {}
-  }
-  try {
-    const raw = localStorage.getItem(keyUnread);
-    if (raw) state.dmUnreadByUser = JSON.parse(raw) || {};
-  } catch (e) {
-    console.warn("DM unread parse kļūda:", e);
-  }
-  try {
-    const raw = localStorage.getItem(keyPeer);
-    if (raw) state.dmPeerRead = JSON.parse(raw) || {};
-  } catch (e) {
-    console.warn("DM peerRead parse kļūda:", e);
-  }
-  try {
-    const raw = localStorage.getItem(keyLast);
-    if (raw) state.dmLastFrom = String(raw || "").trim() || null;
-  } catch {}
-
-  let total = 0;
-  for (const v of Object.values(state.dmUnreadByUser || {})) {
-    total += Math.max(0, Number(v) || 0);
-  }
-  dmSetBadge(total, state.dmUnreadByUser || {});
-}
-
-function dmIncrementUnread(withUser) {
-  const u = String(withUser || "").trim();
-  if (!u) return;
-  const by =
-    state.dmUnreadByUser && typeof state.dmUnreadByUser === "object"
-      ? { ...state.dmUnreadByUser }
-      : {};
-  for (const k of Object.keys(by)) {
-    if (String(k).toLowerCase() === u.toLowerCase()) by[k] = Math.max(0, Number(by[k]) || 0);
-  }
-  by[u] = Math.max(0, Number(by[u]) || 0) + 1;
-  let total = 0;
-  for (const v of Object.values(by)) total += Math.max(0, Number(v) || 0);
-  dmSetBadge(total, by);
-  dmSchedulePersist();
-}
 // ==================== DM (privāts čats) UI + loģika ====================
 let dmTypingLastSent = 0;
 let dmTypingStopTimer = null;
@@ -3547,6 +3458,116 @@ function dmClose() {
   dmSendTyping(false);
   dmClearContext();
 }
+
+function dmStorageKey(username) {
+  const u = String(username || "").trim() || "unknown";
+  return "vz_dm_store_" + u;
+}
+function dmSanitizeMeta(meta) {
+  if (!meta || typeof meta !== "object") return null;
+  const out = { ...meta };
+  if (out.avatarUrl && String(out.avatarUrl).startsWith("data:image/")) {
+    if (String(out.avatarUrl).length > 120000) delete out.avatarUrl;
+  }
+  return out;
+}
+function dmNormalizeMessageForStore(msg) {
+  if (!msg || typeof msg !== "object") return null;
+  const out = {
+    id: msg.id,
+    from: msg.from,
+    to: msg.to,
+    text: msg.text || "",
+    ts: Number(msg.ts) || 0,
+  };
+  if (msg.reply && typeof msg.reply === "object") {
+    const r = {
+      id: msg.reply.id,
+      from: msg.reply.from,
+      text: msg.reply.text,
+    };
+    if (r.id && r.from && r.text) out.reply = r;
+  }
+  if (msg.edited) out.edited = true;
+  if (msg.editedAt) out.editedAt = Number(msg.editedAt) || 0;
+  if (msg.deleted) out.deleted = true;
+  if (msg.deletedAt) out.deletedAt = Number(msg.deletedAt) || 0;
+  const meta = dmSanitizeMeta(msg.meta);
+  if (meta) out.meta = meta;
+  return out;
+}
+function dmThreadsToObject() {
+  const out = {};
+  for (const [k, arr] of state.dmThreads.entries()) {
+    const key = String(k || "").trim();
+    if (!key) continue;
+    const list = Array.isArray(arr) ? arr.slice(-DM_THREAD_MAX_LOCAL) : [];
+    const stored = list.map(dmNormalizeMessageForStore).filter(Boolean);
+    out[key] = stored;
+  }
+  return out;
+}
+function dmObjectToThreads(obj) {
+  const map = new Map();
+  for (const [k, arr] of Object.entries(obj || {})) {
+    if (!Array.isArray(arr)) continue;
+    map.set(k, arr.map(dmNormalizeMessageForStore).filter(Boolean));
+  }
+  return map;
+}
+let _dmPersistTimer = null;
+function dmPersistNow() {
+  if (!state.username || state.dmStorageMode !== "client") return;
+  try {
+    const payload = {
+      v: DM_LOCAL_STORAGE_VERSION,
+      threads: dmThreadsToObject(),
+      unread: state.dmUnreadByUser || {},
+      peerRead: state.dmPeerRead || {},
+      lastFrom: state.dmLastFrom || null,
+      ts: Date.now(),
+    };
+    localStorage.setItem(dmStorageKey(state.username), JSON.stringify(payload));
+  } catch {}
+}
+function dmSchedulePersist() {
+  if (state.dmStorageMode !== "client") return;
+  if (_dmPersistTimer) return;
+  _dmPersistTimer = setTimeout(() => {
+    _dmPersistTimer = null;
+    dmPersistNow();
+  }, DM_STORAGE_PERSIST_MS);
+}
+function dmLoadLocalState() {
+  if (!state.username) return;
+  try {
+    const raw = localStorage.getItem(dmStorageKey(state.username));
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== "object") return;
+    state.dmThreads = dmObjectToThreads(data.threads || {});
+    state.dmUnreadByUser = data.unread && typeof data.unread === "object" ? data.unread : {};
+    state.dmPeerRead = data.peerRead && typeof data.peerRead === "object" ? data.peerRead : {};
+    state.dmLastFrom = data.lastFrom || null;
+    let total = 0;
+    for (const v of Object.values(state.dmUnreadByUser)) total += Math.max(0, Number(v) || 0);
+    state.dmUnreadTotal = total;
+    state.dmInboxPreview = [];
+    dmSetBadge(total, state.dmUnreadByUser);
+  } catch {}
+}
+function dmIncrementUnread(withUser) {
+  const u = String(withUser || "").trim();
+  if (!u) return;
+  const by = state.dmUnreadByUser && typeof state.dmUnreadByUser === "object"
+    ? { ...state.dmUnreadByUser }
+    : {};
+  const prev = Math.max(0, Number(by[u]) || 0);
+  by[u] = prev + 1;
+  let total = 0;
+  for (const v of Object.values(by)) total += Math.max(0, Number(v) || 0);
+  dmSetBadge(total, by);
+}
  
 function dmSetBadge(total, byUser) {
   state.dmUnreadTotal = Math.max(0, Number(total) || 0);
@@ -3582,6 +3603,7 @@ function dmMarkReadLocal(withUser) {
   for (const v of Object.values(by)) total += Math.max(0, Number(v) || 0);
  
   dmSetBadge(total, by);
+  dmSchedulePersist();
 } 
 let _dmToastTimer = null;
 function dmToast(text, fromUser) {
@@ -4215,10 +4237,12 @@ function openDmWith(username) {
   if (title) title.textContent = "Privātais čats ar " + u;
   if (drawer) drawer.style.display = "flex";
  
-  // ielādējam history (ja glabājas serverī) + uzreiz notīram unread šai sarunai
-  if (state.dmStorageMode !== "client") state.socket.emit("dm.history", { with: u });
+  // ielādējam history + uzreiz notīram unread šai sarunai
+  if (state.dmStorageMode !== "client") {
+    state.socket.emit("dm.history", { with: u });
+  }
   state.socket.emit("dm.read", { with: u });
-dmMarkReadLocal(u);
+  dmMarkReadLocal(u);
  const inputRow = document.getElementById("vz-dm-input-row");
 if (inputRow) inputRow.style.display = "flex";
 
@@ -4238,9 +4262,7 @@ function dmUpsertMessages(withUser, messages) {
   const thread = dmGetThread(u);
   const byId = new Map(thread.map((m, idx) => [String(m?.id || ""), idx]));
  
-  (messages || []).forEach((raw) => {
-    const m = dmNormalizeMessageForStore(raw);
-    if (!m) return;
+  (messages || []).forEach((m) => {
     const id = String(m && m.id ? m.id : "");
     if (id && byId.has(id)) {
       const idx = byId.get(id);
@@ -4739,18 +4761,13 @@ socket.on("chatMessage", (payload) => {
 });
  socket.on("dm.unread", (payload) => {
   ensureDmUi();
- 
-  const hasServerCounts =
-    payload &&
-    (payload.total != null || payload.count != null || payload.byUser || Array.isArray(payload?.threads));
-  const mode = payload?.mode || (hasServerCounts ? "server" : "client");
-  if (mode) state.dmStorageMode = mode;
-  if (mode === "client") {
-    // serveris neglabā DM — saglabājam lokālos skaitītājus
-    if (Array.isArray(payload?.threads)) state.dmInboxPreview = payload.threads;
+  if (payload?.mode) state.dmStorageMode = payload.mode;
+  if (state.dmStorageMode === "client") {
+    dmSetBadge(state.dmUnreadTotal, state.dmUnreadByUser);
+    state.dmInboxPreview = [];
     return;
   }
-
+ 
   const total = payload?.total ?? payload?.count ?? 0;
   const byUser = payload?.byUser || {};
   dmSetBadge(total, byUser);
@@ -4811,6 +4828,12 @@ socket.on("chatMessage", (payload) => {
     const withUser = String(payload?.with || "").trim();
     const messages = Array.isArray(payload?.messages) ? payload.messages : [];
     if (!withUser) return;
+
+    const mode = payload?.mode || state.dmStorageMode;
+    if (mode === "client") {
+      if (state.dmOpenWith === withUser) dmRenderThread(withUser);
+      return;
+    }
  
     if (payload && Object.prototype.hasOwnProperty.call(payload, "peerLastRead")) {
       state.dmPeerRead[withUser] = Math.max(0, Number(payload.peerLastRead) || 0);
@@ -4824,9 +4847,10 @@ socket.on("chatMessage", (payload) => {
     const from = String(msg?.from || "").trim();
     if (!from) return;
     if (dmIsBlocked(from)) return;
+    if (payload?.mode) state.dmStorageMode = payload.mode;
+    const isClientMode = state.dmStorageMode === "client";
     state.dmLastFrom = from;
     state.dmTypingByUser[from] = false;
-    dmSchedulePersist();
 
     if (msg && !msg.meta && payload?.fromUser) {
       const fu = payload.fromUser;
@@ -4841,42 +4865,40 @@ socket.on("chatMessage", (payload) => {
     }
  
     dmUpsertMessages(from, [msg]);
- 
-    // kluss paziņojums (netraucē spēlei)
-    if (state.dmOpenWith !== from) dmToast(`✉️ Jauna ziņa no ${from}: ${String(msg?.text || "")}`, from);
 
-    if (state.dmOpenWith !== from && state.dmStorageMode === "client") {
+    if (isClientMode && state.dmOpenWith !== from) {
       dmIncrementUnread(from);
     }
  
+    // kluss paziņojums (netraucē spēlei)
+    if (state.dmOpenWith !== from) dmToast(`✉️ Jauna ziņa no ${from}: ${String(msg?.text || "")}`, from);
+ 
     // ja saruna ir atvērta, uzreiz atzīmējam kā izlasītu
-   if (state.dmOpenWith === from) {
-  dmRenderThread(from);
-  socket.emit("dm.read", { with: from });
-  dmMarkReadLocal(from);
-}
+    if (state.dmOpenWith === from) {
+      dmRenderThread(from);
+      socket.emit("dm.read", { with: from });
+      dmMarkReadLocal(from);
+    }
   });
  
   socket.on("dm.sent", (payload) => {
     const msg = payload?.message;
     const withUser = String(payload?.with || msg?.to || "").trim();
     if (!withUser || !msg) return;
+    if (payload?.mode) state.dmStorageMode = payload.mode;
  
     dmUpsertMessages(withUser, [msg]);
-    state.dmLastFrom = withUser;
-    dmSchedulePersist();
     if (state.dmOpenWith === withUser) dmRenderThread(withUser);
   });
 
   socket.on("dm.read", (payload) => {
     const withUser = String(payload?.with || "").trim();
     if (!withUser) return;
+    if (payload?.mode) state.dmStorageMode = payload.mode;
     const ts = Math.max(0, Number(payload?.ts) || 0);
-    if (ts) {
-      state.dmPeerRead[withUser] = ts;
-      dmSchedulePersist();
-    }
+    if (ts) state.dmPeerRead[withUser] = ts;
     if (state.dmOpenWith === withUser) dmRenderThread(withUser);
+    dmSchedulePersist();
   });
 
   socket.on("dm.typing", (payload) => {
@@ -4890,6 +4912,7 @@ socket.on("chatMessage", (payload) => {
     const withUser = String(payload?.with || "").trim();
     const msg = payload?.message;
     if (!withUser || !msg) return;
+    if (payload?.mode) state.dmStorageMode = payload.mode;
     dmUpsertMessages(withUser, [msg]);
     if (state.dmOpenWith === withUser) dmRenderThread(withUser);
   });
@@ -4898,6 +4921,7 @@ socket.on("chatMessage", (payload) => {
     const withUser = String(payload?.with || "").trim();
     const id = String(payload?.id || "").trim();
     if (!withUser || !id) return;
+    if (payload?.mode) state.dmStorageMode = payload.mode;
     dmUpsertMessages(withUser, [{ id, deleted: true, text: "" }]);
     if (state.dmOpenWith === withUser) dmRenderThread(withUser);
   });
@@ -4912,6 +4936,7 @@ socket.on("chatMessage", (payload) => {
   socket.on("dm.cleared", (payload) => {
   const u = String(payload?.with || "").trim();
   if (!u) return;
+  if (payload?.mode) state.dmStorageMode = payload.mode;
   state.dmThreads.delete(u);
   dmMarkReadLocal(u);
   dmSchedulePersist();
@@ -5885,6 +5910,9 @@ async function initGame() {
     if (legacy && !perUser) localStorage.setItem(avatarStorageKey(state.username), legacy);
   } catch {}
 
+  dmLoadLocalState();
+  window.addEventListener("beforeunload", () => dmPersistNow());
+
   try {
     const soundPref = localStorage.getItem("vz_sound");
     state.soundOn = soundPref === "off" ? false : true;
@@ -5941,8 +5969,6 @@ try {
 } catch {}
   initRadioUi();
 ensureDmUi();
-dmLoadLocalState();
-window.addEventListener("beforeunload", () => dmPersistNow());
 // DM FAB long-press: toggle paziņojumus (ieliekam 1x)
 setTimeout(() => {
   const fab = document.getElementById("vz-dm-fab");
@@ -5997,7 +6023,6 @@ setTimeout(() => {
 
   if (logoutBtn) {
     logoutBtn.addEventListener("click", () => {
-      dmPersistNow();
       if (state.socket) {
         state.socket.disconnect();
         state.socket = null;
@@ -6171,8 +6196,10 @@ setTimeout(() => {
 
     // Avatar auto-sync (per-user)
     try {
-      const localAvatar = getLocalAvatar(me.username);
+      const localEntry = getLocalAvatarEntry(me.username);
+      const localAvatar = localEntry?.url || null;
       const serverAvatar = me.avatarUrl || null;
+      const serverExp = Number(me.avatarUrlExpiresAt) || 0;
 
       if (localAvatar && !serverAvatar && state.token) {
         await apiPost("/avatar", { avatar: localAvatar });
@@ -6180,7 +6207,7 @@ setTimeout(() => {
       }
 
       if (!localAvatar && serverAvatar) {
-        setLocalAvatar(me.username, serverAvatar);
+        setLocalAvatar(me.username, serverAvatar, serverExp);
         setAvatar(playerAvatarImgEl, playerAvatarInitialsEl, serverAvatar, state.username);
         setAvatar(ppAvatarImgEl, ppAvatarInitialsEl, serverAvatar, state.username);
       }
