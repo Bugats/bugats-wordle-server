@@ -1995,7 +1995,6 @@ input:focus-visible {
    =========================== */
 
 #win-ticker,
-#winTicker,
 .vz-win-ticker {
   position: fixed;
   z-index: 9995; /* PATCH: zem mention popup(9996), zem duel/profile */
@@ -2034,7 +2033,6 @@ input:focus-visible {
 }
 
 #win-ticker.vz-win-active,
-#winTicker.vz-win-active,
 .vz-win-ticker.vz-win-active {
   opacity: 0.92;
   animation: vzWinPop 0.55s ease-out;
@@ -2048,7 +2046,6 @@ input:focus-visible {
 
 @media (max-width: 600px) {
   #win-ticker,
-  #winTicker,
   .vz-win-ticker {
     top: calc(env(safe-area-inset-top, 0px) + 8px);
     left: 50%;
@@ -2117,9 +2114,8 @@ input:focus-visible {
    PROFILA POPUP
    =========================== */
 
-.profile-popup.hidden { display: none; }
+.vz-profile-popup.hidden { display: none; }
 
-.profile-popup,
 .vz-profile-popup {
   position: fixed;
   inset: 0;
@@ -2128,17 +2124,6 @@ input:focus-visible {
   align-items: center;
   justify-content: center;
   z-index: 9999;
-}
-
-.profile-popup-inner {
-  background: #14141a;
-  border-radius: 12px;
-  padding: 20px 24px;
-  min-width: 260px;
-  max-width: 320px;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.55);
-  color: #fff;
-  font-size: 14px;
 }
 
 .vz-profile-popup-inner {
@@ -2208,7 +2193,6 @@ input:focus-visible {
 .vz-profile-email-status.vz-ok { color: #7bff9a; }
 .vz-profile-email-status.vz-error { color: #ff6b6b; }
 
-.profile-popup-close,
 .vz-profile-popup-close {
   border: none;
   background: transparent;
@@ -2218,7 +2202,6 @@ input:focus-visible {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
-.profile-popup-close:hover,
 .vz-profile-popup-close:hover { color: #fff; }
 
 .vz-profile-popup-close {
@@ -2844,7 +2827,6 @@ input:focus-visible {
   .vz-hot-banner,
   .vz-xp-bar-fill.vz-xp-bump,
   #win-ticker.vz-win-active,
-  #winTicker.vz-win-active,
   .vz-win-ticker.vz-win-active,
   .vz-region-total-fill,
   .vz-region-bar-fill::after {
