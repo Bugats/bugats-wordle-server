@@ -41,6 +41,8 @@ const PREFERS_REDUCED_MOTION =
   typeof window !== "undefined" &&
   window.matchMedia &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Spēlē vienmēr rādām virpuļa atvēršanos (arī uz PC)
+const FORCE_TILE_SWIRL = true;
 
 // ================== AUTH STORAGE (kompatibilitāte) ==================
 const AUTH_KEYS = {
@@ -2190,7 +2192,8 @@ function updateKeyboardColor(letter, status) {
 }
 
 function revealRow(rowIndex, pattern, opts = {}) {
-  const animate = opts.animate !== false && !PREFERS_REDUCED_MOTION;
+  const animate =
+    opts.animate !== false && (!PREFERS_REDUCED_MOTION || FORCE_TILE_SWIRL);
   const half = Math.floor(FLIP_DURATION_MS / 2);
 
   for (let c = 0; c < state.cols; c++) {
