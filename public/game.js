@@ -199,6 +199,14 @@ function getAuraRankFromLevel(level) {
   if (lvl >= 4) return 1;
   return 0;
 }
+function getCosmeticTierFromLevel(level) {
+  const lvl = Number(level) || 1;
+  if (lvl >= 20) return 5;
+  if (lvl >= 15) return 4;
+  if (lvl >= 10) return 3;
+  if (lvl >= 5) return 2;
+  return 1;
+}
 const RANK_MIN_XP = [
   0,40,90,160,250,360,490,640,810,1000,
   1200,1450,1750,2100,2500,2950,3450,4000,4600,5250,
@@ -1063,10 +1071,13 @@ const card = document.querySelector(".vz-player-card");
 if (card) {
   card.classList.remove("vz-rank-low", "vz-rank-mid", "vz-rank-high");
   for (let i = 1; i <= 10; i++) card.classList.remove("vz-rank-" + i);
+  for (let i = 1; i <= 5; i++) card.classList.remove("vz-cos-tier-" + i);
  
   const aura = getAuraRankFromLevel(me.rankLevel);
   if (aura) card.classList.add("vz-rank-" + aura);
   card.classList.toggle("vz-player-supporter", !!me.supporter);
+  const cosTier = getCosmeticTierFromLevel(me.rankLevel);
+  if (cosTier) card.classList.add("vz-cos-tier-" + cosTier);
  
   // hot streak
   if ((me.streak || 0) >= 3) {
@@ -1339,9 +1350,12 @@ applyRankColor(ppRankEl, data.rankColor);
   if (profilePopupEl) {
     profilePopupEl.classList.remove("vz-rank-low", "vz-rank-mid", "vz-rank-high");
     for (let i = 1; i <= 10; i++) profilePopupEl.classList.remove("vz-rank-" + i);
+    for (let i = 1; i <= 5; i++) profilePopupEl.classList.remove("vz-cos-tier-" + i);
     const aura = getAuraRankFromLevel(data.rankLevel);
     if (aura) profilePopupEl.classList.add("vz-rank-" + aura);
     profilePopupEl.classList.toggle("vz-player-supporter", !!data.supporter);
+    const cosTier = getCosmeticTierFromLevel(data.rankLevel);
+    if (cosTier) profilePopupEl.classList.add("vz-cos-tier-" + cosTier);
   }
 
   const isSelf = data.username === state.username;
