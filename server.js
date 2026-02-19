@@ -4232,7 +4232,7 @@ async function loginHandler(req, res) {
   if (user.isBanned) {
     return res.status(403).json({
       message:
-        "Šis lietotājs ir nobanots no VĀRDU ZONAS. Sazinies ar Bugats.",
+        "Šis lietotājs ir nobanots no VĀRDU ZONAS. Sazināties: thezone@news.thezone.lv",
     });
   }
 

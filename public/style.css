@@ -2066,7 +2066,9 @@ input:focus-visible {
    Footer links
    =========================== */
 
-.vz-footer-link { margin-top: 16px; font-size: 12px; }
+.vz-footer-link { margin-top: 16px; font-size: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.vz-footer-link .vz-how-to-write { color: rgba(255,255,255,0.65); font-size: 11px; }
+.vz-footer-link .vz-how-to-write strong { color: rgba(255,255,255,0.9); }
 .vz-footer-link a {
   color: #a0a0ff;
   text-decoration: none;
