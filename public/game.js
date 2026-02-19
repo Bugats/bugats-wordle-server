@@ -420,7 +420,10 @@ const duelOkBtn = document.getElementById("duel-result-close");
 
 // TOP10 + ONLINE
 const lbListEl = $("#lb-list");
+const streakListEl = $("#streak-list");
+const dailyListEl = $("#daily-list");
 const regionListEl = $("#region-list");
+const regionMyRankEl = document.getElementById("region-my-rank");
 const onlineCountEl = $("#online-count");
 const onlineListEl = $("#online-list");
 
@@ -1157,6 +1160,14 @@ async function refreshRegionStats() {
     const list = Array.isArray(raw) ? raw : raw?.regions || raw?.list || [];
     if (!Array.isArray(list)) return;
 
+    if (regionMyRankEl && raw?.myRegionRank) {
+      const r = raw.myRegionRank;
+      regionMyRankEl.textContent = `Tu savā novadā: ${r.place}. vieta (no ${r.totalInRegion})`;
+      regionMyRankEl.style.display = "block";
+    } else if (regionMyRankEl) {
+      regionMyRankEl.style.display = "none";
+    }
+
     let totalScore = 0;
     list.forEach((item) => {
       totalScore += Number(item?.score || 0);
@@ -1227,6 +1238,8 @@ async function runPostLoginInit() {
   await startNewRound();
   await refreshLeaderboard();
   await refreshWeekly();
+  await refreshStreakLeaderboard();
+  await refreshDailyLeaderboard();
   await refreshMissions();
   await refreshFriends();
   await refreshRegionStats();
@@ -1236,6 +1249,8 @@ async function runPostLoginInit() {
   _chestTickTimer = setInterval(refreshDailyChestStatus, 60_000);
   setInterval(() => { if (_chestStatus) renderDailyChestUi(_chestStatus); }, 1000);
   setInterval(refreshRegionStats, 60_000);
+  setInterval(refreshStreakLeaderboard, 90_000);
+  setInterval(refreshDailyLeaderboard, 90_000);
   initSocket();
 }
 
@@ -2800,8 +2815,73 @@ async function refreshLeaderboard() {
 
       loadLeaderboardAvatar(item.username, avatarImg, avatarInitials);
     });
+
+    const meName = state.me?.username;
+    const lbTargetEl = document.getElementById("lb-target-line");
+    if (lbTargetEl && meName && list.length) {
+      const myIdx = list.findIndex((x) => x.username === meName);
+      if (myIdx === 0) {
+        lbTargetEl.textContent = "Tu esi 1. vieta! 🏆";
+        lbTargetEl.style.display = "block";
+      } else if (myIdx > 0) {
+        lbTargetEl.textContent = "Tavs mērķis: pārspēj " + (list[myIdx - 1].username || "");
+        lbTargetEl.style.display = "block";
+      } else {
+        lbTargetEl.style.display = "none";
+      }
+    }
   } catch (err) {
     console.error("Leaderboard kļūda:", err);
+  }
+}
+
+function renderLeaderboardList(listEl, list, scoreLabel) {
+  if (!listEl) return;
+  listEl.innerHTML = "";
+  (list || []).forEach((item, idx) => {
+    const li = createEl("li", "vz-lb-item");
+    if (idx < 3) li.classList.add("vz-lb-top", `vz-lb-top-${idx + 1}`);
+    const placeSpan = createEl("span", "vz-lb-place");
+    placeSpan.textContent = (item.place != null ? item.place : idx + 1) + ".";
+    li.appendChild(placeSpan);
+    const avatarWrap = createEl("span", "vz-lb-avatar");
+    const avatarImg = createEl("img", "vz-lb-avatar-img");
+    const avatarInitials = createEl("span", "vz-lb-avatar-initials");
+    avatarWrap.appendChild(avatarImg);
+    avatarWrap.appendChild(avatarInitials);
+    li.appendChild(avatarWrap);
+    const spanName = createEl("span", "clickable-username vz-lb-name");
+    spanName.textContent = item.username;
+    applyRankColor(spanName, item.rankColor);
+    spanName.title = item.rankTitle || "";
+    spanName.addEventListener("click", () => openProfile(item.username));
+    applyNameTierClass(spanName, item.rankLevel);
+    li.appendChild(spanName);
+    const scoreSpan = createEl("span", "vz-lb-score");
+    scoreSpan.textContent = scoreLabel(item);
+    li.appendChild(scoreSpan);
+    listEl.appendChild(li);
+    loadLeaderboardAvatar(item.username, avatarImg, avatarInitials);
+  });
+}
+
+async function refreshStreakLeaderboard() {
+  try {
+    const raw = await apiGet("/leaderboard/streak");
+    const list = extractLeaderboard(raw);
+    renderLeaderboardList(streakListEl, list, (item) => ` — ${item.bestStreak || 0} 🔥`);
+  } catch (err) {
+    console.warn("Streak leaderboard kļūda:", err);
+  }
+}
+
+async function refreshDailyLeaderboard() {
+  try {
+    const raw = await apiGet("/leaderboard/daily");
+    const list = extractLeaderboard(raw);
+    renderLeaderboardList(dailyListEl, list, (item) => ` — ${item.winsToday || 0} W`);
+  } catch (err) {
+    console.warn("Daily leaderboard kļūda:", err);
   }
 }
 

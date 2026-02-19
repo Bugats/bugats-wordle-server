@@ -1216,6 +1216,13 @@ input:focus-visible {
   opacity: 0.9;
 }
 
+.vz-lb-target-line {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 200, 100, 0.95);
+}
+
 /* ===== REGION BADGES ===== */
 .vz-region-badge {
   display: inline-flex;
@@ -1260,6 +1267,13 @@ input:focus-visible {
 .vz-region-total {
   margin: 4px 0 10px;
 }
+.vz-region-my-rank {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: rgba(120, 200, 255, 0.95);
+}
+
 .vz-region-total-label {
   font-size: 12px;
   opacity: 0.85;

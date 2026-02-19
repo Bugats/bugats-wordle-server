@@ -3066,6 +3066,57 @@ function computeTop10Leaderboard() {
   }));
 }
 
+function computeStreakLeaderboard() {
+  const arr = Object.values(USERS || {})
+    .filter((u) => u && u.username && !u.isBanned)
+    .slice();
+  arr.forEach((u) => ensureRankFields(u));
+  arr.sort((a, b) => {
+    const dStreak = (b.bestStreak || 0) - (a.bestStreak || 0);
+    if (dStreak !== 0) return dStreak;
+    const ds = (b.score || 0) - (a.score || 0);
+    if (ds !== 0) return ds;
+    return String(a.username).localeCompare(String(b.username));
+  });
+  return arr.slice(0, 10).map((u, idx) => ({
+    place: idx + 1,
+    username: u.username,
+    score: u.score || 0,
+    bestStreak: u.bestStreak || 0,
+    rankTitle: u.rankTitle || "—",
+    rankLevel: u.rankLevel || 1,
+    rankColor: u.rankColor || "#9CA3AF",
+    avatarUrl: avatarForBroadcast(u),
+    supporter: !!u.supporter,
+  }));
+}
+
+function computeDailyLeaderboard() {
+  const today = todayKey();
+  const arr = Object.values(USERS || {})
+    .filter((u) => u && u.username && !u.isBanned && u.winsTodayDate === today && (u.winsToday || 0) > 0)
+    .slice();
+  arr.forEach((u) => ensureRankFields(u));
+  arr.sort((a, b) => {
+    const dw = (b.winsToday || 0) - (a.winsToday || 0);
+    if (dw !== 0) return dw;
+    const ds = (b.score || 0) - (a.score || 0);
+    if (ds !== 0) return ds;
+    return String(a.username).localeCompare(String(b.username));
+  });
+  return arr.slice(0, 10).map((u, idx) => ({
+    place: idx + 1,
+    username: u.username,
+    winsToday: u.winsToday || 0,
+    score: u.score || 0,
+    rankTitle: u.rankTitle || "—",
+    rankLevel: u.rankLevel || 1,
+    rankColor: u.rankColor || "#9CA3AF",
+    avatarUrl: avatarForBroadcast(u),
+    supporter: !!u.supporter,
+  }));
+}
+
 function computeRegionStats() {
   const base = REGION_NAMES.map((name) => ({
     region: name,
@@ -5241,6 +5292,12 @@ app.post("/buy-token", authMiddleware, (req, res) => {
 });
 
 // ===== Leaderboard =====
+app.get("/leaderboard/streak", (_req, res) => {
+  res.json(computeStreakLeaderboard());
+});
+app.get("/leaderboard/daily", (_req, res) => {
+  res.json(computeDailyLeaderboard());
+});
 app.get("/leaderboard", (_req, res) => {
   res.json(computeTop10Leaderboard());
 });
@@ -5254,8 +5311,26 @@ app.get("/weekly", authMiddleware, (req, res) => {
 });
 
 // ===== Regions (Novadi) =====
-app.get("/regions/stats", authMiddleware, (_req, res) => {
-  res.json({ regions: computeRegionStats() });
+function computeMyRegionRank(user) {
+  const region = normalizeRegion(user?.region);
+  if (!region) return null;
+  const inRegion = Object.values(USERS || {})
+    .filter((u) => u && u.username && !u.isBanned && normalizeRegion(u.region) === region)
+    .slice();
+  inRegion.sort((a, b) => {
+    const ds = (b.score || 0) - (a.score || 0);
+    if (ds !== 0) return ds;
+    return String(a.username).localeCompare(String(b.username));
+  });
+  const idx = inRegion.findIndex((u) => u.username === user.username);
+  if (idx < 0) return null;
+  return { place: idx + 1, totalInRegion: inRegion.length };
+}
+
+app.get("/regions/stats", authMiddleware, (req, res) => {
+  const regions = computeRegionStats();
+  const myRegionRank = computeMyRegionRank(req.user);
+  res.json({ regions, myRegionRank });
 });
 
 app.post("/region", authMiddleware, async (req, res) => {
