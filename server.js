@@ -518,12 +518,12 @@ const CHAT_STORE_MODE = String(process.env.CHAT_STORE_MODE || "none")
 const CHAT_STORE_ON_SUPABASE = CHAT_STORE_MODE === "supabase" && SUPABASE_ENABLED;
 const CHAT_STORE_TABLE = String(process.env.CHAT_STORE_TABLE || "chat_messages").trim();
 const CHAT_HISTORY_LIMIT = (() => {
-  const v = parseInt(process.env.CHAT_HISTORY_LIMIT || "120", 10);
-  return Number.isFinite(v) && v >= 0 && v <= 500 ? v : 120;
+  const v = parseInt(process.env.CHAT_HISTORY_LIMIT || "60", 10);
+  return Number.isFinite(v) && v >= 0 && v <= 500 ? v : 60;
 })();
 const CHAT_RETENTION_DAYS = (() => {
-  const v = parseInt(process.env.CHAT_RETENTION_DAYS || "30", 10);
-  return Number.isFinite(v) && v >= 1 && v <= 3650 ? v : 30;
+  const v = parseInt(process.env.CHAT_RETENTION_DAYS || "14", 10);
+  return Number.isFinite(v) && v >= 1 && v <= 3650 ? v : 14;
 })();
 const CHAT_CLEANUP_INTERVAL_MS = (() => {
   const v = parseInt(process.env.CHAT_CLEANUP_INTERVAL_MS || "21600000", 10); // 6h

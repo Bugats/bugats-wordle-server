@@ -3036,7 +3036,7 @@ let chatUnread = 0;
 let lastMention = null;
 let mentionPopupTimer = null;
 
-const MAX_CHAT_ROWS = 250;
+const MAX_CHAT_ROWS = 100;
 const CHAT_DEDUPE_MAX = 500;
 const chatSeen = new Map(); // key -> ts
 const chatSeenOrder = []; // keys FIFO
