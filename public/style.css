@@ -194,7 +194,7 @@ input:focus-visible {
   --vz-glow-gray: 0 0 10px rgba(58, 58, 60, 0.8);
 }
 
-/* Body + background (2026 image + readability overlay + subtle twinkle) */
+/* Body + background (landscape + readability overlay + subtle twinkle) */
 .vz-body-game {
   color: #ffffff;
   color-scheme: dark; /* PATCH: labāk tumšajiem UI elementiem */
@@ -206,8 +206,8 @@ input:focus-visible {
   overflow-y: auto;
   overflow-x: hidden;
 
-  background-color: #000;
-  background-image: url("./assets/vz_bg_2026_desktop.webp");
+  background-color: #1a3d1a;
+  background-image: url("./assets/game_bg_landscape.png");
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
@@ -218,13 +218,12 @@ input:focus-visible {
 
 @media (max-width: 900px) {
   .vz-body-game {
-    background-image: url("./assets/vz_bg_2026_1280.webp");
     background-attachment: scroll;
   }
 }
 @media (max-width: 600px) {
   .vz-body-game {
-    background-image: url("./assets/vz_bg_2026_960.webp");
+    background-image: url("./assets/game_bg_landscape.png");
   }
 }
 
