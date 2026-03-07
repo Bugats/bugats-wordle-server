@@ -333,6 +333,9 @@ revealCostCoins: 25,
 
   // Globālā skaņa
   soundOn: true,
+
+  // Tēma: dark | light | contrast
+  theme: "dark",
 };
 
 const DM_THREAD_MAX_LOCAL = 200;
@@ -408,6 +411,7 @@ const topNamedayEl = document.getElementById("vz-topbar-nameday");
 
 // Globālā skaņa
 const soundToggleBtn = document.getElementById("sound-toggle-btn");
+const themeToggleBtn = document.getElementById("theme-toggle-btn");
 
 // DUELA OVERLAY DOM REF
 const duelOverlayEl = document.getElementById("duel-result-overlay");
@@ -685,6 +689,16 @@ function applySoundState() {
 
   const radioAudio = document.getElementById("vz-radio");
   if (radioAudio) radioAudio.muted = !on;
+}
+
+const THEME_ORDER = ["dark", "light", "contrast"];
+const THEME_LABELS = { dark: "🌙 Tumšs", light: "☀️ Gaišs", contrast: "◐ Augsta kontrasta" };
+
+function applyTheme() {
+  document.body.classList.remove("vz-theme-light", "vz-theme-contrast");
+  if (state.theme === "light") document.body.classList.add("vz-theme-light");
+  else if (state.theme === "contrast") document.body.classList.add("vz-theme-contrast");
+  if (themeToggleBtn) themeToggleBtn.textContent = THEME_LABELS[state.theme] || THEME_LABELS.dark;
 }
 
 // ==================== AVATĀRA PALĪGFUNKCIJAS ====================
@@ -6171,6 +6185,22 @@ async function initGame() {
         localStorage.setItem("vz_sound", state.soundOn ? "on" : "off");
       } catch {}
       applySoundState();
+    });
+  }
+
+  try {
+    const saved = localStorage.getItem("vz_theme");
+    if (saved && THEME_ORDER.includes(saved)) state.theme = saved;
+  } catch {}
+  applyTheme();
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener("click", () => {
+      const idx = THEME_ORDER.indexOf(state.theme);
+      state.theme = THEME_ORDER[(idx + 1) % THEME_ORDER.length];
+      try {
+        localStorage.setItem("vz_theme", state.theme);
+      } catch {}
+      applyTheme();
     });
   }
 
