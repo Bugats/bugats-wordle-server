@@ -1,6 +1,6 @@
 {
   "packageId": "lv.thezone.wordle",
-  "host": "wordle.thezone.lv",
+  "host": "bugats-wordle-server.onrender.com",
   "name": "VARDU ZONA",
   "launcherName": "VARDU ZONA",
   "display": "standalone",
@@ -12,8 +12,8 @@
   "navigationDividerColorDark": "#000000",
   "backgroundColor": "#0B0F2A",
   "enableNotifications": false,
-  "startUrl": "/",
-  "iconUrl": "https://wordle.thezone.lv/branding/vardu-zona-dev-icon-512.png",
+  "startUrl": "/game.html",
+  "iconUrl": "https://bugats-wordle-server.onrender.com/icon-maskable.svg",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
     "path": "keystore/wordle.jks",
@@ -23,7 +23,7 @@
   "appVersionCode": 5,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
-  "webManifestUrl": "https://wordle.thezone.lv/manifest.json",
+  "webManifestUrl": "https://bugats-wordle-server.onrender.com/manifest.json",
   "fallbackType": "customtabs",
   "features": {},
   "alphaDependencies": {
