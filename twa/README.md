@@ -13,25 +13,26 @@ It uses Bubblewrap to generate an Android project that always loads the live web
 1) Install Bubblewrap:
    npm install -g @bubblewrap/cli
 
-2) Generate a signing key (keystore):
-   keytool -genkey -v -keystore wordle.jks -keyalg RSA -keysize 2048 -validity 10000 -alias wordle
+2) Generate a signing key (keystore) in `twa/keystore/`:
+   keytool -genkey -v -keystore wordle.jks -keyalg RSA -keysize 2048 -validity 10000 -alias varduzona
 
 3) Get SHA256 cert fingerprint (needed for assetlinks.json):
-   keytool -list -v -keystore wordle.jks -alias wordle | grep -i SHA256
+   keytool -list -v -keystore keystore/wordle.jks -alias varduzona | findstr SHA256
 
 4) Update /public/.well-known/assetlinks.json:
    - package_name: lv.thezone.wordle
    - sha256_cert_fingerprints: replace with your SHA256
 
-5) Update twa-manifest.json in this folder if needed (packageId, host, name, iconUrl).
+5) Update twa-manifest.json in this folder if needed (packageId, host, name, iconUrl). Host is set to bugats-wordle-server.onrender.com.
 
-6) Init the TWA project:
-   bubblewrap init --manifest=https://wordle.thezone.lv/manifest.json
+6) Init the TWA project (only first time; creates twa/app/):
+   bubblewrap init --manifest=https://bugats-wordle-server.onrender.com/manifest.json
 
-7) Build the Android App Bundle (AAB):
-   bubblewrap build
+7) Build and optionally install on connected phone:
+   .\build-and-install.ps1
+   Or manually: `bubblewrap update` then `bubblewrap build`. APK: twa/app/build/outputs/apk/release/app-release-signed.apk
 
-8) Upload the AAB to Google Play Console.
+8) Upload the AAB to Google Play Console (from build output).
 
 ## Notes
 - The app will always show the live web version, so updates are instant.
