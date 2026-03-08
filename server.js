@@ -5052,8 +5052,12 @@ app.post("/challenge/:id/guess", authMiddleware, (req, res) => {
     return res.status(400).json({ message: "Minējumā drīkst būt tikai burti (A-Z + latviešu burti)." });
   }
 
-  const history = isPlayer1 ? c.history1 : c.history2;
-  if (!Array.isArray(history)) (isPlayer1 ? c.history1 : c.history2) = [];
+  let history = isPlayer1 ? c.history1 : c.history2;
+  if (!Array.isArray(history)) {
+    history = [];
+    if (isPlayer1) c.history1 = history;
+    else c.history2 = history;
+  }
   const currentAttempts = history.length;
   if (currentAttempts >= MAX_ATTEMPTS) {
     return res.status(400).json({ message: "Tu jau esi iztērējis visus mēģinājumus." });

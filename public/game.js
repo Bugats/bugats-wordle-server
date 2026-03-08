@@ -476,6 +476,12 @@ const challengeResultTitle = document.getElementById("challenge-result-title");
 const challengeResultDetail = document.getElementById("challenge-result-detail");
 const challengeResultClose = document.getElementById("challenge-result-close");
 
+const appDownloadLink = document.getElementById("app-download-link");
+const appInstallModal = document.getElementById("app-install-modal");
+const appInstallPwaBtn = document.getElementById("app-install-pwa-btn");
+const appInstallPwaRow = document.getElementById("app-install-pwa-row");
+const appInstallClose = document.getElementById("app-install-close");
+
 // DUELA OVERLAY DOM REF
 const duelOverlayEl = document.getElementById("duel-result-overlay");
 const duelWinnerNameEl = document.getElementById("duel-winner-name");
@@ -873,6 +879,9 @@ function recordWinAndMaybeShowRatePrompt() {
 function hideRateOverlay() {
   if (rateOverlayEl) rateOverlayEl.classList.add("hidden");
 }
+
+// ==================== PWA INSTALL ====================
+let deferredInstallPrompt = null;
 
 // ==================== IZAICINĀJUMS DRAUGAM ====================
 let pendingChallengeId = null;
@@ -6657,6 +6666,35 @@ async function initGame() {
       startNewRound();
     });
   }
+
+  if (appDownloadLink) {
+    appDownloadLink.addEventListener("click", (e) => {
+      if (appInstallModal) {
+        e.preventDefault();
+        if (appInstallPwaRow && deferredInstallPrompt) appInstallPwaRow.style.display = "flex";
+        else if (appInstallPwaRow) appInstallPwaRow.style.display = "none";
+        appInstallModal.classList.remove("hidden");
+      }
+    });
+  }
+  if (appInstallPwaBtn) {
+    appInstallPwaBtn.addEventListener("click", async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      const { outcome } = await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      if (appInstallPwaRow) appInstallPwaRow.style.display = "none";
+      if (appInstallModal) appInstallModal.classList.add("hidden");
+    });
+  }
+  if (appInstallClose && appInstallModal) {
+    appInstallClose.addEventListener("click", () => appInstallModal.classList.add("hidden"));
+  }
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    if (appInstallPwaRow) appInstallPwaRow.style.display = "flex";
+  });
 
   if (shareBtn) shareBtn.addEventListener("click", handleShare);
   if (shareWhatsappBtn) shareWhatsappBtn.addEventListener("click", handleShareWhatsapp);

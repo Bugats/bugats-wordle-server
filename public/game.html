@@ -102,6 +102,7 @@
           <button id="sound-toggle-btn" class="vz-sound-btn" type="button">🔊 Skaņa: ON</button>
           <button id="theme-toggle-btn" class="vz-topbar-link" type="button" title="Tēma: tumšs / gaišs / augsta kontrasta" aria-label="Mainīt tēmu">🌙 Tēma</button>
           <button id="logout-btn" type="button">Izlogoties</button>
+          <a id="app-download-link" class="vz-topbar-link" href="https://play.google.com/store/apps/details?id=lv.thezone.wordle" target="_blank" rel="noopener" title="Lejupielādēt VĀRDU ZONA no Play Store vai pievienot sākumekrānam">📲 Lietotne</a>
           <a class="vz-topbar-link" href="privacy.html" target="_blank" rel="noopener">Privatums</a>
         </div>
       </div>
@@ -231,7 +232,7 @@
 
               <hr class="vz-divider" />
 
-              <button id="challenge-friend-btn" class="vz-share-btn" type="button">⚔️ Izaicināt draugu</button>
+              <button id="challenge-friend-btn" class="vz-share-btn" type="button" title="Izaicināt draugu – abi min to pašu vārdu, uzvar tas, kam mazāk mēģinājumu">⚔️ Izaicināt draugu</button>
               <button id="share-btn" class="vz-share-btn" type="button">🔗 Dalīties ar VĀRDU ZONU</button>
               <button id="share-whatsapp-btn" class="vz-share-btn vz-share-btn-wa" type="button">
                 💬 Dalīties WhatsApp
@@ -615,6 +616,24 @@
         <p id="challenge-result-title" class="vz-offline-title"></p>
         <p id="challenge-result-detail" class="vz-offline-text"></p>
         <button id="challenge-result-close" type="button" class="vz-offline-retry">Spēlēt tālāk</button>
+      </div>
+    </div>
+
+    <!-- Lietotnes lejupielāde / pievienošana sākumekrānam -->
+    <div id="app-install-modal" class="vz-modal-overlay hidden" role="dialog" aria-labelledby="app-install-title">
+      <div class="vz-modal-inner vz-challenge-modal">
+        <h3 id="app-install-title">Lejupielādēt lietotni</h3>
+        <p class="vz-challenge-create-note">Spēli vari izmantot kā lietotni – ātrāk atveras un ērtāk no sākumekrāna.</p>
+        <div id="app-install-pwa-row" class="vz-challenge-join-btns" style="display: none;">
+          <button id="app-install-pwa-btn" type="button" class="vz-btn-primary">Pievienot sākumekrānam</button>
+        </div>
+        <p class="vz-challenge-create-note" style="margin-top: 0.5em;">
+          <strong>Android:</strong> lejupielādē no Play Store.<br />
+          <strong>iPhone / iPad:</strong> Safari → izvēlne (kvadrāts ar bultiņu) → „Pievienot sākumekrānam”.<br />
+          <strong>Dators:</strong> Chrome izvēlnē → „Instalēt VĀRDU ZONA” vai „Pievienot sākumekrānam”.
+        </p>
+        <a id="app-install-play-link" class="vz-btn-primary" href="https://play.google.com/store/apps/details?id=lv.thezone.wordle" target="_blank" rel="noopener" style="display: inline-block; margin-top: 0.75em; text-decoration: none; text-align: center;">Atvērt Play Store</a>
+        <button id="app-install-close" type="button" class="vz-modal-close-btn" style="margin-top: 0.5em;">Aizvērt</button>
       </div>
     </div>
 

@@ -1,7 +1,7 @@
 {
-  "name": "VARDU ZONA",
-  "short_name": "VARDU ZONA",
-  "description": "Latvian word guessing game with ranks, missions, and duels.",
+  "name": "VĀRDU ZONA",
+  "short_name": "VĀRDU ZONA",
+  "description": "Latviešu vārdu minēšanas spēle ar rankiem, misijām, dueļiem un izaicinājumiem draugiem.",
   "lang": "lv",
   "start_url": "./",
   "scope": "./",
