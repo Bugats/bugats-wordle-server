@@ -5,6 +5,10 @@
 // + SEZONAS + HOF
 // + LAIMES RATS (/wheel namespace) ar persistent wheel.json
 // + Ability: atvērt 1 burtu par coins (1x katrā raundā)
+//
+// Politika: neaktīvi konti NETIEK dzēsti un XP/score/streak/medaļas NETIEK nullētas
+// par neaktivitāti. Profils un punkti paliek; tikai ban un atsevišķas admin darbības
+// (piem. sezonas coins/tokens reset) maina datus.
 
 import express from "express";
 import { createServer } from "http";
@@ -631,6 +635,7 @@ function loadUsers(listOverride) {
       if (typeof u.mutedUntil !== "number") u.mutedUntil = 0;
       if (!u.lastActionAt) u.lastActionAt = Date.now();
       if (!u.lastPassiveTickAt) u.lastPassiveTickAt = u.lastActionAt;
+      if (!u.lastLoginAt) u.lastLoginAt = u.createdAt || u.lastActionAt || Date.now();
       if (typeof u.bestStreak !== "number") u.bestStreak = 0;
 
       if (typeof u.missionsDate !== "string") u.missionsDate = "";
@@ -4129,6 +4134,7 @@ async function signupHandler(req, res) {
     email: cleanedEmail || "",
     passwordHash: hash,
     createdAt: now,
+    lastLoginAt: now,
     createdDeviceId: deviceId || null,
     deviceIds: deviceId ? [deviceId] : [],
     xp: 0,
@@ -4238,6 +4244,8 @@ async function loginHandler(req, res) {
 
   const ok = await bcrypt.compare(password, user.passwordHash || "");
   if (!ok) return res.status(400).json({ message: "Nepareiza parole" });
+
+  user.lastLoginAt = Date.now();
 
   // Ierīces ID (ja ir) – uzkrājam pie user (noder nākotnē anti-abuse)
   const deviceId = getDeviceIdFromReq(req);

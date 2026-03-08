@@ -123,12 +123,44 @@ function readAvatarStorageEntry(key) {
     return null;
   }
 }
+function trimAvatarStorageKeys(keepKey) {
+  try {
+    const prefix1 = "vz_avatar_";
+    const prefix2 = "vz_avatar_top_";
+    const ownKey = state.username ? avatarStorageKey(state.username) : "";
+    const protect = new Set([keepKey, ownKey, "vz_avatar"].filter(Boolean));
+    const entries = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || (!k.startsWith(prefix1) && !k.startsWith(prefix2)) || protect.has(k)) continue;
+      const raw = localStorage.getItem(k);
+      let ts = 0;
+      if (raw && raw.trim().startsWith("{")) {
+        try {
+          const o = JSON.parse(raw);
+          if (o && typeof o.ts === "number") ts = o.ts;
+        } catch {}
+      }
+      entries.push({ key: k, ts });
+    }
+    if (entries.length < AVATAR_STORAGE_MAX_KEYS) return;
+    entries.sort((a, b) => a.ts - b.ts);
+    const toRemove = entries.length - AVATAR_STORAGE_MAX_KEYS + 1;
+    for (let i = 0; i < toRemove && i < entries.length; i++) {
+      try {
+        localStorage.removeItem(entries[i].key);
+      } catch {}
+    }
+  } catch {}
+}
+
 function writeAvatarStorageEntry(key, url, exp) {
   try {
     if (!url) {
       localStorage.removeItem(key);
       return;
     }
+    trimAvatarStorageKeys(key);
     const payload = { url: String(url), ts: Date.now() };
     if (exp && Number.isFinite(exp) && exp > 0) payload.exp = exp;
     localStorage.setItem(key, JSON.stringify(payload));
@@ -341,6 +373,9 @@ revealCostCoins: 25,
 const DM_THREAD_MAX_LOCAL = 200;
 const DM_LOCAL_STORAGE_VERSION = 2;
 const DM_STORAGE_PERSIST_MS = 800;
+
+const AVATAR_CACHE_MAX_SIZE = 80;
+const AVATAR_STORAGE_MAX_KEYS = 50;
 
 let seasonTimerId = null;
 let currentProfileName = null; // popupā atvērtais profila vārds
@@ -912,6 +947,11 @@ function fetchAvatarForUser(username, imgEl, initialsEl) {
       const url = data.avatarUrl || null;
       const exp = Number(data.avatarUrlExpiresAt) || 0;
       avatarCache.set(username, url ? { url, exp } : null);
+      while (avatarCache.size > AVATAR_CACHE_MAX_SIZE) {
+        const firstKey = avatarCache.keys().next().value;
+        if (firstKey != null) avatarCache.delete(firstKey);
+        else break;
+      }
 
       if (url && imgEl && document.body.contains(imgEl)) {
         imgEl.src = url;
