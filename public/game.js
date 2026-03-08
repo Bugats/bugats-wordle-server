@@ -2380,7 +2380,6 @@ function showWinEffects() {
   if (typeof confetti === "function") {
     confetti({ particleCount: 80, spread: 70, origin: { y: 0.3 } });
   }
-  playSound(sWin);
 }
 
 // ====== Solo minējums (HTTP /guess) ======
@@ -2420,6 +2419,7 @@ const guessLetters = letters.slice(); // kopija
 
     if (isWin) {
       if (gameMessageEl) gameMessageEl.textContent = "Precīzi! Tu atminēji vārdu!";
+      playSound(sWin);
       setTimeout(() => showWinEffects(), Math.min(120, unlockAfter));
       state.roundFinished = true;
       setTimeout(() => prepareShareResult(true, rowIndex + 1), unlockAfter + 50);
@@ -5289,6 +5289,7 @@ const onDuelGuessResult = async (payload) => {
  
   if (win) {
     if (gameMessageEl) gameMessageEl.textContent = "Tu uzminēji dueli!";
+    playSound(sWin);
     setTimeout(() => showWinEffects(), Math.min(120, unlockAfter));
     state.roundFinished = true;
     state.isLocked = true;
