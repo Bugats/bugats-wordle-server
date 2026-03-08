@@ -644,17 +644,87 @@ async function apiGet(path) {
 }
 
 // ==================== AUDIO HELPERIS ====================
+// Rezerves skaņas (Web Audio), ja MP3 nav vai bojāts
+function playFallbackSound(kind) {
+  if (state.soundOn === false) return;
+  const ctx = getVzAudioCtx();
+  if (!ctx) return;
+  try {
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0, now);
+    const decay = 0.08;
+    if (kind === "s-click") {
+      osc.frequency.setValueAtTime(800, now);
+      osc.type = "sine";
+      gain.gain.linearRampToValueAtTime(0.15, now + 0.02);
+      gain.gain.linearRampToValueAtTime(0, now + decay);
+      osc.start(now);
+      osc.stop(now + decay);
+    } else if (kind === "s-type") {
+      osc.frequency.setValueAtTime(400, now);
+      osc.type = "sine";
+      gain.gain.linearRampToValueAtTime(0.08, now + 0.01);
+      gain.gain.linearRampToValueAtTime(0, now + 0.04);
+      osc.start(now);
+      osc.stop(now + 0.04);
+    } else if (kind === "s-error") {
+      osc.frequency.setValueAtTime(200, now);
+      osc.type = "square";
+      gain.gain.linearRampToValueAtTime(0.08, now + 0.02);
+      gain.gain.linearRampToValueAtTime(0, now + 0.15);
+      osc.start(now);
+      osc.stop(now + 0.15);
+    } else if (kind === "s-win") {
+      osc.frequency.setValueAtTime(523, now);
+      osc.frequency.setValueAtTime(659, now + 0.08);
+      osc.frequency.setValueAtTime(784, now + 0.16);
+      osc.type = "sine";
+      gain.gain.linearRampToValueAtTime(0.12, now + 0.05);
+      gain.gain.linearRampToValueAtTime(0.1, now + 0.25);
+      gain.gain.linearRampToValueAtTime(0, now + 0.4);
+      osc.start(now);
+      osc.stop(now + 0.4);
+    } else if (kind === "s-lose") {
+      osc.frequency.setValueAtTime(262, now);
+      osc.frequency.setValueAtTime(220, now + 0.1);
+      osc.type = "sine";
+      gain.gain.linearRampToValueAtTime(0.1, now + 0.03);
+      gain.gain.linearRampToValueAtTime(0, now + 0.25);
+      osc.start(now);
+      osc.stop(now + 0.25);
+    } else if (kind === "s-coin" || kind === "s-token") {
+      osc.frequency.setValueAtTime(988, now);
+      osc.frequency.setValueAtTime(1318, now + 0.06);
+      osc.type = "sine";
+      gain.gain.linearRampToValueAtTime(0.1, now + 0.02);
+      gain.gain.linearRampToValueAtTime(0, now + 0.12);
+      osc.start(now);
+      osc.stop(now + 0.12);
+    }
+  } catch {}
+}
+
 function playSound(audioEl) {
   if (!audioEl) return;
   if (state.soundOn === false) return;
+  const kind = audioEl.id || "";
   try {
-    audioEl.currentTime = 0;
-    const playPromise = audioEl.play();
-    pulseSoundFx(audioEl.id || "");
-    if (playPromise && typeof playPromise.catch === "function") {
-      playPromise.catch(() => {});
+    if (audioEl.src && !audioEl.error) {
+      audioEl.currentTime = 0;
+      const playPromise = audioEl.play();
+      pulseSoundFx(kind);
+      if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch(() => { playFallbackSound(kind); });
+        return;
+      }
+      return;
     }
   } catch {}
+  playFallbackSound(kind);
 }
 
 function pulseSoundFx(kind, pos) {
