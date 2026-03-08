@@ -4282,9 +4282,15 @@ app.get("/me", authMiddleware, async (req, res) => {
 });
 
 // ======== E-pasta piesaiste (tikai savam profilam) ========
+// Atļauj arī tukšu – lietotājs noņem e-pastu (vairs nesaņems jaunumus)
 app.post("/email", authMiddleware, (req, res) => {
   const user = req.user;
-  const rawEmail = req.body?.email ?? "";
+  const rawEmail = (req.body?.email ?? "").trim();
+  if (rawEmail === "") {
+    user.email = "";
+    saveUsers(USERS);
+    return res.json({ ok: true, email: "" });
+  }
   const cleanedEmail = normalizeEmail(rawEmail);
   if (!cleanedEmail) {
     return res.status(400).json({ message: "Nekorekts e-pasts." });

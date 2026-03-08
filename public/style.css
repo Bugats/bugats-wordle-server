@@ -107,6 +107,13 @@ body:not(.vz-body-game) {
   text-align: center;
 }
 
+.signup-email-note {
+  margin: 4px 0 12px;
+  font-size: 12px;
+  color: #666;
+  line-height: 1.35;
+}
+
 label {
   display: block;
   margin-bottom: 4px;
@@ -2440,6 +2447,12 @@ input:focus-visible {
   text-align: center;
   color: rgba(255, 255, 255, 0.7);
 }
+.vz-profile-email-privacy {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.35;
+}
 .vz-profile-email-row {
   display: flex;
   gap: 8px;
@@ -2453,6 +2466,18 @@ input:focus-visible {
   padding: 6px 8px;
   font-size: 12px;
 }
+.vz-profile-email-remove {
+  margin-top: 4px;
+  padding: 6px 10px;
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.75);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.vz-profile-email-remove:hover { background: rgba(255, 255, 255, 0.08); }
+.vz-profile-email-remove:disabled { opacity: 0.6; cursor: not-allowed; }
 .vz-profile-email-status {
   min-height: 14px;
   text-align: center;

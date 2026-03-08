@@ -534,6 +534,7 @@ const ppEmailBlockEl = $("#pp-email-block");
 const ppEmailInputEl = $("#pp-email-input");
 const ppEmailSaveBtn = $("#pp-email-save");
 const ppEmailStatusEl = $("#pp-email-status");
+const ppEmailRemoveBtn = document.getElementById("pp-email-remove");
 
 // Novads (modal)
 const regionModalEl = document.getElementById("region-modal");
@@ -1423,21 +1424,32 @@ function setProfileEmailStatus(message, kind) {
 async function handleProfileEmailSave() {
   if (!state.token || !ppEmailInputEl) return;
   const raw = String(ppEmailInputEl.value || "").trim();
-  if (!raw) {
-    setProfileEmailStatus("Ievadi e-pastu.", "error");
-    return;
-  }
   if (ppEmailSaveBtn) ppEmailSaveBtn.disabled = true;
   try {
     const data = await apiPost("/email", { email: raw });
-    const saved = data?.email || raw;
+    const saved = data?.email ?? "";
     state.email = saved;
     ppEmailInputEl.value = saved;
-    setProfileEmailStatus("Saglabāts.", "ok");
+    setProfileEmailStatus(saved ? "Saglabāts." : "E-pasts noņemts.", saved ? "ok" : "");
   } catch (err) {
     setProfileEmailStatus(err.message || "Neizdevās saglabāt e-pastu.", "error");
   } finally {
     if (ppEmailSaveBtn) ppEmailSaveBtn.disabled = false;
+  }
+}
+
+async function handleProfileEmailRemove() {
+  if (!state.token || !ppEmailInputEl) return;
+  if (ppEmailRemoveBtn) ppEmailRemoveBtn.disabled = true;
+  try {
+    await apiPost("/email", { email: "" });
+    state.email = "";
+    ppEmailInputEl.value = "";
+    setProfileEmailStatus("E-pasts noņemts. Vairs nesaņemsi jaunumus.", "ok");
+  } catch (err) {
+    setProfileEmailStatus(err.message || "Neizdevās noņemt.", "error");
+  } finally {
+    if (ppEmailRemoveBtn) ppEmailRemoveBtn.disabled = false;
   }
 }
 
@@ -6561,6 +6573,7 @@ setTimeout(() => {
 
   if (ppMsgBtnEl) ppMsgBtnEl.addEventListener("click", handlePersonalMessageClick);
   if (ppEmailSaveBtn) ppEmailSaveBtn.addEventListener("click", handleProfileEmailSave);
+  if (ppEmailRemoveBtn) ppEmailRemoveBtn.addEventListener("click", handleProfileEmailRemove);
   if (ppEmailInputEl) {
     ppEmailInputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter") handleProfileEmailSave();
