@@ -1665,6 +1665,27 @@ try {
   console.error("Neizdevās ielādēt words.txt:", err);
 }
 
+// ======== Izaicinājums draugam (viens vārds, mazāk mēģinājumu = uzvara) ========
+const CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000;
+const CHALLENGE_ID_LEN = 8;
+const challenges = new Map();
+
+function genChallengeId() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let id = "";
+  for (let i = 0; i < CHALLENGE_ID_LEN; i++) {
+    id += chars[crypto.randomInt(0, chars.length)];
+  }
+  return id;
+}
+
+function pruneExpiredChallenges() {
+  const now = Date.now();
+  for (const [id, c] of challenges.entries()) {
+    if (c.createdAt && now - c.createdAt > CHALLENGE_TTL_MS) challenges.delete(id);
+  }
+}
+
 // ======== Rank loģika (40 līmeņi) ========
 // Rank tabula ir ārpus funkcijas (ātrāk + vieglāk papildināt).
 // Pirmie 25 līmeņi saglabāti kā iepriekš, pievienoti nākamie līmeņi + krāsas.
@@ -4942,6 +4963,152 @@ app.get("/start-round", authMiddleware, (req, res) => {
     startedAt: round.startedAt ?? null,
     history: [],
   });
+});
+
+// ======== Izaicinājums draugam ========
+app.post("/challenge/create", authMiddleware, (req, res) => {
+  pruneExpiredChallenges();
+  const user = req.user;
+  const { word, len } = pickRandomWord();
+  const id = genChallengeId();
+  const baseUrl = (req.get("origin") || req.protocol + "://" + req.get("host") || "").replace(/\/$/, "");
+  challenges.set(id, {
+    id,
+    word,
+    len,
+    player1: user.username,
+    player2: null,
+    attempts1: null,
+    attempts2: null,
+    completed1: false,
+    completed2: false,
+    history1: [],
+    history2: [],
+    createdAt: Date.now(),
+  });
+  return res.json({
+    challengeId: id,
+    shareUrl: `${baseUrl}/game.html?challenge=${id}`,
+    player1: user.username,
+    len,
+  });
+});
+
+app.get("/challenge/:id", authMiddleware, (req, res) => {
+  pruneExpiredChallenges();
+  const c = challenges.get(String(req.params.id || "").trim());
+  if (!c) return res.status(404).json({ message: "Izaicinājums nav atrasts vai ir beidzies." });
+  const me = req.user.username;
+  const isPlayer1 = c.player1 === me;
+  const isPlayer2 = c.player2 === me;
+  const status = !c.player2 ? "waiting" : (c.completed1 && c.completed2 ? "finished" : "active");
+  const payload = {
+    challengeId: c.id,
+    player1: c.player1,
+    player2: c.player2 || null,
+    len: c.len,
+    status,
+    myAttempts: isPlayer1 ? c.attempts1 : isPlayer2 ? c.attempts2 : null,
+    opponentAttempts: isPlayer1 ? c.attempts2 : isPlayer2 ? c.attempts1 : null,
+  };
+  if (status === "finished") {
+    payload.winner = c.attempts1 != null && c.attempts2 != null
+      ? (c.attempts1 < c.attempts2 ? c.player1 : c.attempts2 < c.attempts1 ? c.player2 : null)
+      : null;
+    payload.attempts1 = c.attempts1;
+    payload.attempts2 = c.attempts2;
+  }
+  return res.json(payload);
+});
+
+app.post("/challenge/:id/join", authMiddleware, (req, res) => {
+  pruneExpiredChallenges();
+  const id = String(req.params.id || "").trim();
+  const c = challenges.get(id);
+  if (!c) return res.status(404).json({ message: "Izaicinājums nav atrasts." });
+  if (c.player2) return res.status(400).json({ message: "Izaicinājumam jau ir otrs spēlētājs." });
+  const me = req.user.username;
+  if (c.player1 === me) return res.status(400).json({ message: "Nevari pievienoties savam izaicinājumam." });
+  c.player2 = me;
+  return res.json({ ok: true, challengeId: id, len: c.len, player1: c.player1, player2: me });
+});
+
+app.post("/challenge/:id/guess", authMiddleware, (req, res) => {
+  pruneExpiredChallenges();
+  const id = String(req.params.id || "").trim();
+  const c = challenges.get(id);
+  if (!c) return res.status(404).json({ message: "Izaicinājums nav atrasts." });
+  if (!c.player2) return res.status(400).json({ message: "Otrs spēlētājs vēl nav pievienojies." });
+  const me = req.user.username;
+  const isPlayer1 = c.player1 === me;
+  const isPlayer2 = c.player2 === me;
+  if (!isPlayer1 && !isPlayer2) return res.status(403).json({ message: "Tu neesi šī izaicinājuma dalībnieks." });
+
+  const guessRaw = (req.body?.guess || "").toString().trim().toUpperCase();
+  if (guessRaw.length !== c.len) {
+    return res.status(400).json({ message: `Vārdam jābūt ${c.len} burtiem.` });
+  }
+  if (!GUESS_ALLOWED_RE.test(guessRaw)) {
+    return res.status(400).json({ message: "Minējumā drīkst būt tikai burti (A-Z + latviešu burti)." });
+  }
+
+  const history = isPlayer1 ? c.history1 : c.history2;
+  if (!Array.isArray(history)) (isPlayer1 ? c.history1 : c.history2) = [];
+  const currentAttempts = history.length;
+  if (currentAttempts >= MAX_ATTEMPTS) {
+    return res.status(400).json({ message: "Tu jau esi iztērējis visus mēģinājumus." });
+  }
+  if (isPlayer1 && c.completed1) return res.status(400).json({ message: "Tu jau esi pabeidzis šo izaicinājumu." });
+  if (isPlayer2 && c.completed2) return res.status(400).json({ message: "Tu jau esi pabeidzis šo izaicinājumu." });
+
+  const pattern = buildPattern(c.word, guessRaw);
+  const isWin = guessRaw === c.word;
+  const attemptsUsed = currentAttempts + 1;
+  history.push({ guess: guessRaw, pattern, ts: Date.now() });
+
+  if (isPlayer1) {
+    if (isWin || attemptsUsed >= MAX_ATTEMPTS) {
+      c.completed1 = true;
+      c.attempts1 = isWin ? attemptsUsed : MAX_ATTEMPTS;
+    }
+  } else {
+    if (isWin || attemptsUsed >= MAX_ATTEMPTS) {
+      c.completed2 = true;
+      c.attempts2 = isWin ? attemptsUsed : MAX_ATTEMPTS;
+    }
+  }
+
+  const bothDone = c.completed1 && c.completed2;
+  let winner = null;
+  if (bothDone && c.attempts1 != null && c.attempts2 != null) {
+    if (c.attempts1 < c.attempts2) winner = c.player1;
+    else if (c.attempts2 < c.attempts1) winner = c.player2;
+  }
+
+  return res.json({
+    pattern,
+    win: isWin,
+    finished: isPlayer1 ? c.completed1 : c.completed2,
+    attemptsUsed,
+    attemptsLeft: MAX_ATTEMPTS - attemptsUsed,
+    bothDone,
+    winner: bothDone ? winner : undefined,
+    attempts1: bothDone ? c.attempts1 : undefined,
+    attempts2: bothDone ? c.attempts2 : undefined,
+    player1: bothDone ? c.player1 : undefined,
+  });
+});
+
+app.get("/challenge/:id/history", authMiddleware, (req, res) => {
+  const id = String(req.params.id || "").trim();
+  const c = challenges.get(id);
+  if (!c) return res.status(404).json({ message: "Izaicinājums nav atrasts." });
+  const me = req.user.username;
+  const isPlayer1 = c.player1 === me;
+  const isPlayer2 = c.player2 === me;
+  if (!isPlayer1 && !isPlayer2) return res.status(403).json({ message: "Tu neesi šī izaicinājuma dalībnieks." });
+  const history = isPlayer1 ? c.history1 : c.history2;
+  return res.json({ history: Array.isArray(history) ? history : [], len: c.len });
 });
 
 // ======== Ability: Atvērt 1 burtu (1x katrā raundā) ========

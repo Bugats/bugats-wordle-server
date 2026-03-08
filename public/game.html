@@ -231,6 +231,7 @@
 
               <hr class="vz-divider" />
 
+              <button id="challenge-friend-btn" class="vz-share-btn" type="button">⚔️ Izaicināt draugu</button>
               <button id="share-btn" class="vz-share-btn" type="button">🔗 Dalīties ar VĀRDU ZONU</button>
               <button id="share-whatsapp-btn" class="vz-share-btn vz-share-btn-wa" type="button">
                 💬 Dalīties WhatsApp
@@ -579,6 +580,41 @@
           <button class="vz-region-btn" type="button" data-region="Kurzeme">Kurzeme</button>
         </div>
         <div class="vz-region-modal-note">Izvēle tiek saglabāta uzreiz.</div>
+      </div>
+    </div>
+
+    <!-- Izaicinājums draugam: izveidot (kopēt linku) -->
+    <div id="challenge-create-modal" class="vz-modal-overlay hidden" role="dialog" aria-labelledby="challenge-create-title">
+      <div class="vz-modal-inner vz-challenge-modal">
+        <h3 id="challenge-create-title">Izaicināt draugu</h3>
+        <p class="vz-challenge-create-note">Kopē linku un nosūti draugam. Abi minēsiet to pašu vārdu – uzvar tas, kam mazāk mēģinājumu.</p>
+        <div class="vz-challenge-url-row">
+          <input id="challenge-share-url" type="text" readonly class="vz-challenge-url-input" />
+          <button id="challenge-copy-btn" type="button" class="vz-challenge-copy-btn">Kopēt</button>
+        </div>
+        <p id="challenge-copy-status" class="vz-challenge-copy-status"></p>
+        <button id="challenge-create-close" type="button" class="vz-modal-close-btn">Aizvērt</button>
+      </div>
+    </div>
+
+    <!-- Izaicinājums: pievienoties -->
+    <div id="challenge-join-modal" class="vz-modal-overlay hidden" role="dialog" aria-labelledby="challenge-join-title">
+      <div class="vz-modal-inner vz-challenge-modal">
+        <h3 id="challenge-join-title">Izaicinājums</h3>
+        <p id="challenge-join-text" class="vz-challenge-join-text"></p>
+        <div class="vz-challenge-join-btns">
+          <button id="challenge-join-accept" type="button" class="vz-btn-primary">Pievienoties</button>
+          <button id="challenge-join-decline" type="button" class="vz-btn-secondary">Nē</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Izaicinājums: rezultāts -->
+    <div id="challenge-result-overlay" class="vz-offline-overlay hidden" role="alert">
+      <div class="vz-offline-inner">
+        <p id="challenge-result-title" class="vz-offline-title"></p>
+        <p id="challenge-result-detail" class="vz-offline-text"></p>
+        <button id="challenge-result-close" type="button" class="vz-offline-retry">Spēlēt tālāk</button>
       </div>
     </div>
 

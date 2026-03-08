@@ -368,6 +368,12 @@ revealCostCoins: 25,
 
   // Tēma: dark | light | contrast
   theme: "dark",
+
+  // Izaicinājums draugam (viens vārds, mazāk mēģinājumu = uzvara)
+  challengeId: null,
+  challengeOpponent: null,
+  challengeLen: null,
+  challengeFinished: false,
 };
 
 const DM_THREAD_MAX_LOCAL = 200;
@@ -454,6 +460,21 @@ const offlineRetryBtn = document.getElementById("vz-offline-retry-btn");
 const rateOverlayEl = document.getElementById("vz-rate-overlay");
 const rateLaterBtn = document.getElementById("vz-rate-later-btn");
 const rateOpenBtn = document.getElementById("vz-rate-open-btn");
+
+const challengeFriendBtn = document.getElementById("challenge-friend-btn");
+const challengeCreateModal = document.getElementById("challenge-create-modal");
+const challengeShareUrlInput = document.getElementById("challenge-share-url");
+const challengeCopyBtn = document.getElementById("challenge-copy-btn");
+const challengeCopyStatus = document.getElementById("challenge-copy-status");
+const challengeCreateClose = document.getElementById("challenge-create-close");
+const challengeJoinModal = document.getElementById("challenge-join-modal");
+const challengeJoinText = document.getElementById("challenge-join-text");
+const challengeJoinAccept = document.getElementById("challenge-join-accept");
+const challengeJoinDecline = document.getElementById("challenge-join-decline");
+const challengeResultOverlay = document.getElementById("challenge-result-overlay");
+const challengeResultTitle = document.getElementById("challenge-result-title");
+const challengeResultDetail = document.getElementById("challenge-result-detail");
+const challengeResultClose = document.getElementById("challenge-result-close");
 
 // DUELA OVERLAY DOM REF
 const duelOverlayEl = document.getElementById("duel-result-overlay");
@@ -851,6 +872,127 @@ function recordWinAndMaybeShowRatePrompt() {
 
 function hideRateOverlay() {
   if (rateOverlayEl) rateOverlayEl.classList.add("hidden");
+}
+
+// ==================== IZAICINĀJUMS DRAUGAM ====================
+let pendingChallengeId = null;
+
+function getChallengeIdFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("challenge") || null;
+  } catch {
+    return null;
+  }
+}
+
+function clearChallengeFromUrl() {
+  try {
+    const u = new URL(window.location.href);
+  u.searchParams.delete("challenge");
+  const newUrl = u.pathname + (u.search || "") + (u.hash || "");
+  window.history.replaceState({}, "", newUrl);
+  } catch {}
+}
+
+async function startChallengeRound(challengeId) {
+  if (!challengeId || !state.token) return;
+  try {
+    const c = await apiGet("/challenge/" + challengeId);
+    if (!c || c.status === "waiting") return;
+    const len = c.len || 5;
+    state.challengeId = challengeId;
+    state.challengeOpponent = c.player1 === state.username ? c.player2 : c.player1;
+    state.challengeLen = len;
+    state.challengeFinished = c.status === "finished";
+
+    const histRes = await apiGet("/challenge/" + challengeId + "/history");
+    const history = Array.isArray(histRes?.history) ? histRes.history : [];
+
+    resetGrid(len);
+    state.currentRow = 0;
+    state.currentCol = 0;
+    state.roundFinished = false;
+    state.isLocked = false;
+    if (history.length) {
+      history.forEach((h, r) => {
+        const guess = String(h?.guess || "");
+        for (let c = 0; c < guess.length && c < len; c++) {
+          const tile = state.gridTiles?.[r]?.[c];
+          if (!tile) continue;
+          tile.dataset.letter = guess[c];
+          tile.textContent = guess[c];
+        }
+        revealRow(r, h?.pattern || [], { animate: false });
+      });
+      state.currentRow = history.length;
+      state.currentCol = 0;
+    }
+    applyCorrectLocksFromHistory(history);
+    if (gameMessageEl) gameMessageEl.textContent = state.challengeFinished
+      ? "Izaicinājums beidzies. Rezultāts augstāk."
+      : "Izaicinājums pret " + (state.challengeOpponent || "?") + ". Mazāk mēģinājumu = uzvara.";
+    if (newRoundBtn) {
+      newRoundBtn.style.display = "inline-block";
+      newRoundBtn.disabled = false;
+      newRoundBtn.textContent = "Atpakaļ uz spēli";
+    }
+    if (c.status === "finished") {
+      showChallengeResult(c.winner, c.attempts1, c.attempts2, c.player1);
+    }
+  } catch (err) {
+    console.error("startChallengeRound:", err);
+    if (gameMessageEl) gameMessageEl.textContent = "Neizdevās ielādēt izaicinājumu.";
+  }
+}
+
+function applyCorrectLocksFromHistory(history) {
+  if (!Array.isArray(history)) return;
+  const pattern = { correct: 3, present: 2, absent: 1 };
+  history.forEach((h, rowIndex) => {
+    const p = h?.pattern || [];
+    p.forEach((status, colIndex) => {
+      const tile = state.gridTiles?.[rowIndex]?.[colIndex];
+      if (!tile) return;
+      if (status === "correct") tile.dataset.locked = "1";
+      const btn = state.keyboardButtons.get((tile.dataset?.letter || "").toLowerCase());
+      if (btn && !btn.classList.contains("correct") && !btn.classList.contains("present") && !btn.classList.contains("absent")) {
+        if (status === "correct") btn.classList.add("correct");
+        else if (status === "present") btn.classList.add("present");
+        else if (status === "absent") btn.classList.add("absent");
+      }
+    });
+  });
+}
+
+function showChallengeResult(winner, attempts1, attempts2, player1) {
+  if (!challengeResultOverlay || !challengeResultTitle || !challengeResultDetail) return;
+  const me = state.username;
+  const myAttempts = (player1 && me === player1) ? (attempts1 != null ? attempts1 : "—") : (attempts2 != null ? attempts2 : "—");
+  const oppAttempts = (player1 && me === player1) ? (attempts2 != null ? attempts2 : "—") : (attempts1 != null ? attempts1 : "—");
+  if (winner === me) {
+    challengeResultTitle.textContent = "Tu uzvarēji!";
+    challengeResultDetail.textContent = `Tavi mēģinājumi: ${myAttempts}. Pretinieka: ${oppAttempts}.`;
+  } else if (winner) {
+    challengeResultTitle.textContent = "Zaudēji šajā izaicinājumā";
+    challengeResultDetail.textContent = `Tavi mēģinājumi: ${myAttempts}. Uzvarētājs: ${oppAttempts} mēģinājumi.`;
+  } else {
+    challengeResultTitle.textContent = "Neizšķirts!";
+    challengeResultDetail.textContent = `Abi: ${myAttempts} vs ${oppAttempts} mēģinājumi.`;
+  }
+  challengeResultOverlay.classList.remove("hidden");
+}
+
+function exitChallengeMode() {
+  state.challengeId = null;
+  state.challengeOpponent = null;
+  state.challengeLen = null;
+  state.challengeFinished = false;
+  pendingChallengeId = null;
+  clearChallengeFromUrl();
+  if (challengeResultOverlay) challengeResultOverlay.classList.add("hidden");
+  if (challengeCreateModal) challengeCreateModal.classList.add("hidden");
+  if (challengeJoinModal) challengeJoinModal.classList.add("hidden");
 }
 
 // ==================== AVATĀRA PALĪGFUNKCIJAS ====================
@@ -1404,6 +1546,40 @@ async function runPostLoginInit() {
 
   await refreshSeasonHttp();
   await refreshHof();
+
+  const challengeIdFromUrl = getChallengeIdFromUrl();
+  if (challengeIdFromUrl) {
+    try {
+      const c = await apiGet("/challenge/" + challengeIdFromUrl);
+      if (c && c.status === "finished") {
+        showChallengeResult(c.winner, c.attempts1, c.attempts2, c.player1);
+      } else if (c && c.status === "active" && (c.player1 === state.username || c.player2 === state.username)) {
+        await startChallengeRound(challengeIdFromUrl);
+        await refreshLeaderboard();
+        await refreshWeekly();
+        await refreshStreakLeaderboard();
+        await refreshDailyLeaderboard();
+        await refreshMissions();
+        await refreshFriends();
+        await refreshRegionStats();
+        ensureDailyChestUi();
+        await refreshDailyChestStatus();
+        if (_chestTickTimer) clearInterval(_chestTickTimer);
+        _chestTickTimer = setInterval(refreshDailyChestStatus, 60_000);
+        setInterval(() => { if (_chestStatus) renderDailyChestUi(_chestStatus); }, 1000);
+        setInterval(refreshRegionStats, 60_000);
+        setInterval(refreshStreakLeaderboard, 90_000);
+        setInterval(refreshDailyLeaderboard, 90_000);
+        initSocket();
+        return;
+      } else if (c && c.status === "waiting" && c.player1 !== state.username) {
+        pendingChallengeId = challengeIdFromUrl;
+        if (challengeJoinText) challengeJoinText.textContent = "Izaicinājums no " + (c.player1 || "?") + ". Abi minēsiet to pašu vārdu – uzvar tas, kam mazāk mēģinājumu. Pievienoties?";
+        if (challengeJoinModal) challengeJoinModal.classList.remove("hidden");
+      }
+    } catch {}
+  }
+
   await startNewRound();
   await refreshLeaderboard();
   await refreshWeekly();
@@ -2551,9 +2727,48 @@ function showWinEffects() {
 }
 
 // ====== Solo minējums (HTTP /guess) ======
+async function submitChallengeGuess() {
+  if (!state.challengeId || state.isLocked) return;
+  const letters = [];
+  for (let c = 0; c < state.cols; c++) {
+    letters.push(state.gridTiles[state.currentRow]?.[c]?.dataset.letter || "");
+  }
+  const guess = letters.join("");
+  if (!guess || guess.length !== state.cols) return;
+  state.isLocked = true;
+  try {
+    const data = await apiPost("/challenge/" + state.challengeId + "/guess", { guess });
+    const pattern = data.pattern || [];
+    const rowIndex = state.currentRow;
+    revealRow(rowIndex, pattern);
+    const guessLetters = letters.slice();
+    applyCorrectLocksFromPattern(rowIndex - 1, guessLetters, pattern);
+    pattern.forEach((status, i) => updateKeyboardColor(guessLetters[i], status));
+    state.currentRow++;
+    state.currentCol = 0;
+    skipHintLockedForward();
+    if (data.win) playSound(sWin);
+    if (data.finished) state.challengeFinished = true;
+    if (data.bothDone) {
+      showChallengeResult(data.winner, data.attempts1, data.attempts2, data.player1);
+    } else if (data.finished && gameMessageEl) {
+      gameMessageEl.textContent = "Tu pabeidzi. Gaidi pretinieku.";
+    }
+  } catch (err) {
+    if (gameMessageEl) gameMessageEl.textContent = err.message || "Kļūda minējumā.";
+    if (err.message && err.message.includes("mēģinājumus")) flashRow(state.currentRow);
+  } finally {
+    state.isLocked = false;
+  }
+}
+
 async function submitGuess() {
   if (state.duelMode) {
     submitDuelGuess();
+    return;
+  }
+  if (state.challengeId) {
+    await submitChallengeGuess();
     return;
   }
 
@@ -6387,6 +6602,62 @@ async function initGame() {
   if (rateLaterBtn) rateLaterBtn.addEventListener("click", hideRateOverlay);
   if (rateOpenBtn) rateOpenBtn.addEventListener("click", hideRateOverlay);
 
+  if (challengeFriendBtn) {
+    challengeFriendBtn.addEventListener("click", async () => {
+      if (!state.token) return;
+      try {
+        const data = await apiPost("/challenge/create", {});
+        if (challengeShareUrlInput) challengeShareUrlInput.value = data.shareUrl || "";
+        if (challengeCopyStatus) challengeCopyStatus.textContent = "";
+        if (challengeCreateModal) challengeCreateModal.classList.remove("hidden");
+      } catch (err) {
+        appendSystemMessage(err.message || "Neizdevās izveidot izaicinājumu.");
+      }
+    });
+  }
+  if (challengeCopyBtn && challengeShareUrlInput) {
+    challengeCopyBtn.addEventListener("click", () => {
+      challengeShareUrlInput.select();
+      try {
+        navigator.clipboard.writeText(challengeShareUrlInput.value);
+        if (challengeCopyStatus) challengeCopyStatus.textContent = "Nokopēts!";
+      } catch {
+        if (challengeCopyStatus) challengeCopyStatus.textContent = "Nokopē ar Ctrl+C";
+      }
+    });
+  }
+  if (challengeCreateClose && challengeCreateModal) {
+    challengeCreateClose.addEventListener("click", () => challengeCreateModal.classList.add("hidden"));
+  }
+  if (challengeJoinAccept) {
+    challengeJoinAccept.addEventListener("click", async () => {
+      const id = pendingChallengeId;
+      if (!id) return;
+      try {
+        await apiPost("/challenge/" + id + "/join", {});
+        if (challengeJoinModal) challengeJoinModal.classList.add("hidden");
+        pendingChallengeId = null;
+        clearChallengeFromUrl();
+        await startChallengeRound(id);
+      } catch (err) {
+        appendSystemMessage(err.message || "Neizdevās pievienoties.");
+      }
+    });
+  }
+  if (challengeJoinDecline) {
+    challengeJoinDecline.addEventListener("click", () => {
+      if (challengeJoinModal) challengeJoinModal.classList.add("hidden");
+      pendingChallengeId = null;
+      clearChallengeFromUrl();
+    });
+  }
+  if (challengeResultClose) {
+    challengeResultClose.addEventListener("click", () => {
+      exitChallengeMode();
+      startNewRound();
+    });
+  }
+
   if (shareBtn) shareBtn.addEventListener("click", handleShare);
   if (shareWhatsappBtn) shareWhatsappBtn.addEventListener("click", handleShareWhatsapp);
   if (shareDiscordBtn) shareDiscordBtn.addEventListener("click", handleShareDiscord);
@@ -6495,6 +6766,11 @@ setTimeout(() => {
 
   if (newRoundBtn) {
     newRoundBtn.addEventListener("click", () => {
+      if (state.challengeId) {
+        exitChallengeMode();
+        startNewRound();
+        return;
+      }
       if (!state.roundFinished) {
         if (gameMessageEl) gameMessageEl.textContent = "Pabeidz raundu līdz galam, tad var sākt jaunu.";
         return;

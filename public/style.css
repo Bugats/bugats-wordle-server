@@ -2384,6 +2384,36 @@ input:focus-visible {
 .vz-rate-later:hover { background: rgba(255, 255, 255, 0.18); transform: translateY(-1px); }
 .vz-rate-open { background: linear-gradient(135deg, #00c853, #00a843); }
 .vz-rate-open:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0, 200, 83, 0.4); }
+
+/* Izaicinājums draugam – modāļi */
+.vz-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.vz-modal-overlay.hidden { display: none; }
+.vz-modal-inner {
+  background: linear-gradient(135deg, #1a1b2e 0%, #0f1117 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 20px 24px;
+  max-width: 420px;
+  width: 90%;
+}
+.vz-challenge-modal h3 { margin: 0 0 12px; font-size: 18px; color: #fff; }
+.vz-challenge-create-note, .vz-challenge-join-text { margin: 0 0 14px; font-size: 14px; color: #b0b0b0; }
+.vz-challenge-url-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.vz-challenge-url-input { flex: 1; padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: #0f1222; color: #fff; font-size: 13px; }
+.vz-challenge-copy-btn { padding: 8px 14px; border-radius: 6px; border: none; background: #00c853; color: #fff; font-weight: 600; cursor: pointer; }
+.vz-challenge-copy-status { margin: 0 0 12px; font-size: 12px; color: #7bff9a; min-height: 16px; }
+.vz-modal-close-btn { padding: 8px 16px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: #ccc; cursor: pointer; }
+.vz-challenge-join-btns { display: flex; gap: 10px; margin-top: 16px; }
+.vz-btn-primary { padding: 10px 20px; border-radius: 8px; border: none; background: #00c853; color: #fff; font-weight: 600; cursor: pointer; }
+.vz-btn-secondary { padding: 10px 20px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.3); background: transparent; color: #ccc; cursor: pointer; }
 }
 
 /* ===========================
