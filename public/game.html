@@ -56,6 +56,27 @@
     <!-- Ekrāna flash overlay (baseline saderība) -->
     <div id="screen-flash" class="vz-screen-flash" aria-hidden="true"></div>
 
+    <!-- Bez interneta -->
+    <div id="vz-offline-overlay" class="vz-offline-overlay hidden" role="alert" aria-live="assertive">
+      <div class="vz-offline-inner">
+        <p class="vz-offline-title">Nav interneta</p>
+        <p class="vz-offline-text">Pārbaudi savienojumu un mēģini vēlreiz.</p>
+        <button id="vz-offline-retry-btn" type="button" class="vz-offline-retry">Mēģināt vēlreiz</button>
+      </div>
+    </div>
+
+    <!-- Play Store vērtējuma uzvednis (TWA) -->
+    <div id="vz-rate-overlay" class="vz-rate-overlay hidden" role="dialog" aria-labelledby="vz-rate-title" aria-modal="true">
+      <div class="vz-rate-inner">
+        <p id="vz-rate-title" class="vz-rate-title">Vai patīk VĀRDU ZONA?</p>
+        <p class="vz-rate-text">Atstāj vērtējumu Play Store – tas ļoti palīdz!</p>
+        <div class="vz-rate-buttons">
+          <button id="vz-rate-later-btn" type="button" class="vz-rate-btn vz-rate-later">Vēlāk</button>
+          <a id="vz-rate-open-btn" href="https://play.google.com/store/apps/details?id=lv.thezone.wordle" target="_blank" rel="noopener" class="vz-rate-btn vz-rate-open">Atstāt vērtējumu</a>
+        </div>
+      </div>
+    </div>
+
     <div class="vz-game-container">
       <!-- TOPBAR -->
       <div class="vz-topbar">

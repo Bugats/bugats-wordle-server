@@ -413,6 +413,13 @@ const topNamedayEl = document.getElementById("vz-topbar-nameday");
 const soundToggleBtn = document.getElementById("sound-toggle-btn");
 const themeToggleBtn = document.getElementById("theme-toggle-btn");
 
+// Bez interneta + Play Store vērtējums
+const offlineOverlayEl = document.getElementById("vz-offline-overlay");
+const offlineRetryBtn = document.getElementById("vz-offline-retry-btn");
+const rateOverlayEl = document.getElementById("vz-rate-overlay");
+const rateLaterBtn = document.getElementById("vz-rate-later-btn");
+const rateOpenBtn = document.getElementById("vz-rate-open-btn");
+
 // DUELA OVERLAY DOM REF
 const duelOverlayEl = document.getElementById("duel-result-overlay");
 const duelWinnerNameEl = document.getElementById("duel-winner-name");
@@ -769,6 +776,45 @@ function applyTheme() {
   if (state.theme === "light") document.body.classList.add("vz-theme-light");
   else if (state.theme === "contrast") document.body.classList.add("vz-theme-contrast");
   if (themeToggleBtn) themeToggleBtn.textContent = THEME_LABELS[state.theme] || THEME_LABELS.dark;
+}
+
+// ==================== BEZ INTERNETA + PLAY STORE VĒRTĒJUMS ====================
+function setOfflineOverlay(show) {
+  if (!offlineOverlayEl) return;
+  if (show) offlineOverlayEl.classList.remove("hidden");
+  else offlineOverlayEl.classList.add("hidden");
+}
+
+function isTwa() {
+  if (typeof window === "undefined") return false;
+  try {
+    if (window.matchMedia("(display-mode: standalone)").matches) return true;
+    if (window.matchMedia("(display-mode: fullscreen)").matches) return true;
+    if (navigator.standalone === true) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+const RATE_PROMPT_WINS = 3;
+const RATE_STORAGE_KEY = "vz_rate_prompt_shown";
+const WINS_STORAGE_KEY = "vz_total_wins";
+
+function recordWinAndMaybeShowRatePrompt() {
+  try {
+    const n = parseInt(localStorage.getItem(WINS_STORAGE_KEY) || "0", 10);
+    localStorage.setItem(WINS_STORAGE_KEY, String(n + 1));
+    if (n + 1 < RATE_PROMPT_WINS) return;
+    if (localStorage.getItem(RATE_STORAGE_KEY) === "1") return;
+    if (!isTwa() || !rateOverlayEl) return;
+    rateOverlayEl.classList.remove("hidden");
+    localStorage.setItem(RATE_STORAGE_KEY, "1");
+  } catch {}
+}
+
+function hideRateOverlay() {
+  if (rateOverlayEl) rateOverlayEl.classList.add("hidden");
 }
 
 // ==================== AVATĀRA PALĪGFUNKCIJAS ====================
@@ -2510,6 +2556,7 @@ const guessLetters = letters.slice(); // kopija
         } catch {}
       }, unlockAfter);
 
+      setTimeout(recordWinAndMaybeShowRatePrompt, unlockAfter + 600);
       return;
     }
 
@@ -5363,6 +5410,7 @@ const onDuelGuessResult = async (payload) => {
     setTimeout(() => showWinEffects(), Math.min(120, unlockAfter));
     state.roundFinished = true;
     state.isLocked = true;
+    setTimeout(recordWinAndMaybeShowRatePrompt, unlockAfter + 600);
     return;
   }
  
@@ -6274,6 +6322,18 @@ async function initGame() {
       applyTheme();
     });
   }
+
+  if (!navigator.onLine) setOfflineOverlay(true);
+  window.addEventListener("offline", () => setOfflineOverlay(true));
+  window.addEventListener("online", () => setOfflineOverlay(false));
+  if (offlineRetryBtn) {
+    offlineRetryBtn.addEventListener("click", () => {
+      setOfflineOverlay(false);
+      window.location.reload();
+    });
+  }
+  if (rateLaterBtn) rateLaterBtn.addEventListener("click", hideRateOverlay);
+  if (rateOpenBtn) rateOpenBtn.addEventListener("click", hideRateOverlay);
 
   if (shareBtn) shareBtn.addEventListener("click", handleShare);
   if (shareWhatsappBtn) shareWhatsappBtn.addEventListener("click", handleShareWhatsapp);
