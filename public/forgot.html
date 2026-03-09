@@ -10,15 +10,15 @@
   <body class="auth-page-body">
     <div class="container privacy-container" style="max-width: 420px;">
       <h1>Paroles atjaunošana</h1>
-      <p>Ievadi e-pastu, kas piesaistīts tavam kontam. Nosūtīsim linku, lai izvēlētos jaunu paroli.</p>
+      <p>Ievadi e-pastu vai lietotājvārdu. Ja kontam ir e-pasts, nosūtīsim linku.</p>
       <form id="forgot-form">
-        <label for="forgot-email">E-pasts</label>
+        <label for="forgot-input">E-pasts vai lietotājvārds</label>
         <input
-          type="email"
-          id="forgot-email"
-          autocomplete="email"
+          type="text"
+          id="forgot-input"
+          autocomplete="username email"
           required
-          placeholder="piemērs@epasts.lv"
+          placeholder="piemērs@epasts.lv vai lietotājvārds"
         />
         <button type="submit" class="btn-primary">Sūtīt norādījumus</button>
       </form>
@@ -39,19 +39,28 @@
       }
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const email = document.getElementById("forgot-email").value.trim();
-        if (!email) return;
+        const value = document.getElementById("forgot-input").value.trim();
+        if (!value) return;
+        const payload = value.includes("@") ? { email: value } : { username: value };
         showMsg("Sūta…", false);
         try {
           const res = await fetch(API_BASE + "/password-reset-request", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email }),
+            body: JSON.stringify(payload),
           });
           const data = await res.json().catch(() => ({}));
           if (res.ok) {
-            showMsg(data.message || "Ja konts ar šādu e-pastu eksistē, pārbaudi e-pastu.", false);
-            form.reset();
+            if (data.noEmailOnAccount) showMsg(data.message, true);
+            else {
+              showMsg(data.message || "Pārbaudi e-pastu vai mēģini vēlreiz.", false);
+              form.reset();
+            }
+          } else if (res.status === 503) {
+            showMsg(
+              "Paroles atjaunošana pagaidām nav ieslēgta. Raksti uz thezone@news.thezone.lv ar e-pastu, kas reģistrēts tavā kontā – mēs atjaunosim paroli.",
+              true
+            );
           } else {
             showMsg(data.message || "Kļūda. Mēģini vēlreiz.", true);
           }

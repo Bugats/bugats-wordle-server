@@ -4336,20 +4336,38 @@ async function sendPasswordResetEmail(toEmail, resetLink) {
 
 app.post("/password-reset-request", async (req, res) => {
   const rawEmail = String(req.body?.email ?? "").trim();
+  const rawUsername = String(req.body?.username ?? "").trim();
   const cleanedEmail = normalizeEmail(rawEmail);
-  if (!cleanedEmail) {
-    return res.status(400).json({ message: "Ievadi e-pastu." });
-  }
   if (!RESEND_API_KEY) {
     return res.status(503).json({
       message:
         "Paroles atjaunošana pagaidām nav pieejama. Sazinies: thezone@news.thezone.lv",
     });
   }
+  if (!cleanedEmail && !rawUsername) {
+    return res.status(400).json({ message: "Ievadi e-pastu vai lietotājvārdu." });
+  }
   prunePasswordResetTokens();
-  const key = findUserKeyByEmail(cleanedEmail);
-  if (!key || !USERS[key] || !USERS[key].email) {
-    return res.json({ ok: true, message: "Ja konts ar šādu e-pastu eksistē, saņemsi e-pastu ar norādījumiem." });
+  let key = null;
+  let toEmail = null;
+  if (cleanedEmail) {
+    key = findUserKeyByEmail(cleanedEmail);
+    if (key && USERS[key] && USERS[key].email) toEmail = USERS[key].email;
+  }
+  if (!key && rawUsername) {
+    key = findUserKeyCaseInsensitive(rawUsername);
+    if (key && USERS[key] && USERS[key].email) toEmail = USERS[key].email;
+    if (key && USERS[key] && !USERS[key].email) {
+      return res.json({
+        ok: true,
+        noEmailOnAccount: true,
+        message:
+          "Šim kontam nav reģistrēts e-pasts. Pievieno e-pastu profilā (ja atceries paroli) vai raksti uz thezone@news.thezone.lv ar lietotājvārdu.",
+      });
+    }
+  }
+  if (!key || !toEmail) {
+    return res.json({ ok: true, message: "Ja konts ar šādu e-pastu vai lietotājvārdu eksistē un ir e-pasts, saņemsi e-pastu ar norādījumiem." });
   }
   const username = USERS[key].username;
   const token = crypto.randomBytes(32).toString("hex");
@@ -4358,12 +4376,12 @@ app.post("/password-reset-request", async (req, res) => {
     expiresAt: Date.now() + PASSWORD_RESET_TTL_MS,
   });
   const resetLink = `${BASE_URL}/reset-password.html?token=${encodeURIComponent(token)}`;
-  const sent = await sendPasswordResetEmail(cleanedEmail, resetLink);
+  const sent = await sendPasswordResetEmail(toEmail, resetLink);
   if (!sent) {
     passwordResetTokens.delete(token);
     return res.status(500).json({ message: "Neizdevās nosūtīt e-pastu. Mēģini vēlreiz vēlāk." });
   }
-  return res.json({ ok: true, message: "Ja konts ar šādu e-pastu eksistē, saņemsi e-pastu ar norādījumiem." });
+  return res.json({ ok: true, message: "Ja konts ar šādu e-pastu vai lietotājvārdu eksistē un ir e-pasts, saņemsi e-pastu ar norādījumiem." });
 });
 
 app.post("/password-reset", async (req, res) => {
@@ -4389,6 +4407,26 @@ app.post("/password-reset", async (req, res) => {
   saveUsers(USERS);
   passwordResetTokens.delete(rawToken);
   return res.json({ ok: true, message: "Parole nomainīta. Vari ienākt ar jauno paroli." });
+});
+
+// ======== Admin: iestatīt lietotāja paroli (esošajiem bez e-pasta) ========
+app.post("/admin/user/:username/set-password", authMiddleware, async (req, res) => {
+  if (!req.user || !isAdminUser(req.user)) {
+    return res.status(403).json({ message: "Tikai administrators." });
+  }
+  const targetUsername = String(req.params.username || "").trim();
+  const newPassword = String(req.body?.newPassword ?? "").trim();
+  if (!targetUsername) return res.status(400).json({ message: "Norādi lietotājvārdu." });
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({ message: "Jaunajai parolei jābūt vismaz 6 simbolus garai." });
+  }
+  const key = findUserKeyCaseInsensitive(targetUsername);
+  if (!key || !USERS[key]) {
+    return res.status(404).json({ message: "Lietotājs nav atrasts." });
+  }
+  USERS[key].passwordHash = await bcrypt.hash(newPassword, 10);
+  saveUsers(USERS);
+  return res.json({ ok: true, message: `Parole lietotājam ${USERS[key].username} nomainīta.` });
 });
 
 // ======== /me ========
