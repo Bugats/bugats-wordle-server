@@ -4295,6 +4295,102 @@ async function loginHandler(req, res) {
 app.post("/login", loginHandler);
 app.post("/signin", loginHandler);
 
+// ======== Paroles atjaunošana ========
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 h
+const passwordResetTokens = new Map(); // token -> { username, expiresAt }
+const BASE_URL = String(process.env.BASE_URL || "https://bugats-wordle-server.onrender.com").replace(/\/$/, "");
+const RESEND_API_KEY = String(process.env.RESEND_API_KEY || "").trim();
+const RESEND_FROM = String(process.env.RESEND_FROM || "Vārdu Zona <noreply@thezone.lv>").trim();
+
+function prunePasswordResetTokens() {
+  const now = Date.now();
+  for (const [tok, data] of passwordResetTokens.entries()) {
+    if (data && data.expiresAt && data.expiresAt < now) passwordResetTokens.delete(tok);
+  }
+}
+
+async function sendPasswordResetEmail(toEmail, resetLink) {
+  if (!RESEND_API_KEY) return false;
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+    },
+    body: JSON.stringify({
+      from: RESEND_FROM,
+      to: [toEmail],
+      subject: "VĀRDU ZONA – paroles atjaunošana",
+      html: `
+        <p>Sveiki!</p>
+        <p>Tu pieprasīji paroles atjaunošanu VĀRDU ZONA kontam.</p>
+        <p>Nospied linku zemāk, lai izvēlētos jaunu paroli (links der 1 stundu):</p>
+        <p><a href="${resetLink}">${resetLink}</a></p>
+        <p>Ja tu nepieprasīji atjaunošanu, ignorē šo e-pastu.</p>
+        <p>— VĀRDU ZONA</p>
+      `.trim(),
+    }),
+  });
+  return res.ok;
+}
+
+app.post("/password-reset-request", async (req, res) => {
+  const rawEmail = String(req.body?.email ?? "").trim();
+  const cleanedEmail = normalizeEmail(rawEmail);
+  if (!cleanedEmail) {
+    return res.status(400).json({ message: "Ievadi e-pastu." });
+  }
+  if (!RESEND_API_KEY) {
+    return res.status(503).json({
+      message:
+        "Paroles atjaunošana pagaidām nav pieejama. Sazinies: thezone@news.thezone.lv",
+    });
+  }
+  prunePasswordResetTokens();
+  const key = findUserKeyByEmail(cleanedEmail);
+  if (!key || !USERS[key] || !USERS[key].email) {
+    return res.json({ ok: true, message: "Ja konts ar šādu e-pastu eksistē, saņemsi e-pastu ar norādījumiem." });
+  }
+  const username = USERS[key].username;
+  const token = crypto.randomBytes(32).toString("hex");
+  passwordResetTokens.set(token, {
+    username,
+    expiresAt: Date.now() + PASSWORD_RESET_TTL_MS,
+  });
+  const resetLink = `${BASE_URL}/reset-password.html?token=${encodeURIComponent(token)}`;
+  const sent = await sendPasswordResetEmail(cleanedEmail, resetLink);
+  if (!sent) {
+    passwordResetTokens.delete(token);
+    return res.status(500).json({ message: "Neizdevās nosūtīt e-pastu. Mēģini vēlreiz vēlāk." });
+  }
+  return res.json({ ok: true, message: "Ja konts ar šādu e-pastu eksistē, saņemsi e-pastu ar norādījumiem." });
+});
+
+app.post("/password-reset", async (req, res) => {
+  const { token, newPassword } = req.body || {};
+  const rawToken = String(token ?? "").trim();
+  const rawPassword = String(newPassword ?? "").trim();
+  if (!rawToken) return res.status(400).json({ message: "Trūkst atjaunošanas koda." });
+  if (!rawPassword || rawPassword.length < 6) {
+    return res.status(400).json({ message: "Jaunajai parolei jābūt vismaz 6 simbolus garai." });
+  }
+  prunePasswordResetTokens();
+  const data = passwordResetTokens.get(rawToken);
+  if (!data || !data.username || (data.expiresAt && data.expiresAt < Date.now())) {
+    return res.status(400).json({ message: "Kods ir nederīgs vai beidzies. Pieprasi atjaunošanu vēlreiz." });
+  }
+  const key = findUserKeyCaseInsensitive(data.username);
+  if (!key || !USERS[key]) {
+    passwordResetTokens.delete(rawToken);
+    return res.status(400).json({ message: "Lietotājs nav atrasts." });
+  }
+  const hash = await bcrypt.hash(rawPassword, 10);
+  USERS[key].passwordHash = hash;
+  saveUsers(USERS);
+  passwordResetTokens.delete(rawToken);
+  return res.json({ ok: true, message: "Parole nomainīta. Vari ienākt ar jauno paroli." });
+});
+
 // ======== /me ========
 app.get("/me", authMiddleware, async (req, res) => {
   const u = req.user;

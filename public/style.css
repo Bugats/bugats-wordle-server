@@ -189,6 +189,18 @@ input:focus-visible {
   color: red;
 }
 
+.auth-link-row {
+  margin-top: 10px;
+  font-size: 14px;
+}
+.auth-link-row a {
+  color: #00b4ff;
+  text-decoration: none;
+}
+.auth-link-row a:hover {
+  text-decoration: underline;
+}
+
 /* ===========================
    GAME.HTML – VĀRDU ZONA
    =========================== */

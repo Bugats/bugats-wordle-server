@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="lv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Paroles atjaunošana — VĀRDU ZONA</title>
+    <meta name="theme-color" content="#0b0f2a" />
+    <link rel="stylesheet" href="style.css?v=2026-03-21" />
+  </head>
+  <body class="auth-page-body">
+    <div class="container privacy-container" style="max-width: 420px;">
+      <h1>Paroles atjaunošana</h1>
+      <p>Ievadi e-pastu, kas piesaistīts tavam kontam. Nosūtīsim linku, lai izvēlētos jaunu paroli.</p>
+      <form id="forgot-form">
+        <label for="forgot-email">E-pasts</label>
+        <input
+          type="email"
+          id="forgot-email"
+          autocomplete="email"
+          required
+          placeholder="piemērs@epasts.lv"
+        />
+        <button type="submit" class="btn-primary">Sūtīt norādījumus</button>
+      </form>
+      <p id="forgot-message" class="error-message" style="color: inherit; display: none;"></p>
+      <p class="auth-link-row">
+        <a href="index.html">← Atpakaļ uz pierakstīšanos</a>
+      </p>
+    </div>
+    <script>
+      const API_BASE = "https://bugats-wordle-server.onrender.com";
+      const form = document.getElementById("forgot-form");
+      const messageEl = document.getElementById("forgot-message");
+      function showMsg(text, isError) {
+        if (!messageEl) return;
+        messageEl.textContent = text || "";
+        messageEl.style.display = text ? "block" : "none";
+        messageEl.style.color = isError ? "red" : "green";
+      }
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const email = document.getElementById("forgot-email").value.trim();
+        if (!email) return;
+        showMsg("Sūta…", false);
+        try {
+          const res = await fetch(API_BASE + "/password-reset-request", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok) {
+            showMsg(data.message || "Ja konts ar šādu e-pastu eksistē, pārbaudi e-pastu.", false);
+            form.reset();
+          } else {
+            showMsg(data.message || "Kļūda. Mēģini vēlreiz.", true);
+          }
+        } catch (err) {
+          showMsg("Nav savienojuma ar serveri. Mēģini vēlreiz.", true);
+        }
+      });
+    </script>
+  </body>
+</html>
