@@ -519,6 +519,20 @@ function publicWheelState() {
   };
 }
 
+function toLegacyWheelState(state) {
+  const st = state && typeof state === "object" ? state : publicWheelState();
+  const spinMs = parseInt(st.settings?.spinMs ?? WHEEL_DEFAULT_SPIN_MS, 10);
+  return {
+    slots: Array.isArray(st.slots) ? st.slots : [],
+    removeOnWin: !!st.settings?.removeOnWin,
+    spinMs:
+      Number.isFinite(spinMs) && spinMs >= 3000 && spinMs <= 60000
+        ? spinMs
+        : WHEEL_DEFAULT_SPIN_MS,
+    lastSpin: st.lastSpin || null,
+  };
+}
+
 function wheelIsSpinningNow() {
   const now = Date.now();
   return !!(
@@ -532,13 +546,16 @@ let wheelNsp = null;
 
 function wheelEmitUpdate(force = true) {
   if (!wheelNsp) return;
-  wheelNsp.emit("wheel:update", publicWheelState());
-  if (force) wheelNsp.emit("update", publicWheelState());
+  const state = publicWheelState();
+  wheelNsp.emit("wheel:update", state);
+  wheelNsp.emit("wheel:state", toLegacyWheelState(state));
+  wheelNsp.emit("wheel:lastSpin", state.lastSpin || null);
+  if (force) wheelNsp.emit("update", state);
 }
 
 function wheelEmitError(socket, msg) {
   try {
-    socket.emit("wheel:error", msg);
+    socket.emit("wheel:error", { message: String(msg || "Wheel error") });
     socket.emit("error", msg);
   } catch {
     // ignore
@@ -805,12 +822,14 @@ function wheelStartSpin(byUsername, io) {
     winnerIndex,
     winnerName,
     winnerSource,
+    slotsAtSpin: slots.slice(),
     slotsCount: n,
     spinMs: ms,
     by: String(byUsername || "ADMIN"),
     at: now,
     manualCount: combined.manualCount,
     tokenCount: combined.tokenCount,
+    lastSpin: wheelStore.lastSpin || null,
   };
 
   if (wheelNsp) {
@@ -2896,9 +2915,16 @@ wheelNsp.on("connection", (socket) => {
     };
   };
 
+  const emitWheelSnapshot = () => {
+    const state = publicWheelState();
+    socket.emit("wheel:update", state);
+    socket.emit("update", state);
+    socket.emit("wheel:state", toLegacyWheelState(state));
+    socket.emit("wheel:lastSpin", state.lastSpin || null);
+  };
+
   socket.emit("wheel:me", getMe());
-  socket.emit("wheel:update", publicWheelState());
-  socket.emit("update", publicWheelState());
+  emitWheelSnapshot();
 
   const bind = (action, fn) => {
     socket.on(`wheel:${action}`, fn);
@@ -2917,16 +2943,18 @@ wheelNsp.on("connection", (socket) => {
         socket.data.user = null;
       }
       socket.emit("wheel:me", getMe());
-      socket.emit("wheel:update", publicWheelState());
-      socket.emit("update", publicWheelState());
+      emitWheelSnapshot();
     } catch {
       wheelEmitError(socket, "Nederīgs token.");
     }
   });
 
   bind("join", () => {
-    socket.emit("wheel:update", publicWheelState());
-    socket.emit("update", publicWheelState());
+    emitWheelSnapshot();
+  });
+
+  bind("getState", () => {
+    emitWheelSnapshot();
   });
 
   bind("syncTokens", () => {
@@ -3031,6 +3059,45 @@ wheelNsp.on("connection", (socket) => {
     wheelEmitUpdate(true);
   });
 
+  bind("removeAll", (payload = {}) => {
+    const admin = wheelRequireAdmin(socket);
+    if (!admin) return;
+    if (wheelBlockIfSpinning(socket)) return;
+
+    const name = payload.name ?? payload.username ?? payload.nick ?? "";
+    const r = wheelRemoveAllByName(name);
+    if (!r.ok) return wheelEmitError(socket, r.message);
+    wheelEmitUpdate(true);
+  });
+
+  bind("removeOne", (payload = {}) => {
+    const admin = wheelRequireAdmin(socket);
+    if (!admin) return;
+    if (wheelBlockIfSpinning(socket)) return;
+
+    if (payload && (payload.index || payload.index === 0)) {
+      const r = wheelRemoveOneByIndex(payload.index);
+      if (!r.ok) return wheelEmitError(socket, r.message);
+      wheelEmitUpdate(true);
+      return;
+    }
+
+    const name = String(payload.name ?? payload.username ?? payload.nick ?? "")
+      .trim()
+      .toLowerCase();
+    if (!name) return wheelEmitError(socket, "Nav vārda.");
+
+    const combined = wheelGetCombinedSlots();
+    const idx = combined.slots.findIndex(
+      (x) => String(x || "").trim().toLowerCase() === name
+    );
+    if (idx < 0) return wheelEmitError(socket, "Vārds nav atrasts ratā.");
+
+    const r = wheelRemoveOneByIndex(idx);
+    if (!r.ok) return wheelEmitError(socket, r.message);
+    wheelEmitUpdate(true);
+  });
+
   bind("settings", (payload = {}) => {
     const admin = wheelRequireAdmin(socket);
     if (!admin) return;
@@ -3058,12 +3125,42 @@ wheelNsp.on("connection", (socket) => {
     wheelEmitUpdate(true);
   });
 
-  bind("spin", () => {
+  bind("spin", (payload = {}, ack) => {
     const admin = wheelRequireAdmin(socket);
-    if (!admin) return;
+    if (!admin) {
+      if (typeof ack === "function") ack({ ok: false, message: "Nav ADMIN." });
+      return;
+    }
+
+    if (payload && typeof payload === "object") {
+      wheelApplySettings({
+        spinMs:
+          payload.spinMs ?? payload.spin_ms ?? payload.ms ?? payload.durationMs,
+        removeOnWin:
+          typeof payload.removeOnWin === "boolean"
+            ? payload.removeOnWin
+            : typeof payload.remove_on_win === "boolean"
+            ? payload.remove_on_win
+            : undefined,
+      });
+    }
 
     const r = wheelStartSpin(admin.username, io);
-    if (!r.ok) return wheelEmitError(socket, r.message);
+    if (!r.ok) {
+      wheelEmitError(socket, r.message);
+      if (typeof ack === "function") ack({ ok: false, message: r.message });
+      return;
+    }
+
+    if (typeof ack === "function") {
+      ack({
+        ok: true,
+        stopIndex: r.winnerIndex,
+        slotsAtSpin: Array.isArray(r.slotsAtSpin) ? r.slotsAtSpin : [],
+        lastSpin: r.lastSpin || null,
+        state: toLegacyWheelState(publicWheelState()),
+      });
+    }
   });
 });
 
