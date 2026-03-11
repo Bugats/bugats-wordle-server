@@ -2,7 +2,7 @@
 "use strict";
 
 const API_BASE = "https://bugats-wordle-server.onrender.com";
-const SOCKET_URL = API_BASE;
+const SOCKET_URL = `${API_BASE}/wheel`;
 
 const $ = (s) => document.querySelector(s);
 
