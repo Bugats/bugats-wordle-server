@@ -14,12 +14,16 @@ import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import pino from "pino";
+import pinoHttp from "pino-http";
 import { createClient } from "@supabase/supabase-js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -31,7 +35,8 @@ const JWT_SECRET =
   process.env.JWT_SECRET || "BUGATS_VARDU_ZONA_SUPER_SLEPENS_JWT";
 
 const USERS_FILE = process.env.USERS_FILE || path.join(__dirname, "users.json");
-const REPORTS_FILE = process.env.REPORTS_FILE || path.join(__dirname, "reports.json");
+const REPORTS_FILE =
+  process.env.REPORTS_FILE || path.join(__dirname, "reports.json");
 const WORDS_FILE = path.join(__dirname, "words.txt");
 
 // Seasons storage
@@ -143,8 +148,7 @@ const CORS_ORIGINS_RAW = (process.env.CORS_ORIGINS || "*").trim();
 const CORS_ORIGINS =
   CORS_ORIGINS_RAW === "*"
     ? "*"
-    : CORS_ORIGINS_RAW
-        .split(",")
+    : CORS_ORIGINS_RAW.split(",")
         .map((s) => s.trim())
         .filter(Boolean);
 
@@ -200,18 +204,24 @@ function normalizeTitle(title) {
     .replace(/\s+/g, " ")
     .trim();
   if (!cleaned) return "";
-  return cleaned.length > TITLE_MAX_LEN ? cleaned.slice(0, TITLE_MAX_LEN) : cleaned;
+  return cleaned.length > TITLE_MAX_LEN
+    ? cleaned.slice(0, TITLE_MAX_LEN)
+    : cleaned;
 }
 function avatarForBroadcast(u) {
   if (!u || typeof u !== "object") return null;
   return compactAvatarUrl(resolveAvatarUrl(u), AVATAR_INLINE_MAX_CHARS);
 }
 function normalizeRegion(region) {
-  const key = String(region || "").trim().toLowerCase();
+  const key = String(region || "")
+    .trim()
+    .toLowerCase();
   return REGION_MAP.get(key) || "";
 }
 function normalizeEmail(raw) {
-  const email = String(raw || "").trim().toLowerCase();
+  const email = String(raw || "")
+    .trim()
+    .toLowerCase();
   if (!email) return "";
   if (email.length > EMAIL_MAX_LEN) return "";
   if (!EMAIL_RE.test(email)) return "";
@@ -294,7 +304,9 @@ function getSupabasePublicUrl(path) {
   if (!SUPABASE_ENABLED || !supabase || !SUPABASE_STORAGE_PUBLIC) return null;
   if (!path) return null;
   try {
-    const res = supabase.storage.from(SUPABASE_STORAGE_BUCKET).getPublicUrl(path);
+    const res = supabase.storage
+      .from(SUPABASE_STORAGE_BUCKET)
+      .getPublicUrl(path);
     return res?.data?.publicUrl || null;
   } catch {
     return null;
@@ -302,7 +314,8 @@ function getSupabasePublicUrl(path) {
 }
 const avatarSignedCache = new Map(); // path -> { url, expiresAt }
 async function getSupabaseSignedUrl(path) {
-  if (!SUPABASE_ENABLED || !supabase || !path) return { url: null, expiresAt: 0 };
+  if (!SUPABASE_ENABLED || !supabase || !path)
+    return { url: null, expiresAt: 0 };
   if (SUPABASE_STORAGE_PUBLIC) {
     return { url: getSupabasePublicUrl(path), expiresAt: 0 };
   }
@@ -519,8 +532,11 @@ const CHAT_DUP_WINDOW_MS = 4000;
 const CHAT_STORE_MODE = String(process.env.CHAT_STORE_MODE || "none")
   .trim()
   .toLowerCase();
-const CHAT_STORE_ON_SUPABASE = CHAT_STORE_MODE === "supabase" && SUPABASE_ENABLED;
-const CHAT_STORE_TABLE = String(process.env.CHAT_STORE_TABLE || "chat_messages").trim();
+const CHAT_STORE_ON_SUPABASE =
+  CHAT_STORE_MODE === "supabase" && SUPABASE_ENABLED;
+const CHAT_STORE_TABLE = String(
+  process.env.CHAT_STORE_TABLE || "chat_messages"
+).trim();
 const CHAT_HISTORY_LIMIT = (() => {
   const v = parseInt(process.env.CHAT_HISTORY_LIMIT || "60", 10);
   return Number.isFinite(v) && v >= 0 && v <= 500 ? v : 60;
@@ -562,7 +578,9 @@ const USERS_STORE_MODE = String(process.env.USERS_STORE_MODE || "file")
   .toLowerCase();
 const USERS_STORE_ON_SUPABASE =
   USERS_STORE_MODE === "supabase" && SUPABASE_ENABLED;
-const USERS_STORE_TABLE = String(process.env.USERS_STORE_TABLE || "vz_users").trim();
+const USERS_STORE_TABLE = String(
+  process.env.USERS_STORE_TABLE || "vz_users"
+).trim();
 const USERS_STORE_BATCH = (() => {
   const v = parseInt(process.env.USERS_STORE_BATCH || "500", 10);
   return Number.isFinite(v) && v >= 50 && v <= 2000 ? v : 500;
@@ -573,7 +591,9 @@ const REPORTS_STORE_MODE = String(process.env.REPORTS_STORE_MODE || "file")
   .toLowerCase();
 const REPORTS_STORE_ON_SUPABASE =
   REPORTS_STORE_MODE === "supabase" && SUPABASE_ENABLED;
-const REPORTS_STORE_TABLE = String(process.env.REPORTS_STORE_TABLE || "vz_reports").trim();
+const REPORTS_STORE_TABLE = String(
+  process.env.REPORTS_STORE_TABLE || "vz_reports"
+).trim();
 const REPORTS_STORE_BATCH = (() => {
   const v = parseInt(process.env.REPORTS_STORE_BATCH || "500", 10);
   return Number.isFinite(v) && v >= 50 && v <= 2000 ? v : 500;
@@ -635,7 +655,8 @@ function loadUsers(listOverride) {
       if (typeof u.mutedUntil !== "number") u.mutedUntil = 0;
       if (!u.lastActionAt) u.lastActionAt = Date.now();
       if (!u.lastPassiveTickAt) u.lastPassiveTickAt = u.lastActionAt;
-      if (!u.lastLoginAt) u.lastLoginAt = u.createdAt || u.lastActionAt || Date.now();
+      if (!u.lastLoginAt)
+        u.lastLoginAt = u.createdAt || u.lastActionAt || Date.now();
       if (typeof u.bestStreak !== "number") u.bestStreak = 0;
 
       if (typeof u.missionsDate !== "string") u.missionsDate = "";
@@ -661,7 +682,8 @@ function loadUsers(listOverride) {
 
       // Ekonomikas / ability dienas skaitītāji (misijām)
       if (typeof u.tokensBoughtToday !== "number") u.tokensBoughtToday = 0;
-      if (typeof u.tokensBoughtTodayDate !== "string") u.tokensBoughtTodayDate = "";
+      if (typeof u.tokensBoughtTodayDate !== "string")
+        u.tokensBoughtTodayDate = "";
       if (typeof u.revealUsedToday !== "number") u.revealUsedToday = 0;
       if (typeof u.revealUsedTodayDate !== "string") u.revealUsedTodayDate = "";
 
@@ -672,7 +694,12 @@ function loadUsers(listOverride) {
       if (typeof u.avatarUrl !== "string") u.avatarUrl = null;
       if (typeof u.avatarPath !== "string") u.avatarPath = "";
       if (typeof u.avatarUpdatedAt !== "number") u.avatarUpdatedAt = 0;
-      if (SUPABASE_ENABLED && u.avatarPath && SUPABASE_STORAGE_PUBLIC && !u.avatarUrl) {
+      if (
+        SUPABASE_ENABLED &&
+        u.avatarPath &&
+        SUPABASE_STORAGE_PUBLIC &&
+        !u.avatarUrl
+      ) {
         const pub = getSupabasePublicUrl(u.avatarPath);
         if (pub) u.avatarUrl = pub;
       }
@@ -701,7 +728,8 @@ function loadUsers(listOverride) {
       if (!Number.isFinite(u.regionBoost)) u.regionBoost = 0;
       u.regionPoints = Math.max(0, Math.floor(u.regionPoints));
       u.regionBoost = Math.max(0, Math.floor(u.regionBoost));
-      if (!u.regionAttacks || typeof u.regionAttacks !== "object") u.regionAttacks = {};
+      if (!u.regionAttacks || typeof u.regionAttacks !== "object")
+        u.regionAttacks = {};
       try {
         const cleaned = {};
         for (const [k, v] of Object.entries(u.regionAttacks || {})) {
@@ -734,9 +762,11 @@ function loadUsers(listOverride) {
       // Privātais čats (DM) — inbox users.json
       if (DM_STORE_ON_SERVER) {
         if (!u.dm || typeof u.dm !== "object") u.dm = {};
-        if (!u.dm.threads || typeof u.dm.threads !== "object") u.dm.threads = {};
+        if (!u.dm.threads || typeof u.dm.threads !== "object")
+          u.dm.threads = {};
         if (!u.dm.unread || typeof u.dm.unread !== "object") u.dm.unread = {};
-        if (!u.dm.lastRead || typeof u.dm.lastRead !== "object") u.dm.lastRead = {};
+        if (!u.dm.lastRead || typeof u.dm.lastRead !== "object")
+          u.dm.lastRead = {};
         // DM anti-spam state
         if (typeof u.lastDmAt !== "number") u.lastDmAt = 0;
         if (typeof u.lastDmText !== "string") u.lastDmText = "";
@@ -746,7 +776,11 @@ function loadUsers(listOverride) {
       }
 
       // Bloķētie lietotāji (case-insensitive map)
-      if (!u.blocks || typeof u.blocks !== "object" || Array.isArray(u.blocks)) {
+      if (
+        !u.blocks ||
+        typeof u.blocks !== "object" ||
+        Array.isArray(u.blocks)
+      ) {
         const next = {};
         if (Array.isArray(u.blocks)) {
           for (const item of u.blocks) {
@@ -771,8 +805,10 @@ function loadUsers(listOverride) {
 
       // Draugi + ielūgumi
       if (!Array.isArray(u.friends)) u.friends = [];
-      if (!u.friendInvitesIn || typeof u.friendInvitesIn !== "object") u.friendInvitesIn = {};
-      if (!u.friendInvitesOut || typeof u.friendInvitesOut !== "object") u.friendInvitesOut = {};
+      if (!u.friendInvitesIn || typeof u.friendInvitesIn !== "object")
+        u.friendInvitesIn = {};
+      if (!u.friendInvitesOut || typeof u.friendInvitesOut !== "object")
+        u.friendInvitesOut = {};
 
       // Guess anti-spam
       if (typeof u.lastGuessAt !== "number") u.lastGuessAt = 0;
@@ -842,7 +878,12 @@ function pruneUsersForMemory(users) {
   let changed = false;
   for (const u of Object.values(users)) {
     if (!u || typeof u !== "object") continue;
-    if (SUPABASE_ENABLED && u.avatarPath && !SUPABASE_STORAGE_PUBLIC && u.avatarUrl) {
+    if (
+      SUPABASE_ENABLED &&
+      u.avatarPath &&
+      !SUPABASE_STORAGE_PUBLIC &&
+      u.avatarUrl
+    ) {
       u.avatarUrl = null;
       changed = true;
     }
@@ -855,7 +896,8 @@ function pruneUsersForMemory(users) {
       changed = true;
     }
     if (!DM_STORE_ON_SERVER) continue;
-    const threads = u.dm?.threads && typeof u.dm.threads === "object" ? u.dm.threads : null;
+    const threads =
+      u.dm?.threads && typeof u.dm.threads === "object" ? u.dm.threads : null;
     if (!threads) continue;
     for (const arr of Object.values(threads)) {
       if (!Array.isArray(arr)) continue;
@@ -864,7 +906,10 @@ function pruneUsersForMemory(users) {
         if (!meta || typeof meta !== "object") continue;
         const av = meta.avatarUrl;
         if (typeof av === "string" && av.startsWith("data:image/")) {
-          if (!DM_META_AVATAR_MAX_CHARS || av.length > DM_META_AVATAR_MAX_CHARS) {
+          if (
+            !DM_META_AVATAR_MAX_CHARS ||
+            av.length > DM_META_AVATAR_MAX_CHARS
+          ) {
             meta.avatarUrl = null;
             changed = true;
           }
@@ -1383,7 +1428,9 @@ function wheelBlockIfSpinning(socket) {
 }
 
 function wheelAdd(nameRaw, countRaw) {
-  const name = String(nameRaw || "").trim().slice(0, 60);
+  const name = String(nameRaw || "")
+    .trim()
+    .slice(0, 60);
   if (!name) return { ok: false, message: "Nav vārda." };
 
   let count = parseInt(countRaw ?? 1, 10);
@@ -1407,7 +1454,9 @@ function wheelAdd(nameRaw, countRaw) {
 }
 
 function findUserKeyCaseInsensitive(nameRaw) {
-  const q = String(nameRaw || "").trim().toLowerCase();
+  const q = String(nameRaw || "")
+    .trim()
+    .toLowerCase();
   if (!q) return null;
   if (USERS[nameRaw]) return nameRaw;
   for (const k of Object.keys(USERS || {})) {
@@ -1682,7 +1731,8 @@ function genChallengeId() {
 function pruneExpiredChallenges() {
   const now = Date.now();
   for (const [id, c] of challenges.entries()) {
-    if (c.createdAt && now - c.createdAt > CHALLENGE_TTL_MS) challenges.delete(id);
+    if (c.createdAt && now - c.createdAt > CHALLENGE_TTL_MS)
+      challenges.delete(id);
   }
 }
 
@@ -1848,7 +1898,8 @@ function isRegionBonusActive(date = new Date()) {
 function ensureDailyChest(user) {
   if (!user.dailyChest || typeof user.dailyChest !== "object")
     user.dailyChest = {};
-  if (typeof user.dailyChest.lastDate !== "string") user.dailyChest.lastDate = "";
+  if (typeof user.dailyChest.lastDate !== "string")
+    user.dailyChest.lastDate = "";
   if (typeof user.dailyChest.streak !== "number") user.dailyChest.streak = 0;
   if (typeof user.dailyChest.totalOpens !== "number")
     user.dailyChest.totalOpens = 0;
@@ -1862,8 +1913,7 @@ function getTzOffsetMinutes(timeZone, date = new Date()) {
       hour: "2-digit",
     }).formatToParts(date);
 
-    const tz =
-      parts.find((p) => p.type === "timeZoneName")?.value || "GMT+0";
+    const tz = parts.find((p) => p.type === "timeZoneName")?.value || "GMT+0";
     const m = tz.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/);
     if (!m) return 0;
     const sign = m[1] === "-" ? -1 : 1;
@@ -1973,13 +2023,16 @@ function ensureDailyMissions(user) {
     const mult =
       type === "token_buys" || type === "reveal_used"
         ? 1 + tier * 0.25
-        : type === "fast_wins" || type === "perfect_wins" || type === "duel_wins"
-        ? 1 + tier * 0.35
-        : 1 + tier * 0.45;
+        : type === "fast_wins" ||
+            type === "perfect_wins" ||
+            type === "duel_wins"
+          ? 1 + tier * 0.35
+          : 1 + tier * 0.45;
 
     let target = Math.max(1, Math.round(b * mult));
     const cap = Number(MISSION_TARGET_CAPS[type]);
-    if (Number.isFinite(cap) && cap >= 1) target = Math.min(target, Math.floor(cap));
+    if (Number.isFinite(cap) && cap >= 1)
+      target = Math.min(target, Math.floor(cap));
     return target;
   }
 
@@ -2010,7 +2063,8 @@ function ensureDailyMissions(user) {
       const candidates = items.filter((m) => !used.has(m.id));
       if (!candidates.length) return null;
       let total = 0;
-      for (const m of candidates) total += Math.max(0.0001, Number(m.weight) || 1);
+      for (const m of candidates)
+        total += Math.max(0.0001, Number(m.weight) || 1);
       let r = rng() * total;
       for (const m of candidates) {
         r -= Math.max(0.0001, Number(m.weight) || 1);
@@ -2045,7 +2099,9 @@ function ensureDailyMissions(user) {
     selected.push(...pickWeightedUnique(basics, 1, rng));
     // vēl 1 basic, lai misijas nav pārāk "eksotiskas"
     selected.push(...pickWeightedUnique(basics, 1, rng));
-    selected.push(...pickWeightedUnique(others, Math.max(0, desired - selected.length), rng));
+    selected.push(
+      ...pickWeightedUnique(others, Math.max(0, desired - selected.length), rng)
+    );
 
     const uniqById = new Map();
     for (const m of selected) {
@@ -2079,7 +2135,11 @@ function ensureDailyMissions(user) {
     });
   }
 
-  if (user.missionsDate !== key || !Array.isArray(user.missions) || !user.missions.length) {
+  if (
+    user.missionsDate !== key ||
+    !Array.isArray(user.missions) ||
+    !user.missions.length
+  ) {
     user.missionsDate = key;
     user.missions = buildDailyMissions(user);
     user.missionsBonusDate = "";
@@ -2101,7 +2161,9 @@ function ensureDailyMissions(user) {
       const c = String(code || "");
       const t = String(type || "");
       return (
-        DAILY_MISSION_POOL.find((d) => d && (d.id === c || d.type === t || d.id === t)) || null
+        DAILY_MISSION_POOL.find(
+          (d) => d && (d.id === c || d.type === t || d.id === t)
+        ) || null
       );
     };
 
@@ -2217,7 +2279,10 @@ function getMissionBonusStatus(user) {
   };
 }
 
-function updateMissionsOnGuess(user, { isWin, xpGain, winTimeMs, wordLen, attemptsUsed }) {
+function updateMissionsOnGuess(
+  user,
+  { isWin, xpGain, winTimeMs, wordLen, attemptsUsed }
+) {
   ensureDailyMissions(user);
   let changed = false;
 
@@ -2264,7 +2329,11 @@ function updateMissionsOnGuess(user, { isWin, xpGain, winTimeMs, wordLen, attemp
         if (!isWin) break;
         const maxA = Number(m?.meta?.maxAttempts || 3);
         const lim = Number.isFinite(maxA) && maxA >= 1 ? maxA : 3;
-        if (Number.isFinite(attemptsUsed) && attemptsUsed > 0 && attemptsUsed <= lim) {
+        if (
+          Number.isFinite(attemptsUsed) &&
+          attemptsUsed > 0 &&
+          attemptsUsed <= lim
+        ) {
           m.progress = prevProgress + 1;
           changed = true;
         }
@@ -2331,14 +2400,23 @@ function updateMissionsOnDuelWin(user) {
 
 function updateMissionsOnTokenBuy(user, qty = 1) {
   resetDailyCountersIfNeeded(user);
-  user.tokensBoughtToday = (user.tokensBoughtToday || 0) + Math.max(1, Math.floor(qty || 1));
-  return updateMissionsGenericCounter(user, "token_buys", user.tokensBoughtToday);
+  user.tokensBoughtToday =
+    (user.tokensBoughtToday || 0) + Math.max(1, Math.floor(qty || 1));
+  return updateMissionsGenericCounter(
+    user,
+    "token_buys",
+    user.tokensBoughtToday
+  );
 }
 
 function updateMissionsOnRevealUsed(user) {
   resetDailyCountersIfNeeded(user);
   user.revealUsedToday = (user.revealUsedToday || 0) + 1;
-  return updateMissionsGenericCounter(user, "reveal_used", user.revealUsedToday);
+  return updateMissionsGenericCounter(
+    user,
+    "reveal_used",
+    user.revealUsedToday
+  );
 }
 
 function updateMissionsOnChestOpen(user) {
@@ -2451,7 +2529,8 @@ function awardRegionMvpIfNeeded(today) {
     winners[region] = { username: best.username, wins: best.wins };
     const u = USERS[best.username];
     if (u && REGION_MVP_BOOST > 0) {
-      u.regionBoost = Math.max(0, Math.floor(u.regionBoost || 0)) + REGION_MVP_BOOST;
+      u.regionBoost =
+        Math.max(0, Math.floor(u.regionBoost || 0)) + REGION_MVP_BOOST;
       didChange = true;
     }
     winList.push(`${region}: ${best.username} (${best.wins})`);
@@ -2465,7 +2544,9 @@ function awardRegionMvpIfNeeded(today) {
   if (winList.length) {
     const bonusMsg =
       REGION_MVP_BOOST > 0 ? ` (+${REGION_MVP_BOOST} novada punkti)` : "";
-    broadcastSystemMessage(`🏅 Novadu MVP (${yesterdayKey}): ${winList.join(" • ")}${bonusMsg}`);
+    broadcastSystemMessage(
+      `🏅 Novadu MVP (${yesterdayKey}): ${winList.join(" • ")}${bonusMsg}`
+    );
   }
 }
 
@@ -2554,7 +2635,11 @@ function computeMedalsForUser(targetUser) {
     dailyChamp.winners.length === 1 &&
     dailyChamp.winners[0] === targetUser.username
   ) {
-    medals.push({ code: "DAILY_CHAMP", icon: "👑", label: "Šodienas čempions" });
+    medals.push({
+      code: "DAILY_CHAMP",
+      icon: "👑",
+      label: "Šodienas čempions",
+    });
   }
 
   const topXp = bestByField("xp");
@@ -2672,11 +2757,13 @@ function upsertHallOfFameWinner(
 
   const key = findUserKeyCaseInsensitive(uname);
   const champ = key ? USERS[key] : null;
-  if (!champ) return { ok: false, message: "Lietotājs nav atrasts users.json." };
+  if (!champ)
+    return { ok: false, message: "Lietotājs nav atrasts users.json." };
 
   const medalCode = championMedalCode(sid);
   const finishedAt =
-    Number.isFinite(Number(finishedAtOverride)) && Number(finishedAtOverride) > 0
+    Number.isFinite(Number(finishedAtOverride)) &&
+    Number(finishedAtOverride) > 0
       ? Number(finishedAtOverride)
       : defaultSeasonFinishedAt(sid);
 
@@ -2686,7 +2773,9 @@ function upsertHallOfFameWinner(
     seasonId: sid,
     username: champ.username,
     score:
-      scoreOverride !== undefined && scoreOverride !== null && scoreOverride !== ""
+      scoreOverride !== undefined &&
+      scoreOverride !== null &&
+      scoreOverride !== ""
         ? Math.max(0, Math.floor(Number(scoreOverride) || 0))
         : champ.score || 0,
     xp: champ.xp || 0,
@@ -2862,7 +2951,9 @@ function startSeasonFlow({ byAdminUsername } = {}) {
   }
 
   if (byAdminUsername) {
-    console.log(`SEASON rollover by ${byAdminUsername}: now ${seasonState.name}`);
+    console.log(
+      `SEASON rollover by ${byAdminUsername}: now ${seasonState.name}`
+    );
   }
 
   return { mode: "rolled_next", season: seasonState, hofEntry, didReset };
@@ -2883,9 +2974,12 @@ async function buildMePayload(u) {
       : Number(rankInfo.nextMinXp) || null;
 
   const need =
-    nextMinXp && Number.isFinite(nextMinXp) && nextMinXp > minXp ? nextMinXp - minXp : 0;
+    nextMinXp && Number.isFinite(nextMinXp) && nextMinXp > minXp
+      ? nextMinXp - minXp
+      : 0;
   const inLevel = Math.max(0, xp - minXp);
-  const pct = need > 0 ? Math.max(0, Math.min(100, (inLevel / need) * 100)) : 100;
+  const pct =
+    need > 0 ? Math.max(0, Math.min(100, (inLevel / need) * 100)) : 100;
   const toNext = need > 0 ? Math.max(0, nextMinXp - xp) : 0;
 
   const { url: avatarUrl, expiresAt: avatarUrlExpiresAt } =
@@ -2927,7 +3021,9 @@ async function buildMePayload(u) {
 
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization || "";
-  const token = String(authHeader).replace(/^Bearer\s+/i, "").trim();
+  const token = String(authHeader)
+    .replace(/^Bearer\s+/i, "")
+    .trim();
   if (!token) return res.status(401).json({ message: "Nav token" });
 
   try {
@@ -2951,6 +3047,44 @@ function authMiddleware(req, res, next) {
 const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
+
+const logger = pino(
+  process.env.LOG_PRETTY === "1"
+    ? {
+        level: process.env.LOG_LEVEL || "info",
+        transport: {
+          target: "pino-pretty",
+          options: { translateTime: "SYS:standard", ignore: "pid,hostname" },
+        },
+      }
+    : { level: process.env.LOG_LEVEL || "info" }
+);
+
+app.use(
+  pinoHttp({
+    logger,
+    autoLogging: { ignore: (req) => req.url === "/health" },
+    redact: ["req.headers.authorization"],
+  })
+);
+
+app.use(
+  helmet({
+    // Keep static assets embeddable for existing webview/TWA use-cases.
+    crossOriginResourcePolicy: false,
+  })
+);
+
+const globalRateLimiter = rateLimit({
+  windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000),
+  limit: Number(process.env.RATE_LIMIT_MAX || 300),
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+});
+app.use((req, res, next) => {
+  if (req.path.startsWith("/socket.io")) return next();
+  return globalRateLimiter(req, res, next);
+});
 
 app.use(cors(corsOptions));
 app.use(express.json({ limit: BODY_JSON_LIMIT }));
@@ -3120,7 +3254,14 @@ function computeStreakLeaderboard() {
 function computeDailyLeaderboard() {
   const today = todayKey();
   const arr = Object.values(USERS || {})
-    .filter((u) => u && u.username && !u.isBanned && u.winsTodayDate === today && (u.winsToday || 0) > 0)
+    .filter(
+      (u) =>
+        u &&
+        u.username &&
+        !u.isBanned &&
+        u.winsTodayDate === today &&
+        (u.winsToday || 0) > 0
+    )
     .slice();
   arr.forEach((u) => ensureRankFields(u));
   arr.sort((a, b) => {
@@ -3160,7 +3301,8 @@ function computeRegionStats() {
       const row = byRegion.get(region);
       if (row) {
         row.players += 1;
-        row.score += Number(u.score || 0) + Math.max(0, Number(u.regionBoost || 0));
+        row.score +=
+          Number(u.score || 0) + Math.max(0, Number(u.regionBoost || 0));
         row.xp += Number(u.xp || 0);
       }
     }
@@ -3267,7 +3409,9 @@ async function loadChatHistory(limit = CHAT_HISTORY_LIMIT) {
   try {
     const { data, error } = await supabase
       .from(CHAT_STORE_TABLE)
-      .select("id,username,text,ts,rank_level,rank_color,rank_title,supporter,region")
+      .select(
+        "id,username,text,ts,rank_level,rank_color,rank_title,supporter,region"
+      )
       .order("ts", { ascending: false })
       .limit(limit);
     if (error) {
@@ -3326,9 +3470,12 @@ async function cleanupChatHistory() {
 function ensureDm(user) {
   if (!user || typeof user !== "object") return null;
   if (!user.dm || typeof user.dm !== "object") user.dm = {};
-  if (!user.dm.threads || typeof user.dm.threads !== "object") user.dm.threads = {};
-  if (!user.dm.unread || typeof user.dm.unread !== "object") user.dm.unread = {};
-  if (!user.dm.lastRead || typeof user.dm.lastRead !== "object") user.dm.lastRead = {};
+  if (!user.dm.threads || typeof user.dm.threads !== "object")
+    user.dm.threads = {};
+  if (!user.dm.unread || typeof user.dm.unread !== "object")
+    user.dm.unread = {};
+  if (!user.dm.lastRead || typeof user.dm.lastRead !== "object")
+    user.dm.lastRead = {};
 
   // migrācija/clean-up: veci bugaini keyi (piem. "[object Object]")
   try {
@@ -3377,7 +3524,8 @@ function ensureDm(user) {
     for (const [k, v] of Object.entries(user.dm.unread || {})) {
       const ck = canonName(k);
       if (!ck) continue;
-      newUnread[ck] = Math.max(0, Number(newUnread[ck]) || 0) + Math.max(0, Number(v) || 0);
+      newUnread[ck] =
+        Math.max(0, Number(newUnread[ck]) || 0) + Math.max(0, Number(v) || 0);
     }
     user.dm.unread = newUnread;
 
@@ -3399,7 +3547,8 @@ function dmThreadKeyFor(userA, userB) {
   // saglabājam thread zem “other username” (string), lai frontā vienkārši atvērt
   const getName = (x) => {
     if (typeof x === "string") return x.trim();
-    if (x && typeof x === "object" && typeof x.username === "string") return x.username.trim();
+    if (x && typeof x === "object" && typeof x.username === "string")
+      return x.username.trim();
     return "";
   };
   return getName(userB);
@@ -3451,12 +3600,18 @@ function dmGetLastRead(dm, otherUsername) {
 }
 
 function blockKey(name) {
-  return String(name || "").trim().toLowerCase();
+  return String(name || "")
+    .trim()
+    .toLowerCase();
 }
 
 function ensureBlocks(user) {
   if (!user || typeof user !== "object") return null;
-  if (!user.blocks || typeof user.blocks !== "object" || Array.isArray(user.blocks)) {
+  if (
+    !user.blocks ||
+    typeof user.blocks !== "object" ||
+    Array.isArray(user.blocks)
+  ) {
     user.blocks = {};
   }
   return user.blocks;
@@ -3496,8 +3651,10 @@ function listBlocks(user) {
 function ensureFriends(user) {
   if (!user || typeof user !== "object") return null;
   if (!Array.isArray(user.friends)) user.friends = [];
-  if (!user.friendInvitesIn || typeof user.friendInvitesIn !== "object") user.friendInvitesIn = {};
-  if (!user.friendInvitesOut || typeof user.friendInvitesOut !== "object") user.friendInvitesOut = {};
+  if (!user.friendInvitesIn || typeof user.friendInvitesIn !== "object")
+    user.friendInvitesIn = {};
+  if (!user.friendInvitesOut || typeof user.friendInvitesOut !== "object")
+    user.friendInvitesOut = {};
 
   const cleanList = [];
   const seen = new Set();
@@ -3535,9 +3692,13 @@ function ensureFriends(user) {
 
 function areFriends(user, otherName) {
   ensureFriends(user);
-  const key = String(otherName || "").trim().toLowerCase();
+  const key = String(otherName || "")
+    .trim()
+    .toLowerCase();
   if (!key) return false;
-  return (user.friends || []).some((n) => String(n || "").toLowerCase() === key);
+  return (user.friends || []).some(
+    (n) => String(n || "").toLowerCase() === key
+  );
 }
 
 function addFriend(user, otherName) {
@@ -3545,17 +3706,22 @@ function addFriend(user, otherName) {
   const name = String(otherName || "").trim();
   if (!name) return false;
   const key = name.toLowerCase();
-  if (user.friends.some((n) => String(n || "").toLowerCase() === key)) return false;
+  if (user.friends.some((n) => String(n || "").toLowerCase() === key))
+    return false;
   user.friends.push(name);
   return true;
 }
 
 function removeFriend(user, otherName) {
   ensureFriends(user);
-  const key = String(otherName || "").trim().toLowerCase();
+  const key = String(otherName || "")
+    .trim()
+    .toLowerCase();
   if (!key) return false;
   const before = user.friends.length;
-  user.friends = user.friends.filter((n) => String(n || "").toLowerCase() !== key);
+  user.friends = user.friends.filter(
+    (n) => String(n || "").toLowerCase() !== key
+  );
   return user.friends.length !== before;
 }
 
@@ -3567,7 +3733,9 @@ function setInvite(map, otherName, ts = Date.now()) {
 }
 
 function removeInvite(map, otherName) {
-  const key = String(otherName || "").trim().toLowerCase();
+  const key = String(otherName || "")
+    .trim()
+    .toLowerCase();
   if (!key) return false;
   delete map[key];
   return true;
@@ -3586,7 +3754,9 @@ function listInvites(map) {
 function getFriendsPayload(user) {
   ensureFriends(user);
   return {
-    friends: (user.friends || []).slice().sort((a, b) => String(a).localeCompare(String(b))),
+    friends: (user.friends || [])
+      .slice()
+      .sort((a, b) => String(a).localeCompare(String(b))),
     incoming: listInvites(user.friendInvitesIn),
     outgoing: listInvites(user.friendInvitesOut),
   };
@@ -3625,8 +3795,8 @@ function dmComputeUnread(dm) {
     }
     threads.sort(
       (a, b) =>
-        (b.unread - a.unread) ||
-        (b.lastTs - a.lastTs) ||
+        b.unread - a.unread ||
+        b.lastTs - a.lastTs ||
         String(a.with).localeCompare(String(b.with))
     );
     threads = threads.slice(0, 60);
@@ -3715,7 +3885,16 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
   }
 
   if (
-    ["ban", "unban", "kick", "mute", "unmute", "title", "settitle", "region"].includes(cmd) &&
+    [
+      "ban",
+      "unban",
+      "kick",
+      "mute",
+      "unmute",
+      "title",
+      "settitle",
+      "region",
+    ].includes(cmd) &&
     !targetName
   ) {
     adminSocket.emit("chatMessage", {
@@ -3895,7 +4074,9 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
       }
 
       const endStr = result.season.endAt
-        ? new Date(result.season.endAt).toLocaleString("lv-LV", { timeZone: TZ })
+        ? new Date(result.season.endAt).toLocaleString("lv-LV", {
+            timeZone: TZ,
+          })
         : "—";
 
       if (result.mode === "rolled_next") {
@@ -3903,7 +4084,9 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
           broadcastSystemMessage(
             `🏆 Sezona ${result.hofEntry.seasonId} čempions: ${result.hofEntry.username} (score ${result.hofEntry.score}). Ierakstīts Hall of Fame!`
           );
-          io.emit("seasonHofUpdate", { top: seasonStore.hallOfFame[0] || null });
+          io.emit("seasonHofUpdate", {
+            top: seasonStore.hallOfFame[0] || null,
+          });
         }
 
         broadcastSystemMessage(
@@ -4011,8 +4194,7 @@ function handleAdminCommand(raw, adminUser, adminSocket) {
     default:
       adminSocket.emit("chatMessage", {
         username: "SYSTEM",
-        text:
-          "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute, /title <user> <tituls>, /region <user> <novads>, /seasonstart, /seasononline, /hofset <sid> <username> [score].",
+        text: "Nezināma komanda. Pieejams: /kick, /ban, /unban, /mute <min>, /unmute, /title <user> <tituls>, /region <user> <novads>, /seasonstart, /seasononline, /hofset <sid> <username> [score].",
         ts: Date.now(),
       });
   }
@@ -4027,9 +4209,14 @@ const DUEL_ELO_K_NEWBIE = 40; // pirmajās spēlēs ātrāk stabilizējas
 
 function getDeviceIdFromReq(req) {
   const h =
-    (req && req.headers && (req.headers["x-vz-device-id"] || req.headers["x-device-id"])) || "";
-  const b = req && req.body && (req.body.deviceId || req.body.deviceID || req.body.did);
-  const raw = typeof b === "string" && b.trim() ? b : typeof h === "string" ? h : "";
+    (req &&
+      req.headers &&
+      (req.headers["x-vz-device-id"] || req.headers["x-device-id"])) ||
+    "";
+  const b =
+    req && req.body && (req.body.deviceId || req.body.deviceID || req.body.did);
+  const raw =
+    typeof b === "string" && b.trim() ? b : typeof h === "string" ? h : "";
   const s = String(raw || "").trim();
   if (!s) return "";
   // vienkāršs, drošs formāts (UUID/slug)
@@ -4123,7 +4310,8 @@ async function signupHandler(req, res) {
     const recent = countRecentSignupsForDeviceId(deviceId, Date.now());
     if (recent >= DEVICE_SIGNUP_MAX) {
       return res.status(429).json({
-        message: "No šīs ierīces pēdējo 24h laikā jau izveidots konts. Pamēģini vēlāk.",
+        message:
+          "No šīs ierīces pēdējo 24h laikā jau izveidots konts. Pamēģini vēlāk.",
         code: "DEVICE_SIGNUP_LIMIT",
       });
     }
@@ -4298,14 +4486,19 @@ app.post("/signin", loginHandler);
 // ======== Paroles atjaunošana ========
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 h
 const passwordResetTokens = new Map(); // token -> { username, expiresAt }
-const BASE_URL = String(process.env.BASE_URL || "https://bugats-wordle-server.onrender.com").replace(/\/$/, "");
+const BASE_URL = String(
+  process.env.BASE_URL || "https://bugats-wordle-server.onrender.com"
+).replace(/\/$/, "");
 const RESEND_API_KEY = String(process.env.RESEND_API_KEY || "").trim();
-const RESEND_FROM = String(process.env.RESEND_FROM || "Vārdu Zona <noreply@thezone.lv>").trim();
+const RESEND_FROM = String(
+  process.env.RESEND_FROM || "Vārdu Zona <noreply@thezone.lv>"
+).trim();
 
 function prunePasswordResetTokens() {
   const now = Date.now();
   for (const [tok, data] of passwordResetTokens.entries()) {
-    if (data && data.expiresAt && data.expiresAt < now) passwordResetTokens.delete(tok);
+    if (data && data.expiresAt && data.expiresAt < now)
+      passwordResetTokens.delete(tok);
   }
 }
 
@@ -4345,7 +4538,9 @@ app.post("/password-reset-request", async (req, res) => {
     });
   }
   if (!cleanedEmail && !rawUsername) {
-    return res.status(400).json({ message: "Ievadi e-pastu vai lietotājvārdu." });
+    return res
+      .status(400)
+      .json({ message: "Ievadi e-pastu vai lietotājvārdu." });
   }
   prunePasswordResetTokens();
   let key = null;
@@ -4367,7 +4562,11 @@ app.post("/password-reset-request", async (req, res) => {
     }
   }
   if (!key || !toEmail) {
-    return res.json({ ok: true, message: "Ja konts ar šādu e-pastu vai lietotājvārdu eksistē un ir e-pasts, saņemsi e-pastu ar norādījumiem." });
+    return res.json({
+      ok: true,
+      message:
+        "Ja konts ar šādu e-pastu vai lietotājvārdu eksistē un ir e-pasts, saņemsi e-pastu ar norādījumiem.",
+    });
   }
   const username = USERS[key].username;
   const token = crypto.randomBytes(32).toString("hex");
@@ -4379,23 +4578,40 @@ app.post("/password-reset-request", async (req, res) => {
   const sent = await sendPasswordResetEmail(toEmail, resetLink);
   if (!sent) {
     passwordResetTokens.delete(token);
-    return res.status(500).json({ message: "Neizdevās nosūtīt e-pastu. Mēģini vēlreiz vēlāk." });
+    return res
+      .status(500)
+      .json({ message: "Neizdevās nosūtīt e-pastu. Mēģini vēlreiz vēlāk." });
   }
-  return res.json({ ok: true, message: "Ja konts ar šādu e-pastu vai lietotājvārdu eksistē un ir e-pasts, saņemsi e-pastu ar norādījumiem." });
+  return res.json({
+    ok: true,
+    message:
+      "Ja konts ar šādu e-pastu vai lietotājvārdu eksistē un ir e-pasts, saņemsi e-pastu ar norādījumiem.",
+  });
 });
 
 app.post("/password-reset", async (req, res) => {
   const { token, newPassword } = req.body || {};
   const rawToken = String(token ?? "").trim();
   const rawPassword = String(newPassword ?? "").trim();
-  if (!rawToken) return res.status(400).json({ message: "Trūkst atjaunošanas koda." });
+  if (!rawToken)
+    return res.status(400).json({ message: "Trūkst atjaunošanas koda." });
   if (!rawPassword || rawPassword.length < 6) {
-    return res.status(400).json({ message: "Jaunajai parolei jābūt vismaz 6 simbolus garai." });
+    return res
+      .status(400)
+      .json({ message: "Jaunajai parolei jābūt vismaz 6 simbolus garai." });
   }
   prunePasswordResetTokens();
   const data = passwordResetTokens.get(rawToken);
-  if (!data || !data.username || (data.expiresAt && data.expiresAt < Date.now())) {
-    return res.status(400).json({ message: "Kods ir nederīgs vai beidzies. Pieprasi atjaunošanu vēlreiz." });
+  if (
+    !data ||
+    !data.username ||
+    (data.expiresAt && data.expiresAt < Date.now())
+  ) {
+    return res
+      .status(400)
+      .json({
+        message: "Kods ir nederīgs vai beidzies. Pieprasi atjaunošanu vēlreiz.",
+      });
   }
   const key = findUserKeyCaseInsensitive(data.username);
   if (!key || !USERS[key]) {
@@ -4406,28 +4622,41 @@ app.post("/password-reset", async (req, res) => {
   USERS[key].passwordHash = hash;
   saveUsers(USERS);
   passwordResetTokens.delete(rawToken);
-  return res.json({ ok: true, message: "Parole nomainīta. Vari ienākt ar jauno paroli." });
+  return res.json({
+    ok: true,
+    message: "Parole nomainīta. Vari ienākt ar jauno paroli.",
+  });
 });
 
 // ======== Admin: iestatīt lietotāja paroli (esošajiem bez e-pasta) ========
-app.post("/admin/user/:username/set-password", authMiddleware, async (req, res) => {
-  if (!req.user || !isAdminUser(req.user)) {
-    return res.status(403).json({ message: "Tikai administrators." });
+app.post(
+  "/admin/user/:username/set-password",
+  authMiddleware,
+  async (req, res) => {
+    if (!req.user || !isAdminUser(req.user)) {
+      return res.status(403).json({ message: "Tikai administrators." });
+    }
+    const targetUsername = String(req.params.username || "").trim();
+    const newPassword = String(req.body?.newPassword ?? "").trim();
+    if (!targetUsername)
+      return res.status(400).json({ message: "Norādi lietotājvārdu." });
+    if (!newPassword || newPassword.length < 6) {
+      return res
+        .status(400)
+        .json({ message: "Jaunajai parolei jābūt vismaz 6 simbolus garai." });
+    }
+    const key = findUserKeyCaseInsensitive(targetUsername);
+    if (!key || !USERS[key]) {
+      return res.status(404).json({ message: "Lietotājs nav atrasts." });
+    }
+    USERS[key].passwordHash = await bcrypt.hash(newPassword, 10);
+    saveUsers(USERS);
+    return res.json({
+      ok: true,
+      message: `Parole lietotājam ${USERS[key].username} nomainīta.`,
+    });
   }
-  const targetUsername = String(req.params.username || "").trim();
-  const newPassword = String(req.body?.newPassword ?? "").trim();
-  if (!targetUsername) return res.status(400).json({ message: "Norādi lietotājvārdu." });
-  if (!newPassword || newPassword.length < 6) {
-    return res.status(400).json({ message: "Jaunajai parolei jābūt vismaz 6 simbolus garai." });
-  }
-  const key = findUserKeyCaseInsensitive(targetUsername);
-  if (!key || !USERS[key]) {
-    return res.status(404).json({ message: "Lietotājs nav atrasts." });
-  }
-  USERS[key].passwordHash = await bcrypt.hash(newPassword, 10);
-  saveUsers(USERS);
-  return res.json({ ok: true, message: `Parole lietotājam ${USERS[key].username} nomainīta.` });
-});
+);
 
 // ======== /me ========
 app.get("/me", authMiddleware, async (req, res) => {
@@ -4459,7 +4688,11 @@ app.post("/email", authMiddleware, (req, res) => {
     return res.status(400).json({ message: "Nekorekts e-pasts." });
   }
   const existingKey = findUserKeyByEmail(cleanedEmail);
-  if (existingKey && USERS[existingKey] && USERS[existingKey].username !== user.username) {
+  if (
+    existingKey &&
+    USERS[existingKey] &&
+    USERS[existingKey].username !== user.username
+  ) {
     return res.status(400).json({ message: "Šis e-pasts jau izmantots." });
   }
   user.email = cleanedEmail;
@@ -4515,14 +4748,21 @@ app.post("/avatar", authMiddleware, async (req, res) => {
         });
       if (uploadError) {
         console.error("Supabase avatar upload error:", uploadError);
-        return res.status(500).json({ message: "Neizdevās augšupielādēt avatāru." });
+        return res
+          .status(500)
+          .json({ message: "Neizdevās augšupielādēt avatāru." });
       }
       if (prevPath && prevPath !== filePath) {
-        supabase.storage.from(SUPABASE_STORAGE_BUCKET).remove([prevPath]).catch(() => {});
+        supabase.storage
+          .from(SUPABASE_STORAGE_BUCKET)
+          .remove([prevPath])
+          .catch(() => {});
       }
       user.avatarPath = filePath;
       user.avatarUpdatedAt = Date.now();
-      user.avatarUrl = SUPABASE_STORAGE_PUBLIC ? getSupabasePublicUrl(filePath) : null;
+      user.avatarUrl = SUPABASE_STORAGE_PUBLIC
+        ? getSupabasePublicUrl(filePath)
+        : null;
     } else {
       user.avatarUrl = avatar;
       user.avatarPath = "";
@@ -4564,9 +4804,12 @@ async function buildPublicProfilePayload(targetUser, requester) {
       ? null
       : Number(rankInfo.nextMinXp) || null;
   const need =
-    nextMinXp && Number.isFinite(nextMinXp) && nextMinXp > minXp ? nextMinXp - minXp : 0;
+    nextMinXp && Number.isFinite(nextMinXp) && nextMinXp > minXp
+      ? nextMinXp - minXp
+      : 0;
   const inLevel = Math.max(0, xp - minXp);
-  const pct = need > 0 ? Math.max(0, Math.min(100, (inLevel / need) * 100)) : 100;
+  const pct =
+    need > 0 ? Math.max(0, Math.min(100, (inLevel / need) * 100)) : 100;
   const toNext = need > 0 ? Math.max(0, nextMinXp - xp) : 0;
 
   const { url: avatarUrl, expiresAt: avatarUrlExpiresAt } =
@@ -4643,13 +4886,15 @@ app.post("/friends/request", authMiddleware, (req, res) => {
   const user = req.user;
   const toRaw = req.body?.to || req.body?.username || req.body?.user || "";
   const toName = String(toRaw || "").trim();
-  if (!toName) return res.status(400).json({ message: "Nav nor��dīts lietotājs." });
+  if (!toName)
+    return res.status(400).json({ message: "Nav nor��dīts lietotājs." });
   if (toName === user.username)
     return res.status(400).json({ message: "Nevari pievienot sevi." });
 
   const key = findUserKeyCaseInsensitive(toName);
   const target = key ? USERS[key] : null;
-  if (!target) return res.status(404).json({ message: "Lietotājs nav atrasts." });
+  if (!target)
+    return res.status(404).json({ message: "Lietotājs nav atrasts." });
 
   ensureFriends(user);
   ensureFriends(target);
@@ -4685,11 +4930,13 @@ app.post("/friends/accept", authMiddleware, (req, res) => {
   const user = req.user;
   const fromRaw = req.body?.from || req.body?.username || req.body?.user || "";
   const fromName = String(fromRaw || "").trim();
-  if (!fromName) return res.status(400).json({ message: "Nav norādīts lietotājs." });
+  if (!fromName)
+    return res.status(400).json({ message: "Nav norādīts lietotājs." });
 
   const key = findUserKeyCaseInsensitive(fromName);
   const other = key ? USERS[key] : null;
-  if (!other) return res.status(404).json({ message: "Lietotājs nav atrasts." });
+  if (!other)
+    return res.status(404).json({ message: "Lietotājs nav atrasts." });
 
   ensureFriends(user);
   ensureFriends(other);
@@ -4711,11 +4958,13 @@ app.post("/friends/decline", authMiddleware, (req, res) => {
   const user = req.user;
   const fromRaw = req.body?.from || req.body?.username || req.body?.user || "";
   const fromName = String(fromRaw || "").trim();
-  if (!fromName) return res.status(400).json({ message: "Nav norādīts lietotājs." });
+  if (!fromName)
+    return res.status(400).json({ message: "Nav norādīts lietotājs." });
 
   const key = findUserKeyCaseInsensitive(fromName);
   const other = key ? USERS[key] : null;
-  if (!other) return res.status(404).json({ message: "Lietotājs nav atrasts." });
+  if (!other)
+    return res.status(404).json({ message: "Lietotājs nav atrasts." });
 
   ensureFriends(user);
   ensureFriends(other);
@@ -4731,11 +4980,13 @@ app.post("/friends/cancel", authMiddleware, (req, res) => {
   const user = req.user;
   const toRaw = req.body?.to || req.body?.username || req.body?.user || "";
   const toName = String(toRaw || "").trim();
-  if (!toName) return res.status(400).json({ message: "Nav norādīts lietotājs." });
+  if (!toName)
+    return res.status(400).json({ message: "Nav norādīts lietotājs." });
 
   const key = findUserKeyCaseInsensitive(toName);
   const other = key ? USERS[key] : null;
-  if (!other) return res.status(404).json({ message: "Lietotājs nav atrasts." });
+  if (!other)
+    return res.status(404).json({ message: "Lietotājs nav atrasts." });
 
   ensureFriends(user);
   ensureFriends(other);
@@ -4751,11 +5002,13 @@ app.post("/friends/remove", authMiddleware, (req, res) => {
   const user = req.user;
   const otherRaw = req.body?.user || req.body?.username || req.body?.to || "";
   const otherName = String(otherRaw || "").trim();
-  if (!otherName) return res.status(400).json({ message: "Nav norādīts lietotājs." });
+  if (!otherName)
+    return res.status(400).json({ message: "Nav norādīts lietotājs." });
 
   const key = findUserKeyCaseInsensitive(otherName);
   const other = key ? USERS[key] : null;
-  if (!other) return res.status(404).json({ message: "Lietotājs nav atrasts." });
+  if (!other)
+    return res.status(404).json({ message: "Lietotājs nav atrasts." });
 
   ensureFriends(user);
   ensureFriends(other);
@@ -4778,7 +5031,10 @@ app.get("/missions", authMiddleware, (req, res) => {
   ensureSpecialMedals(user);
   ensureRankFields(user);
   saveUsers(USERS);
-  res.json({ missions: getPublicMissions(user), bonus: getMissionBonusStatus(user) });
+  res.json({
+    missions: getPublicMissions(user),
+    bonus: getMissionBonusStatus(user),
+  });
 });
 
 app.post("/missions/claim", authMiddleware, async (req, res) => {
@@ -4836,7 +5092,9 @@ app.post("/missions/bonus", authMiddleware, async (req, res) => {
 
   const bonus = getMissionBonusStatus(user);
   if (!bonus.isCompleted) {
-    return res.status(400).json({ message: "Visas misijas vēl nav pabeigtas." });
+    return res
+      .status(400)
+      .json({ message: "Visas misijas vēl nav pabeigtas." });
   }
   if (bonus.isClaimed) {
     return res.status(400).json({ message: "Dienas bonus balva jau saņemta." });
@@ -4958,10 +5216,16 @@ app.post("/chest/open", authMiddleware, async (req, res) => {
 
 // ======== SEZONA API ========
 app.get("/season", authMiddleware, (_req, res) => {
-  res.json({ ...seasonState, hallOfFameTop: seasonStore.hallOfFame[0] || null });
+  res.json({
+    ...seasonState,
+    hallOfFameTop: seasonStore.hallOfFame[0] || null,
+  });
 });
 app.get("/season/state", (_req, res) => {
-  res.json({ ...seasonState, hallOfFameTop: seasonStore.hallOfFame[0] || null });
+  res.json({
+    ...seasonState,
+    hallOfFameTop: seasonStore.hallOfFame[0] || null,
+  });
 });
 app.get("/season/hof", authMiddleware, (_req, res) => {
   res.json(seasonStore.hallOfFame || []);
@@ -4993,7 +5257,9 @@ app.post("/season/hof/override", authMiddleware, (req, res) => {
 app.post("/season/start", authMiddleware, (req, res) => {
   const user = req.user;
   if (!isAdminUser(user)) {
-    return res.status(403).json({ message: "Tikai admins var startēt sezonu." });
+    return res
+      .status(403)
+      .json({ message: "Tikai admins var startēt sezonu." });
   }
 
   const result = startSeasonFlow({ byAdminUsername: user.username });
@@ -5053,13 +5319,18 @@ app.get("/start-round", authMiddleware, (req, res) => {
     // migrācija drošībai
     if (typeof user.currentRound.revealUsed !== "boolean")
       user.currentRound.revealUsed = false;
-    if (!user.currentRound.reveal || typeof user.currentRound.reveal !== "object")
+    if (
+      !user.currentRound.reveal ||
+      typeof user.currentRound.reveal !== "object"
+    )
       user.currentRound.reveal = null;
     if (!Array.isArray(user.currentRound.knownCorrect)) {
       const len = Math.max(0, Math.floor(user.currentRound.len || 0));
-      user.currentRound.knownCorrect = len > 0 ? new Array(len).fill(false) : [];
+      user.currentRound.knownCorrect =
+        len > 0 ? new Array(len).fill(false) : [];
     }
-    if (!Array.isArray(user.currentRound.history)) user.currentRound.history = [];
+    if (!Array.isArray(user.currentRound.history))
+      user.currentRound.history = [];
 
     saveUsers(USERS);
 
@@ -5105,7 +5376,11 @@ app.post("/challenge/create", authMiddleware, (req, res) => {
   const user = req.user;
   const { word, len } = pickRandomWord();
   const id = genChallengeId();
-  const baseUrl = (req.get("origin") || req.protocol + "://" + req.get("host") || "").replace(/\/$/, "");
+  const baseUrl = (
+    req.get("origin") ||
+    req.protocol + "://" + req.get("host") ||
+    ""
+  ).replace(/\/$/, "");
   challenges.set(id, {
     id,
     word,
@@ -5131,11 +5406,18 @@ app.post("/challenge/create", authMiddleware, (req, res) => {
 app.get("/challenge/:id", authMiddleware, (req, res) => {
   pruneExpiredChallenges();
   const c = challenges.get(String(req.params.id || "").trim());
-  if (!c) return res.status(404).json({ message: "Izaicinājums nav atrasts vai ir beidzies." });
+  if (!c)
+    return res
+      .status(404)
+      .json({ message: "Izaicinājums nav atrasts vai ir beidzies." });
   const me = req.user.username;
   const isPlayer1 = c.player1 === me;
   const isPlayer2 = c.player2 === me;
-  const status = !c.player2 ? "waiting" : (c.completed1 && c.completed2 ? "finished" : "active");
+  const status = !c.player2
+    ? "waiting"
+    : c.completed1 && c.completed2
+      ? "finished"
+      : "active";
   const payload = {
     challengeId: c.id,
     player1: c.player1,
@@ -5146,9 +5428,14 @@ app.get("/challenge/:id", authMiddleware, (req, res) => {
     opponentAttempts: isPlayer1 ? c.attempts2 : isPlayer2 ? c.attempts1 : null,
   };
   if (status === "finished") {
-    payload.winner = c.attempts1 != null && c.attempts2 != null
-      ? (c.attempts1 < c.attempts2 ? c.player1 : c.attempts2 < c.attempts1 ? c.player2 : null)
-      : null;
+    payload.winner =
+      c.attempts1 != null && c.attempts2 != null
+        ? c.attempts1 < c.attempts2
+          ? c.player1
+          : c.attempts2 < c.attempts1
+            ? c.player2
+            : null
+        : null;
     payload.attempts1 = c.attempts1;
     payload.attempts2 = c.attempts2;
   }
@@ -5160,11 +5447,23 @@ app.post("/challenge/:id/join", authMiddleware, (req, res) => {
   const id = String(req.params.id || "").trim();
   const c = challenges.get(id);
   if (!c) return res.status(404).json({ message: "Izaicinājums nav atrasts." });
-  if (c.player2) return res.status(400).json({ message: "Izaicinājumam jau ir otrs spēlētājs." });
+  if (c.player2)
+    return res
+      .status(400)
+      .json({ message: "Izaicinājumam jau ir otrs spēlētājs." });
   const me = req.user.username;
-  if (c.player1 === me) return res.status(400).json({ message: "Nevari pievienoties savam izaicinājumam." });
+  if (c.player1 === me)
+    return res
+      .status(400)
+      .json({ message: "Nevari pievienoties savam izaicinājumam." });
   c.player2 = me;
-  return res.json({ ok: true, challengeId: id, len: c.len, player1: c.player1, player2: me });
+  return res.json({
+    ok: true,
+    challengeId: id,
+    len: c.len,
+    player1: c.player1,
+    player2: me,
+  });
 });
 
 app.post("/challenge/:id/guess", authMiddleware, (req, res) => {
@@ -5172,18 +5471,28 @@ app.post("/challenge/:id/guess", authMiddleware, (req, res) => {
   const id = String(req.params.id || "").trim();
   const c = challenges.get(id);
   if (!c) return res.status(404).json({ message: "Izaicinājums nav atrasts." });
-  if (!c.player2) return res.status(400).json({ message: "Otrs spēlētājs vēl nav pievienojies." });
+  if (!c.player2)
+    return res
+      .status(400)
+      .json({ message: "Otrs spēlētājs vēl nav pievienojies." });
   const me = req.user.username;
   const isPlayer1 = c.player1 === me;
   const isPlayer2 = c.player2 === me;
-  if (!isPlayer1 && !isPlayer2) return res.status(403).json({ message: "Tu neesi šī izaicinājuma dalībnieks." });
+  if (!isPlayer1 && !isPlayer2)
+    return res
+      .status(403)
+      .json({ message: "Tu neesi šī izaicinājuma dalībnieks." });
 
   const guessRaw = (req.body?.guess || "").toString().trim().toUpperCase();
   if (guessRaw.length !== c.len) {
     return res.status(400).json({ message: `Vārdam jābūt ${c.len} burtiem.` });
   }
   if (!GUESS_ALLOWED_RE.test(guessRaw)) {
-    return res.status(400).json({ message: "Minējumā drīkst būt tikai burti (A-Z + latviešu burti)." });
+    return res
+      .status(400)
+      .json({
+        message: "Minējumā drīkst būt tikai burti (A-Z + latviešu burti).",
+      });
   }
 
   let history = isPlayer1 ? c.history1 : c.history2;
@@ -5194,10 +5503,18 @@ app.post("/challenge/:id/guess", authMiddleware, (req, res) => {
   }
   const currentAttempts = history.length;
   if (currentAttempts >= MAX_ATTEMPTS) {
-    return res.status(400).json({ message: "Tu jau esi iztērējis visus mēģinājumus." });
+    return res
+      .status(400)
+      .json({ message: "Tu jau esi iztērējis visus mēģinājumus." });
   }
-  if (isPlayer1 && c.completed1) return res.status(400).json({ message: "Tu jau esi pabeidzis šo izaicinājumu." });
-  if (isPlayer2 && c.completed2) return res.status(400).json({ message: "Tu jau esi pabeidzis šo izaicinājumu." });
+  if (isPlayer1 && c.completed1)
+    return res
+      .status(400)
+      .json({ message: "Tu jau esi pabeidzis šo izaicinājumu." });
+  if (isPlayer2 && c.completed2)
+    return res
+      .status(400)
+      .json({ message: "Tu jau esi pabeidzis šo izaicinājumu." });
 
   const pattern = buildPattern(c.word, guessRaw);
   const isWin = guessRaw === c.word;
@@ -5244,9 +5561,15 @@ app.get("/challenge/:id/history", authMiddleware, (req, res) => {
   const me = req.user.username;
   const isPlayer1 = c.player1 === me;
   const isPlayer2 = c.player2 === me;
-  if (!isPlayer1 && !isPlayer2) return res.status(403).json({ message: "Tu neesi šī izaicinājuma dalībnieks." });
+  if (!isPlayer1 && !isPlayer2)
+    return res
+      .status(403)
+      .json({ message: "Tu neesi šī izaicinājuma dalībnieks." });
   const history = isPlayer1 ? c.history1 : c.history2;
-  return res.json({ history: Array.isArray(history) ? history : [], len: c.len });
+  return res.json({
+    history: Array.isArray(history) ? history : [],
+    len: c.len,
+  });
 });
 
 // ======== Ability: Atvērt 1 burtu (1x katrā raundā) ========
@@ -5299,7 +5622,8 @@ app.post("/ability/reveal-letter", authMiddleware, (req, res) => {
     });
   }
 
-  const avoidRaw = req.body && Array.isArray(req.body.avoid) ? req.body.avoid : [];
+  const avoidRaw =
+    req.body && Array.isArray(req.body.avoid) ? req.body.avoid : [];
   const avoid = new Set(
     avoidRaw
       .map((x) => Number(x))
@@ -5551,7 +5875,8 @@ app.post("/guess", authMiddleware, (req, res) => {
 
   try {
     round.history.push({ guess: guessRaw, pattern, ts: Date.now() });
-    if (round.history.length > MAX_ATTEMPTS) round.history = round.history.slice(-MAX_ATTEMPTS);
+    if (round.history.length > MAX_ATTEMPTS)
+      round.history = round.history.slice(-MAX_ATTEMPTS);
   } catch {}
 
   attemptsUsed = Math.max(1, MAX_ATTEMPTS - (round.attemptsLeft || 0));
@@ -5634,7 +5959,10 @@ function computeMyRegionRank(user) {
   const region = normalizeRegion(user?.region);
   if (!region) return null;
   const inRegion = Object.values(USERS || {})
-    .filter((u) => u && u.username && !u.isBanned && normalizeRegion(u.region) === region)
+    .filter(
+      (u) =>
+        u && u.username && !u.isBanned && normalizeRegion(u.region) === region
+    )
     .slice();
   inRegion.sort((a, b) => {
     const ds = (b.score || 0) - (a.score || 0);
@@ -5697,8 +6025,10 @@ app.post("/region/attack", authMiddleware, async (req, res) => {
     return res.status(400).json({ message: "Nepietiek novada punktu." });
   }
   user.regionPoints = points - amount;
-  if (!user.regionAttacks || typeof user.regionAttacks !== "object") user.regionAttacks = {};
-  user.regionAttacks[target] = (Number(user.regionAttacks[target]) || 0) + amount;
+  if (!user.regionAttacks || typeof user.regionAttacks !== "object")
+    user.regionAttacks = {};
+  user.regionAttacks[target] =
+    (Number(user.regionAttacks[target]) || 0) + amount;
   saveUsers(USERS);
   res.json({ ok: true, me: await buildMePayload(user) });
 });
@@ -5766,14 +6096,19 @@ function finishDuel(duel, winnerName, reason) {
     saveUsers(USERS);
     broadcastLeaderboard(false);
 
-    const eloAfter = (duel.ranked !== false && u1 && u2)
-      ? { [p1]: u1.duelElo, [p2]: u2.duelElo }
-      : null;
+    const eloAfter =
+      duel.ranked !== false && u1 && u2
+        ? { [p1]: u1.duelElo, [p2]: u2.duelElo }
+        : null;
 
     const eloDelta1 =
-      eloBefore && eloAfter ? Number(eloAfter[p1] || 0) - Number(eloBefore[p1] || 0) : 0;
+      eloBefore && eloAfter
+        ? Number(eloAfter[p1] || 0) - Number(eloBefore[p1] || 0)
+        : 0;
     const eloDelta2 =
-      eloBefore && eloAfter ? Number(eloAfter[p2] || 0) - Number(eloBefore[p2] || 0) : 0;
+      eloBefore && eloAfter
+        ? Number(eloAfter[p2] || 0) - Number(eloBefore[p2] || 0)
+        : 0;
 
     if (s1)
       s1.emit("duel.end", {
@@ -6034,26 +6369,33 @@ wheelNsp.on("connection", (socket) => {
 
     if (mode === "set") {
       const v = parseInt(payload.set ?? payload.value ?? payload.tokens, 10);
-      if (!Number.isFinite(v) || v < 0) return wheelEmitError(socket, "Nederīgs set.");
+      if (!Number.isFinite(v) || v < 0)
+        return wheelEmitError(socket, "Nederīgs set.");
       nextTokens = v;
     } else if (mode === "delta") {
       const d = parseInt(payload.delta ?? payload.d ?? payload.change, 10);
-      if (!Number.isFinite(d) || d === 0) return wheelEmitError(socket, "Nederīgs delta.");
+      if (!Number.isFinite(d) || d === 0)
+        return wheelEmitError(socket, "Nederīgs delta.");
       nextTokens = Math.max(0, nextTokens + d);
     } else {
       const hasSet =
         payload.set !== undefined && payload.set !== null && payload.set !== "";
       const hasDelta =
-        payload.delta !== undefined && payload.delta !== null && payload.delta !== "";
-      if (!hasSet && !hasDelta) return wheelEmitError(socket, "Norādi set vai delta.");
+        payload.delta !== undefined &&
+        payload.delta !== null &&
+        payload.delta !== "";
+      if (!hasSet && !hasDelta)
+        return wheelEmitError(socket, "Norādi set vai delta.");
 
       if (hasSet) {
         const v = parseInt(payload.set, 10);
-        if (!Number.isFinite(v) || v < 0) return wheelEmitError(socket, "Nederīgs set.");
+        if (!Number.isFinite(v) || v < 0)
+          return wheelEmitError(socket, "Nederīgs set.");
         nextTokens = v;
       } else {
         const d = parseInt(payload.delta, 10);
-        if (!Number.isFinite(d) || d === 0) return wheelEmitError(socket, "Nederīgs delta.");
+        if (!Number.isFinite(d) || d === 0)
+          return wheelEmitError(socket, "Nederīgs delta.");
         nextTokens = Math.max(0, nextTokens + d);
       }
     }
@@ -6113,13 +6455,14 @@ wheelNsp.on("connection", (socket) => {
     if (wheelBlockIfSpinning(socket)) return;
 
     wheelApplySettings({
-      spinMs: payload.spinMs ?? payload.spin_ms ?? payload.ms ?? payload.durationMs,
+      spinMs:
+        payload.spinMs ?? payload.spin_ms ?? payload.ms ?? payload.durationMs,
       removeOnWin:
         typeof payload.removeOnWin === "boolean"
           ? payload.removeOnWin
           : typeof payload.remove_on_win === "boolean"
-          ? payload.remove_on_win
-          : undefined,
+            ? payload.remove_on_win
+            : undefined,
     });
 
     wheelEmitUpdate(true);
@@ -6169,7 +6512,9 @@ io.on("connection", (socket) => {
         ranked: duel.ranked !== false,
         attemptsLeft: duel.attemptsLeft?.[user.username] ?? null,
         rowsUsed: duel.rowsUsed?.[user.username] ?? null,
-        history: Array.isArray(duel.history?.[user.username]) ? duel.history[user.username] : [],
+        history: Array.isArray(duel.history?.[user.username])
+          ? duel.history[user.username]
+          : [],
       });
     }
   } catch {}
@@ -6312,12 +6657,14 @@ io.on("connection", (socket) => {
     const toRaw =
       typeof payload === "string"
         ? ""
-        : payload?.to ?? payload?.username ?? payload?.target ?? "";
-    const textRaw = typeof payload === "string" ? payload : payload?.text ?? "";
+        : (payload?.to ?? payload?.username ?? payload?.target ?? "");
+    const textRaw =
+      typeof payload === "string" ? payload : (payload?.text ?? "");
 
     const toName = String(toRaw || "").trim();
     const text = dmSanitizeText(textRaw);
-    if (!toName) return socket.emit("dm.error", { message: "Nav norādīts saņēmējs." });
+    if (!toName)
+      return socket.emit("dm.error", { message: "Nav norādīts saņēmējs." });
     if (!text) return socket.emit("dm.error", { message: "Ziņa ir tukša." });
 
     if (sender.isBanned) {
@@ -6347,15 +6694,20 @@ io.on("connection", (socket) => {
 
     const key = findUserKeyCaseInsensitive(toName);
     const target = key ? USERS[key] : null;
-    if (!target) return socket.emit("dm.error", { message: "Lietotājs nav atrasts." });
+    if (!target)
+      return socket.emit("dm.error", { message: "Lietotājs nav atrasts." });
     if (target.username === sender.username)
       return socket.emit("dm.error", { message: "Nevari rakstīt sev." });
 
     if (isBlocked(sender, target.username)) {
-      return socket.emit("dm.error", { message: "Tu esi nobloķējis šo lietotāju." });
+      return socket.emit("dm.error", {
+        message: "Tu esi nobloķējis šo lietotāju.",
+      });
     }
     if (isBlocked(target, sender.username)) {
-      return socket.emit("dm.error", { message: "Lietotājs tevi ir nobloķējis." });
+      return socket.emit("dm.error", {
+        message: "Lietotājs tevi ir nobloķējis.",
+      });
     }
 
     // aktivitāte (anti-afk)
@@ -6368,7 +6720,12 @@ io.on("connection", (socket) => {
       const rfrom = String(payload.reply?.from || "").trim();
       let rtext = String(payload.reply?.text || "").trim();
       if (rtext.length > 80) rtext = rtext.slice(0, 80);
-      if (rid && rfrom && rtext && (rfrom === sender.username || rfrom === target.username)) {
+      if (
+        rid &&
+        rfrom &&
+        rtext &&
+        (rfrom === sender.username || rfrom === target.username)
+      ) {
         reply = { id: rid, from: rfrom, text: rtext };
       }
     }
@@ -6385,7 +6742,11 @@ io.on("connection", (socket) => {
       if (reply) msg.reply = reply;
       saveUsers(USERS);
 
-      socket.emit("dm.sent", { message: msg, with: target.username, mode: "client" });
+      socket.emit("dm.sent", {
+        message: msg,
+        with: target.username,
+        mode: "client",
+      });
       const targetSocket = getSocketByUsername(target.username);
       if (targetSocket) {
         targetSocket.emit("dm.message", {
@@ -6399,7 +6760,8 @@ io.on("connection", (socket) => {
     }
 
     const msg = dmPushMessage(sender, target, text, { reply });
-    if (!msg) return socket.emit("dm.error", { message: "Neizdevās nosūtīt ziņu." });
+    if (!msg)
+      return socket.emit("dm.error", { message: "Neizdevās nosūtīt ziņu." });
 
     saveUsers(USERS);
 
@@ -6424,7 +6786,9 @@ io.on("connection", (socket) => {
     if (socketRateLimited(socket, "dmTyping", DM_TYPING_RATE_MS)) return;
     const sender = USERS[user.username] || user;
     const toRaw =
-      typeof payload === "string" ? payload : payload?.with ?? payload?.to ?? payload?.username ?? "";
+      typeof payload === "string"
+        ? payload
+        : (payload?.with ?? payload?.to ?? payload?.username ?? "");
     const toName = String(toRaw || "").trim();
     if (!toName) return;
     const key = findUserKeyCaseInsensitive(toName);
@@ -6432,19 +6796,28 @@ io.on("connection", (socket) => {
     if (!target || target.username === sender.username) return;
     const targetSocket = getSocketByUsername(target.username);
     if (!targetSocket) return;
-    if (isBlocked(sender, target.username) || isBlocked(target, sender.username)) return;
-    const typing = !!(payload && typeof payload === "object" ? payload.typing : false);
+    if (
+      isBlocked(sender, target.username) ||
+      isBlocked(target, sender.username)
+    )
+      return;
+    const typing = !!(payload && typeof payload === "object"
+      ? payload.typing
+      : false);
     targetSocket.emit("dm.typing", { from: sender.username, typing });
   });
 
   socket.on("dm.edit", (payload) => {
     const me = USERS[user.username] || user;
     const otherRaw =
-      typeof payload === "string" ? payload : payload?.with ?? payload?.to ?? payload?.username ?? "";
+      typeof payload === "string"
+        ? payload
+        : (payload?.with ?? payload?.to ?? payload?.username ?? "");
     const otherName = String(otherRaw || "").trim();
     const id = String(payload?.id || "").trim();
     const text = dmSanitizeText(payload?.text || "");
-    if (!otherName || !id) return socket.emit("dm.error", { message: "Nederīga ziņa." });
+    if (!otherName || !id)
+      return socket.emit("dm.error", { message: "Nederīga ziņa." });
     if (!text) return socket.emit("dm.error", { message: "Ziņa ir tukša." });
 
     if (!DM_STORE_ON_SERVER) {
@@ -6459,10 +6832,18 @@ io.on("connection", (socket) => {
         edited: true,
         editedAt: Date.now(),
       };
-      socket.emit("dm.edited", { with: otherUsername, message, mode: "client" });
+      socket.emit("dm.edited", {
+        with: otherUsername,
+        message,
+        mode: "client",
+      });
       const targetSocket = getSocketByUsername(otherUsername);
       if (targetSocket) {
-        targetSocket.emit("dm.edited", { with: me.username, message, mode: "client" });
+        targetSocket.emit("dm.edited", {
+          with: me.username,
+          message,
+          mode: "client",
+        });
       }
       return;
     }
@@ -6472,12 +6853,17 @@ io.on("connection", (socket) => {
     const other = key ? USERS[key] : null;
     const otherUsername = other?.username || otherName;
     const threadKey = dmThreadKeyFor(me, otherUsername);
-    const arr = Array.isArray(me.dm.threads?.[threadKey]) ? me.dm.threads[threadKey] : [];
+    const arr = Array.isArray(me.dm.threads?.[threadKey])
+      ? me.dm.threads[threadKey]
+      : [];
     const idx = arr.findIndex((m) => m && m.id === id);
-    if (idx === -1) return socket.emit("dm.error", { message: "Ziņa nav atrasta." });
+    if (idx === -1)
+      return socket.emit("dm.error", { message: "Ziņa nav atrasta." });
     const msg = arr[idx];
     if (msg?.from !== me.username)
-      return socket.emit("dm.error", { message: "Vari rediģēt tikai savas ziņas." });
+      return socket.emit("dm.error", {
+        message: "Vari rediģēt tikai savas ziņas.",
+      });
 
     arr[idx] = { ...msg, text, edited: true, editedAt: Date.now() };
     saveUsers(USERS);
@@ -6487,10 +6873,13 @@ io.on("connection", (socket) => {
   socket.on("dm.delete", (payload) => {
     const me = USERS[user.username] || user;
     const otherRaw =
-      typeof payload === "string" ? payload : payload?.with ?? payload?.to ?? payload?.username ?? "";
+      typeof payload === "string"
+        ? payload
+        : (payload?.with ?? payload?.to ?? payload?.username ?? "");
     const otherName = String(otherRaw || "").trim();
     const id = String(payload?.id || "").trim();
-    if (!otherName || !id) return socket.emit("dm.error", { message: "Nederīga ziņa." });
+    if (!otherName || !id)
+      return socket.emit("dm.error", { message: "Nederīga ziņa." });
 
     if (!DM_STORE_ON_SERVER) {
       const key = findUserKeyCaseInsensitive(otherName);
@@ -6499,7 +6888,11 @@ io.on("connection", (socket) => {
       socket.emit("dm.deleted", { with: otherUsername, id, mode: "client" });
       const targetSocket = getSocketByUsername(otherUsername);
       if (targetSocket) {
-        targetSocket.emit("dm.deleted", { with: me.username, id, mode: "client" });
+        targetSocket.emit("dm.deleted", {
+          with: me.username,
+          id,
+          mode: "client",
+        });
       }
       return;
     }
@@ -6509,12 +6902,17 @@ io.on("connection", (socket) => {
     const other = key ? USERS[key] : null;
     const otherUsername = other?.username || otherName;
     const threadKey = dmThreadKeyFor(me, otherUsername);
-    const arr = Array.isArray(me.dm.threads?.[threadKey]) ? me.dm.threads[threadKey] : [];
+    const arr = Array.isArray(me.dm.threads?.[threadKey])
+      ? me.dm.threads[threadKey]
+      : [];
     const idx = arr.findIndex((m) => m && m.id === id);
-    if (idx === -1) return socket.emit("dm.error", { message: "Ziņa nav atrasta." });
+    if (idx === -1)
+      return socket.emit("dm.error", { message: "Ziņa nav atrasta." });
     const msg = arr[idx];
     if (msg?.from !== me.username)
-      return socket.emit("dm.error", { message: "Vari dzēst tikai savas ziņas." });
+      return socket.emit("dm.error", {
+        message: "Vari dzēst tikai savas ziņas.",
+      });
 
     arr[idx] = { ...msg, text: "", deleted: true, deletedAt: Date.now() };
     saveUsers(USERS);
@@ -6524,9 +6922,12 @@ io.on("connection", (socket) => {
   socket.on("dm.block", (payload) => {
     const me = USERS[user.username] || user;
     const otherRaw =
-      typeof payload === "string" ? payload : payload?.with ?? payload?.username ?? payload?.user ?? "";
+      typeof payload === "string"
+        ? payload
+        : (payload?.with ?? payload?.username ?? payload?.user ?? "");
     const otherName = String(otherRaw || "").trim();
-    if (!otherName) return socket.emit("dm.error", { message: "Nav norādīts lietotājs." });
+    if (!otherName)
+      return socket.emit("dm.error", { message: "Nav norādīts lietotājs." });
     if (otherName === me.username) {
       return socket.emit("dm.error", { message: "Nevari bloķēt sevi." });
     }
@@ -6541,16 +6942,23 @@ io.on("connection", (socket) => {
       dmZeroUnreadCaseInsensitive(me.dm, otherUsername);
     }
     saveUsers(USERS);
-    socket.emit("dm.blocked", { list: listBlocks(me), with: otherUsername, blocked: true });
+    socket.emit("dm.blocked", {
+      list: listBlocks(me),
+      with: otherUsername,
+      blocked: true,
+    });
     socket.emit("dm.unread", dmComputeUnread(me.dm));
   });
 
   socket.on("dm.unblock", (payload) => {
     const me = USERS[user.username] || user;
     const otherRaw =
-      typeof payload === "string" ? payload : payload?.with ?? payload?.username ?? payload?.user ?? "";
+      typeof payload === "string"
+        ? payload
+        : (payload?.with ?? payload?.username ?? payload?.user ?? "");
     const otherName = String(otherRaw || "").trim();
-    if (!otherName) return socket.emit("dm.error", { message: "Nav norādīts lietotājs." });
+    if (!otherName)
+      return socket.emit("dm.error", { message: "Nav norādīts lietotājs." });
 
     const key = findUserKeyCaseInsensitive(otherName);
     const other = key ? USERS[key] : null;
@@ -6558,15 +6966,22 @@ io.on("connection", (socket) => {
 
     removeBlock(me, otherUsername);
     saveUsers(USERS);
-    socket.emit("dm.blocked", { list: listBlocks(me), with: otherUsername, blocked: false });
+    socket.emit("dm.blocked", {
+      list: listBlocks(me),
+      with: otherUsername,
+      blocked: false,
+    });
   });
 
   socket.on("dm.report", (payload) => {
     const me = USERS[user.username] || user;
     const otherRaw =
-      typeof payload === "string" ? payload : payload?.with ?? payload?.username ?? payload?.user ?? "";
+      typeof payload === "string"
+        ? payload
+        : (payload?.with ?? payload?.username ?? payload?.user ?? "");
     const otherName = String(otherRaw || "").trim();
-    if (!otherName) return socket.emit("dm.error", { message: "Nav norādīts lietotājs." });
+    if (!otherName)
+      return socket.emit("dm.error", { message: "Nav norādīts lietotājs." });
     if (otherName === me.username) {
       return socket.emit("dm.error", { message: "Nevari ziņot par sevi." });
     }
@@ -6578,7 +6993,8 @@ io.on("connection", (socket) => {
     let reason = "";
     if (payload && typeof payload === "object" && payload.reason) {
       reason = String(payload.reason || "").trim();
-      if (reason.length > REPORT_REASON_MAX_LEN) reason = reason.slice(0, REPORT_REASON_MAX_LEN);
+      if (reason.length > REPORT_REASON_MAX_LEN)
+        reason = reason.slice(0, REPORT_REASON_MAX_LEN);
     }
 
     let messageText = "";
@@ -6609,9 +7025,12 @@ io.on("connection", (socket) => {
   socket.on("dm.history", (payload) => {
     const me = USERS[user.username] || user;
     const otherRaw =
-      typeof payload === "string" ? payload : payload?.with ?? payload?.username ?? payload?.user ?? "";
+      typeof payload === "string"
+        ? payload
+        : (payload?.with ?? payload?.username ?? payload?.user ?? "");
     const otherName = String(otherRaw || "").trim();
-    if (!otherName) return socket.emit("dm.history", { with: "", messages: [] });
+    if (!otherName)
+      return socket.emit("dm.history", { with: "", messages: [] });
 
     if (!DM_STORE_ON_SERVER) {
       return socket.emit("dm.history", {
@@ -6628,7 +7047,9 @@ io.on("connection", (socket) => {
     const otherUsername = other?.username || otherName;
 
     const threadKey = dmThreadKeyFor(me, otherUsername);
-    const arr = Array.isArray(me.dm.threads?.[threadKey]) ? me.dm.threads[threadKey] : [];
+    const arr = Array.isArray(me.dm.threads?.[threadKey])
+      ? me.dm.threads[threadKey]
+      : [];
     const peerLastRead = other ? dmGetLastRead(other.dm, me.username) : 0;
 
     // sūtam pēdējās 60 ziņas, lai nav milzīgs payload
@@ -6643,7 +7064,9 @@ io.on("connection", (socket) => {
   socket.on("dm.read", (payload) => {
     const me = USERS[user.username] || user;
     const otherRaw =
-      typeof payload === "string" ? payload : payload?.with ?? payload?.username ?? payload?.user ?? "";
+      typeof payload === "string"
+        ? payload
+        : (payload?.with ?? payload?.username ?? payload?.user ?? "");
     const otherName = String(otherRaw || "").trim();
     if (!otherName) return;
 
@@ -6658,7 +7081,11 @@ io.on("connection", (socket) => {
         !isBlocked(me, otherUser?.username || otherName) &&
         !(otherUser && isBlocked(otherUser, me.username))
       ) {
-        otherSocket.emit("dm.read", { with: me.username, ts: readAt, mode: "client" });
+        otherSocket.emit("dm.read", {
+          with: me.username,
+          ts: readAt,
+          mode: "client",
+        });
       }
       return;
     }
@@ -6689,9 +7116,12 @@ io.on("connection", (socket) => {
   socket.on("dm.clearThread", (payload) => {
     const me = USERS[user.username] || user;
     const otherRaw =
-      typeof payload === "string" ? payload : payload?.with ?? payload?.username ?? payload?.user ?? "";
+      typeof payload === "string"
+        ? payload
+        : (payload?.with ?? payload?.username ?? payload?.user ?? "");
     const otherName = String(otherRaw || "").trim();
-    if (!otherName) return socket.emit("dm.error", { message: "Nav norādīta saruna." });
+    if (!otherName)
+      return socket.emit("dm.error", { message: "Nav norādīta saruna." });
 
     if (!DM_STORE_ON_SERVER) {
       const key = findUserKeyCaseInsensitive(otherName);
@@ -6718,10 +7148,12 @@ io.on("connection", (socket) => {
 
     const threadKey = dmThreadKeyFor(me, otherUsername);
     try {
-      if (me.dm.threads && typeof me.dm.threads === "object") delete me.dm.threads[threadKey];
+      if (me.dm.threads && typeof me.dm.threads === "object")
+        delete me.dm.threads[threadKey];
     } catch {}
     try {
-      if (me.dm.lastRead && typeof me.dm.lastRead === "object") delete me.dm.lastRead[otherUsername];
+      if (me.dm.lastRead && typeof me.dm.lastRead === "object")
+        delete me.dm.lastRead[otherUsername];
     } catch {}
     dmZeroUnreadCaseInsensitive(me.dm, otherUsername);
 
@@ -6737,7 +7169,10 @@ io.on("connection", (socket) => {
     const isObj = targetNameRaw && typeof targetNameRaw === "object";
     const targetName = String(
       isObj
-        ? targetNameRaw.target || targetNameRaw.username || targetNameRaw.opponent || ""
+        ? targetNameRaw.target ||
+            targetNameRaw.username ||
+            targetNameRaw.opponent ||
+            ""
         : targetNameRaw || ""
     ).trim();
     // default: ranked (back-compat ar veco klientu, kas sūta tikai string)
@@ -6860,7 +7295,9 @@ io.on("connection", (socket) => {
   socket.on("duel.guess", (payload) => {
     const u = socket.data.user;
     const duelId = payload?.duelId;
-    const guess = String(payload?.guess || "").trim().toUpperCase();
+    const guess = String(payload?.guess || "")
+      .trim()
+      .toUpperCase();
     const duel = duelId ? duels.get(duelId) : null;
     if (!duel) return;
 
@@ -6869,14 +7306,20 @@ io.on("connection", (socket) => {
 
     // neļaujam minēt pirms atskaites beigām (fair play)
     if (duel.startedAt && Date.now() < duel.startedAt) {
-      return socket.emit("duel.error", { message: "Duelis vēl nav sācies. Pagaidi atskaiti!" });
+      return socket.emit("duel.error", {
+        message: "Duelis vēl nav sācies. Pagaidi atskaiti!",
+      });
     }
 
     if (!guess || guess.length !== duel.len) {
-      return socket.emit("duel.error", { message: `Vārdam jābūt ${duel.len} burtiem.` });
+      return socket.emit("duel.error", {
+        message: `Vārdam jābūt ${duel.len} burtiem.`,
+      });
     }
     if (!GUESS_ALLOWED_RE.test(guess)) {
-      return socket.emit("duel.error", { message: "Minējumā drīkst būt tikai burti (A-Z + LV)." });
+      return socket.emit("duel.error", {
+        message: "Minējumā drīkst būt tikai burti (A-Z + LV).",
+      });
     }
 
     const left = duel.attemptsLeft[u.username] ?? 0;
@@ -6892,7 +7335,8 @@ io.on("connection", (socket) => {
 
     try {
       if (!duel.history) duel.history = {};
-      if (!Array.isArray(duel.history[u.username])) duel.history[u.username] = [];
+      if (!Array.isArray(duel.history[u.username]))
+        duel.history[u.username] = [];
       duel.history[u.username].push({ guess, pattern, ts: Date.now() });
     } catch {}
 
@@ -6930,7 +7374,8 @@ io.on("connection", (socket) => {
         const duelId = userToDuel.get(uname);
         const duel = duelId ? duels.get(duelId) : null;
 
-        if (duel && duel.status === "pending") finishDuel(duel, null, "declined");
+        if (duel && duel.status === "pending")
+          finishDuel(duel, null, "declined");
       }
     } catch {}
 
@@ -6964,7 +7409,11 @@ async function initDataStores() {
   }
 
   const pruned = pruneUsersForMemory(USERS);
-  if (pruned || !DM_STORE_ON_SERVER || (USERS_STORE_ON_SUPABASE && !usersLoadedFromDb)) {
+  if (
+    pruned ||
+    !DM_STORE_ON_SERVER ||
+    (USERS_STORE_ON_SUPABASE && !usersLoadedFromDb)
+  ) {
     saveUsers(USERS);
   }
 }
@@ -6984,11 +7433,15 @@ async function startServer() {
 
   // ======== HTTP listen ========
   httpServer.listen(PORT, () => {
-    console.log(`VĀRDU ZONA serveris iet uz porta ${PORT}`);
+    logger.info({ port: PORT }, "VĀRDU ZONA serveris palaists");
   });
 }
 
-startServer().catch((err) => {
-  console.error("Server start failed:", err);
-  process.exit(1);
-});
+if (process.env.NODE_ENV !== "test") {
+  startServer().catch((err) => {
+    logger.error({ err }, "Server start failed");
+    process.exit(1);
+  });
+}
+
+export { app, httpServer, io, logger, startServer };
