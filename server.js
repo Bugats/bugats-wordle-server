@@ -3072,6 +3072,19 @@ app.use(
   helmet({
     // Keep static assets embeddable for existing webview/TWA use-cases.
     crossOriginResourcePolicy: false,
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        // Frontend talks to Render API host and Socket.IO over HTTPS/WSS.
+        "connect-src": [
+          "'self'",
+          "https://bugats-wordle-server.onrender.com",
+          "wss://bugats-wordle-server.onrender.com",
+        ],
+        // Allow the in-game radio stream host while keeping strict defaults.
+        "media-src": ["'self'", "https://stream.nightride.fm"],
+      },
+    },
   })
 );
 
@@ -4607,11 +4620,9 @@ app.post("/password-reset", async (req, res) => {
     !data.username ||
     (data.expiresAt && data.expiresAt < Date.now())
   ) {
-    return res
-      .status(400)
-      .json({
-        message: "Kods ir nederīgs vai beidzies. Pieprasi atjaunošanu vēlreiz.",
-      });
+    return res.status(400).json({
+      message: "Kods ir nederīgs vai beidzies. Pieprasi atjaunošanu vēlreiz.",
+    });
   }
   const key = findUserKeyCaseInsensitive(data.username);
   if (!key || !USERS[key]) {
@@ -5488,11 +5499,9 @@ app.post("/challenge/:id/guess", authMiddleware, (req, res) => {
     return res.status(400).json({ message: `Vārdam jābūt ${c.len} burtiem.` });
   }
   if (!GUESS_ALLOWED_RE.test(guessRaw)) {
-    return res
-      .status(400)
-      .json({
-        message: "Minējumā drīkst būt tikai burti (A-Z + latviešu burti).",
-      });
+    return res.status(400).json({
+      message: "Minējumā drīkst būt tikai burti (A-Z + latviešu burti).",
+    });
   }
 
   let history = isPlayer1 ? c.history1 : c.history2;

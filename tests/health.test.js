@@ -9,3 +9,15 @@ describe("GET /health", () => {
     expect(res.body).toEqual({ ok: true });
   });
 });
+
+describe("CSP headers", () => {
+  it("allows required external connect and media sources", async () => {
+    const res = await request(app).get("/game.html");
+    expect(res.status).toBe(200);
+    const csp = String(res.headers["content-security-policy"] || "");
+    expect(csp).toContain(
+      "connect-src 'self' https://bugats-wordle-server.onrender.com wss://bugats-wordle-server.onrender.com"
+    );
+    expect(csp).toContain("media-src 'self' https://stream.nightride.fm");
+  });
+});
