@@ -2749,6 +2749,7 @@ input:focus-visible {
    =========================== */
 
 .vz-radio-card {
+  margin-top: -4px;
   box-shadow: 0 0 16px rgba(0, 0, 0, 0.9), 0 0 18px rgba(0, 200, 255, 0.4);
   border-color: rgba(0, 200, 255, 0.7);
 }
