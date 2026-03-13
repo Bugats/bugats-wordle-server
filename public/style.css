@@ -3542,7 +3542,7 @@ input:focus-visible {
   text-shadow: 0 1px 0 rgba(0,0,0,0.9) !important; /* ass, ne miglains */
   filter: none !important;
 }
-/* ===== LOGO: SLANT + DARK BLUE + RED NEON ===== */
+/* ===== LOGO: cleaner / more serious ===== */
 .vz-logo-main{
   margin: 18px auto 10px;
   padding: 10px 0 16px;
@@ -3558,23 +3558,23 @@ input:focus-visible {
   height: 100%;
   pointer-events: none;
   z-index: 0;
-  mix-blend-mode: screen;
-  opacity: 0.9;
+  mix-blend-mode: normal;
+  opacity: 0.52;
   overflow: hidden;
   background:
-    radial-gradient(140px 70px at 18% 50%, rgba(255, 0, 90, 0.35), transparent 65%),
-    radial-gradient(180px 90px at 82% 45%, rgba(0, 200, 255, 0.28), transparent 68%);
-  filter: blur(0.4px);
+    radial-gradient(170px 80px at 20% 50%, rgba(141, 171, 218, 0.18), transparent 68%),
+    radial-gradient(200px 95px at 80% 45%, rgba(93, 132, 189, 0.2), transparent 72%);
+  filter: blur(0.2px);
 }
 #vz-logo-fx::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.35), transparent);
-  opacity: 0.35;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  opacity: 0.25;
   transform: translateX(-70%);
-  animation: vzLogoSweep 6.5s ease-in-out infinite;
-  mix-blend-mode: screen;
+  animation: vzLogoSweep 12s ease-in-out infinite;
+  mix-blend-mode: normal;
 }
 #vz-logo-fx canvas {
   width: 100% !important;
@@ -3586,30 +3586,28 @@ input:focus-visible {
 
 .vz-logo-title{
   font-family: "Cinzel", "Times New Roman", serif;
-  font-weight: 700;
-  font-style: italic;
-  font-size: clamp(3.2rem, 7vw, 5.2rem);
-  letter-spacing: 0.22em;
+  font-weight: 800;
+  font-style: normal;
+  font-size: clamp(3rem, 6.3vw, 4.8rem);
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  line-height: 1.05;
+  line-height: 1.08;
   color: transparent;
   background: linear-gradient(180deg,
-    #0b1233 0%,
-    #101b46 55%,
-    #1a2660 100%
+    #f0f4ff 0%,
+    #d8e3f7 52%,
+    #b9c9e8 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
-  -webkit-text-stroke: 1px rgba(0,0,0,0.65);
+  -webkit-text-stroke: 1px rgba(5, 12, 28, 0.72);
   text-shadow:
-    0 0 6px rgba(0,0,0,0.9),
-    0 0 12px rgba(255, 0, 70, 0.75),
-    0 0 24px rgba(255, 0, 70, 0.45),
-    0 0 40px rgba(255, 0, 90, 0.35);
+    0 1px 0 rgba(8, 14, 30, 0.95),
+    0 8px 16px rgba(8, 14, 30, 0.45);
   position: relative;
   display: inline-block;
-  transform: skewX(-10deg);
-  animation: vzLogoNeon 3s ease-in-out infinite;
+  transform: none;
+  animation: none;
   z-index: 2;
 }
 
@@ -3620,11 +3618,9 @@ input:focus-visible {
   top: 0;
   z-index: -1;
   color: transparent;
-  -webkit-text-stroke: 1px rgba(255, 0, 70, 0.85);
-  text-shadow:
-    0 0 14px rgba(255, 0, 70, 0.8),
-    0 0 26px rgba(255, 0, 70, 0.55);
-  opacity: 0.9;
+  -webkit-text-stroke: 1px rgba(34, 54, 92, 0.55);
+  text-shadow: 0 0 10px rgba(34, 54, 92, 0.3);
+  opacity: 0.65;
 }
 
 .vz-logo-main::after{
@@ -3638,26 +3634,26 @@ input:focus-visible {
   border-radius: 999px;
   background: linear-gradient(90deg,
     transparent,
-    rgba(10,18,51,0.9),
-    rgba(255, 0, 70, 0.85),
-    rgba(10,18,51,0.9),
+    rgba(37, 56, 92, 0.78),
+    rgba(142, 168, 211, 0.82),
+    rgba(37, 56, 92, 0.78),
     transparent
   );
-  box-shadow: 0 0 12px rgba(255, 0, 70, 0.55), 0 0 18px rgba(5, 10, 30, 0.9);
-  opacity: 0.95;
+  box-shadow: 0 0 10px rgba(40, 64, 104, 0.4), 0 0 14px rgba(5, 10, 30, 0.55);
+  opacity: 0.88;
   z-index: 1;
 }
 
 .vz-logo-sub{
   display: block;
   margin-top: 8px;
-  font-size: 0.9rem;
+  font-size: 0.84rem;
   font-weight: 600;
-  font-style: italic;
-  letter-spacing: 0.22em;
+  font-style: normal;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(180, 200, 255, 0.78);
-  text-shadow: 0 0 10px rgba(255, 0, 70, 0.45), 0 0 8px rgba(0,0,0,0.9);
+  color: rgba(196, 210, 236, 0.86);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.65);
   position: relative;
   z-index: 2;
 }
@@ -3688,12 +3684,12 @@ input:focus-visible {
   .vz-logo-main::after{ width: 75%; }
   .vz-logo-title{
     font-size: clamp(2.2rem, 8vw, 3rem);
-    letter-spacing: 0.18em;
-    text-shadow: 0 2px 10px rgba(0,0,0,0.35) !important;
+    letter-spacing: 0.14em;
+    text-shadow: 0 1px 0 rgba(8, 14, 30, 0.95), 0 6px 12px rgba(8, 14, 30, 0.4) !important;
   }
   .vz-logo-sub{
-    font-size: 0.8rem;
-    letter-spacing: 0.18em;
+    font-size: 0.75rem;
+    letter-spacing: 0.14em;
     display: none;
   }
 }
