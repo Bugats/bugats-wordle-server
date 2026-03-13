@@ -12,14 +12,30 @@
 */
 
 // ================== KONFIGS ==================
-const API_BASE = "https://bugats-wordle-server.onrender.com";
+const API_BASE = (() => {
+  try {
+    const forced = String(localStorage.getItem("vz_api_base") || "").trim();
+    if (forced) return forced.replace(/\/+$/, "");
+  } catch {}
+  const host = String(window.location.hostname || "").toLowerCase();
+  if (host === "localhost" || host === "127.0.0.1") {
+    return String(window.location.origin || "").replace(/\/+$/, "");
+  }
+  return "https://bugats-wordle-server.onrender.com";
+})();
 
 // Admin lietotāji (tāpat kā serverī / UI)
 const ADMIN_USERNAMES = ["Bugats", "BugatsLV"];
-const ADMIN_SET = new Set(ADMIN_USERNAMES.map((u) => String(u).trim().toLowerCase()));
+const ADMIN_SET = new Set(
+  ADMIN_USERNAMES.map((u) => String(u).trim().toLowerCase())
+);
 
 function isAdminUsername(u) {
-  return ADMIN_SET.has(String(u || "").trim().toLowerCase());
+  return ADMIN_SET.has(
+    String(u || "")
+      .trim()
+      .toLowerCase()
+  );
 }
 
 const REGION_META = {
@@ -80,7 +96,12 @@ function setStoredAuth(token, username) {
 }
 
 function clearStoredAuth() {
-  const all = new Set([...AUTH_KEYS.token, ...AUTH_KEYS.username, "vz_token", "vz_username"]);
+  const all = new Set([
+    ...AUTH_KEYS.token,
+    ...AUTH_KEYS.username,
+    "vz_token",
+    "vz_username",
+  ]);
   for (const k of all) {
     try {
       localStorage.removeItem(k);
@@ -132,7 +153,12 @@ function trimAvatarStorageKeys(keepKey) {
     const entries = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (!k || (!k.startsWith(prefix1) && !k.startsWith(prefix2)) || protect.has(k)) continue;
+      if (
+        !k ||
+        (!k.startsWith(prefix1) && !k.startsWith(prefix2)) ||
+        protect.has(k)
+      )
+        continue;
       const raw = localStorage.getItem(k);
       let ts = 0;
       if (raw && raw.trim().startsWith("{")) {
@@ -238,13 +264,12 @@ function getCosmeticTierFromLevel(level) {
   return 1;
 }
 const RANK_MIN_XP = [
-  0,40,90,160,250,360,490,640,810,1000,
-  1200,1450,1750,2100,2500,2950,3450,4000,4600,5250,
-  5950,6700,7500,8350,9250,
-  10200,11200,12300,13500,14800,16200,17700,19300,21000,22800,
-  24700,26700,28800,31000,33300
+  0, 40, 90, 160, 250, 360, 490, 640, 810, 1000, 1200, 1450, 1750, 2100, 2500,
+  2950, 3450, 4000, 4600, 5250, 5950, 6700, 7500, 8350, 9250, 10200, 11200,
+  12300, 13500, 14800, 16200, 17700, 19300, 21000, 22800, 24700, 26700, 28800,
+  31000, 33300,
 ];
- 
+
 function rankMinXpByLevel(level) {
   const lvl = Math.max(1, Math.min(40, Number(level) || 1));
   return RANK_MIN_XP[lvl - 1] ?? 0;
@@ -267,7 +292,11 @@ function applyRankColor(el, color) {
   el.style.color = c || ""; // ja nav krāsas -> noņem inline krāsu
 }
 // ==================== FETCH HELPERS (timeout + JSON drošība) ====================
-async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
+async function fetchWithTimeout(
+  url,
+  options = {},
+  timeoutMs = FETCH_TIMEOUT_MS
+) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -277,7 +306,9 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS)
     if (e && e.name === "AbortError") {
       throw new Error("Tīkls neatbildēja laikā. Pamēģini vēlreiz.");
     }
-    throw new Error("Neizdevās pieslēgties serverim. Pārbaudi internetu un mēģini vēlreiz.");
+    throw new Error(
+      "Neizdevās pieslēgties serverim. Pārbaudi internetu un mēģini vēlreiz."
+    );
   } finally {
     clearTimeout(t);
   }
@@ -299,7 +330,10 @@ async function readJsonOrThrow(res) {
     console.error("Non-JSON response:", txt);
     throw new Error("Servera kļūda (nav korekts JSON).");
   }
-  if (!res.ok) throw new Error((data && data.message) || "Servera kļūda (" + res.status + ").");
+  if (!res.ok)
+    throw new Error(
+      (data && data.message) || "Servera kļūda (" + res.status + ")."
+    );
   return data;
 }
 
@@ -312,7 +346,7 @@ const state = {
   regionPoints: 0,
   regionAttackTarget: "",
   regionAttackRegion: "",
-// DM (privāts čats)
+  // DM (privāts čats)
   dmOpenWith: null,
   dmThreads: new Map(), // username -> [{id,from,to,text,ts}]
   dmUnreadTotal: 0,
@@ -340,10 +374,10 @@ const state = {
   isLocked: false,
   roundFinished: false,
 
-// Ability: atvērt 1 burtu (1x raundā, par coins)
-revealUsed: false,
-revealHint: null, // { pos, letter, cost }
-revealCostCoins: 25,
+  // Ability: atvērt 1 burtu (1x raundā, par coins)
+  revealUsed: false,
+  revealHint: null, // { pos, letter, cost }
+  revealCostCoins: 25,
 
   gridTiles: [], // [row][col] -> tile element
   keyboardButtons: new Map(), // key -> button
@@ -362,6 +396,11 @@ revealCostCoins: 25,
 
   // Sezona
   season: null,
+
+  // Turniri
+  tournaments: [],
+  tournamentActiveId: null,
+  tournamentReportCtx: null,
 
   // Globālā skaņa
   soundOn: true,
@@ -384,6 +423,7 @@ const AVATAR_CACHE_MAX_SIZE = 80;
 const AVATAR_STORAGE_MAX_KEYS = 50;
 
 let seasonTimerId = null;
+let tournamentRefreshTimer = null;
 let currentProfileName = null; // popupā atvērtais profila vārds
 
 // kešs citu spēlētāju mini avatāriem (username -> url vai null)
@@ -436,8 +476,12 @@ const playerXpLabelEl = $("#player-xp-label");
 
 // AVATĀRS (profila kartē)
 const playerAvatarImgEl = document.getElementById("player-avatar-img");
-const playerAvatarInitialsEl = document.getElementById("player-avatar-initials");
-const playerAvatarUploadBtnEl = document.getElementById("player-avatar-upload-btn");
+const playerAvatarInitialsEl = document.getElementById(
+  "player-avatar-initials"
+);
+const playerAvatarUploadBtnEl = document.getElementById(
+  "player-avatar-upload-btn"
+);
 const playerAvatarFileEl = document.getElementById("player-avatar-file");
 
 // AVATĀRS (popupā)
@@ -471,9 +515,13 @@ const challengeJoinModal = document.getElementById("challenge-join-modal");
 const challengeJoinText = document.getElementById("challenge-join-text");
 const challengeJoinAccept = document.getElementById("challenge-join-accept");
 const challengeJoinDecline = document.getElementById("challenge-join-decline");
-const challengeResultOverlay = document.getElementById("challenge-result-overlay");
+const challengeResultOverlay = document.getElementById(
+  "challenge-result-overlay"
+);
 const challengeResultTitle = document.getElementById("challenge-result-title");
-const challengeResultDetail = document.getElementById("challenge-result-detail");
+const challengeResultDetail = document.getElementById(
+  "challenge-result-detail"
+);
 const challengeResultClose = document.getElementById("challenge-result-close");
 
 const appDownloadLink = document.getElementById("app-download-link");
@@ -507,6 +555,21 @@ const missionsListEl = $("#missions-list");
 const weeklyListEl = $("#weekly-list");
 const weeklySubEl = $("#weekly-sub");
 const weeklyYouEl = $("#weekly-you");
+const tournamentCardEl = $("#tournament-card");
+const tournamentStatusEl = $("#tournament-status");
+const tournamentMetaEl = $("#tournament-meta");
+const tournamentMatchListEl = $("#tournament-match-list");
+const tournamentEmptyEl = $("#tournament-empty");
+const tournamentMyMatchEl = $("#tournament-my-match");
+const tournamentMyMatchTextEl = $("#tournament-my-match-text");
+const tournamentReportFormEl = $("#tournament-report-form");
+const tournamentScore1LabelEl = $("#tournament-score1-label");
+const tournamentScore2LabelEl = $("#tournament-score2-label");
+const tournamentScore1InputEl = $("#tournament-score1");
+const tournamentScore2InputEl = $("#tournament-score2");
+const tournamentReportBtnEl = $("#tournament-report-btn");
+const tournamentReportStatusEl = $("#tournament-report-status");
+const tournamentRefreshBtnEl = $("#tournament-refresh-btn");
 
 // Draugi
 const friendsListEl = $("#friends-list");
@@ -519,18 +582,46 @@ const chatMessagesEl = $("#chat-messages");
 const chatInputEl = $("#chat-input");
 const chatSendBtn = $("#chat-send-btn");
 const CHAT_EMOJIS = [
-  "😀","😁","😂","🤣","🙂","😉","😍","😘",
-  "😎","🤔","😅","😭","😡","🤯","😴","🤝",
-  "🔥","⚡","🏆","🎯","🎉","💪","✅","❌",
-  "❤️","💀","👀","🙏","💸","🧠","🫡","🐸",
+  "😀",
+  "😁",
+  "😂",
+  "🤣",
+  "🙂",
+  "😉",
+  "😍",
+  "😘",
+  "😎",
+  "🤔",
+  "😅",
+  "😭",
+  "😡",
+  "🤯",
+  "😴",
+  "🤝",
+  "🔥",
+  "⚡",
+  "🏆",
+  "🎯",
+  "🎉",
+  "💪",
+  "✅",
+  "❌",
+  "❤️",
+  "💀",
+  "👀",
+  "🙏",
+  "💸",
+  "🧠",
+  "🫡",
+  "🐸",
 ];
- 
+
 function insertAtCursor(inputEl, text) {
   if (!inputEl) return;
   inputEl.focus();
   const start = inputEl.selectionStart;
   const end = inputEl.selectionEnd;
- 
+
   if (typeof start === "number" && typeof end === "number") {
     const v = inputEl.value || "";
     inputEl.value = v.slice(0, start) + text + v.slice(end);
@@ -540,12 +631,12 @@ function insertAtCursor(inputEl, text) {
     inputEl.value = (inputEl.value || "") + text;
   }
 }
- 
+
 function initChatEmojiPicker() {
   const btn = document.getElementById("chat-emoji-btn");
   const panel = document.getElementById("chat-emoji-panel");
   if (!btn || !panel || !chatInputEl) return;
- 
+
   panel.innerHTML = "";
   CHAT_EMOJIS.forEach((e) => {
     const b = document.createElement("button");
@@ -557,16 +648,16 @@ function initChatEmojiPicker() {
     });
     panel.appendChild(b);
   });
- 
+
   btn.addEventListener("click", () => panel.classList.toggle("hidden"));
- 
+
   document.addEventListener("click", (ev) => {
     if (panel.classList.contains("hidden")) return;
     if (ev.target === btn) return;
     if (panel.contains(ev.target)) return;
     panel.classList.add("hidden");
   });
- 
+
   document.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape") panel.classList.add("hidden");
   });
@@ -576,7 +667,9 @@ function initChatEmojiPicker() {
 const chatUnreadBadgeEl = document.getElementById("chat-unread-badge");
 const chatMentionBadgeEl = document.getElementById("chat-mention-badge");
 const chatMentionPopupEl = document.getElementById("chat-mention-popup");
-const chatMentionPopupTextEl = document.getElementById("chat-mention-popup-text");
+const chatMentionPopupTextEl = document.getElementById(
+  "chat-mention-popup-text"
+);
 
 // Profila popup
 const profilePopupEl = $("#player-profile-popup");
@@ -638,10 +731,39 @@ function getVzAudioCtx() {
 
 // Bez Q/W/X/Y
 const NOTE_KEYS = [
-  "E","R","T","U","I","O","P",
-  "A","S","D","F","G","H","J","K","L",
-  "Z","C","V","B","N","M",
-  "Ā","Č","Ē","Ģ","Ī","Ķ","Ļ","Ņ","Š","Ū","Ž",
+  "E",
+  "R",
+  "T",
+  "U",
+  "I",
+  "O",
+  "P",
+  "A",
+  "S",
+  "D",
+  "F",
+  "G",
+  "H",
+  "J",
+  "K",
+  "L",
+  "Z",
+  "C",
+  "V",
+  "B",
+  "N",
+  "M",
+  "Ā",
+  "Č",
+  "Ē",
+  "Ģ",
+  "Ī",
+  "Ķ",
+  "Ļ",
+  "Ņ",
+  "Š",
+  "Ū",
+  "Ž",
 ];
 
 const BASE_FREQ = 220;
@@ -788,7 +910,9 @@ function playSound(audioEl) {
       const playPromise = audioEl.play();
       pulseSoundFx(kind);
       if (playPromise && typeof playPromise.catch === "function") {
-        playPromise.catch(() => { playFallbackSound(kind); });
+        playPromise.catch(() => {
+          playFallbackSound(kind);
+        });
         return;
       }
       return;
@@ -807,7 +931,8 @@ function pulseSoundFx(kind, pos) {
 }
 
 function fxPointFromTile(tile) {
-  if (!gridEl || !tile || typeof tile.getBoundingClientRect !== "function") return null;
+  if (!gridEl || !tile || typeof tile.getBoundingClientRect !== "function")
+    return null;
   try {
     const gridRect = gridEl.getBoundingClientRect();
     const tileRect = tile.getBoundingClientRect();
@@ -832,13 +957,19 @@ function applySoundState() {
 }
 
 const THEME_ORDER = ["dark", "light", "contrast"];
-const THEME_LABELS = { dark: "🌙 Tumšs", light: "☀️ Gaišs", contrast: "◐ Augsta kontrasta" };
+const THEME_LABELS = {
+  dark: "🌙 Tumšs",
+  light: "☀️ Gaišs",
+  contrast: "◐ Augsta kontrasta",
+};
 
 function applyTheme() {
   document.body.classList.remove("vz-theme-light", "vz-theme-contrast");
   if (state.theme === "light") document.body.classList.add("vz-theme-light");
-  else if (state.theme === "contrast") document.body.classList.add("vz-theme-contrast");
-  if (themeToggleBtn) themeToggleBtn.textContent = THEME_LABELS[state.theme] || THEME_LABELS.dark;
+  else if (state.theme === "contrast")
+    document.body.classList.add("vz-theme-contrast");
+  if (themeToggleBtn)
+    themeToggleBtn.textContent = THEME_LABELS[state.theme] || THEME_LABELS.dark;
 }
 
 // ==================== BEZ INTERNETA + PLAY STORE VĒRTĒJUMS ====================
@@ -898,9 +1029,9 @@ function getChallengeIdFromUrl() {
 function clearChallengeFromUrl() {
   try {
     const u = new URL(window.location.href);
-  u.searchParams.delete("challenge");
-  const newUrl = u.pathname + (u.search || "") + (u.hash || "");
-  window.history.replaceState({}, "", newUrl);
+    u.searchParams.delete("challenge");
+    const newUrl = u.pathname + (u.search || "") + (u.hash || "");
+    window.history.replaceState({}, "", newUrl);
   } catch {}
 }
 
@@ -911,7 +1042,8 @@ async function startChallengeRound(challengeId) {
     if (!c || c.status === "waiting") return;
     const len = c.len || 5;
     state.challengeId = challengeId;
-    state.challengeOpponent = c.player1 === state.username ? c.player2 : c.player1;
+    state.challengeOpponent =
+      c.player1 === state.username ? c.player2 : c.player1;
     state.challengeLen = len;
     state.challengeFinished = c.status === "finished";
 
@@ -938,9 +1070,12 @@ async function startChallengeRound(challengeId) {
       state.currentCol = 0;
     }
     applyCorrectLocksFromHistory(history);
-    if (gameMessageEl) gameMessageEl.textContent = state.challengeFinished
-      ? "Izaicinājums beidzies. Rezultāts augstāk."
-      : "Izaicinājums pret " + (state.challengeOpponent || "?") + ". Mazāk mēģinājumu = uzvara.";
+    if (gameMessageEl)
+      gameMessageEl.textContent = state.challengeFinished
+        ? "Izaicinājums beidzies. Rezultāts augstāk."
+        : "Izaicinājums pret " +
+          (state.challengeOpponent || "?") +
+          ". Mazāk mēģinājumu = uzvara.";
     if (newRoundBtn) {
       newRoundBtn.style.display = "inline-block";
       newRoundBtn.disabled = false;
@@ -951,7 +1086,8 @@ async function startChallengeRound(challengeId) {
     }
   } catch (err) {
     console.error("startChallengeRound:", err);
-    if (gameMessageEl) gameMessageEl.textContent = "Neizdevās ielādēt izaicinājumu.";
+    if (gameMessageEl)
+      gameMessageEl.textContent = "Neizdevās ielādēt izaicinājumu.";
   }
 }
 
@@ -964,8 +1100,15 @@ function applyCorrectLocksFromHistory(history) {
       const tile = state.gridTiles?.[rowIndex]?.[colIndex];
       if (!tile) return;
       if (status === "correct") tile.dataset.locked = "1";
-      const btn = state.keyboardButtons.get((tile.dataset?.letter || "").toLowerCase());
-      if (btn && !btn.classList.contains("correct") && !btn.classList.contains("present") && !btn.classList.contains("absent")) {
+      const btn = state.keyboardButtons.get(
+        (tile.dataset?.letter || "").toLowerCase()
+      );
+      if (
+        btn &&
+        !btn.classList.contains("correct") &&
+        !btn.classList.contains("present") &&
+        !btn.classList.contains("absent")
+      ) {
         if (status === "correct") btn.classList.add("correct");
         else if (status === "present") btn.classList.add("present");
         else if (status === "absent") btn.classList.add("absent");
@@ -975,10 +1118,29 @@ function applyCorrectLocksFromHistory(history) {
 }
 
 function showChallengeResult(winner, attempts1, attempts2, player1) {
-  if (!challengeResultOverlay || !challengeResultTitle || !challengeResultDetail) return;
+  if (
+    !challengeResultOverlay ||
+    !challengeResultTitle ||
+    !challengeResultDetail
+  )
+    return;
   const me = state.username;
-  const myAttempts = (player1 && me === player1) ? (attempts1 != null ? attempts1 : "—") : (attempts2 != null ? attempts2 : "—");
-  const oppAttempts = (player1 && me === player1) ? (attempts2 != null ? attempts2 : "—") : (attempts1 != null ? attempts1 : "—");
+  const myAttempts =
+    player1 && me === player1
+      ? attempts1 != null
+        ? attempts1
+        : "—"
+      : attempts2 != null
+        ? attempts2
+        : "—";
+  const oppAttempts =
+    player1 && me === player1
+      ? attempts2 != null
+        ? attempts2
+        : "—"
+      : attempts1 != null
+        ? attempts1
+        : "—";
   if (winner === me) {
     challengeResultTitle.textContent = "Tu uzvarēji!";
     challengeResultDetail.textContent = `Tavi mēģinājumi: ${myAttempts}. Pretinieka: ${oppAttempts}.`;
@@ -1079,7 +1241,8 @@ function applyMiniAvatar(username, imgEl, initialsEl) {
     avatarPending
       .get(username)
       .then(() => {
-        if (document.body.contains(initialsEl)) applyMiniAvatar(username, imgEl, initialsEl);
+        if (document.body.contains(initialsEl))
+          applyMiniAvatar(username, imgEl, initialsEl);
       })
       .catch(() => {});
     return;
@@ -1200,7 +1363,7 @@ function getNameTierFromLevel(level) {
 
 function applyNameTierClass(el, level) {
   if (!el) return;
- 
+
   for (let i = 0; i <= 15; i++) el.classList.remove("vz-name-tier-" + i);
   el.classList.add("vz-name-tier-" + getNameTierFromLevel(level));
 }
@@ -1327,7 +1490,8 @@ function updatePlayerCard(me) {
     dmUpdateBlockUi();
   }
 
-  if (playerRankEl) playerRankEl.textContent = `${me.rankTitle} (L${me.rankLevel})`;
+  if (playerRankEl)
+    playerRankEl.textContent = `${me.rankTitle} (L${me.rankLevel})`;
   applyRankColor(playerNameEl, me.rankColor);
   if (playerXpEl) playerXpEl.textContent = me.xp;
   if (playerScoreEl) playerScoreEl.textContent = me.score;
@@ -1339,7 +1503,11 @@ function updatePlayerCard(me) {
   const storedEntry = getLocalAvatarEntry(me.username);
 
   if (avatarUrl) {
-    if (!storedEntry || storedEntry.url !== avatarUrl || (avatarExp && storedEntry.exp !== avatarExp)) {
+    if (
+      !storedEntry ||
+      storedEntry.url !== avatarUrl ||
+      (avatarExp && storedEntry.exp !== avatarExp)
+    ) {
       setLocalAvatar(me.username, avatarUrl, avatarExp);
     }
   } else if (storedEntry?.url) {
@@ -1357,61 +1525,62 @@ function updatePlayerCard(me) {
   }
 
   if (playerTokensEl) playerTokensEl.textContent = me.tokens;
-  if (playerMedalsStripEl) renderPlayerMedals(me.medals, playerMedalsStripEl, false);
+  if (playerMedalsStripEl)
+    renderPlayerMedals(me.medals, playerMedalsStripEl, false);
 
- if (playerXpBarEl && playerXpLabelEl) {
-  const level = Math.max(1, me.rankLevel || 1);
- 
-  let minXp = Number.isFinite(me.rankMinXp) ? me.rankMinXp : null;
-let nextMinXp = Number.isFinite(me.rankNextMinXp) ? me.rankNextMinXp : null;
- 
-// fallback, ja backend vēl nesūta sliekšņus
-if (minXp === null) minXp = rankMinXpByLevel(level);
-if (nextMinXp === null && level < 40) nextMinXp = rankMinXpByLevel(level + 1);
- 
- const xp = typeof me.xp === "number" ? me.xp : 0;
- if (state.lastXp !== null && xp > state.lastXp) {
-   playerXpBarEl.classList.add("vz-xp-bump");
-   setTimeout(() => playerXpBarEl.classList.remove("vz-xp-bump"), 420);
- }
- state.lastXp = xp;
- 
-  if (nextMinXp && nextMinXp > minXp) {
-    const inLevel = Math.max(0, xp - minXp);
-    const need = nextMinXp - minXp;
-    const pct = Math.max(0, Math.min(100, (inLevel / need) * 100));
- 
-    playerXpBarEl.style.width = pct.toFixed(1) + "%";
-    playerXpLabelEl.textContent = `${inLevel}/${need} XP līdz L${level + 1}`;
-  } else {
-    // MAX rank
-    playerXpBarEl.style.width = "100%";
-    playerXpLabelEl.textContent = "MAX RANK";
-  }
-}
+  if (playerXpBarEl && playerXpLabelEl) {
+    const level = Math.max(1, me.rankLevel || 1);
 
-const card = document.querySelector(".vz-player-card");
-if (card) {
-  card.classList.remove("vz-rank-low", "vz-rank-mid", "vz-rank-high");
-  for (let i = 1; i <= 10; i++) card.classList.remove("vz-rank-" + i);
-  for (let i = 1; i <= 5; i++) card.classList.remove("vz-cos-tier-" + i);
- 
-  const aura = getAuraRankFromLevel(me.rankLevel);
-  if (aura) card.classList.add("vz-rank-" + aura);
-  card.classList.toggle("vz-player-supporter", !!me.supporter);
-  const cosTier = getCosmeticTierFromLevel(me.rankLevel);
-  if (cosTier) card.classList.add("vz-cos-tier-" + cosTier);
- 
-  // hot streak
-  if ((me.streak || 0) >= 3) {
-    card.classList.add("vz-profile-hot");
-    if (hotStreakBannerEl) hotStreakBannerEl.style.display = "block";
-  } else {
-    card.classList.remove("vz-profile-hot");
-    if (hotStreakBannerEl) hotStreakBannerEl.style.display = "none";
+    let minXp = Number.isFinite(me.rankMinXp) ? me.rankMinXp : null;
+    let nextMinXp = Number.isFinite(me.rankNextMinXp) ? me.rankNextMinXp : null;
+
+    // fallback, ja backend vēl nesūta sliekšņus
+    if (minXp === null) minXp = rankMinXpByLevel(level);
+    if (nextMinXp === null && level < 40)
+      nextMinXp = rankMinXpByLevel(level + 1);
+
+    const xp = typeof me.xp === "number" ? me.xp : 0;
+    if (state.lastXp !== null && xp > state.lastXp) {
+      playerXpBarEl.classList.add("vz-xp-bump");
+      setTimeout(() => playerXpBarEl.classList.remove("vz-xp-bump"), 420);
+    }
+    state.lastXp = xp;
+
+    if (nextMinXp && nextMinXp > minXp) {
+      const inLevel = Math.max(0, xp - minXp);
+      const need = nextMinXp - minXp;
+      const pct = Math.max(0, Math.min(100, (inLevel / need) * 100));
+
+      playerXpBarEl.style.width = pct.toFixed(1) + "%";
+      playerXpLabelEl.textContent = `${inLevel}/${need} XP līdz L${level + 1}`;
+    } else {
+      // MAX rank
+      playerXpBarEl.style.width = "100%";
+      playerXpLabelEl.textContent = "MAX RANK";
+    }
   }
-}
-  
+
+  const card = document.querySelector(".vz-player-card");
+  if (card) {
+    card.classList.remove("vz-rank-low", "vz-rank-mid", "vz-rank-high");
+    for (let i = 1; i <= 10; i++) card.classList.remove("vz-rank-" + i);
+    for (let i = 1; i <= 5; i++) card.classList.remove("vz-cos-tier-" + i);
+
+    const aura = getAuraRankFromLevel(me.rankLevel);
+    if (aura) card.classList.add("vz-rank-" + aura);
+    card.classList.toggle("vz-player-supporter", !!me.supporter);
+    const cosTier = getCosmeticTierFromLevel(me.rankLevel);
+    if (cosTier) card.classList.add("vz-cos-tier-" + cosTier);
+
+    // hot streak
+    if ((me.streak || 0) >= 3) {
+      card.classList.add("vz-profile-hot");
+      if (hotStreakBannerEl) hotStreakBannerEl.style.display = "block";
+    } else {
+      card.classList.remove("vz-profile-hot");
+      if (hotStreakBannerEl) hotStreakBannerEl.style.display = "none";
+    }
+  }
 }
 
 // ==================== NOVADI (klani) ====================
@@ -1463,8 +1632,10 @@ function bindRegionModal() {
 }
 
 function bindRegionActions() {
-  if (regionBoostBtn) regionBoostBtn.addEventListener("click", handleRegionBoost);
-  if (regionAttackBtn) regionAttackBtn.addEventListener("click", handleRegionAttack);
+  if (regionBoostBtn)
+    regionBoostBtn.addEventListener("click", handleRegionBoost);
+  if (regionAttackBtn)
+    regionAttackBtn.addEventListener("click", handleRegionAttack);
   if (regionAttackSelect) {
     regionAttackSelect.addEventListener("change", () => {
       state.regionAttackTarget = regionAttackSelect.value || "";
@@ -1527,7 +1698,10 @@ async function refreshRegionStats() {
 
       const pct = createEl("span", "vz-region-pct");
       const pctVal = REGION_TOTAL_CAP
-        ? Math.max(0, Math.min(100, (Number(item.score || 0) / REGION_TOTAL_CAP) * 100))
+        ? Math.max(
+            0,
+            Math.min(100, (Number(item.score || 0) / REGION_TOTAL_CAP) * 100)
+          )
         : 0;
       pct.textContent = `${pctVal.toFixed(1)}%`;
       row.appendChild(pct);
@@ -1562,7 +1736,11 @@ async function runPostLoginInit() {
       const c = await apiGet("/challenge/" + challengeIdFromUrl);
       if (c && c.status === "finished") {
         showChallengeResult(c.winner, c.attempts1, c.attempts2, c.player1);
-      } else if (c && c.status === "active" && (c.player1 === state.username || c.player2 === state.username)) {
+      } else if (
+        c &&
+        c.status === "active" &&
+        (c.player1 === state.username || c.player2 === state.username)
+      ) {
         await startChallengeRound(challengeIdFromUrl);
         await refreshLeaderboard();
         await refreshWeekly();
@@ -1571,19 +1749,27 @@ async function runPostLoginInit() {
         await refreshMissions();
         await refreshFriends();
         await refreshRegionStats();
+        await refreshTournamentCard(true);
         ensureDailyChestUi();
         await refreshDailyChestStatus();
         if (_chestTickTimer) clearInterval(_chestTickTimer);
         _chestTickTimer = setInterval(refreshDailyChestStatus, 60_000);
-        setInterval(() => { if (_chestStatus) renderDailyChestUi(_chestStatus); }, 1000);
+        setInterval(() => {
+          if (_chestStatus) renderDailyChestUi(_chestStatus);
+        }, 1000);
         setInterval(refreshRegionStats, 60_000);
         setInterval(refreshStreakLeaderboard, 90_000);
         setInterval(refreshDailyLeaderboard, 90_000);
+        startTournamentRefreshTimer();
         initSocket();
         return;
       } else if (c && c.status === "waiting" && c.player1 !== state.username) {
         pendingChallengeId = challengeIdFromUrl;
-        if (challengeJoinText) challengeJoinText.textContent = "Izaicinājums no " + (c.player1 || "?") + ". Abi minēsiet to pašu vārdu – uzvar tas, kam mazāk mēģinājumu. Pievienoties?";
+        if (challengeJoinText)
+          challengeJoinText.textContent =
+            "Izaicinājums no " +
+            (c.player1 || "?") +
+            ". Abi minēsiet to pašu vārdu – uzvar tas, kam mazāk mēģinājumu. Pievienoties?";
         if (challengeJoinModal) challengeJoinModal.classList.remove("hidden");
       }
     } catch {}
@@ -1597,27 +1783,33 @@ async function runPostLoginInit() {
   await refreshMissions();
   await refreshFriends();
   await refreshRegionStats();
+  await refreshTournamentCard(true);
   ensureDailyChestUi();
   await refreshDailyChestStatus();
   if (_chestTickTimer) clearInterval(_chestTickTimer);
   _chestTickTimer = setInterval(refreshDailyChestStatus, 60_000);
-  setInterval(() => { if (_chestStatus) renderDailyChestUi(_chestStatus); }, 1000);
+  setInterval(() => {
+    if (_chestStatus) renderDailyChestUi(_chestStatus);
+  }, 1000);
   setInterval(refreshRegionStats, 60_000);
   setInterval(refreshStreakLeaderboard, 90_000);
   setInterval(refreshDailyLeaderboard, 90_000);
+  startTournamentRefreshTimer();
   initSocket();
 }
 
 // ==================== PROFILA POPUP + DM ====================
 function handlePersonalMessageClick() {
   const u =
-    (ppMsgBtnEl && ppMsgBtnEl.dataset.username ? ppMsgBtnEl.dataset.username : "") ||
+    (ppMsgBtnEl && ppMsgBtnEl.dataset.username
+      ? ppMsgBtnEl.dataset.username
+      : "") ||
     currentProfileName ||
     (ppUsernameEl ? ppUsernameEl.textContent : "");
- 
+
   const username = (u || "").trim();
   if (!username) return;
- 
+
   openDmWith(username);
   hidePlayerProfile();
 }
@@ -1655,9 +1847,15 @@ async function handleProfileEmailSave() {
     const saved = data?.email ?? "";
     state.email = saved;
     ppEmailInputEl.value = saved;
-    setProfileEmailStatus(saved ? "Saglabāts." : "E-pasts noņemts.", saved ? "ok" : "");
+    setProfileEmailStatus(
+      saved ? "Saglabāts." : "E-pasts noņemts.",
+      saved ? "ok" : ""
+    );
   } catch (err) {
-    setProfileEmailStatus(err.message || "Neizdevās saglabāt e-pastu.", "error");
+    setProfileEmailStatus(
+      err.message || "Neizdevās saglabāt e-pastu.",
+      "error"
+    );
   } finally {
     if (ppEmailSaveBtn) ppEmailSaveBtn.disabled = false;
   }
@@ -1700,7 +1898,7 @@ function showPlayerProfile(data) {
   }
   if (ppRankEl) ppRankEl.textContent = `${data.rankTitle} (L${data.rankLevel})`;
   applyRankColor(ppUsernameEl, data.rankColor);
-applyRankColor(ppRankEl, data.rankColor);
+  applyRankColor(ppRankEl, data.rankColor);
   if (ppXpEl) ppXpEl.textContent = data.xp;
   if (ppScoreEl) ppScoreEl.textContent = data.score;
   if (ppCoinsEl) ppCoinsEl.textContent = data.coins;
@@ -1728,9 +1926,15 @@ applyRankColor(ppRankEl, data.rankColor);
   setAvatar(ppAvatarImgEl, ppAvatarInitialsEl, avatarForPopup, data.username);
 
   if (profilePopupEl) {
-    profilePopupEl.classList.remove("vz-rank-low", "vz-rank-mid", "vz-rank-high");
-    for (let i = 1; i <= 10; i++) profilePopupEl.classList.remove("vz-rank-" + i);
-    for (let i = 1; i <= 5; i++) profilePopupEl.classList.remove("vz-cos-tier-" + i);
+    profilePopupEl.classList.remove(
+      "vz-rank-low",
+      "vz-rank-mid",
+      "vz-rank-high"
+    );
+    for (let i = 1; i <= 10; i++)
+      profilePopupEl.classList.remove("vz-rank-" + i);
+    for (let i = 1; i <= 5; i++)
+      profilePopupEl.classList.remove("vz-cos-tier-" + i);
     const aura = getAuraRankFromLevel(data.rankLevel);
     if (aura) profilePopupEl.classList.add("vz-rank-" + aura);
     profilePopupEl.classList.toggle("vz-player-supporter", !!data.supporter);
@@ -1748,7 +1952,8 @@ applyRankColor(ppRankEl, data.rankColor);
   setProfileEmailStatus("", "");
 
   let duelBtn = document.getElementById("vz-profile-duel-btn");
-  const inner = profilePopupEl.querySelector(".vz-profile-popup-inner") || profilePopupEl;
+  const inner =
+    profilePopupEl.querySelector(".vz-profile-popup-inner") || profilePopupEl;
 
   if (!duelBtn && inner) {
     duelBtn = document.createElement("button");
@@ -1762,7 +1967,9 @@ applyRankColor(ppRankEl, data.rankColor);
 
   if (duelBtn) {
     duelBtn.style.display =
-      state.username && data.username === state.username ? "none" : "inline-block";
+      state.username && data.username === state.username
+        ? "none"
+        : "inline-block";
   }
 
   let blockBtn = document.getElementById("vz-profile-block-btn");
@@ -1835,7 +2042,9 @@ function handleProfileDuelClick() {
     return;
   }
   state.socket.emit("duel.challenge", currentProfileName);
-  appendSystemMessage(`Tu izaicināji ${currentProfileName} uz dueli. Gaidām atbildi...`);
+  appendSystemMessage(
+    `Tu izaicināji ${currentProfileName} uz dueli. Gaidām atbildi...`
+  );
   hidePlayerProfile();
 }
 
@@ -1882,7 +2091,8 @@ function renderMissions(missions, bonus) {
     const statusSpan = createEl("span", "mission-status");
 
     if (!m.isCompleted) statusSpan.textContent = "Progressā";
-    else if (m.isCompleted && !m.isClaimed) statusSpan.textContent = "Gatavs saņemšanai";
+    else if (m.isCompleted && !m.isClaimed)
+      statusSpan.textContent = "Gatavs saņemšanai";
     else {
       statusSpan.textContent = "Balva saņemta";
       statusSpan.classList.add("mission-status-done");
@@ -1930,7 +2140,8 @@ function renderMissions(missions, bonus) {
 
     const statusSpan = createEl("span", "mission-status");
     if (!bonus.isCompleted) statusSpan.textContent = "Progressā";
-    else if (bonus.isCompleted && !bonus.isClaimed) statusSpan.textContent = "Gatavs saņemšanai";
+    else if (bonus.isCompleted && !bonus.isClaimed)
+      statusSpan.textContent = "Gatavs saņemšanai";
     else {
       statusSpan.textContent = "Balva saņemta";
       statusSpan.classList.add("mission-status-done");
@@ -1966,7 +2177,10 @@ async function refreshMissions() {
   if (!state.token) return;
   try {
     const missionsRaw = await apiGet("/missions");
-    renderMissions(extractMissions(missionsRaw), extractMissionBonus(missionsRaw));
+    renderMissions(
+      extractMissions(missionsRaw),
+      extractMissionBonus(missionsRaw)
+    );
   } catch (err) {
     console.error("Misiju kļūda:", err);
   }
@@ -2014,8 +2228,12 @@ async function claimMissionBonus() {
 function applyFriendsPayload(payload) {
   if (!payload || typeof payload !== "object") return;
   state.friends = Array.isArray(payload.friends) ? payload.friends : [];
-  state.friendInvitesIn = Array.isArray(payload.incoming) ? payload.incoming : [];
-  state.friendInvitesOut = Array.isArray(payload.outgoing) ? payload.outgoing : [];
+  state.friendInvitesIn = Array.isArray(payload.incoming)
+    ? payload.incoming
+    : [];
+  state.friendInvitesOut = Array.isArray(payload.outgoing)
+    ? payload.outgoing
+    : [];
   renderFriends();
   updateProfileFriendButton();
 }
@@ -2023,9 +2241,15 @@ function applyFriendsPayload(payload) {
 function friendRelation(name) {
   const uname = String(name || "").trim();
   const key = uname.toLowerCase();
-  const isFriend = state.friends.some((n) => String(n || "").toLowerCase() === key);
-  const incoming = state.friendInvitesIn.some((x) => String(x?.name || "").toLowerCase() === key);
-  const outgoing = state.friendInvitesOut.some((x) => String(x?.name || "").toLowerCase() === key);
+  const isFriend = state.friends.some(
+    (n) => String(n || "").toLowerCase() === key
+  );
+  const incoming = state.friendInvitesIn.some(
+    (x) => String(x?.name || "").toLowerCase() === key
+  );
+  const outgoing = state.friendInvitesOut.some(
+    (x) => String(x?.name || "").toLowerCase() === key
+  );
   return { isFriend, incoming, outgoing };
 }
 
@@ -2074,7 +2298,11 @@ function renderFriends() {
     });
   }
 
-  if (!state.friends.length && !state.friendInvitesIn.length && !state.friendInvitesOut.length) {
+  if (
+    !state.friends.length &&
+    !state.friendInvitesIn.length &&
+    !state.friendInvitesOut.length
+  ) {
     const empty = createEl("div", "mission-status");
     empty.textContent = "Nav draugu. Pievieno kādu!";
     friendsInvitesEl.appendChild(empty);
@@ -2085,7 +2313,11 @@ function renderFriends() {
     const row = createEl("li", "vz-friend-row");
     const left = createEl("div", "vz-friend-left");
     const dot = createEl("span", "vz-friend-status");
-    const online = state.onlineUsers.has(String(name || "").trim().toLowerCase());
+    const online = state.onlineUsers.has(
+      String(name || "")
+        .trim()
+        .toLowerCase()
+    );
     if (online) dot.classList.add("vz-friend-online");
     left.appendChild(dot);
 
@@ -2261,7 +2493,8 @@ function setGridGlow(x, y, alpha) {
   if (!gridEl) return;
   if (Number.isFinite(x)) gridEl.style.setProperty("--glow-x", `${x}px`);
   if (Number.isFinite(y)) gridEl.style.setProperty("--glow-y", `${y}px`);
-  if (Number.isFinite(alpha)) gridEl.style.setProperty("--glow-alpha", String(alpha));
+  if (Number.isFinite(alpha))
+    gridEl.style.setProperty("--glow-alpha", String(alpha));
 }
 
 function updateGridGlowFromPoint(clientX, clientY, alpha = 0.35) {
@@ -2293,8 +2526,12 @@ function initGridGlow() {
   if (_gridGlowInit || !gridEl) return;
   _gridGlowInit = true;
 
-  gridEl.addEventListener("pointermove", (e) => updateGridGlowFromPoint(e.clientX, e.clientY, 0.32));
-  gridEl.addEventListener("pointerdown", (e) => updateGridGlowFromPoint(e.clientX, e.clientY, 0.45));
+  gridEl.addEventListener("pointermove", (e) =>
+    updateGridGlowFromPoint(e.clientX, e.clientY, 0.32)
+  );
+  gridEl.addEventListener("pointerdown", (e) =>
+    updateGridGlowFromPoint(e.clientX, e.clientY, 0.45)
+  );
   gridEl.addEventListener("pointerleave", clearGridGlow);
   gridEl.addEventListener(
     "touchmove",
@@ -2307,50 +2544,60 @@ function initGridGlow() {
   gridEl.addEventListener("touchend", clearGridGlow, { passive: true });
 }
 let _fitGridRaf = 0;
- 
+
 function fitGridToViewport() {
   if (!gridEl) return;
- 
+
   const cols = Math.max(3, Number(state.cols) || 5);
   const rows = Math.max(3, Number(state.rows) || 6);
   const gap = 6;
- 
+
   // rezervē vietu apakšā (Jauns raunds / Izlogoties + drošas atstarpes)
   const actionsWrap =
-  (newRoundBtn && newRoundBtn.parentElement) ||
-  (logoutBtn && logoutBtn.parentElement) ||
-  null;
- 
-const actionsH = actionsWrap ? actionsWrap.getBoundingClientRect().height : 0;
- 
-// rezervē vietu pogām + safe-area
-const safe = (window.visualViewport && window.visualViewport.height)
-  ? Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop)
-  : 0;
- 
-const bottomReserve = Math.max(84, Math.ceil(actionsH) + 12 + safe);
- 
+    (newRoundBtn && newRoundBtn.parentElement) ||
+    (logoutBtn && logoutBtn.parentElement) ||
+    null;
+
+  const actionsH = actionsWrap ? actionsWrap.getBoundingClientRect().height : 0;
+
+  // rezervē vietu pogām + safe-area
+  const safe =
+    window.visualViewport && window.visualViewport.height
+      ? Math.max(
+          0,
+          window.innerHeight -
+            window.visualViewport.height -
+            window.visualViewport.offsetTop
+        )
+      : 0;
+
+  const bottomReserve = Math.max(84, Math.ceil(actionsH) + 12 + safe);
+
   const keyboardH = keyboardEl ? keyboardEl.getBoundingClientRect().height : 0;
   const gridTop = gridEl.getBoundingClientRect().top || 0;
   const keyboardTop = keyboardEl ? keyboardEl.getBoundingClientRect().top : 0;
- 
-  const vw = Math.min(window.innerWidth, document.documentElement.clientWidth || window.innerWidth);
+
+  const vw = Math.min(
+    window.innerWidth,
+    document.documentElement.clientWidth || window.innerWidth
+  );
   const vh = window.innerHeight;
- 
+
   const availW = vw - 24;
   const availHViewport = vh - keyboardH - bottomReserve - gridTop - 12;
-  const availHBetween = keyboardTop > gridTop ? keyboardTop - gridTop - 12 : availHViewport;
+  const availHBetween =
+    keyboardTop > gridTop ? keyboardTop - gridTop - 12 : availHViewport;
   const availH = Math.max(0, Math.min(availHViewport, availHBetween));
- 
+
   const maxByW = Math.floor((availW - (cols - 1) * gap) / cols);
   const maxByH = Math.floor((availH - (rows - 1) * gap) / rows);
- 
+
   const size = Math.max(30, Math.min(68, Math.min(maxByW, maxByH)));
- 
+
   gridEl.style.setProperty("--tile-size", size + "px");
   gridEl.style.setProperty("--tile-gap", gap + "px");
 }
- 
+
 function scheduleFitGrid() {
   cancelAnimationFrame(_fitGridRaf);
   _fitGridRaf = requestAnimationFrame(fitGridToViewport);
@@ -2364,14 +2611,12 @@ function resetGrid(len) {
   state.roundFinished = false;
   state.lastShareResult = null;
   setShareResultVisible(false);
-// reset reveal-letter ability katram jaunam raundam
-state.revealUsed = false;
-state.revealHint = null;
- 
-ensureRevealAbilityUI();
-updateRevealAbilityUI();
+  // reset reveal-letter ability katram jaunam raundam
+  state.revealUsed = false;
+  state.revealHint = null;
 
-
+  ensureRevealAbilityUI();
+  updateRevealAbilityUI();
 
   // Baseline: katra raunda startā reset
   resetKeyboardForNewRound();
@@ -2396,12 +2641,12 @@ updateRevealAbilityUI();
   }
 
   if (gameMessageEl) gameMessageEl.textContent = "";
- if (newRoundBtn) {
-  newRoundBtn.style.display = "none";
-  newRoundBtn.disabled = true;
-}
- 
-scheduleFitGrid();
+  if (newRoundBtn) {
+    newRoundBtn.style.display = "none";
+    newRoundBtn.disabled = true;
+  }
+
+  scheduleFitGrid();
 }
 
 async function startNewRound() {
@@ -2410,40 +2655,54 @@ async function startNewRound() {
   try {
     const data = await apiGet("/start-round");
     const len = data.len || 5;
-resetGrid(len);
+    resetGrid(len);
 
-
-// ja raunds jau bija ar atvērtu burtu (refresh/reconnect), atjaunojam UI un ieliekam hint
-if (data && data.revealUsed && data.reveal && Number.isInteger(data.reveal.pos) && data.reveal.letter) {
-  state.revealUsed = true;
-  state.revealHint = { pos: data.reveal.pos, letter: data.reveal.letter, cost: state.revealCostCoins };
-  applyRevealHintFromRow(data.reveal.pos, data.reveal.letter, state.currentRow);
-  updateRevealAbilityUI();
-}
-// atjauno solo raundu pēc refresh/disconnect (ja serveris atdod history)
-if (Array.isArray(data.history) && data.history.length) {
-  data.history.forEach((h, r) => {
-    const guess = String(h?.guess || "");
-    for (let c = 0; c < guess.length; c++) {
-      const tile = state.gridTiles?.[r]?.[c];
-      if (!tile) continue;
-      tile.dataset.letter = guess[c];
-      tile.textContent = guess[c];
+    // ja raunds jau bija ar atvērtu burtu (refresh/reconnect), atjaunojam UI un ieliekam hint
+    if (
+      data &&
+      data.revealUsed &&
+      data.reveal &&
+      Number.isInteger(data.reveal.pos) &&
+      data.reveal.letter
+    ) {
+      state.revealUsed = true;
+      state.revealHint = {
+        pos: data.reveal.pos,
+        letter: data.reveal.letter,
+        cost: state.revealCostCoins,
+      };
+      applyRevealHintFromRow(
+        data.reveal.pos,
+        data.reveal.letter,
+        state.currentRow
+      );
+      updateRevealAbilityUI();
     }
-    revealRow(r, h?.pattern || [], { animate: false });
-  });
- 
-  state.currentRow = data.history.length;
-  state.currentCol = 0;
-  skipHintLockedForward();
-}
-    if (gameMessageEl) gameMessageEl.textContent = `Jauns raunds (${len} burti).`;
+    // atjauno solo raundu pēc refresh/disconnect (ja serveris atdod history)
+    if (Array.isArray(data.history) && data.history.length) {
+      data.history.forEach((h, r) => {
+        const guess = String(h?.guess || "");
+        for (let c = 0; c < guess.length; c++) {
+          const tile = state.gridTiles?.[r]?.[c];
+          if (!tile) continue;
+          tile.dataset.letter = guess[c];
+          tile.textContent = guess[c];
+        }
+        revealRow(r, h?.pattern || [], { animate: false });
+      });
+
+      state.currentRow = data.history.length;
+      state.currentCol = 0;
+      skipHintLockedForward();
+    }
+    if (gameMessageEl)
+      gameMessageEl.textContent = `Jauns raunds (${len} burti).`;
   } catch (err) {
     console.error("start-round kļūda:", err);
-    if (gameMessageEl) gameMessageEl.textContent = err.message || "Neizdevās sākt raundu.";
+    if (gameMessageEl)
+      gameMessageEl.textContent = err.message || "Neizdevās sākt raundu.";
   }
 }
-
 
 function ensureRevealAbilityUI() {
   // UI tiek uzģenerēts JS pusē (nav jāmaina game.html, ja negribi).
@@ -2470,7 +2729,9 @@ function ensureRevealAbilityUI() {
 
   // ieliekam starp grid un keyboard, ja tas ir iespējams
   const parent =
-    keyboardEl && keyboardEl.parentElement ? keyboardEl.parentElement : gridEl.parentElement;
+    keyboardEl && keyboardEl.parentElement
+      ? keyboardEl.parentElement
+      : gridEl.parentElement;
 
   if (parent && keyboardEl && keyboardEl.parentElement === parent) {
     parent.insertBefore(wrap, keyboardEl);
@@ -2482,10 +2743,14 @@ function ensureRevealAbilityUI() {
 function updateRevealAbilityUI() {
   const btn = document.getElementById("vz-btn-reveal-letter");
   if (!btn) return;
- 
-  const disabled = !!state.duelMode || !!state.isLocked || !!state.roundFinished || !!state.revealUsed;
+
+  const disabled =
+    !!state.duelMode ||
+    !!state.isLocked ||
+    !!state.roundFinished ||
+    !!state.revealUsed;
   btn.disabled = disabled;
- 
+
   if (state.duelMode) {
     btn.textContent = "Reveal nav pieejams duelī";
   } else if (state.revealUsed) {
@@ -2502,18 +2767,21 @@ function tileIsHintLocked(row, col) {
 
 function skipHintLockedForward() {
   // pārbīda kursoru uz nākamo rediģējamo ailīti (izlaiž hint-lock)
-  while (state.currentCol < state.cols && tileIsHintLocked(state.currentRow, state.currentCol)) {
+  while (
+    state.currentCol < state.cols &&
+    tileIsHintLocked(state.currentRow, state.currentCol)
+  ) {
     state.currentCol++;
   }
 }
 
 function applyRevealHintFromRow(pos, letter, fromRow = state.currentRow) {
   const L = String(letter || "").toUpperCase();
- 
+
   for (let r = fromRow; r < state.rows; r++) {
     const tile = state.gridTiles?.[r]?.[pos];
     if (!tile) continue;
- 
+
     // ja nav burta vai nav vēl atklāts rezultāts, varam ielikt hint burtu
     if (!tile.dataset.letter) {
       tile.dataset.letter = L;
@@ -2523,34 +2791,34 @@ function applyRevealHintFromRow(pos, letter, fromRow = state.currentRow) {
         tile.classList.contains("correct") ||
         tile.classList.contains("present") ||
         tile.classList.contains("absent");
- 
+
       if (!hasResultClass) {
         tile.dataset.letter = L;
         tile.textContent = L;
       }
     }
- 
+
     tile.dataset.locked = "1";
     tile.classList.add("hint-locked");
   }
- 
+
   skipHintLockedForward();
 }
 function applyCorrectLocksFromPattern(fromRowExclusive, guessLetters, pattern) {
   if (!Array.isArray(pattern) || !Array.isArray(guessLetters)) return;
- 
+
   const startRow = Math.max(0, (fromRowExclusive ?? 0) + 1);
- 
+
   for (let pos = 0; pos < state.cols; pos++) {
     if (pattern[pos] !== "correct") continue;
- 
+
     const letter = String(guessLetters[pos] || "").toUpperCase();
     if (!letter) continue;
- 
+
     for (let r = startRow; r < state.rows; r++) {
       const tile = state.gridTiles?.[r]?.[pos];
       if (!tile) continue;
- 
+
       tile.dataset.letter = letter;
       tile.textContent = letter;
       tile.dataset.locked = "1";
@@ -2560,7 +2828,7 @@ function applyCorrectLocksFromPattern(fromRowExclusive, guessLetters, pattern) {
   }
 }
 async function useRevealLetter() {
-    if (state.duelMode) return;
+  if (state.duelMode) return;
   if (state.isLocked || state.roundFinished) return;
   if (state.revealUsed) return;
 
@@ -2599,26 +2867,24 @@ async function useRevealLetter() {
 
     gameMessageEl.textContent = `Atvērts burts: ${String(data.letter || "").toUpperCase()} (pozīcija ${Number(data.pos) + 1})`;
   } catch (err) {
-const code = err?.data?.code || err?.data?.error || null;
-if (code === "ALREADY_USED") {
-  state.revealUsed = true;
-  updateRevealAbilityUI();
-}
-gameMessageEl.textContent = String(err?.message || "Kļūda: reveal-letter");
+    const code = err?.data?.code || err?.data?.error || null;
+    if (code === "ALREADY_USED") {
+      state.revealUsed = true;
+      updateRevealAbilityUI();
+    }
+    gameMessageEl.textContent = String(err?.message || "Kļūda: reveal-letter");
   } finally {
     state.isLocked = false;
     updateRevealAbilityUI();
   }
 }
 
-
 function addLetter(ch) {
   if (state.isLocked) return;
   if (state.currentRow >= state.rows) return;
-// izlaižam hint-lock ailes (ja atvērts burts)
-skipHintLockedForward();
-if (state.currentCol >= state.cols) return;
-
+  // izlaižam hint-lock ailes (ja atvērts burts)
+  skipHintLockedForward();
+  if (state.currentCol >= state.cols) return;
 
   const tile = state.gridTiles[state.currentRow]?.[state.currentCol];
   if (!tile) return;
@@ -2657,7 +2923,6 @@ function deleteLetter() {
   pulseGridGlow();
 }
 
-
 function flashRow(rowIndex) {
   const row = state.gridTiles[rowIndex] || [];
   row.forEach((tile) => {
@@ -2671,7 +2936,8 @@ function updateKeyboardColor(letter, status) {
   if (!letter) return;
 
   const base = letter.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const btn = state.keyboardButtons.get(base) || state.keyboardButtons.get(letter);
+  const btn =
+    state.keyboardButtons.get(base) || state.keyboardButtons.get(letter);
 
   const priority = { correct: 3, present: 2, absent: 1 };
   if (!btn) return;
@@ -2728,7 +2994,10 @@ function showWinEffects() {
   }
   if (screenFlashEl) {
     screenFlashEl.classList.add("vz-screen-flash-active");
-    setTimeout(() => screenFlashEl.classList.remove("vz-screen-flash-active"), 200);
+    setTimeout(
+      () => screenFlashEl.classList.remove("vz-screen-flash-active"),
+      200
+    );
   }
   if (typeof confetti === "function") {
     confetti({ particleCount: 80, spread: 70, origin: { y: 0.3 } });
@@ -2746,26 +3015,37 @@ async function submitChallengeGuess() {
   if (!guess || guess.length !== state.cols) return;
   state.isLocked = true;
   try {
-    const data = await apiPost("/challenge/" + state.challengeId + "/guess", { guess });
+    const data = await apiPost("/challenge/" + state.challengeId + "/guess", {
+      guess,
+    });
     const pattern = data.pattern || [];
     const rowIndex = state.currentRow;
     revealRow(rowIndex, pattern);
     const guessLetters = letters.slice();
     applyCorrectLocksFromPattern(rowIndex - 1, guessLetters, pattern);
-    pattern.forEach((status, i) => updateKeyboardColor(guessLetters[i], status));
+    pattern.forEach((status, i) =>
+      updateKeyboardColor(guessLetters[i], status)
+    );
     state.currentRow++;
     state.currentCol = 0;
     skipHintLockedForward();
     if (data.win) playSound(sWin);
     if (data.finished) state.challengeFinished = true;
     if (data.bothDone) {
-      showChallengeResult(data.winner, data.attempts1, data.attempts2, data.player1);
+      showChallengeResult(
+        data.winner,
+        data.attempts1,
+        data.attempts2,
+        data.player1
+      );
     } else if (data.finished && gameMessageEl) {
       gameMessageEl.textContent = "Tu pabeidzi. Gaidi pretinieku.";
     }
   } catch (err) {
-    if (gameMessageEl) gameMessageEl.textContent = err.message || "Kļūda minējumā.";
-    if (err.message && err.message.includes("mēģinājumus")) flashRow(state.currentRow);
+    if (gameMessageEl)
+      gameMessageEl.textContent = err.message || "Kļūda minējumā.";
+    if (err.message && err.message.includes("mēģinājumus"))
+      flashRow(state.currentRow);
   } finally {
     state.isLocked = false;
   }
@@ -2784,7 +3064,8 @@ async function submitGuess() {
   if (state.isLocked) return;
   if (state.currentCol !== state.cols) {
     flashRow(state.currentRow);
-    if (gameMessageEl) gameMessageEl.textContent = `Vārdam jābūt ${state.cols} burtiem.`;
+    if (gameMessageEl)
+      gameMessageEl.textContent = `Vārdam jābūt ${state.cols} burtiem.`;
     return;
   }
 
@@ -2802,7 +3083,7 @@ async function submitGuess() {
     const pattern = data.pattern || [];
     revealRow(state.currentRow, pattern);
     const rowIndex = state.currentRow;
-const guessLetters = letters.slice(); // kopija
+    const guessLetters = letters.slice(); // kopija
 
     const isWin = !!data.win;
     const finished = !!data.finished;
@@ -2810,17 +3091,21 @@ const guessLetters = letters.slice(); // kopija
     const unlockAfter = revealDurationMs();
 
     if (isWin) {
-      if (gameMessageEl) gameMessageEl.textContent = "Precīzi! Tu atminēji vārdu!";
+      if (gameMessageEl)
+        gameMessageEl.textContent = "Precīzi! Tu atminēji vārdu!";
       playSound(sWin);
       setTimeout(() => showWinEffects(), Math.min(120, unlockAfter));
       state.roundFinished = true;
-      setTimeout(() => prepareShareResult(true, rowIndex + 1), unlockAfter + 50);
+      setTimeout(
+        () => prepareShareResult(true, rowIndex + 1),
+        unlockAfter + 50
+      );
 
       if (newRoundBtn) {
         newRoundBtn.style.display = "inline-block";
         newRoundBtn.disabled = false;
-       setTimeout(scheduleFitGrid, 0);
-       setTimeout(scheduleFitGrid, 250);
+        setTimeout(scheduleFitGrid, 0);
+        setTimeout(scheduleFitGrid, 250);
       }
 
       setTimeout(async () => {
@@ -2839,13 +3124,16 @@ const guessLetters = letters.slice(); // kopija
     if (finished) {
       if (gameMessageEl) gameMessageEl.textContent = "Raunds beidzies!";
       state.roundFinished = true;
-      setTimeout(() => prepareShareResult(false, rowIndex + 1), unlockAfter + 50);
+      setTimeout(
+        () => prepareShareResult(false, rowIndex + 1),
+        unlockAfter + 50
+      );
 
       if (newRoundBtn) {
         newRoundBtn.style.display = "inline-block";
         newRoundBtn.disabled = false;
-       setTimeout(scheduleFitGrid, 0);
-       setTimeout(scheduleFitGrid, 250);
+        setTimeout(scheduleFitGrid, 0);
+        setTimeout(scheduleFitGrid, 250);
       }
 
       setTimeout(() => playSound(sLose), Math.min(120, unlockAfter));
@@ -2862,29 +3150,38 @@ const guessLetters = letters.slice(); // kopija
       return;
     }
 
-setTimeout(async () => {
-  state.currentRow++;
- 
-  applyCorrectLocksFromPattern(rowIndex, guessLetters, pattern);
- 
-  // ja ir atvērts burts šajā raundā, ieliekam to arī nākamajā minēšanas rindā
-  if (state.revealHint && Number.isInteger(state.revealHint.pos) && state.revealHint.letter) {
-    applyRevealHintFromRow(state.revealHint.pos, state.revealHint.letter, state.currentRow);
-  }
- 
-  state.currentCol = 0;
-  skipHintLockedForward();
-  state.isLocked = false;
- 
-  try {
-    const me = await apiGet("/me");
-    updatePlayerCard(me);
-    refreshMissions();
-  } catch {}
-}, unlockAfter);
+    setTimeout(async () => {
+      state.currentRow++;
+
+      applyCorrectLocksFromPattern(rowIndex, guessLetters, pattern);
+
+      // ja ir atvērts burts šajā raundā, ieliekam to arī nākamajā minēšanas rindā
+      if (
+        state.revealHint &&
+        Number.isInteger(state.revealHint.pos) &&
+        state.revealHint.letter
+      ) {
+        applyRevealHintFromRow(
+          state.revealHint.pos,
+          state.revealHint.letter,
+          state.currentRow
+        );
+      }
+
+      state.currentCol = 0;
+      skipHintLockedForward();
+      state.isLocked = false;
+
+      try {
+        const me = await apiGet("/me");
+        updatePlayerCard(me);
+        refreshMissions();
+      } catch {}
+    }, unlockAfter);
   } catch (err) {
     console.error("/guess kļūda:", err);
-    if (gameMessageEl) gameMessageEl.textContent = err.message || "Kļūda minējumā.";
+    if (gameMessageEl)
+      gameMessageEl.textContent = err.message || "Kļūda minējumā.";
     state.isLocked = false;
     playSound(sError);
   }
@@ -2897,7 +3194,8 @@ function submitDuelGuess() {
 
   if (state.currentCol !== state.cols) {
     flashRow(state.currentRow);
-    if (gameMessageEl) gameMessageEl.textContent = `Vārdam jābūt ${state.cols} burtiem duelī.`;
+    if (gameMessageEl)
+      gameMessageEl.textContent = `Vārdam jābūt ${state.cols} burtiem duelī.`;
     return;
   }
 
@@ -2917,19 +3215,19 @@ function submitDuelGuess() {
 // ==================== DUELIS – OVERLAY ====================
 function ensureDuelRematchBtn() {
   if (!duelOkBtn) return null;
- 
+
   let btn = document.getElementById("duelRematchBtn");
   if (btn) return btn;
- 
+
   btn = document.createElement("button");
   btn.id = "duelRematchBtn";
   btn.type = "button";
   btn.textContent = "🔁 Revanšs";
- 
+
   // paņemam tādu pašu stilu kā OK pogai
   btn.className = duelOkBtn.className || "";
   btn.style.marginLeft = "10px";
- 
+
   duelOkBtn.insertAdjacentElement("afterend", btn);
   return btn;
 }
@@ -2944,73 +3242,80 @@ function showDuelResultOverlay(details) {
 
   if (duelWinnerNameEl) duelWinnerNameEl.textContent = winnerText;
   if (duelScoreLineEl) {
-  const base = details && details.scoreText ? details.scoreText : "";
-  const ranked = details?.ranked !== false;
-  const yourElo = details?.yourElo;
- 
-  let eloTxt = "";
-  if (ranked && Number.isFinite(Number(yourElo))) {
-    const d = Number(details?.eloDelta);
-    const dTxt = Number.isFinite(d) ? (d > 0 ? ` (+${d})` : ` (${d})`) : "";
-    eloTxt = ` | ELO: ${Number(yourElo)}${dTxt}`;
+    const base = details && details.scoreText ? details.scoreText : "";
+    const ranked = details?.ranked !== false;
+    const yourElo = details?.yourElo;
+
+    let eloTxt = "";
+    if (ranked && Number.isFinite(Number(yourElo))) {
+      const d = Number(details?.eloDelta);
+      const dTxt = Number.isFinite(d) ? (d > 0 ? ` (+${d})` : ` (${d})`) : "";
+      eloTxt = ` | ELO: ${Number(yourElo)}${dTxt}`;
+    }
+
+    duelScoreLineEl.textContent = base + eloTxt;
   }
- 
-  duelScoreLineEl.textContent = base + eloTxt;
-}
 
   if (duelExtraMsgEl) {
     let extra = "";
     if (youWin) extra = `Tu uzvarēji dueli pret ${opponent || "pretinieku"}!`;
     else if (winner) extra = `${winner} uzvarēja dueli.`;
     else if (reason === "declined") extra = "Duēlis tika atteikts.";
-    else if (!winner && (reason === "timeout" || reason === "no_attempts" || reason === "no_winner"))
-  extra = "Neizšķirts!";
-else extra = "Duēlis beidzies.";
+    else if (
+      !winner &&
+      (reason === "timeout" ||
+        reason === "no_attempts" ||
+        reason === "no_winner")
+    )
+      extra = "Neizšķirts!";
+    else extra = "Duēlis beidzies.";
     duelExtraMsgEl.textContent = extra;
   }
   // winner avatar
-const winName = winnerText === "TU" ? state.username : (winner || "");
-const winInitial = (winName && winName.charAt(0).toUpperCase()) || "?";
- 
-const winImg = document.getElementById("duel-winner-avatar");
-const winInit = document.getElementById("duel-winner-initials");
- 
-if (winInit) winInit.textContent = winInitial;
- 
-if (winImg) {
-  let url = null;
- 
-  if (winName === state.username) {
-    const entry = getLocalAvatarEntry(state.username);
-    url = entry?.url || null;
-  }
- 
-  if (!url && winName) {
-    const cachedEntry = getCachedAvatarEntry(winName);
-    if (cachedEntry?.url) url = cachedEntry.url;
-  }
- 
-  if (!url && winName) {
-    fetchAvatarForUser(winName, winImg, winInit).catch(() => {});
-  } else {
-    if (url) {
-      winImg.src = url;
-      winImg.style.display = "block";
-      if (winInit) winInit.style.display = "none";
+  const winName = winnerText === "TU" ? state.username : winner || "";
+  const winInitial = (winName && winName.charAt(0).toUpperCase()) || "?";
+
+  const winImg = document.getElementById("duel-winner-avatar");
+  const winInit = document.getElementById("duel-winner-initials");
+
+  if (winInit) winInit.textContent = winInitial;
+
+  if (winImg) {
+    let url = null;
+
+    if (winName === state.username) {
+      const entry = getLocalAvatarEntry(state.username);
+      url = entry?.url || null;
+    }
+
+    if (!url && winName) {
+      const cachedEntry = getCachedAvatarEntry(winName);
+      if (cachedEntry?.url) url = cachedEntry.url;
+    }
+
+    if (!url && winName) {
+      fetchAvatarForUser(winName, winImg, winInit).catch(() => {});
     } else {
-      winImg.src = "";
-      winImg.style.display = "none";
-      if (winInit) winInit.style.display = "flex";
+      if (url) {
+        winImg.src = url;
+        winImg.style.display = "block";
+        if (winInit) winInit.style.display = "none";
+      } else {
+        winImg.src = "";
+        winImg.style.display = "none";
+        if (winInit) winInit.style.display = "flex";
+      }
     }
   }
-}
-duelOverlayEl.classList.toggle("vz-duel-win", !!youWin);
-duelOverlayEl.classList.toggle("vz-duel-lose", !youWin && !!winner);
- duelOverlayEl.classList.remove("hidden");
- if (duelOkBtn) {
-  duelOkBtn.disabled = false;
-  try { duelOkBtn.focus(); } catch {}
-}
+  duelOverlayEl.classList.toggle("vz-duel-win", !!youWin);
+  duelOverlayEl.classList.toggle("vz-duel-lose", !youWin && !!winner);
+  duelOverlayEl.classList.remove("hidden");
+  if (duelOkBtn) {
+    duelOkBtn.disabled = false;
+    try {
+      duelOkBtn.focus();
+    } catch {}
+  }
 }
 
 function hideDuelResultOverlay() {
@@ -3018,7 +3323,7 @@ function hideDuelResultOverlay() {
   duelOverlayEl.classList.add("hidden");
   duelOverlayEl.classList.remove("vz-duel-win", "vz-duel-lose");
   const b = document.getElementById("duelRematchBtn");
-if (b) b.style.display = "none";
+  if (b) b.style.display = "none";
 }
 
 // ==================== EKRĀNA TASTATŪRA ====================
@@ -3037,7 +3342,10 @@ function buildKeyboard() {
 
   KEYBOARD_LAYOUT.forEach((row) => {
     const isEnterRow = row.length === 1 && row[0] === "ENTER";
-    const rowEl = createEl("div", "kb-row" + (isEnterRow ? " kb-row-enter" : ""));
+    const rowEl = createEl(
+      "div",
+      "kb-row" + (isEnterRow ? " kb-row-enter" : "")
+    );
 
     row.forEach((key) => {
       const btn = createEl("button", "kb-key");
@@ -3064,7 +3372,8 @@ function buildKeyboard() {
 
       rowEl.appendChild(btn);
 
-      if (key.length === 1 || key === "SHIFT") state.keyboardButtons.set(key, btn);
+      if (key.length === 1 || key === "SHIFT")
+        state.keyboardButtons.set(key, btn);
     });
 
     keyboardEl.appendChild(rowEl);
@@ -3084,7 +3393,9 @@ function updateShiftVisual() {
 
   const on = !!state.shiftOn;
 
-  keyboardEl.querySelectorAll(".kb-shift").forEach((btn) => btn.classList.toggle("kb-shift-on", on));
+  keyboardEl
+    .querySelectorAll(".kb-shift")
+    .forEach((btn) => btn.classList.toggle("kb-shift-on", on));
 
   keyboardEl.querySelectorAll(".kb-key").forEach((btn) => {
     const base = btn.dataset.baseKey;
@@ -3101,7 +3412,8 @@ function updateShiftVisual() {
 // Fiziskā tastatūra
 window.addEventListener("keydown", (e) => {
   const active = document.activeElement;
-  if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
+  if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA"))
+    return;
 
   // lock laikā atļaujam tikai Enter/Shift
   if (state.isLocked && e.key !== "Enter" && e.key !== "Shift") return;
@@ -3228,7 +3540,8 @@ async function refreshLeaderboard() {
         lbTargetEl.textContent = "Tu esi 1. vieta! 🏆";
         lbTargetEl.style.display = "block";
       } else if (myIdx > 0) {
-        lbTargetEl.textContent = "Tavs mērķis: pārspēj " + (list[myIdx - 1].username || "");
+        lbTargetEl.textContent =
+          "Tavs mērķis: pārspēj " + (list[myIdx - 1].username || "");
         lbTargetEl.style.display = "block";
       } else {
         lbTargetEl.style.display = "none";
@@ -3273,7 +3586,11 @@ async function refreshStreakLeaderboard() {
   try {
     const raw = await apiGet("/leaderboard/streak");
     const list = extractLeaderboard(raw);
-    renderLeaderboardList(streakListEl, list, (item) => ` — ${item.bestStreak || 0} 🔥`);
+    renderLeaderboardList(
+      streakListEl,
+      list,
+      (item) => ` — ${item.bestStreak || 0} 🔥`
+    );
   } catch (err) {
     console.warn("Streak leaderboard kļūda:", err);
   }
@@ -3283,7 +3600,11 @@ async function refreshDailyLeaderboard() {
   try {
     const raw = await apiGet("/leaderboard/daily");
     const list = extractLeaderboard(raw);
-    renderLeaderboardList(dailyListEl, list, (item) => ` — ${item.winsToday || 0} W`);
+    renderLeaderboardList(
+      dailyListEl,
+      list,
+      (item) => ` — ${item.winsToday || 0} W`
+    );
   } catch (err) {
     console.warn("Daily leaderboard kļūda:", err);
   }
@@ -3357,6 +3678,353 @@ async function refreshWeekly() {
   }
 }
 
+function tournamentTypeLabel(type) {
+  const key = String(type || "")
+    .trim()
+    .toLowerCase();
+  if (key === "single_elimination") return "Single elimination";
+  if (key === "double_elimination") return "Double elimination";
+  if (key === "round_robin") return "Round robin";
+  return "Turnīrs";
+}
+
+function tournamentMatchStatusLabel(status) {
+  const code = Number(status);
+  if (code === 0) return "Bloķēts";
+  if (code === 1) return "Gaida pretinieku";
+  if (code === 2) return "Gatavs";
+  if (code === 3) return "Notiek";
+  if (code === 4) return "Pabeigts";
+  if (code === 5) return "Arhivēts";
+  return "Nezināms";
+}
+
+function normalizeTournamentList(payload) {
+  const list = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.tournaments)
+      ? payload.tournaments
+      : [];
+  return list.filter((t) => t && Number.isFinite(Number(t.id)));
+}
+
+function setTournamentReportStatus(message, kind = "") {
+  if (!tournamentReportStatusEl) return;
+  tournamentReportStatusEl.textContent = String(message || "");
+  tournamentReportStatusEl.classList.remove("vz-ok", "vz-error");
+  if (kind === "ok") tournamentReportStatusEl.classList.add("vz-ok");
+  if (kind === "error") tournamentReportStatusEl.classList.add("vz-error");
+}
+
+function clearTournamentCardUi() {
+  if (tournamentMetaEl) {
+    tournamentMetaEl.textContent = "";
+    tournamentMetaEl.classList.add("hidden");
+  }
+  if (tournamentMatchListEl) {
+    tournamentMatchListEl.innerHTML = "";
+    tournamentMatchListEl.classList.add("hidden");
+  }
+  if (tournamentEmptyEl) {
+    tournamentEmptyEl.textContent = "";
+    tournamentEmptyEl.classList.add("hidden");
+  }
+  if (tournamentMyMatchEl) tournamentMyMatchEl.classList.add("hidden");
+  if (tournamentMyMatchTextEl) tournamentMyMatchTextEl.textContent = "—";
+  if (tournamentReportFormEl) tournamentReportFormEl.classList.add("hidden");
+  if (tournamentScore1InputEl) tournamentScore1InputEl.value = "";
+  if (tournamentScore2InputEl) tournamentScore2InputEl.value = "";
+  if (tournamentScore1LabelEl)
+    tournamentScore1LabelEl.textContent = "Spēlētājs 1";
+  if (tournamentScore2LabelEl)
+    tournamentScore2LabelEl.textContent = "Spēlētājs 2";
+  setTournamentReportStatus("");
+  state.tournamentReportCtx = null;
+}
+
+function renderTournamentCardEmpty(message) {
+  if (!tournamentCardEl || !tournamentStatusEl) return;
+  clearTournamentCardUi();
+  tournamentStatusEl.textContent = String(message || "Turnīri nav pieejami.");
+}
+
+function getTournamentParticipantMap(data) {
+  const out = new Map();
+  const participants = Array.isArray(data?.participant) ? data.participant : [];
+  for (const p of participants) {
+    if (!p || p.id == null) continue;
+    out.set(Number(p.id), String(p.name || "").trim());
+  }
+  return out;
+}
+
+function tournamentParticipantNameById(map, id) {
+  if (id == null) return "";
+  const byNum = map.get(Number(id));
+  if (byNum) return byNum;
+  return map.get(id) || "";
+}
+
+function matchContainsParticipant(match, participantId) {
+  const p1 = Number(match?.opponent1?.id);
+  const p2 = Number(match?.opponent2?.id);
+  return p1 === Number(participantId) || p2 === Number(participantId);
+}
+
+function isTournamentMatchPlayable(match) {
+  const status = Number(match?.status);
+  return status === 1 || status === 2 || status === 3;
+}
+
+function findMyTournamentMatch(matches, participantId) {
+  const mine = (Array.isArray(matches) ? matches : []).filter((m) =>
+    matchContainsParticipant(m, participantId)
+  );
+  if (!mine.length) return null;
+  mine.sort((a, b) => {
+    const aPlayable = isTournamentMatchPlayable(a) ? 0 : 1;
+    const bPlayable = isTournamentMatchPlayable(b) ? 0 : 1;
+    if (aPlayable !== bPlayable) return aPlayable - bPlayable;
+    return Number(a?.id || 0) - Number(b?.id || 0);
+  });
+  return mine[0];
+}
+
+function startTournamentRefreshTimer() {
+  if (tournamentRefreshTimer) clearInterval(tournamentRefreshTimer);
+  tournamentRefreshTimer = setInterval(() => {
+    refreshTournamentCard(false);
+  }, 60_000);
+}
+
+function renderTournamentCard(meta, details) {
+  if (!tournamentCardEl || !tournamentStatusEl) return;
+  clearTournamentCardUi();
+
+  const data = details && typeof details === "object" ? details.data || {} : {};
+  const participants = Array.isArray(data.participant) ? data.participant : [];
+  const allMatches = Array.isArray(data.match) ? data.match : [];
+  const currentMatches = Array.isArray(details?.currentMatches)
+    ? details.currentMatches
+    : [];
+  const participantMap = getTournamentParticipantMap(data);
+
+  let statusLine = String(meta?.name || "Turnīrs");
+  if (details?.currentRound?.number) {
+    statusLine += ` · Kārta ${details.currentRound.number}`;
+  } else if (!details?.currentStage) {
+    statusLine += " · Pabeigts";
+  }
+  tournamentStatusEl.textContent = statusLine;
+
+  if (tournamentMetaEl) {
+    const participantCount = Math.max(
+      0,
+      Number(meta?.participantCount || 0) || participants.length
+    );
+    tournamentMetaEl.textContent = `${tournamentTypeLabel(meta?.type)} · ${participantCount} spēlētāji`;
+    tournamentMetaEl.classList.remove("hidden");
+  }
+
+  const championName = Array.isArray(details?.finalStandings)
+    ? String(details.finalStandings?.[0]?.name || "").trim()
+    : "";
+  if (championName && tournamentEmptyEl) {
+    tournamentEmptyEl.textContent = `Uzvarētājs: ${championName}`;
+    tournamentEmptyEl.classList.remove("hidden");
+  }
+
+  const list = (
+    currentMatches.length
+      ? currentMatches
+      : allMatches.filter(isTournamentMatchPlayable)
+  ).slice(0, 6);
+  if (tournamentMatchListEl) {
+    if (list.length) {
+      list.forEach((match) => {
+        const p1 =
+          tournamentParticipantNameById(participantMap, match?.opponent1?.id) ||
+          "TBD";
+        const p2 =
+          tournamentParticipantNameById(participantMap, match?.opponent2?.id) ||
+          "TBD";
+        const li = createEl("li");
+        li.textContent = `${p1} vs ${p2} · ${tournamentMatchStatusLabel(match?.status)}`;
+        tournamentMatchListEl.appendChild(li);
+      });
+      tournamentMatchListEl.classList.remove("hidden");
+    } else if (!championName && tournamentEmptyEl) {
+      tournamentEmptyEl.textContent = "Šobrīd nav aktīvu maču.";
+      tournamentEmptyEl.classList.remove("hidden");
+    }
+  }
+
+  if (!tournamentMyMatchEl || !tournamentMyMatchTextEl) return;
+  tournamentMyMatchEl.classList.remove("hidden");
+
+  const myName = String(state.username || "")
+    .trim()
+    .toLowerCase();
+  const myParticipant = participants.find(
+    (p) =>
+      String(p?.name || "")
+        .trim()
+        .toLowerCase() === myName
+  );
+
+  if (!myParticipant || myParticipant.id == null) {
+    tournamentMyMatchTextEl.textContent = "Tu neesi šī turnīra dalībnieks.";
+    return;
+  }
+
+  const myMatch =
+    findMyTournamentMatch(
+      allMatches.filter(isTournamentMatchPlayable),
+      myParticipant.id
+    ) || findMyTournamentMatch(allMatches, myParticipant.id);
+
+  if (!myMatch) {
+    tournamentMyMatchTextEl.textContent = "Pašlaik tev nav aktīva mača.";
+    return;
+  }
+
+  const p1Name =
+    tournamentParticipantNameById(participantMap, myMatch?.opponent1?.id) ||
+    "Spēlētājs 1";
+  const p2Name =
+    tournamentParticipantNameById(participantMap, myMatch?.opponent2?.id) ||
+    "Spēlētājs 2";
+  tournamentMyMatchTextEl.textContent = `${p1Name} vs ${p2Name} · ${tournamentMatchStatusLabel(
+    myMatch?.status
+  )}`;
+
+  const canReportFromUi =
+    isTournamentMatchPlayable(myMatch) &&
+    myMatch?.id != null &&
+    myMatch?.opponent1?.id != null &&
+    myMatch?.opponent2?.id != null;
+  if (!canReportFromUi) return;
+
+  if (tournamentScore1LabelEl) tournamentScore1LabelEl.textContent = p1Name;
+  if (tournamentScore2LabelEl) tournamentScore2LabelEl.textContent = p2Name;
+
+  if (tournamentScore1InputEl) {
+    const v1 = Number(myMatch?.opponent1?.score);
+    tournamentScore1InputEl.value = Number.isFinite(v1)
+      ? String(Math.max(0, Math.floor(v1)))
+      : "";
+  }
+  if (tournamentScore2InputEl) {
+    const v2 = Number(myMatch?.opponent2?.score);
+    tournamentScore2InputEl.value = Number.isFinite(v2)
+      ? String(Math.max(0, Math.floor(v2)))
+      : "";
+  }
+
+  if (tournamentReportFormEl) tournamentReportFormEl.classList.remove("hidden");
+  setTournamentReportStatus(
+    "Ievadi rezultātu un nospied “Iesniegt rezultātu”."
+  );
+  state.tournamentReportCtx = {
+    tournamentId: Number(meta?.id),
+    matchId: Number(myMatch.id),
+    p1Name,
+    p2Name,
+  };
+}
+
+async function refreshTournamentCard(force = false) {
+  if (!state.token || !tournamentCardEl || !tournamentStatusEl) return;
+  if (tournamentRefreshBtnEl) tournamentRefreshBtnEl.disabled = true;
+  try {
+    const listPayload = await apiGet("/tournaments");
+    const list = normalizeTournamentList(listPayload);
+    state.tournaments = list;
+
+    if (!list.length) {
+      renderTournamentCardEmpty("Šobrīd nav aktīvu turnīru.");
+      state.tournamentActiveId = null;
+      return;
+    }
+
+    let selected = null;
+    if (!force && state.tournamentActiveId != null) {
+      selected =
+        list.find((t) => Number(t?.id) === Number(state.tournamentActiveId)) ||
+        null;
+    }
+    if (!selected) {
+      selected =
+        list.find(
+          (t) => String(t?.status || "").toLowerCase() !== "completed"
+        ) || list[0];
+    }
+    if (!selected) {
+      renderTournamentCardEmpty("Šobrīd nav aktīvu turnīru.");
+      state.tournamentActiveId = null;
+      return;
+    }
+
+    state.tournamentActiveId = Number(selected.id);
+    const details = await apiGet(`/tournaments/${selected.id}`);
+    renderTournamentCard(selected, details);
+  } catch (err) {
+    console.error("Turnīru ielādes kļūda:", err);
+    renderTournamentCardEmpty(err.message || "Neizdevās ielādēt turnīrus.");
+  } finally {
+    if (tournamentRefreshBtnEl) tournamentRefreshBtnEl.disabled = false;
+  }
+}
+
+async function handleTournamentReportSubmit() {
+  if (!state.token) return;
+  const ctx = state.tournamentReportCtx;
+  if (
+    !ctx ||
+    !Number.isFinite(Number(ctx.tournamentId)) ||
+    !Number.isFinite(Number(ctx.matchId))
+  ) {
+    setTournamentReportStatus(
+      "Šobrīd nav mača, kam iesniegt rezultātu.",
+      "error"
+    );
+    return;
+  }
+  const score1 = parseInt(tournamentScore1InputEl?.value || "", 10);
+  const score2 = parseInt(tournamentScore2InputEl?.value || "", 10);
+  if (
+    !Number.isFinite(score1) ||
+    !Number.isFinite(score2) ||
+    score1 < 0 ||
+    score2 < 0
+  ) {
+    setTournamentReportStatus("Ievadi abus rezultātus (>= 0).", "error");
+    return;
+  }
+  if (score1 === score2) {
+    setTournamentReportStatus("Neizšķirts šobrīd nav atbalstīts.", "error");
+    return;
+  }
+
+  if (tournamentReportBtnEl) tournamentReportBtnEl.disabled = true;
+  try {
+    await apiPost(
+      `/tournaments/${ctx.tournamentId}/matches/${ctx.matchId}/report`,
+      { score1, score2 }
+    );
+    setTournamentReportStatus("Rezultāts iesniegts.", "ok");
+    appendSystemMessage("🏟️ Turnīra mača rezultāts iesniegts.");
+    await refreshTournamentCard(true);
+  } catch (err) {
+    setTournamentReportStatus(
+      err.message || "Neizdevās iesniegt rezultātu.",
+      "error"
+    );
+  } finally {
+    if (tournamentReportBtnEl) tournamentReportBtnEl.disabled = false;
+  }
+}
+
 function updateOnlineList(payload) {
   const ul = onlineListEl;
   const countEl = onlineCountEl;
@@ -3369,7 +4037,8 @@ function updateOnlineList(payload) {
     players = payload;
     count = players.length;
   } else if (payload && typeof payload === "object") {
-    const users = payload.users || payload.players || payload.list || payload.online;
+    const users =
+      payload.users || payload.players || payload.list || payload.online;
     if (Array.isArray(users)) players = users;
     count = typeof payload.count === "number" ? payload.count : players.length;
   }
@@ -3382,24 +4051,28 @@ function updateOnlineList(payload) {
 
   players.forEach((p) => {
     let username = "";
-let supporter = false;
-let avatarUrl = null;
-let rankLevel = null;
-let rankColor = null;
-let region = "";
+    let supporter = false;
+    let avatarUrl = null;
+    let rankLevel = null;
+    let rankColor = null;
+    let region = "";
 
     if (typeof p === "string") username = p;
     else if (p && typeof p === "object") {
       username = p.username || p.name || "";
       supporter = !!(p.supporter || p.isSupporter);
       avatarUrl = p.avatarUrl || null;
-    if (typeof p.rankLevel === "number") rankLevel = p.rankLevel;
-    if (typeof p.rankColor === "string") rankColor = p.rankColor;
-    if (typeof p.region === "string") region = p.region;
+      if (typeof p.rankLevel === "number") rankLevel = p.rankLevel;
+      if (typeof p.rankColor === "string") rankColor = p.rankColor;
+      if (typeof p.region === "string") region = p.region;
     }
 
     if (!username) return;
-    onlineSet.add(String(username || "").trim().toLowerCase());
+    onlineSet.add(
+      String(username || "")
+        .trim()
+        .toLowerCase()
+    );
 
     const li = document.createElement("li");
     if (username === myName) li.classList.add("vz-online-self");
@@ -3438,7 +4111,8 @@ let region = "";
     ul.appendChild(li);
   });
 
-  const finalCount = typeof count === "number" && count > 0 ? count : visibleCount;
+  const finalCount =
+    typeof count === "number" && count > 0 ? count : visibleCount;
   countEl.textContent = String(finalCount);
   state.onlineUsers = onlineSet;
   renderFriends();
@@ -3487,10 +4161,11 @@ function renderHofEntry(entry) {
   const infoEl = createEl("span", "vz-hof-info");
   const score = typeof e.score === "number" ? e.score : e.score || "";
   const seasonId = e.seasonId != null ? e.seasonId : "";
-  const when =
-    e.finishedAt
-      ? new Date(e.finishedAt).toLocaleString("lv-LV", { timeZone: "Europe/Riga" })
-      : "";
+  const when = e.finishedAt
+    ? new Date(e.finishedAt).toLocaleString("lv-LV", {
+        timeZone: "Europe/Riga",
+      })
+    : "";
 
   infoEl.textContent =
     `${seasonId ? ` — Sezona ${seasonId}` : ""}` +
@@ -3501,7 +4176,8 @@ function renderHofEntry(entry) {
   hofSeason1El.appendChild(nameEl);
   hofSeason1El.appendChild(infoEl);
 
-  if (e.avatarUrl) setAvatar(avatarImg, avatarInitials, e.avatarUrl, e.username);
+  if (e.avatarUrl)
+    setAvatar(avatarImg, avatarInitials, e.avatarUrl, e.username);
   else applyMiniAvatar(e.username, avatarImg, avatarInitials);
 }
 
@@ -3560,7 +4236,12 @@ let _lastSystemAt = 0;
 function isChatNearBottom() {
   if (!chatMessagesEl) return true;
   const threshold = 40;
-  return chatMessagesEl.scrollHeight - chatMessagesEl.scrollTop - chatMessagesEl.clientHeight < threshold;
+  return (
+    chatMessagesEl.scrollHeight -
+      chatMessagesEl.scrollTop -
+      chatMessagesEl.clientHeight <
+    threshold
+  );
 }
 
 function trimChatRowsKeepScroll() {
@@ -3579,7 +4260,10 @@ function trimChatRowsKeepScroll() {
   }
 
   if (!wasNearBottom && removedPx > 0) {
-    chatMessagesEl.scrollTop = Math.max(0, chatMessagesEl.scrollTop - removedPx);
+    chatMessagesEl.scrollTop = Math.max(
+      0,
+      chatMessagesEl.scrollTop - removedPx
+    );
   }
 }
 
@@ -3633,7 +4317,8 @@ function buildChatRowElement(msg) {
     const nameSpan = createEl("span", "chat-name");
     const clickable = createEl("span", "clickable-username");
     clickable.textContent = msg.username + ": ";
-    if (typeof msg.rankLevel === "number") applyNameTierClass(clickable, msg.rankLevel);
+    if (typeof msg.rankLevel === "number")
+      applyNameTierClass(clickable, msg.rankLevel);
     applyRankColor(clickable, msg.rankColor);
     clickable.addEventListener("click", () => openProfile(msg.username));
     const badge = buildRegionBadge(msg.region, "vz-region-badge-chat");
@@ -3665,7 +4350,8 @@ function appendChatMessage(msg, opts = {}) {
 
   chatMessagesEl.appendChild(row);
 
-  if (wasNearBottom || isHistory) chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  if (wasNearBottom || isHistory)
+    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 
   if (!isHistory) {
     const tabHidden = !!document.hidden;
@@ -3679,8 +4365,13 @@ function appendChatMessage(msg, opts = {}) {
     if (my && msg.username && msg.username !== "SYSTEM") {
       const re = new RegExp("@" + escapeRegExp(my) + "(\\b|$)", "i");
       if (re.test(String(msg.text || ""))) {
-        lastMention = { from: msg.username, text: msg.text, ts: normalizeTs(msg.ts) };
-        if (chatMentionBadgeEl) chatMentionBadgeEl.classList.add("vz-mention-active");
+        lastMention = {
+          from: msg.username,
+          text: msg.text,
+          ts: normalizeTs(msg.ts),
+        };
+        if (chatMentionBadgeEl)
+          chatMentionBadgeEl.classList.add("vz-mention-active");
         showMentionPopup(`🔔 ${msg.username}: ${msg.text}`);
       }
     }
@@ -3710,7 +4401,8 @@ function appendChatMessagesBulk(list, opts = {}) {
 
   chatMessagesEl.appendChild(frag);
 
-  if (wasNearBottom || isHistory) chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  if (wasNearBottom || isHistory)
+    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
   trimChatRowsKeepScroll();
 }
 
@@ -3738,7 +4430,7 @@ let dmTypingLastSent = 0;
 let dmTypingStopTimer = null;
 function ensureDmUi() {
   if (document.getElementById("vz-dm-fab")) return;
- 
+
   // FAB poga
   const fab = document.createElement("button");
   fab.id = "vz-dm-fab";
@@ -3747,8 +4439,8 @@ function ensureDmUi() {
   fab.title = "Privātais čats";
   fab.style.position = "fixed";
   fab.style.right = "14px";
-fab.style.bottom = "";
-fab.style.top = "74px";
+  fab.style.bottom = "";
+  fab.style.top = "74px";
   fab.style.zIndex = "99998";
   fab.style.width = "52px";
   fab.style.height = "52px";
@@ -3759,7 +4451,7 @@ fab.style.top = "74px";
   fab.style.fontSize = "20px";
   fab.style.fontWeight = "900";
   fab.style.boxShadow = "0 10px 30px rgba(0,0,0,0.35)";
- 
+
   const badge = document.createElement("div");
   badge.id = "vz-dm-badge";
   badge.style.position = "absolute";
@@ -3778,15 +4470,15 @@ fab.style.top = "74px";
   badge.style.fontWeight = "900";
   badge.style.border = "2px solid rgba(20,20,24,0.92)";
   fab.appendChild(badge);
- 
- fab.addEventListener("click", () => {
-  if (fab.dataset.lpJustDid === "1") return;
- 
-  const u = String(state.dmLastFrom || "").trim();
-  if (u) openDmWith(u);
-  else dmShowInbox();
-});
- 
+
+  fab.addEventListener("click", () => {
+    if (fab.dataset.lpJustDid === "1") return;
+
+    const u = String(state.dmLastFrom || "").trim();
+    if (u) openDmWith(u);
+    else dmShowInbox();
+  });
+
   // Drawer
   const drawer = document.createElement("div");
   drawer.id = "vz-dm-drawer";
@@ -3806,20 +4498,20 @@ fab.style.top = "74px";
   drawer.style.boxShadow = "0 10px 30px rgba(0,0,0,0.45)";
   drawer.style.overflow = "hidden";
   drawer.style.backdropFilter = "blur(8px)";
- 
+
   const header = document.createElement("div");
   header.style.display = "flex";
   header.style.alignItems = "center";
   header.style.justifyContent = "space-between";
   header.style.padding = "10px 12px";
   header.style.borderBottom = "1px solid rgba(255,255,255,0.10)";
- 
+
   const title = document.createElement("div");
   title.id = "vz-dm-title";
   title.style.fontWeight = "900";
   title.style.color = "#fff";
   title.textContent = "Privātais čats";
- 
+
   const actions = document.createElement("div");
   actions.style.display = "flex";
   actions.style.alignItems = "center";
@@ -3866,7 +4558,7 @@ fab.style.top = "74px";
   close.style.background = "rgba(255,255,255,0.06)";
   close.style.color = "#fff";
   close.addEventListener("click", () => dmClose());
- const del = document.createElement("button");
+  const del = document.createElement("button");
   del.type = "button";
   del.textContent = "🗑️";
   del.title = "Dzēst šo sarunu (tikai man)";
@@ -3876,7 +4568,7 @@ fab.style.top = "74px";
   del.style.border = "1px solid rgba(255,255,255,0.12)";
   del.style.background = "rgba(255,255,255,0.06)";
   del.style.color = "#fff";
- 
+
   let _armUntil = 0;
   let _armUser = "";
   del.addEventListener("click", () => {
@@ -3885,7 +4577,9 @@ fab.style.top = "74px";
     const now = Date.now();
     if (_armUser === u && now < _armUntil) {
       // apstiprināts
-      try { state.socket.emit("dm.clearThread", { with: u }); } catch {}
+      try {
+        state.socket.emit("dm.clearThread", { with: u });
+      } catch {}
       state.dmThreads.delete(u);
       dmMarkReadLocal(u);
       state.dmOpenWith = null;
@@ -3896,7 +4590,7 @@ fab.style.top = "74px";
     _armUntil = now + 3000;
     dmToast("Spied vēlreiz 3s laikā, lai dzēstu sarunu.", "");
   });
-  
+
   actions.appendChild(report);
   actions.appendChild(block);
   actions.appendChild(close);
@@ -3904,7 +4598,7 @@ fab.style.top = "74px";
 
   header.appendChild(title);
   header.appendChild(actions);
- 
+
   const msgs = document.createElement("div");
   msgs.id = "vz-dm-messages";
   msgs.style.flex = "1";
@@ -3913,7 +4607,7 @@ fab.style.top = "74px";
   msgs.style.display = "flex";
   msgs.style.flexDirection = "column";
   msgs.style.gap = "8px";
- 
+
   const contextBar = document.createElement("div");
   contextBar.id = "vz-dm-context";
   contextBar.style.display = "none";
@@ -3959,7 +4653,7 @@ fab.style.top = "74px";
   inputRow.style.gap = "8px";
   inputRow.style.padding = "10px 12px";
   inputRow.style.borderTop = "1px solid rgba(255,255,255,0.10)";
- 
+
   const inp = document.createElement("input");
   inp.id = "vz-dm-input";
   inp.type = "text";
@@ -3982,7 +4676,7 @@ fab.style.top = "74px";
     }
   });
   inp.addEventListener("blur", () => dmSendTyping(false));
- 
+
   const send = document.createElement("button");
   send.id = "vz-dm-send";
   send.type = "button";
@@ -3994,23 +4688,23 @@ fab.style.top = "74px";
   send.style.color = "#fff";
   send.style.fontWeight = "800";
   send.addEventListener("click", () => dmSendCurrent());
- 
+
   inputRow.appendChild(inp);
   inputRow.appendChild(send);
- 
+
   drawer.appendChild(header);
   drawer.appendChild(msgs);
   drawer.appendChild(contextBar);
   drawer.appendChild(typingBar);
   drawer.appendChild(inputRow);
- 
+
   // Toast
   const toast = document.createElement("div");
   toast.id = "vz-dm-toast";
   toast.style.position = "fixed";
   toast.style.right = "14px";
- toast.style.bottom = "";
-toast.style.top = "74px";
+  toast.style.bottom = "";
+  toast.style.top = "74px";
   toast.style.zIndex = "99999";
   toast.style.display = "none";
   toast.style.maxWidth = "320px";
@@ -4025,42 +4719,43 @@ toast.style.top = "74px";
     if (toast.dataset.from) openDmWith(toast.dataset.from);
     toast.style.display = "none";
   });
- 
+
   document.body.appendChild(fab);
   document.body.appendChild(drawer);
   document.body.appendChild(toast);
   // paceļam FAB/drawer virs mobilās klaviatūras (visualViewport)
-try {
-  const vv = window.visualViewport;
- 
-  const apply = () => {
-  const keyboardH = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
- 
-  // FAB ir top-right: nekad neliekam bottom (lai nelēkā)
-  fab.style.bottom = "";
-  fab.style.top = (74 + (vv ? vv.offsetTop : 0)) + "px";
- 
-  // Drawer paliek apakšā, paceļam virs klaviatūras
-  drawer.style.bottom = (14 + keyboardH) + "px";
- 
-  // Toast arī top (netraucē klaviatūrai)
-  toast.style.bottom = "";
-  toast.style.top = (74 + (vv ? vv.offsetTop : 0)) + "px";
-};
- 
-  apply();
- 
-  // IMPORTANT: lai neliekas listeneri vairākkārt
-  if (fab.dataset.vvBound !== "1") {
-    fab.dataset.vvBound = "1";
-    if (vv) {
-      vv.addEventListener("resize", apply);
-      vv.addEventListener("scroll", apply);
-    }
-    window.addEventListener("resize", apply);
-  }
-} catch {}
+  try {
+    const vv = window.visualViewport;
 
+    const apply = () => {
+      const keyboardH = vv
+        ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+        : 0;
+
+      // FAB ir top-right: nekad neliekam bottom (lai nelēkā)
+      fab.style.bottom = "";
+      fab.style.top = 74 + (vv ? vv.offsetTop : 0) + "px";
+
+      // Drawer paliek apakšā, paceļam virs klaviatūras
+      drawer.style.bottom = 14 + keyboardH + "px";
+
+      // Toast arī top (netraucē klaviatūrai)
+      toast.style.bottom = "";
+      toast.style.top = 74 + (vv ? vv.offsetTop : 0) + "px";
+    };
+
+    apply();
+
+    // IMPORTANT: lai neliekas listeneri vairākkārt
+    if (fab.dataset.vvBound !== "1") {
+      fab.dataset.vvBound = "1";
+      if (vv) {
+        vv.addEventListener("resize", apply);
+        vv.addEventListener("scroll", apply);
+      }
+      window.addEventListener("resize", apply);
+    }
+  } catch {}
 }
 
 function dmClose() {
@@ -4157,11 +4852,14 @@ function dmLoadLocalState() {
     const data = JSON.parse(raw);
     if (!data || typeof data !== "object") return;
     state.dmThreads = dmObjectToThreads(data.threads || {});
-    state.dmUnreadByUser = data.unread && typeof data.unread === "object" ? data.unread : {};
-    state.dmPeerRead = data.peerRead && typeof data.peerRead === "object" ? data.peerRead : {};
+    state.dmUnreadByUser =
+      data.unread && typeof data.unread === "object" ? data.unread : {};
+    state.dmPeerRead =
+      data.peerRead && typeof data.peerRead === "object" ? data.peerRead : {};
     state.dmLastFrom = data.lastFrom || null;
     let total = 0;
-    for (const v of Object.values(state.dmUnreadByUser)) total += Math.max(0, Number(v) || 0);
+    for (const v of Object.values(state.dmUnreadByUser))
+      total += Math.max(0, Number(v) || 0);
     state.dmUnreadTotal = total;
     state.dmInboxPreview = [];
     dmSetBadge(total, state.dmUnreadByUser);
@@ -4170,23 +4868,24 @@ function dmLoadLocalState() {
 function dmIncrementUnread(withUser) {
   const u = String(withUser || "").trim();
   if (!u) return;
-  const by = state.dmUnreadByUser && typeof state.dmUnreadByUser === "object"
-    ? { ...state.dmUnreadByUser }
-    : {};
+  const by =
+    state.dmUnreadByUser && typeof state.dmUnreadByUser === "object"
+      ? { ...state.dmUnreadByUser }
+      : {};
   const prev = Math.max(0, Number(by[u]) || 0);
   by[u] = prev + 1;
   let total = 0;
   for (const v of Object.values(by)) total += Math.max(0, Number(v) || 0);
   dmSetBadge(total, by);
 }
- 
+
 function dmSetBadge(total, byUser) {
   state.dmUnreadTotal = Math.max(0, Number(total) || 0);
   state.dmUnreadByUser = byUser && typeof byUser === "object" ? byUser : {};
- 
+
   const badge = document.getElementById("vz-dm-badge");
   if (!badge) return;
- 
+
   if (state.dmUnreadTotal > 0) {
     badge.style.display = "flex";
     badge.textContent = String(Math.min(99, state.dmUnreadTotal));
@@ -4199,39 +4898,39 @@ function dmSetBadge(total, byUser) {
 function dmMarkReadLocal(withUser) {
   const u = String(withUser || "").trim();
   if (!u) return;
- 
+
   const by =
     state.dmUnreadByUser && typeof state.dmUnreadByUser === "object"
       ? { ...state.dmUnreadByUser }
       : {};
- 
+
   for (const k of Object.keys(by)) {
     if (String(k).toLowerCase() === u.toLowerCase()) by[k] = 0;
   }
   by[u] = 0;
- 
+
   let total = 0;
   for (const v of Object.values(by)) total += Math.max(0, Number(v) || 0);
- 
+
   dmSetBadge(total, by);
   dmSchedulePersist();
-} 
+}
 let _dmToastTimer = null;
 function dmToast(text, fromUser) {
-  if (state.dmNotifyOn === false) return;   // <- ŠO IELIEC
+  if (state.dmNotifyOn === false) return; // <- ŠO IELIEC
   const toast = document.getElementById("vz-dm-toast");
   if (!toast) return;
- 
+
   toast.textContent = String(text || "");
   toast.dataset.from = fromUser ? String(fromUser) : "";
   toast.style.display = "block";
- 
+
   if (_dmToastTimer) clearTimeout(_dmToastTimer);
   _dmToastTimer = setTimeout(() => {
     toast.style.display = "none";
   }, 3200);
 }
- 
+
 function dmUpdateContextBar() {
   const bar = document.getElementById("vz-dm-context");
   const text = document.getElementById("vz-dm-context-text");
@@ -4284,7 +4983,9 @@ function dmSetEdit(msg) {
   const inp = document.getElementById("vz-dm-input");
   if (inp) {
     inp.value = state.dmEdit.text || "";
-    try { inp.focus(); } catch {}
+    try {
+      inp.focus();
+    } catch {}
   }
 }
 
@@ -4323,7 +5024,9 @@ function dmSetBlockedUsers(list) {
   state.dmBlockedUsers = arr.filter(Boolean);
   const set = new Set();
   for (const u of state.dmBlockedUsers) {
-    const k = String(u || "").trim().toLowerCase();
+    const k = String(u || "")
+      .trim()
+      .toLowerCase();
     if (k) set.add(k);
   }
   state.dmBlockedSet = set;
@@ -4333,7 +5036,9 @@ function dmSetBlockedUsers(list) {
 }
 
 function dmIsBlocked(username) {
-  const k = String(username || "").trim().toLowerCase();
+  const k = String(username || "")
+    .trim()
+    .toLowerCase();
   if (!k) return false;
   return state.dmBlockedSet && state.dmBlockedSet.has(k);
 }
@@ -4407,13 +5112,13 @@ function dmGetThread(withUser) {
   if (!state.dmThreads.has(key)) state.dmThreads.set(key, []);
   return state.dmThreads.get(key);
 }
- 
+
 function dmRenderThread(withUser) {
   const box = document.getElementById("vz-dm-messages");
   if (!box) return;
- 
+
   box.innerHTML = "";
- 
+
   // Sticky “atpakaļ” josla
   const topBar = document.createElement("div");
   topBar.style.position = "sticky";
@@ -4422,7 +5127,7 @@ function dmRenderThread(withUser) {
   topBar.style.padding = "0 0 8px 0";
   topBar.style.background = "rgba(20,20,24,0.96)";
   topBar.style.backdropFilter = "blur(8px)";
- 
+
   const backBtn = document.createElement("button");
   backBtn.type = "button";
   backBtn.textContent = "← Inbox";
@@ -4433,16 +5138,18 @@ function dmRenderThread(withUser) {
   backBtn.style.color = "#fff";
   backBtn.style.fontWeight = "800";
   backBtn.addEventListener("click", () => dmShowInbox());
- 
+
   topBar.appendChild(backBtn);
   box.appendChild(topBar);
- 
+
   const thread = dmGetThread(withUser);
   const peerReadTs = Math.max(0, Number(state.dmPeerRead?.[withUser]) || 0);
-  const lastMy = [...thread].reverse().find((m) => m && m.from === state.username && !m.deleted);
+  const lastMy = [...thread]
+    .reverse()
+    .find((m) => m && m.from === state.username && !m.deleted);
   const lastMyId = lastMy ? String(lastMy.id || "") : "";
   const blocked = dmIsBlocked(withUser);
- 
+
   thread.forEach((m) => {
     if (!m) return;
     const isMe = m.from === state.username;
@@ -4473,7 +5180,8 @@ function dmRenderThread(withUser) {
     col.className = "dm-col " + (isMe ? "dm-col-me" : "dm-col-other");
 
     const bubble = document.createElement("div");
-    bubble.className = "dm-bubble " + (isMe ? "dm-bubble-me" : "dm-bubble-other");
+    bubble.className =
+      "dm-bubble " + (isMe ? "dm-bubble-me" : "dm-bubble-other");
     if (m.deleted) bubble.classList.add("dm-bubble-deleted");
 
     if (m.reply && m.reply.text) {
@@ -4556,7 +5264,8 @@ function dmRenderThread(withUser) {
     nameSpan.className = "dm-name";
     nameSpan.textContent = isMe ? "Tu" : String(m.from || "");
     if (!isMe && m.meta) {
-      if (typeof m.meta.rankLevel === "number") applyNameTierClass(nameSpan, m.meta.rankLevel);
+      if (typeof m.meta.rankLevel === "number")
+        applyNameTierClass(nameSpan, m.meta.rankLevel);
       if (m.meta.rankColor) applyRankColor(nameSpan, m.meta.rankColor);
     }
     meta.appendChild(nameSpan);
@@ -4585,7 +5294,12 @@ function dmRenderThread(withUser) {
       meta.appendChild(edited);
     }
 
-    if (isMe && lastMyId && String(m.id || "") === lastMyId && peerReadTs >= (Number(m.ts) || 0)) {
+    if (
+      isMe &&
+      lastMyId &&
+      String(m.id || "") === lastMyId &&
+      peerReadTs >= (Number(m.ts) || 0)
+    ) {
       const seen = document.createElement("span");
       seen.className = "dm-seen";
       const seenStr = new Date(peerReadTs).toLocaleTimeString("lv-LV", {
@@ -4604,61 +5318,71 @@ function dmRenderThread(withUser) {
     row.appendChild(col);
     box.appendChild(row);
   });
- 
+
   box.scrollTop = box.scrollHeight;
   dmUpdateTypingIndicator();
 }
 
- function dmRenderInbox() {
+function dmRenderInbox() {
   const box = document.getElementById("vz-dm-messages");
   const inputRow = document.getElementById("vz-dm-input-row");
   const title = document.getElementById("vz-dm-title");
   const contextBar = document.getElementById("vz-dm-context");
   const typingBar = document.getElementById("vz-dm-typing");
   if (!box) return;
- 
+
   if (title) title.textContent = "Privātais čats";
   if (inputRow) inputRow.style.display = "none";
   if (contextBar) contextBar.style.display = "none";
   if (typingBar) typingBar.style.display = "none";
- 
+
   box.innerHTML = "";
- 
+
   const normName = (v) => String(v || "").trim();
   const keyOf = (name) => normName(name).toLowerCase();
- 
+
   // dedupe/merge case-insensitive
   const byKey = new Map(); // lower -> { name, unread, lastTs, lastText }
- 
+
   const upsert = (name, unread, lastTs, lastText) => {
     const n = normName(name);
     if (!n || n === "SYSTEM" || n === state.username) return;
- 
+
     const k = keyOf(n);
     const u = Math.max(0, Number(unread) || 0);
     const ts = Math.max(0, Number(lastTs) || 0);
     const txt = String(lastText || "").slice(0, 60);
- 
+
     const prev = byKey.get(k);
     if (!prev) {
       byKey.set(k, { name: n, unread: u, lastTs: ts, lastText: txt });
       return;
     }
- 
+
     // prefer a "nice" casing (from preview / existing thread key)
     const bestName = prev.name && prev.name.length >= n.length ? prev.name : n;
- 
+
     // merge unread (keep the max; server + local may differ briefly)
     const bestUnread = Math.max(prev.unread || 0, u);
- 
+
     // keep newest lastTs/lastText
     if (ts > (prev.lastTs || 0)) {
-      byKey.set(k, { name: bestName, unread: bestUnread, lastTs: ts, lastText: txt });
+      byKey.set(k, {
+        name: bestName,
+        unread: bestUnread,
+        lastTs: ts,
+        lastText: txt,
+      });
     } else {
-      byKey.set(k, { name: bestName, unread: bestUnread, lastTs: prev.lastTs || 0, lastText: prev.lastText || "" });
+      byKey.set(k, {
+        name: bestName,
+        unread: bestUnread,
+        lastTs: prev.lastTs || 0,
+        lastText: prev.lastText || "",
+      });
     }
   };
- 
+
   // 1) servera inbox preview (pēc refresh uzreiz ir saraksts)
   if (Array.isArray(state.dmInboxPreview)) {
     for (const t of state.dmInboxPreview) {
@@ -4666,155 +5390,153 @@ function dmRenderThread(withUser) {
       upsert(t.with, t.unread, t.lastTs, t.lastText);
     }
   }
- 
+
   // 2) fallback + merge: lokālie threadi/unread (ja preview nav vai nav pilns)
   const users = new Set([
     ...Object.keys(state.dmUnreadByUser || {}),
     ...Array.from(state.dmThreads.keys()),
   ]);
- 
+
   for (const u of users) {
     const name = normName(u);
     if (!name || name === "SYSTEM" || name === state.username) continue;
- 
+
     const unread = Math.max(0, Number(state.dmUnreadByUser?.[u]) || 0);
     const thread = state.dmThreads.get(name) || [];
     const last = thread.length ? thread[thread.length - 1] : null;
     const lastTs = last ? Number(last.ts) || 0 : 0;
     const lastText = last ? String(last.text || "") : "";
- 
+
     upsert(name, unread, lastTs, lastText);
   }
- 
+
   const items = Array.from(byKey.values());
   items.sort(
     (a, b) =>
-      (b.unread - a.unread) ||
-      (b.lastTs - a.lastTs) ||
-      a.name.localeCompare(b.name)
+      b.unread - a.unread || b.lastTs - a.lastTs || a.name.localeCompare(b.name)
   );
- 
+
   if (!items.length) {
     const empty = document.createElement("div");
     empty.style.opacity = "0.8";
-    empty.textContent = "Inbox tukšs. Atver profilu un spied “Rakstīt privāti”.";
+    empty.textContent =
+      "Inbox tukšs. Atver profilu un spied “Rakstīt privāti”.";
     box.appendChild(empty);
     return;
   }
- 
- items.forEach((it, idx) => {
-  const row = document.createElement("button");
-  row.type = "button";
-  row.className = "dm-inbox-row";
-  row.style.display = "flex";
-  row.style.alignItems = "center";
-  row.style.justifyContent = "space-between";
-  row.style.gap = "10px";
-  row.style.width = "100%";
-  row.style.textAlign = "left";
-  row.style.padding = "10px 10px";
-  row.style.borderRadius = "12px";
-  row.style.border = "1px solid rgba(255,255,255,0.10)";
-  row.style.background = "rgba(255,255,255,0.06)";
-  row.style.color = "#fff";
-  row.style.cursor = "pointer";
-  if (it.unread > 0) row.classList.add("dm-inbox-row-unread");
-  if (idx === 0) row.classList.add("dm-inbox-row-latest");
- 
-  // Left side: avatar + texts
-  const leftWrap = document.createElement("div");
-  leftWrap.style.display = "flex";
-  leftWrap.style.alignItems = "center";
-  leftWrap.style.gap = "10px";
-  leftWrap.style.minWidth = "0";
- 
-  const avatarWrap = document.createElement("div");
-  avatarWrap.style.width = "34px";
-  avatarWrap.style.height = "34px";
-  avatarWrap.style.borderRadius = "12px";
-  avatarWrap.style.overflow = "hidden";
-  avatarWrap.style.flex = "0 0 34px";
-  avatarWrap.style.border = "1px solid rgba(255,255,255,0.10)";
-  avatarWrap.style.background = "rgba(255,255,255,0.06)";
- 
-  const img = document.createElement("img");
-  img.style.width = "100%";
-  img.style.height = "100%";
-  img.style.objectFit = "cover";
-  img.style.display = "none";
- 
-  const init = document.createElement("div");
-  init.style.width = "100%";
-  init.style.height = "100%";
-  init.style.display = "flex";
-  init.style.alignItems = "center";
-  init.style.justifyContent = "center";
-  init.style.fontWeight = "900";
-  init.style.color = "#fff";
-  init.style.background = "rgba(255,255,255,0.06)";
- 
-  avatarWrap.appendChild(img);
-  avatarWrap.appendChild(init);
- 
-  applyMiniAvatar(it.name, img, init);
- 
-  const textCol = document.createElement("div");
-  textCol.style.display = "flex";
-  textCol.style.flexDirection = "column";
-  textCol.style.gap = "2px";
-  textCol.style.minWidth = "0";
- 
-  const nameEl = document.createElement("div");
-  nameEl.style.fontWeight = "900";
-  nameEl.textContent = it.name;
- 
-  const sub = document.createElement("div");
-  sub.style.fontSize = "12px";
-  sub.style.opacity = "0.75";
-  sub.style.whiteSpace = "nowrap";
-  sub.style.overflow = "hidden";
-  sub.style.textOverflow = "ellipsis";
-  sub.textContent = it.lastText ? String(it.lastText).slice(0, 60) : "—";
-  if (it.unread > 0) sub.classList.add("dm-inbox-sub-unread");
- 
-  textCol.appendChild(nameEl);
-  textCol.appendChild(sub);
- 
-  leftWrap.appendChild(avatarWrap);
-  leftWrap.appendChild(textCol);
- 
-  // Right side: unread badge
-  const right = document.createElement("div");
-  right.style.display = "flex";
-  right.style.alignItems = "center";
-  right.style.gap = "8px";
- 
-  if (it.unread > 0) {
-    const b = document.createElement("div");
-    b.style.minWidth = "22px";
-    b.style.height = "22px";
-    b.style.padding = "0 7px";
-    b.style.display = "flex";
-    b.style.alignItems = "center";
-    b.style.justifyContent = "center";
-    b.style.borderRadius = "999px";
-    b.style.background = "#ef4444";
-    b.style.color = "#fff";
-    b.style.fontWeight = "900";
-    b.style.fontSize = "12px";
-    b.textContent = String(Math.min(99, it.unread));
-    right.appendChild(b);
-  }
- 
-  row.appendChild(leftWrap);
-  row.appendChild(right);
- 
-  row.addEventListener("click", () => openDmWith(it.name));
-  box.appendChild(row);
-});
+
+  items.forEach((it, idx) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "dm-inbox-row";
+    row.style.display = "flex";
+    row.style.alignItems = "center";
+    row.style.justifyContent = "space-between";
+    row.style.gap = "10px";
+    row.style.width = "100%";
+    row.style.textAlign = "left";
+    row.style.padding = "10px 10px";
+    row.style.borderRadius = "12px";
+    row.style.border = "1px solid rgba(255,255,255,0.10)";
+    row.style.background = "rgba(255,255,255,0.06)";
+    row.style.color = "#fff";
+    row.style.cursor = "pointer";
+    if (it.unread > 0) row.classList.add("dm-inbox-row-unread");
+    if (idx === 0) row.classList.add("dm-inbox-row-latest");
+
+    // Left side: avatar + texts
+    const leftWrap = document.createElement("div");
+    leftWrap.style.display = "flex";
+    leftWrap.style.alignItems = "center";
+    leftWrap.style.gap = "10px";
+    leftWrap.style.minWidth = "0";
+
+    const avatarWrap = document.createElement("div");
+    avatarWrap.style.width = "34px";
+    avatarWrap.style.height = "34px";
+    avatarWrap.style.borderRadius = "12px";
+    avatarWrap.style.overflow = "hidden";
+    avatarWrap.style.flex = "0 0 34px";
+    avatarWrap.style.border = "1px solid rgba(255,255,255,0.10)";
+    avatarWrap.style.background = "rgba(255,255,255,0.06)";
+
+    const img = document.createElement("img");
+    img.style.width = "100%";
+    img.style.height = "100%";
+    img.style.objectFit = "cover";
+    img.style.display = "none";
+
+    const init = document.createElement("div");
+    init.style.width = "100%";
+    init.style.height = "100%";
+    init.style.display = "flex";
+    init.style.alignItems = "center";
+    init.style.justifyContent = "center";
+    init.style.fontWeight = "900";
+    init.style.color = "#fff";
+    init.style.background = "rgba(255,255,255,0.06)";
+
+    avatarWrap.appendChild(img);
+    avatarWrap.appendChild(init);
+
+    applyMiniAvatar(it.name, img, init);
+
+    const textCol = document.createElement("div");
+    textCol.style.display = "flex";
+    textCol.style.flexDirection = "column";
+    textCol.style.gap = "2px";
+    textCol.style.minWidth = "0";
+
+    const nameEl = document.createElement("div");
+    nameEl.style.fontWeight = "900";
+    nameEl.textContent = it.name;
+
+    const sub = document.createElement("div");
+    sub.style.fontSize = "12px";
+    sub.style.opacity = "0.75";
+    sub.style.whiteSpace = "nowrap";
+    sub.style.overflow = "hidden";
+    sub.style.textOverflow = "ellipsis";
+    sub.textContent = it.lastText ? String(it.lastText).slice(0, 60) : "—";
+    if (it.unread > 0) sub.classList.add("dm-inbox-sub-unread");
+
+    textCol.appendChild(nameEl);
+    textCol.appendChild(sub);
+
+    leftWrap.appendChild(avatarWrap);
+    leftWrap.appendChild(textCol);
+
+    // Right side: unread badge
+    const right = document.createElement("div");
+    right.style.display = "flex";
+    right.style.alignItems = "center";
+    right.style.gap = "8px";
+
+    if (it.unread > 0) {
+      const b = document.createElement("div");
+      b.style.minWidth = "22px";
+      b.style.height = "22px";
+      b.style.padding = "0 7px";
+      b.style.display = "flex";
+      b.style.alignItems = "center";
+      b.style.justifyContent = "center";
+      b.style.borderRadius = "999px";
+      b.style.background = "#ef4444";
+      b.style.color = "#fff";
+      b.style.fontWeight = "900";
+      b.style.fontSize = "12px";
+      b.textContent = String(Math.min(99, it.unread));
+      right.appendChild(b);
+    }
+
+    row.appendChild(leftWrap);
+    row.appendChild(right);
+
+    row.addEventListener("click", () => openDmWith(it.name));
+    box.appendChild(row);
+  });
 }
- 
- 
+
 function dmShowInbox() {
   ensureDmUi();
   const drawer = document.getElementById("vz-dm-drawer");
@@ -4837,42 +5559,44 @@ function openDmWith(username) {
     dmToast("Nevari rakstīt sev.");
     return;
   }
- 
- ensureDmUi();
- 
+
+  ensureDmUi();
+
   state.dmOpenWith = u;
   dmClearContext();
- 
+
   const drawer = document.getElementById("vz-dm-drawer");
   const title = document.getElementById("vz-dm-title");
   if (title) title.textContent = "Privātais čats ar " + u;
   if (drawer) drawer.style.display = "flex";
- 
+
   // ielādējam history + uzreiz notīram unread šai sarunai
   if (state.dmStorageMode !== "client") {
     state.socket.emit("dm.history", { with: u });
   }
   state.socket.emit("dm.read", { with: u });
   dmMarkReadLocal(u);
- const inputRow = document.getElementById("vz-dm-input-row");
-if (inputRow) inputRow.style.display = "flex";
+  const inputRow = document.getElementById("vz-dm-input-row");
+  if (inputRow) inputRow.style.display = "flex";
 
-dmRenderThread(u);
-dmUpdateBlockUi();
- 
+  dmRenderThread(u);
+  dmUpdateBlockUi();
+
   const inp = document.getElementById("vz-dm-input");
   if (inp) {
-    try { inp.focus(); } catch {}
+    try {
+      inp.focus();
+    } catch {}
   }
 }
- 
+
 function dmUpsertMessages(withUser, messages) {
   const u = String(withUser || "").trim();
   if (!u) return;
- 
+
   const thread = dmGetThread(u);
   const byId = new Map(thread.map((m, idx) => [String(m?.id || ""), idx]));
- 
+
   (messages || []).forEach((m) => {
     const id = String(m && m.id ? m.id : "");
     if (id && byId.has(id)) {
@@ -4882,11 +5606,11 @@ function dmUpsertMessages(withUser, messages) {
     }
     thread.push(m);
   });
- 
+
   while (thread.length > DM_THREAD_MAX_LOCAL) thread.shift();
   dmSchedulePersist();
 }
- 
+
 function dmSendCurrent() {
   const u = String(state.dmOpenWith || "").trim();
   if (!u || !state.socket) return;
@@ -4894,17 +5618,21 @@ function dmSendCurrent() {
     dmToast("Tu esi nobloķējis šo lietotāju.");
     return;
   }
- 
+
   const inp = document.getElementById("vz-dm-input");
   const text = inp ? String(inp.value || "").trim() : "";
   if (!text) return;
- 
+
   if (state.dmEdit && state.dmEdit.id) {
     state.socket.emit("dm.edit", { with: u, id: state.dmEdit.id, text });
     dmClearContext();
   } else {
     const reply = state.dmReply
-      ? { id: state.dmReply.id, from: state.dmReply.from, text: state.dmReply.text }
+      ? {
+          id: state.dmReply.id,
+          from: state.dmReply.from,
+          text: state.dmReply.text,
+        }
       : null;
     state.socket.emit("dm.send", { to: u, text, reply });
     dmClearContext();
@@ -5015,11 +5743,11 @@ async function refreshSeasonHttp() {
 }
 // ==================== DUEL COUNTDOWN UI ====================
 let duelCountdownId = null;
- 
+
 function ensureDuelCountdownUI() {
   let wrap = document.getElementById("vz-duel-countdown");
   if (wrap) return wrap;
- 
+
   wrap = document.createElement("div");
   wrap.id = "vz-duel-countdown";
   wrap.style.position = "fixed";
@@ -5031,7 +5759,7 @@ function ensureDuelCountdownUI() {
   wrap.style.pointerEvents = "none";
   wrap.style.background = "rgba(0,0,0,0.35)";
   wrap.style.backdropFilter = "blur(2px)";
- 
+
   const text = document.createElement("div");
   text.id = "vz-duel-countdown-text";
   text.style.fontSize = "64px";
@@ -5042,12 +5770,12 @@ function ensureDuelCountdownUI() {
   text.style.transform = "translateY(-10px)";
   text.style.opacity = "0";
   text.style.transition = "opacity 120ms ease, transform 120ms ease";
- 
+
   wrap.appendChild(text);
   document.body.appendChild(wrap);
   return wrap;
 }
- 
+
 function hideDuelStartCountdown() {
   const wrap = document.getElementById("vz-duel-countdown");
   if (wrap) wrap.style.display = "none";
@@ -5056,26 +5784,26 @@ function hideDuelStartCountdown() {
     duelCountdownId = null;
   }
 }
- 
+
 function showDuelStartCountdown(playStartsAt, serverNow, countdownMs) {
   const wrap = ensureDuelCountdownUI();
   const textEl = document.getElementById("vz-duel-countdown-text");
   if (!wrap || !textEl) return;
- 
+
   hideDuelStartCountdown();
- 
+
   const sn = Number(serverNow);
   if (Number.isFinite(sn)) duelServerOffsetMs = sn - Date.now();
- 
+
   const startsAt = Number(playStartsAt) || 0;
   if (!startsAt) return;
- 
+
   const cdMs = Number(countdownMs) > 0 ? Number(countdownMs) : 5000;
- 
+
   const tick = () => {
     const nowSrv = Date.now() + (duelServerOffsetMs || 0);
     const msLeft = startsAt - nowSrv;
- 
+
     // ja countdown jau beidzies
     if (msLeft <= 0) {
       textEl.textContent = "AIZIET!";
@@ -5087,16 +5815,16 @@ function showDuelStartCountdown(playStartsAt, serverNow, countdownMs) {
       setTimeout(() => hideDuelStartCountdown(), 650);
       return true; // stop interval
     }
- 
+
     // rādam tikai countdown logā (pēdējās cdMs milisekundēs)
     if (msLeft > cdMs) {
       wrap.style.display = "none";
       return false;
     }
- 
+
     const sec = Math.max(1, Math.ceil(msLeft / 1000));
     textEl.textContent = String(sec);
- 
+
     wrap.style.display = "flex";
     textEl.style.opacity = "0";
     textEl.style.transform = "translateY(-8px)";
@@ -5104,10 +5832,10 @@ function showDuelStartCountdown(playStartsAt, serverNow, countdownMs) {
       textEl.style.opacity = "1";
       textEl.style.transform = "translateY(0)";
     });
- 
+
     return false;
   };
- 
+
   if (tick()) return;
   duelCountdownId = setInterval(() => {
     if (tick()) {
@@ -5123,7 +5851,7 @@ let duelServerOffsetMs = 0; // NEW: servera laika nobīde
 function ensureDuelTimerUI() {
   if (document.getElementById("vz-duel-timer")) return;
   if (!gridEl) return;
- 
+
   const el = document.createElement("div");
   el.id = "vz-duel-timer";
   el.style.display = "none";
@@ -5136,36 +5864,36 @@ function ensureDuelTimerUI() {
   el.style.fontWeight = "800";
   el.style.textAlign = "center";
   el.style.letterSpacing = "0.5px";
- 
+
   gridEl.insertAdjacentElement("beforebegin", el);
 }
- 
+
 function startDuelTimer(expiresAt, serverNow) {
   ensureDuelTimerUI();
   const el = document.getElementById("vz-duel-timer");
   if (!el) return;
- 
+
   const exp = Number(expiresAt) || 0;
   if (!exp) return;
- 
+
   // NEW: sinhronizējam laiku pēc servera
   if (Number.isFinite(serverNow)) {
     duelServerOffsetMs = Number(serverNow) - Date.now();
   }
- 
+
   duelEndsAt = exp;
   el.style.display = "block";
- 
+
   if (duelTimerId) clearInterval(duelTimerId);
   duelTimerId = setInterval(() => {
     const now = Date.now() + (duelServerOffsetMs || 0);
     const msLeft = duelEndsAt - now;
- 
+
     const s = Math.max(0, Math.floor(msLeft / 1000));
     const mm = String(Math.floor(s / 60)).padStart(2, "0");
     const ss = String(s % 60).padStart(2, "0");
     el.textContent = `⏱️ ${mm}:${ss}`;
- 
+
     if (msLeft <= 0) {
       clearInterval(duelTimerId);
       duelTimerId = null;
@@ -5173,7 +5901,7 @@ function startDuelTimer(expiresAt, serverNow) {
     }
   }, 250);
 }
- 
+
 function stopDuelTimer() {
   const el = document.getElementById("vz-duel-timer");
   if (el) el.style.display = "none";
@@ -5184,10 +5912,10 @@ function stopDuelTimer() {
 }
 let duelInviteTimer = null;
 let pendingDuelInvite = null; // { duelId, from, len }
- 
+
 function ensureDuelInviteUI() {
   if (document.getElementById("vz-duel-invite")) return;
- 
+
   const box = document.createElement("div");
   box.id = "vz-duel-invite";
   box.style.position = "fixed";
@@ -5203,24 +5931,24 @@ function ensureDuelInviteUI() {
   box.style.color = "#fff";
   box.style.display = "none";
   box.style.boxShadow = "0 10px 30px rgba(0,0,0,0.35)";
- 
+
   const title = document.createElement("div");
   title.style.fontWeight = "700";
   title.style.marginBottom = "6px";
   title.textContent = "⚔️ Duelis";
   box.appendChild(title);
- 
+
   const text = document.createElement("div");
   text.id = "vz-duel-invite-text";
   text.style.fontSize = "14px";
   text.style.opacity = "0.95";
   text.style.marginBottom = "10px";
   box.appendChild(text);
- 
+
   const row = document.createElement("div");
   row.style.display = "flex";
   row.style.gap = "8px";
- 
+
   const btnNo = document.createElement("button");
   btnNo.type = "button";
   btnNo.textContent = "Noraidīt";
@@ -5231,7 +5959,7 @@ function ensureDuelInviteUI() {
   btnNo.style.background = "rgba(255,255,255,0.06)";
   btnNo.style.color = "#fff";
   btnNo.addEventListener("click", () => declineDuelInvite(false));
- 
+
   const btnYes = document.createElement("button");
   btnYes.type = "button";
   btnYes.textContent = "Pieņemt";
@@ -5242,35 +5970,35 @@ function ensureDuelInviteUI() {
   btnYes.style.background = "rgba(60,180,120,0.35)";
   btnYes.style.color = "#fff";
   btnYes.addEventListener("click", () => acceptDuelInvite());
- 
+
   row.appendChild(btnNo);
   row.appendChild(btnYes);
   box.appendChild(row);
- 
+
   document.body.appendChild(box);
 }
- 
+
 function showDuelInvite(payload) {
   const duelId = payload?.duelId;
   if (!duelId) return;
- 
+
   pendingDuelInvite = {
     duelId,
     from: payload?.from || "kāds spēlētājs",
     len: payload?.len || 5,
   };
- 
+
   const box = document.getElementById("vz-duel-invite");
   const text = document.getElementById("vz-duel-invite-text");
   if (!box || !text) return;
- 
+
   text.textContent = `${pendingDuelInvite.from} tevi izaicina (${pendingDuelInvite.len} burti).`;
   box.style.display = "block";
- 
+
   if (duelInviteTimer) clearTimeout(duelInviteTimer);
   duelInviteTimer = setTimeout(() => declineDuelInvite(true), 12000);
 }
- 
+
 function hideDuelInviteUI() {
   const box = document.getElementById("vz-duel-invite");
   if (box) box.style.display = "none";
@@ -5278,14 +6006,14 @@ function hideDuelInviteUI() {
   duelInviteTimer = null;
   pendingDuelInvite = null;
 }
- 
+
 function declineDuelInvite(isAuto) {
   const duelId = pendingDuelInvite?.duelId;
   if (duelId && state.socket) state.socket.emit("duel.decline", { duelId });
   if (!isAuto) appendSystemMessage("⚔️ Duelis noraidīts.");
   hideDuelInviteUI();
 }
- 
+
 function acceptDuelInvite() {
   const duelId = pendingDuelInvite?.duelId;
   if (duelId && state.socket) state.socket.emit("duel.accept", { duelId });
@@ -5317,22 +6045,22 @@ function initSocket() {
   });
 
   state.socket = socket;
-socket.on("duel.invite", (payload) => {
-  const duelId = payload?.duelId;
-  if (!duelId) return;
- 
-  // ja jau duelī, vai notiek animācija/lock, vai tu šobrīd raksti minējumu -> noraidām, lai netraucē
-  const inActiveRound = !state.roundFinished && state.currentRow < state.rows;
-  const isTypingNow = state.currentCol > 0;
- 
-  if (state.duelMode || state.isLocked || (inActiveRound && isTypingNow)) {
-    socket.emit("duel.decline", { duelId });
-    return;
-  }
- 
-  ensureDuelInviteUI();
-  showDuelInvite(payload);
-});
+  socket.on("duel.invite", (payload) => {
+    const duelId = payload?.duelId;
+    if (!duelId) return;
+
+    // ja jau duelī, vai notiek animācija/lock, vai tu šobrīd raksti minējumu -> noraidām, lai netraucē
+    const inActiveRound = !state.roundFinished && state.currentRow < state.rows;
+    const isTypingNow = state.currentCol > 0;
+
+    if (state.duelMode || state.isLocked || (inActiveRound && isTypingNow)) {
+      socket.emit("duel.decline", { duelId });
+      return;
+    }
+
+    ensureDuelInviteUI();
+    showDuelInvite(payload);
+  });
   socket.on("connect", () => {
     if (_socketEverConnected) appendSystemMessage("Savienojums atjaunots.");
     else appendSystemMessage("Pieslēgts VĀRDU ZONAS serverim.");
@@ -5353,77 +6081,77 @@ socket.on("duel.invite", (payload) => {
     const arr = Array.isArray(payload)
       ? payload
       : payload && Array.isArray(payload.messages)
-      ? payload.messages
-      : [];
+        ? payload.messages
+        : [];
     if (!arr.length) return;
 
     const slice = arr.slice(-120);
     appendChatMessagesBulk(slice, { isHistory: true });
     clearUnreadIfNeeded();
   });
-socket.on("chatMessage", (payload) => {
-  // serveris parasti sūta objektu {username,text,ts,...}
-  if (typeof payload === "string") {
-    appendChatMessage({ username: "SYSTEM", text: payload, ts: Date.now() });
-  } else if (payload && typeof payload === "object") {
-    appendChatMessage(payload);
-  }
-  clearUnreadIfNeeded();
-});
- socket.on("dm.unread", (payload) => {
-  ensureDmUi();
-  if (payload?.mode) state.dmStorageMode = payload.mode;
-  if (state.dmStorageMode === "client") {
-    dmSetBadge(state.dmUnreadTotal, state.dmUnreadByUser);
-    state.dmInboxPreview = [];
-    return;
-  }
- 
-  const total = payload?.total ?? payload?.count ?? 0;
-  const byUser = payload?.byUser || {};
-  dmSetBadge(total, byUser);
- 
-  // NEW: servera inbox preview (lai pēc refresh ir saraksts)
-  const threads = Array.isArray(payload?.threads) ? payload.threads : [];
-  state.dmInboxPreview = threads;
- 
-  // izvēlamies “pēdējo” sarunu (prioritāte: unread, pēc tam lastTs)
-  if (!state.dmLastFrom) {
-    let best = null;
-    for (const t of threads) {
-      if (!t || !t.with) continue;
-      const cand = {
-        with: String(t.with || "").trim(),
-        unread: Math.max(0, Number(t.unread) || 0),
-        lastTs: Math.max(0, Number(t.lastTs) || 0),
-      };
-      if (!cand.with) continue;
- 
-      if (
-        !best ||
-        cand.unread > best.unread ||
-        (cand.unread === best.unread && cand.lastTs > best.lastTs)
-      ) {
-        best = cand;
-      }
+  socket.on("chatMessage", (payload) => {
+    // serveris parasti sūta objektu {username,text,ts,...}
+    if (typeof payload === "string") {
+      appendChatMessage({ username: "SYSTEM", text: payload, ts: Date.now() });
+    } else if (payload && typeof payload === "object") {
+      appendChatMessage(payload);
     }
- 
-    if (best && best.with) state.dmLastFrom = best.with;
-    else {
-      // fallback uz veco byUser loģiku
-      let bestU = "";
-      let bestC = 0;
-      for (const [k, v] of Object.entries(byUser)) {
-        const c = Math.max(0, Number(v) || 0);
-        if (c > bestC) {
-          bestC = c;
-          bestU = String(k || "").trim();
+    clearUnreadIfNeeded();
+  });
+  socket.on("dm.unread", (payload) => {
+    ensureDmUi();
+    if (payload?.mode) state.dmStorageMode = payload.mode;
+    if (state.dmStorageMode === "client") {
+      dmSetBadge(state.dmUnreadTotal, state.dmUnreadByUser);
+      state.dmInboxPreview = [];
+      return;
+    }
+
+    const total = payload?.total ?? payload?.count ?? 0;
+    const byUser = payload?.byUser || {};
+    dmSetBadge(total, byUser);
+
+    // NEW: servera inbox preview (lai pēc refresh ir saraksts)
+    const threads = Array.isArray(payload?.threads) ? payload.threads : [];
+    state.dmInboxPreview = threads;
+
+    // izvēlamies “pēdējo” sarunu (prioritāte: unread, pēc tam lastTs)
+    if (!state.dmLastFrom) {
+      let best = null;
+      for (const t of threads) {
+        if (!t || !t.with) continue;
+        const cand = {
+          with: String(t.with || "").trim(),
+          unread: Math.max(0, Number(t.unread) || 0),
+          lastTs: Math.max(0, Number(t.lastTs) || 0),
+        };
+        if (!cand.with) continue;
+
+        if (
+          !best ||
+          cand.unread > best.unread ||
+          (cand.unread === best.unread && cand.lastTs > best.lastTs)
+        ) {
+          best = cand;
         }
       }
-      if (bestU) state.dmLastFrom = bestU;
+
+      if (best && best.with) state.dmLastFrom = best.with;
+      else {
+        // fallback uz veco byUser loģiku
+        let bestU = "";
+        let bestC = 0;
+        for (const [k, v] of Object.entries(byUser)) {
+          const c = Math.max(0, Number(v) || 0);
+          if (c > bestC) {
+            bestC = c;
+            bestU = String(k || "").trim();
+          }
+        }
+        if (bestU) state.dmLastFrom = bestU;
+      }
     }
-  }
-});
+  });
 
   socket.on("dm.blocked", (payload) => {
     const list = Array.isArray(payload?.list) ? payload.list : [];
@@ -5434,7 +6162,7 @@ socket.on("chatMessage", (payload) => {
   socket.on("friends.update", (payload) => {
     applyFriendsPayload(payload);
   });
- 
+
   socket.on("dm.history", (payload) => {
     const withUser = String(payload?.with || "").trim();
     const messages = Array.isArray(payload?.messages) ? payload.messages : [];
@@ -5445,14 +6173,20 @@ socket.on("chatMessage", (payload) => {
       if (state.dmOpenWith === withUser) dmRenderThread(withUser);
       return;
     }
- 
-    if (payload && Object.prototype.hasOwnProperty.call(payload, "peerLastRead")) {
-      state.dmPeerRead[withUser] = Math.max(0, Number(payload.peerLastRead) || 0);
+
+    if (
+      payload &&
+      Object.prototype.hasOwnProperty.call(payload, "peerLastRead")
+    ) {
+      state.dmPeerRead[withUser] = Math.max(
+        0,
+        Number(payload.peerLastRead) || 0
+      );
     }
     dmUpsertMessages(withUser, messages);
     if (state.dmOpenWith === withUser) dmRenderThread(withUser);
   });
- 
+
   socket.on("dm.message", (payload) => {
     const msg = payload?.message;
     const from = String(msg?.from || "").trim();
@@ -5474,16 +6208,17 @@ socket.on("chatMessage", (payload) => {
         supporter: !!fu.supporter,
       };
     }
- 
+
     dmUpsertMessages(from, [msg]);
 
     if (isClientMode && state.dmOpenWith !== from) {
       dmIncrementUnread(from);
     }
- 
+
     // kluss paziņojums (netraucē spēlei)
-    if (state.dmOpenWith !== from) dmToast(`✉️ Jauna ziņa no ${from}: ${String(msg?.text || "")}`, from);
- 
+    if (state.dmOpenWith !== from)
+      dmToast(`✉️ Jauna ziņa no ${from}: ${String(msg?.text || "")}`, from);
+
     // ja saruna ir atvērta, uzreiz atzīmējam kā izlasītu
     if (state.dmOpenWith === from) {
       dmRenderThread(from);
@@ -5491,13 +6226,13 @@ socket.on("chatMessage", (payload) => {
       dmMarkReadLocal(from);
     }
   });
- 
+
   socket.on("dm.sent", (payload) => {
     const msg = payload?.message;
     const withUser = String(payload?.with || msg?.to || "").trim();
     if (!withUser || !msg) return;
     if (payload?.mode) state.dmStorageMode = payload.mode;
- 
+
     dmUpsertMessages(withUser, [msg]);
     if (state.dmOpenWith === withUser) dmRenderThread(withUser);
   });
@@ -5536,7 +6271,7 @@ socket.on("chatMessage", (payload) => {
     dmUpsertMessages(withUser, [{ id, deleted: true, text: "" }]);
     if (state.dmOpenWith === withUser) dmRenderThread(withUser);
   });
- 
+
   socket.on("dm.error", (payload) => {
     const m = payload?.message || "DM kļūda.";
     dmToast("❌ " + m);
@@ -5545,17 +6280,17 @@ socket.on("chatMessage", (payload) => {
     dmToast("✅ Paldies! Ziņojums nosūtīts.");
   });
   socket.on("dm.cleared", (payload) => {
-  const u = String(payload?.with || "").trim();
-  if (!u) return;
-  if (payload?.mode) state.dmStorageMode = payload.mode;
-  state.dmThreads.delete(u);
-  dmMarkReadLocal(u);
-  dmSchedulePersist();
-  if (state.dmOpenWith === u) {
-    state.dmOpenWith = null;
-    dmShowInbox();
-  }
-});
+    const u = String(payload?.with || "").trim();
+    if (!u) return;
+    if (payload?.mode) state.dmStorageMode = payload.mode;
+    state.dmThreads.delete(u);
+    dmMarkReadLocal(u);
+    dmSchedulePersist();
+    if (state.dmOpenWith === u) {
+      state.dmOpenWith = null;
+      dmShowInbox();
+    }
+  });
   socket.on("onlineList", (data) => {
     updateOnlineList(data);
   });
@@ -5589,208 +6324,230 @@ socket.on("chatMessage", (payload) => {
   });
 
   // ===== DUEĻI =====
- socket.on("duel.error", (payload) => {
-  const msg = payload?.message || "Nezināma duēļa kļūda.";
-  appendSystemMessage("❌ Duēlis: " + msg);
-  if (!duelCountdownId) state.isLocked = false;
-});
- 
-socket.on("duel.waiting", (payload) => {
-  const opp = payload?.opponent || "pretinieks";
-  appendSystemMessage(`⏳ Izaicinājums nosūtīts ${opp}. Gaidām atbildi...`);
-});
- 
-socket.on("duel.start", (payload) => {
-  hideDuelInviteUI();
-  const { duelId, len, opponent } = payload || {};
-  state.duelMode = true;
-  state.duelId = duelId;
-  state.duelOpponent = opponent || null;
- 
-  resetGrid(len || 5);
-  if (gameMessageEl) {
-    gameMessageEl.textContent = `⚔️ Duēlis pret ${opponent || "pretinieks"} — pirmais, kurš atmin, uzvar!`;
-  }
-  appendSystemMessage(`⚔️ Duēlis sākas pret ${opponent || "pretinieks"} (${len} burti).`);
- const sn = Number(payload?.serverNow);
-const base = Number.isFinite(payload?.startedAt) ? Number(payload.startedAt) : (Number.isFinite(sn) ? sn : Date.now());
-const exp = payload?.expiresAt || (base + 2 * 60 * 1000);
-state.isLocked = true;
- 
-if (Number.isFinite(sn)) duelServerOffsetMs = sn - Date.now();
-const playStartsAt = Number(payload?.startedAt) || (Date.now() + (duelServerOffsetMs || 0) + 5000);
- 
-showDuelStartCountdown(playStartsAt, sn, payload?.countdownMs);
-const delayMs = Math.max(0, playStartsAt - (Date.now() + (duelServerOffsetMs || 0))); 
-setTimeout(() => {
-  state.isLocked = false;
-  startDuelTimer(exp, sn);
-}, delayMs)
-});
- 
-// refresh/reconnect turpina dueli
-socket.on("duel.resume", (payload) => {
-  const { duelId, len, opponent, history } = payload || {};
-  if (!duelId) return;
- 
-  state.duelMode = true;
-  state.duelId = duelId;
-  state.duelOpponent = opponent || null;
- 
-  resetGrid(len || 5);
- const sn = Number(payload?.serverNow);
-const base = Number.isFinite(payload?.startedAt) ? Number(payload.startedAt) : (Number.isFinite(sn) ? sn : Date.now());
-const exp = payload?.expiresAt || (base + 2 * 60 * 1000);
-if (Number.isFinite(sn)) duelServerOffsetMs = sn - Date.now();
-const nowSrv = Date.now() + (duelServerOffsetMs || 0);
-const playStartsAt = Number(payload?.startedAt) || 0;
- 
-if (playStartsAt && nowSrv < playStartsAt) {
-  state.isLocked = true;
-  showDuelStartCountdown(playStartsAt, sn, payload?.countdownMs);
- 
-  const delayMs = Math.max(0, playStartsAt - nowSrv);
-  setTimeout(() => {
-    state.isLocked = false;
-    startDuelTimer(exp, sn);
-  }, delayMs);
-} else {
-  startDuelTimer(exp, sn);
-}
- 
-  (history || []).forEach((h, r) => {
-    const guess = String(h?.guess || "");
-    for (let c = 0; c < guess.length; c++) {
-      const tile = state.gridTiles?.[r]?.[c];
-      if (!tile) continue;
-      tile.dataset.letter = guess[c];
-      tile.textContent = guess[c];
-    }
-    revealRow(r, h?.pattern || [], { animate: false });
+  socket.on("duel.error", (payload) => {
+    const msg = payload?.message || "Nezināma duēļa kļūda.";
+    appendSystemMessage("❌ Duēlis: " + msg);
+    if (!duelCountdownId) state.isLocked = false;
   });
- state.currentRow = (history || []).length;
-state.currentCol = 0;
-skipHintLockedForward();
-}); // <-- ŠIS AIZVER socket.on("duel.resume", ...)
 
-const onDuelGuessResult = async (payload) => {
-  const { duelId, pattern, win, finished } = payload || {};
-  if (!state.duelMode || duelId !== state.duelId) return;
- 
-    revealRow(state.currentRow, pattern || []);
-  const unlockAfter = revealDurationMs();
- 
-  if (win) {
-    if (gameMessageEl) gameMessageEl.textContent = "Tu uzminēji dueli!";
-    playSound(sWin);
-    setTimeout(() => showWinEffects(), Math.min(120, unlockAfter));
-    state.roundFinished = true;
+  socket.on("duel.waiting", (payload) => {
+    const opp = payload?.opponent || "pretinieks";
+    appendSystemMessage(`⏳ Izaicinājums nosūtīts ${opp}. Gaidām atbildi...`);
+  });
+
+  socket.on("duel.start", (payload) => {
+    hideDuelInviteUI();
+    const { duelId, len, opponent } = payload || {};
+    state.duelMode = true;
+    state.duelId = duelId;
+    state.duelOpponent = opponent || null;
+
+    resetGrid(len || 5);
+    if (gameMessageEl) {
+      gameMessageEl.textContent = `⚔️ Duēlis pret ${opponent || "pretinieks"} — pirmais, kurš atmin, uzvar!`;
+    }
+    appendSystemMessage(
+      `⚔️ Duēlis sākas pret ${opponent || "pretinieks"} (${len} burti).`
+    );
+    const sn = Number(payload?.serverNow);
+    const base = Number.isFinite(payload?.startedAt)
+      ? Number(payload.startedAt)
+      : Number.isFinite(sn)
+        ? sn
+        : Date.now();
+    const exp = payload?.expiresAt || base + 2 * 60 * 1000;
     state.isLocked = true;
-    setTimeout(recordWinAndMaybeShowRatePrompt, unlockAfter + 600);
-    return;
-  }
- 
-  if (finished) {
-    if (gameMessageEl) gameMessageEl.textContent = "Tev beidzās mēģinājumi duelī.";
-    setTimeout(() => playSound(sLose), Math.min(120, unlockAfter));
-    state.roundFinished = true;
-    state.isLocked = true;
-    return;
-  }
- 
-  setTimeout(() => {
-    state.currentRow++;
+
+    if (Number.isFinite(sn)) duelServerOffsetMs = sn - Date.now();
+    const playStartsAt =
+      Number(payload?.startedAt) ||
+      Date.now() + (duelServerOffsetMs || 0) + 5000;
+
+    showDuelStartCountdown(playStartsAt, sn, payload?.countdownMs);
+    const delayMs = Math.max(
+      0,
+      playStartsAt - (Date.now() + (duelServerOffsetMs || 0))
+    );
+    setTimeout(() => {
+      state.isLocked = false;
+      startDuelTimer(exp, sn);
+    }, delayMs);
+  });
+
+  // refresh/reconnect turpina dueli
+  socket.on("duel.resume", (payload) => {
+    const { duelId, len, opponent, history } = payload || {};
+    if (!duelId) return;
+
+    state.duelMode = true;
+    state.duelId = duelId;
+    state.duelOpponent = opponent || null;
+
+    resetGrid(len || 5);
+    const sn = Number(payload?.serverNow);
+    const base = Number.isFinite(payload?.startedAt)
+      ? Number(payload.startedAt)
+      : Number.isFinite(sn)
+        ? sn
+        : Date.now();
+    const exp = payload?.expiresAt || base + 2 * 60 * 1000;
+    if (Number.isFinite(sn)) duelServerOffsetMs = sn - Date.now();
+    const nowSrv = Date.now() + (duelServerOffsetMs || 0);
+    const playStartsAt = Number(payload?.startedAt) || 0;
+
+    if (playStartsAt && nowSrv < playStartsAt) {
+      state.isLocked = true;
+      showDuelStartCountdown(playStartsAt, sn, payload?.countdownMs);
+
+      const delayMs = Math.max(0, playStartsAt - nowSrv);
+      setTimeout(() => {
+        state.isLocked = false;
+        startDuelTimer(exp, sn);
+      }, delayMs);
+    } else {
+      startDuelTimer(exp, sn);
+    }
+
+    (history || []).forEach((h, r) => {
+      const guess = String(h?.guess || "");
+      for (let c = 0; c < guess.length; c++) {
+        const tile = state.gridTiles?.[r]?.[c];
+        if (!tile) continue;
+        tile.dataset.letter = guess[c];
+        tile.textContent = guess[c];
+      }
+      revealRow(r, h?.pattern || [], { animate: false });
+    });
+    state.currentRow = (history || []).length;
     state.currentCol = 0;
     skipHintLockedForward();
-    state.isLocked = false;
-  }, unlockAfter);
- 
-  setTimeout(async () => {
+  }); // <-- ŠIS AIZVER socket.on("duel.resume", ...)
+
+  const onDuelGuessResult = async (payload) => {
+    const { duelId, pattern, win, finished } = payload || {};
+    if (!state.duelMode || duelId !== state.duelId) return;
+
+    revealRow(state.currentRow, pattern || []);
+    const unlockAfter = revealDurationMs();
+
+    if (win) {
+      if (gameMessageEl) gameMessageEl.textContent = "Tu uzminēji dueli!";
+      playSound(sWin);
+      setTimeout(() => showWinEffects(), Math.min(120, unlockAfter));
+      state.roundFinished = true;
+      state.isLocked = true;
+      setTimeout(recordWinAndMaybeShowRatePrompt, unlockAfter + 600);
+      return;
+    }
+
+    if (finished) {
+      if (gameMessageEl)
+        gameMessageEl.textContent = "Tev beidzās mēģinājumi duelī.";
+      setTimeout(() => playSound(sLose), Math.min(120, unlockAfter));
+      state.roundFinished = true;
+      state.isLocked = true;
+      return;
+    }
+
+    setTimeout(() => {
+      state.currentRow++;
+      state.currentCol = 0;
+      skipHintLockedForward();
+      state.isLocked = false;
+    }, unlockAfter);
+
+    setTimeout(async () => {
+      try {
+        const me = await apiGet("/me");
+        updatePlayerCard(me);
+      } catch {}
+    }, unlockAfter);
+  };
+
+  // klausāmies abus eventus (dažādiem servera variantiem)
+  socket.on("duel.guessResult", onDuelGuessResult);
+
+  socket.on("duel.end", async (payload) => {
+    hideDuelStartCountdown();
+    stopDuelTimer();
+    const { duelId, winner, youWin, reason } = payload || {};
+    const isDraw =
+      !winner &&
+      (reason === "timeout" ||
+        reason === "no_attempts" ||
+        reason === "no_winner");
+    const opponentName = payload?.opponent || state.duelOpponent || null;
+    const ranked = payload?.ranked !== false; // default = ranked
+    if (duelId && state.duelId && duelId !== state.duelId) return;
+
+    state.duelMode = false;
+    state.duelId = null;
+    state.duelOpponent = null;
+    state.isLocked = true;
+    state.roundFinished = true;
+
+    let msg = "";
+    if (youWin) msg = "⚔️ Duēlis beidzies — tu uzvarēji!";
+    else if (winner) msg = `⚔️ Duēlis beidzies — uzvarēja ${winner}.`;
+    else if (reason === "declined") msg = "⚔️ Duēlis tika atteikts.";
+    else if (isDraw) msg = "⚔️ Neizšķirts!";
+    else msg = "⚔️ Duēlis beidzies.";
+
+    appendSystemMessage(msg);
+    if (gameMessageEl) gameMessageEl.textContent = msg;
+
     try {
       const me = await apiGet("/me");
       updatePlayerCard(me);
     } catch {}
-  }, unlockAfter);
-};
- 
-// klausāmies abus eventus (dažādiem servera variantiem)
-socket.on("duel.guessResult", onDuelGuessResult);
- 
-socket.on("duel.end", async (payload) => {
-    hideDuelStartCountdown(); 
-    stopDuelTimer();
-  const { duelId, winner, youWin, reason } = payload || {};
-  const isDraw = !winner && (reason === "timeout" || reason === "no_attempts" || reason === "no_winner");
-  const opponentName = payload?.opponent || state.duelOpponent || null;
- const ranked = payload?.ranked !== false; // default = ranked
-  if (duelId && state.duelId && duelId !== state.duelId) return;
- 
-  state.duelMode = false;
-  state.duelId = null;
-  state.duelOpponent = null;
-  state.isLocked = true;
-  state.roundFinished = true;
- 
-  let msg = "";
-  if (youWin) msg = "⚔️ Duēlis beidzies — tu uzvarēji!";
-  else if (winner) msg = `⚔️ Duēlis beidzies — uzvarēja ${winner}.`;
-  else if (reason === "declined") msg = "⚔️ Duēlis tika atteikts.";
-  else if (isDraw) msg = "⚔️ Neizšķirts!";
-  else msg = "⚔️ Duēlis beidzies.";
- 
-  appendSystemMessage(msg);
-  if (gameMessageEl) gameMessageEl.textContent = msg;
- 
-  try {
-    const me = await apiGet("/me");
-    updatePlayerCard(me);
-  } catch {}
- 
-  if (youWin || winner || isDraw) {
-   showDuelResultOverlay({
-  winner,
-  youWin,
-  opponent: opponentName,
-  reason,
-  scoreText: payload?.scoreText || "",
-  ranked,
-  yourElo: payload?.yourElo,
-  opponentElo: payload?.opponentElo,
-  eloDelta: payload?.eloDelta,
-});
- const rematchBtn = ensureDuelRematchBtn();
-if (rematchBtn) {
-  rematchBtn.style.display = opponentName ? "inline-block" : "none";
- rematchBtn.onclick = (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  hideDuelResultOverlay();
- 
-  // atbloķē un ļauj turpināt spēli gaidot revanšu
-  state.isLocked = false;
-  state.roundFinished = true;
-  startNewRound();
- 
-  socket.emit("duel.challenge", { target: opponentName, ranked });
-  appendSystemMessage(`🔁 Revanšs izaicinājums nosūtīts ${opponentName}.`);
-};
-}
-    if (newRoundBtn) {
-      newRoundBtn.style.display = "inline-block";
-      newRoundBtn.disabled = false;
-      setTimeout(scheduleFitGrid, 0);
+
+    if (youWin || winner || isDraw) {
+      showDuelResultOverlay({
+        winner,
+        youWin,
+        opponent: opponentName,
+        reason,
+        scoreText: payload?.scoreText || "",
+        ranked,
+        yourElo: payload?.yourElo,
+        opponentElo: payload?.opponentElo,
+        eloDelta: payload?.eloDelta,
+      });
+      const rematchBtn = ensureDuelRematchBtn();
+      if (rematchBtn) {
+        rematchBtn.style.display = opponentName ? "inline-block" : "none";
+        rematchBtn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          hideDuelResultOverlay();
+
+          // atbloķē un ļauj turpināt spēli gaidot revanšu
+          state.isLocked = false;
+          state.roundFinished = true;
+          startNewRound();
+
+          socket.emit("duel.challenge", { target: opponentName, ranked });
+          appendSystemMessage(
+            `🔁 Revanšs izaicinājums nosūtīts ${opponentName}.`
+          );
+        };
+      }
+      if (newRoundBtn) {
+        newRoundBtn.style.display = "inline-block";
+        newRoundBtn.disabled = false;
+        setTimeout(scheduleFitGrid, 0);
+      }
+    } else {
+      hideDuelResultOverlay();
+
+      if (newRoundBtn) {
+        newRoundBtn.style.display = "none";
+        newRoundBtn.disabled = true;
+      }
+
+      setTimeout(() => startNewRound(), 1200);
     }
-  } else {
-    hideDuelResultOverlay();
- 
-    if (newRoundBtn) {
-      newRoundBtn.style.display = "none";
-      newRoundBtn.disabled = true;
-    }
- 
-    setTimeout(() => startNewRound(), 1200);
-  }
-});
+  });
 }
 // ==================== ČATS: SŪTĪŠANA + SEZONAS KOMANDA ====================
 let _lastChatSendAt = 0;
@@ -5810,7 +6567,9 @@ async function sendChatMessage() {
   }
 
   if (text.length > CHAT_MAX_LEN) {
-    appendSystemMessage(`Ziņa par gara (${text.length}/${CHAT_MAX_LEN}). Saīsini un sūti vēlreiz.`);
+    appendSystemMessage(
+      `Ziņa par gara (${text.length}/${CHAT_MAX_LEN}). Saīsini un sūti vēlreiz.`
+    );
     playSound(sError);
     return;
   }
@@ -5829,7 +6588,9 @@ async function sendChatMessage() {
     try {
       const season = await apiPost("/season/start", {});
       applySeasonState(season);
-      appendSystemMessage(`📢 ${(season && season.name) || "SEZONA"} ir startēta!`);
+      appendSystemMessage(
+        `📢 ${(season && season.name) || "SEZONA"} ir startēta!`
+      );
     } catch (err) {
       console.error("Sezonas start kļūda (čats):", err);
       appendSystemMessage(err.message || "Neizdevās startēt sezonu.");
@@ -5850,7 +6611,9 @@ async function handleBuyToken() {
     const data = await apiPost("/buy-token", {});
     if (playerCoinsEl) playerCoinsEl.textContent = data.coins;
     if (playerTokensEl) playerTokensEl.textContent = data.tokens;
-    appendSystemMessage(`🎟️ Tu nopirki 1 žetonu! Tagad tev ir ${data.tokens} žetoni.`);
+    appendSystemMessage(
+      `🎟️ Tu nopirki 1 žetonu! Tagad tev ir ${data.tokens} žetoni.`
+    );
     playSound(sToken);
 
     // papildus sync, ja serveris maina vēl ko (rank/xp/mission progress utt.)
@@ -5869,7 +6632,7 @@ async function handleBuyToken() {
 // ==================== DAILY CHEST (frontend) ====================
 let _chestStatus = null;
 let _chestTickTimer = null;
- 
+
 function formatMsShort(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
   const hh = String(Math.floor(s / 3600)).padStart(2, "0");
@@ -5877,51 +6640,51 @@ function formatMsShort(ms) {
   const ss = String(s % 60).padStart(2, "0");
   return `${hh}:${mm}:${ss}`;
 }
- 
+
 function ensureDailyChestUi() {
   if (document.getElementById("vz-daily-chest-wrap")) return;
- 
+
   const wrap = document.createElement("div");
   wrap.id = "vz-daily-chest-wrap";
   wrap.style.marginTop = "10px";
   wrap.style.display = "flex";
   wrap.style.flexDirection = "column";
   wrap.style.gap = "6px";
- 
+
   const btn = document.createElement("button");
   btn.id = "vz-daily-chest-btn";
   btn.type = "button";
   btn.className = "mission-claim-btn";
   btn.textContent = "🎁 Daily Chest";
   btn.addEventListener("click", () => handleDailyChestClick());
- 
+
   const sub = document.createElement("div");
   sub.id = "vz-daily-chest-sub";
   sub.style.fontSize = "12px";
   sub.style.opacity = "0.85";
   sub.textContent = "";
- 
+
   wrap.appendChild(btn);
   wrap.appendChild(sub);
- 
+
   // mēģinam ielikt profila kartē (zem coins/tokens)
   const card =
     document.querySelector(".vz-player-card") ||
     (playerNameEl ? playerNameEl.closest(".vz-player-card") : null);
- 
+
   if (card) card.appendChild(wrap);
   else document.body.appendChild(wrap);
 }
- 
+
 function renderDailyChestUi(status) {
   const btn = document.getElementById("vz-daily-chest-btn");
   const sub = document.getElementById("vz-daily-chest-sub");
   if (!btn || !sub) return;
- 
+
   const available = !!status?.available;
   const streak = Number(status?.streak) || 0;
   const nextAt = Number(status?.nextAt) || 0;
- 
+
   if (available) {
     btn.disabled = false;
     btn.textContent = "🎁 Atvērt Daily Chest";
@@ -5930,10 +6693,12 @@ function renderDailyChestUi(status) {
     btn.disabled = false;
     const left = nextAt ? nextAt - Date.now() : 0;
     btn.textContent = "🎁 Daily Chest (šodien jau atvērts)";
-    sub.textContent = nextAt ? `Nākamais pēc: ${formatMsShort(left)}` : "Nāc rīt!";
+    sub.textContent = nextAt
+      ? `Nākamais pēc: ${formatMsShort(left)}`
+      : "Nāc rīt!";
   }
 }
- 
+
 async function refreshDailyChestStatus() {
   if (!state.token) return;
   try {
@@ -5945,29 +6710,31 @@ async function refreshDailyChestStatus() {
     console.warn("Daily Chest status kļūda:", err);
   }
 }
- 
+
 async function openDailyChestNow() {
   if (!state.token) return;
- 
+
   const btn = document.getElementById("vz-daily-chest-btn");
   if (btn) btn.disabled = true;
- 
+
   try {
     const data = await apiPost("/chest/open", {});
     if (data?.me) updatePlayerCard(data.me);
- 
+
     // UI sync
     refreshMissions();
     await refreshDailyChestStatus();
- 
+
     const rw = data?.rewards || {};
     const parts = [];
     if (rw.coins) parts.push(`+${rw.coins} coins`);
     if (rw.xp) parts.push(`+${rw.xp} XP`);
     if (rw.tokens) parts.push(`+${rw.tokens} žetons`);
     const streak = Number(data?.streak) || 0;
- 
-    appendSystemMessage(`🎁 Daily Chest atvērts: ${parts.join(", ") || "balva"} (streak ${streak})`);
+
+    appendSystemMessage(
+      `🎁 Daily Chest atvērts: ${parts.join(", ") || "balva"} (streak ${streak})`
+    );
     playSound(sCoin);
     if (rw.tokens) playSound(sToken);
   } catch (err) {
@@ -5977,7 +6744,7 @@ async function openDailyChestNow() {
     if (btn) btn.disabled = false;
   }
 }
- 
+
 function handleDailyChestClick() {
   const s = _chestStatus;
   if (!s) {
@@ -6009,7 +6776,10 @@ function updateLatviaClock() {
     });
   } catch {
     const now = new Date();
-    topTimeEl.textContent = now.toLocaleTimeString("lv-LV", { hour: "2-digit", minute: "2-digit" });
+    topTimeEl.textContent = now.toLocaleTimeString("lv-LV", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
     topDateEl.textContent = now.toLocaleDateString("lv-LV");
   }
 }
@@ -6060,7 +6830,8 @@ async function loadLatviaNamedayOnce() {
 
   try {
     topNamedayEl.textContent = "Ielādē vārda dienu...";
-    const url = "https://nameday.abalin.net/api/V1/today?country=lv&timezone=Europe/Riga";
+    const url =
+      "https://nameday.abalin.net/api/V1/today?country=lv&timezone=Europe/Riga";
     const res = await fetchWithTimeout(url, {}, 10_000);
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
@@ -6070,7 +6841,9 @@ async function loadLatviaNamedayOnce() {
       names = data.nameday.lv || data.nameday["lv"];
     }
 
-    topNamedayEl.textContent = names ? "Vārda diena: " + names : "Vārda diena: —";
+    topNamedayEl.textContent = names
+      ? "Vārda diena: " + names
+      : "Vārda diena: —";
   } catch (err) {
     console.warn("Vārda dienas API kļūda:", err);
     topNamedayEl.textContent = "Vārda diena: —";
@@ -6160,19 +6933,31 @@ async function handleAvatarUpload(e) {
 
     setLocalAvatar(state.username, dataUrl);
 
-    setAvatar(playerAvatarImgEl, playerAvatarInitialsEl, dataUrl, state.username);
+    setAvatar(
+      playerAvatarImgEl,
+      playerAvatarInitialsEl,
+      dataUrl,
+      state.username
+    );
     setAvatar(ppAvatarImgEl, ppAvatarInitialsEl, dataUrl, state.username);
 
     if (state.token) {
       try {
         await apiPost("/avatar", { avatar: dataUrl });
-        appendSystemMessage("Tavs avatārs atjaunots un saglabāts serverī (sync ar citām ierīcēm).");
+        appendSystemMessage(
+          "Tavs avatārs atjaunots un saglabāts serverī (sync ar citām ierīcēm)."
+        );
       } catch (err) {
         console.error("Avatāra sync kļūda:", err);
-        appendSystemMessage("Avatārs saglabāts šajā ierīcē, bet servera sync neizdevās: " + (err.message || ""));
+        appendSystemMessage(
+          "Avatārs saglabāts šajā ierīcē, bet servera sync neizdevās: " +
+            (err.message || "")
+        );
       }
     } else {
-      appendSystemMessage("Tavs avatārs atjaunots šajā ierīcē. (Nav tokena, servera sync izlaists.)");
+      appendSystemMessage(
+        "Tavs avatārs atjaunots šajā ierīcē. (Nav tokena, servera sync izlaists.)"
+      );
     }
 
     // ļauj augšupielādēt to pašu failu atkārtoti
@@ -6197,7 +6982,11 @@ async function openDiscordShare(text) {
   } catch {
     prompt("Nokopē tekstu Discord:", payload);
   }
-  window.open("https://discord.com/channels/@me", "_blank", "noopener,noreferrer");
+  window.open(
+    "https://discord.com/channels/@me",
+    "_blank",
+    "noopener,noreferrer"
+  );
 }
 
 async function handleShare() {
@@ -6364,7 +7153,10 @@ async function buildShareSticker(data) {
 
 function prepareShareResult(isWin, attemptsUsed) {
   if (state.duelMode) return;
-  const rowsUsed = Math.max(1, Math.min(state.rows, attemptsUsed || state.rows));
+  const rowsUsed = Math.max(
+    1,
+    Math.min(state.rows, attemptsUsed || state.rows)
+  );
   const matrix = buildShareMatrix(rowsUsed);
   const gridText = buildShareGridText(matrix);
   state.lastShareResult = {
@@ -6460,7 +7252,8 @@ function initRadioUi() {
         statusEl.textContent = "Radio spēlē...";
       } catch (err) {
         console.error("Radio play error:", err);
-        statusEl.textContent = "Neizdevās palaist radio (pārbaudi URL vai pārlūka atļaujas).";
+        statusEl.textContent =
+          "Neizdevās palaist radio (pārbaudi URL vai pārlūka atļaujas).";
       }
     } else {
       radioAudio.pause();
@@ -6483,30 +7276,34 @@ function initRadioUi() {
 
 // ==================== INIT ====================
 let _fsBtnHomes = null;
- 
+
 function ensureFsBottomBar() {
   let bar = document.getElementById("vz-fs-bottom-bar");
   if (bar) return bar;
- 
+
   bar = document.createElement("div");
   bar.id = "vz-fs-bottom-bar";
   bar.style.display = "none"; // default (ne pilnekrānā)
   document.body.appendChild(bar);
   return bar;
 }
- 
+
 function setFullscreenBottomButtons(on) {
   if (!newRoundBtn) return;
- 
+
   const bar = ensureFsBottomBar();
- 
+
   if (on) {
     if (!_fsBtnHomes) {
       _fsBtnHomes = [
-        { btn: newRoundBtn, parent: newRoundBtn.parentNode, next: newRoundBtn.nextSibling },
+        {
+          btn: newRoundBtn,
+          parent: newRoundBtn.parentNode,
+          next: newRoundBtn.nextSibling,
+        },
       ];
     }
- 
+
     bar.style.display = "flex";
     bar.appendChild(newRoundBtn);
   } else {
@@ -6519,17 +7316,18 @@ function setFullscreenBottomButtons(on) {
       }
     }
   }
-}let _logoutHome = null;
- 
+}
+let _logoutHome = null;
+
 function keepActionButtonsTogether() {
   if (!newRoundBtn) return;
- 
+
   const wrap = document.querySelector(".vz-bottom-buttons");
   if (!wrap) return;
- 
+
   if (!wrap.contains(newRoundBtn)) wrap.appendChild(newRoundBtn);
 }
- 
+
 function restoreLogoutButtonHome() {
   if (!_logoutHome || !logoutBtn) return;
   const { parent, next } = _logoutHome;
@@ -6548,7 +7346,9 @@ async function initGame() {
 
   state.token = token;
   state.username = username;
-  try { state.dmNotifyOn = localStorage.getItem("vz_dm_notify") !== "off"; } catch {}
+  try {
+    state.dmNotifyOn = localStorage.getItem("vz_dm_notify") !== "off";
+  } catch {}
 
   // kanonizējam
   setStoredAuth(token, username);
@@ -6557,7 +7357,8 @@ async function initGame() {
   try {
     const legacy = localStorage.getItem("vz_avatar");
     const perUser = localStorage.getItem(avatarStorageKey(state.username));
-    if (legacy && !perUser) localStorage.setItem(avatarStorageKey(state.username), legacy);
+    if (legacy && !perUser)
+      localStorage.setItem(avatarStorageKey(state.username), legacy);
   } catch {}
 
   dmLoadLocalState();
@@ -6616,9 +7417,11 @@ async function initGame() {
       if (!state.token) return;
       try {
         const data = await apiPost("/challenge/create", {});
-        if (challengeShareUrlInput) challengeShareUrlInput.value = data.shareUrl || "";
+        if (challengeShareUrlInput)
+          challengeShareUrlInput.value = data.shareUrl || "";
         if (challengeCopyStatus) challengeCopyStatus.textContent = "";
-        if (challengeCreateModal) challengeCreateModal.classList.remove("hidden");
+        if (challengeCreateModal)
+          challengeCreateModal.classList.remove("hidden");
       } catch (err) {
         appendSystemMessage(err.message || "Neizdevās izveidot izaicinājumu.");
       }
@@ -6631,12 +7434,15 @@ async function initGame() {
         navigator.clipboard.writeText(challengeShareUrlInput.value);
         if (challengeCopyStatus) challengeCopyStatus.textContent = "Nokopēts!";
       } catch {
-        if (challengeCopyStatus) challengeCopyStatus.textContent = "Nokopē ar Ctrl+C";
+        if (challengeCopyStatus)
+          challengeCopyStatus.textContent = "Nokopē ar Ctrl+C";
       }
     });
   }
   if (challengeCreateClose && challengeCreateModal) {
-    challengeCreateClose.addEventListener("click", () => challengeCreateModal.classList.add("hidden"));
+    challengeCreateClose.addEventListener("click", () =>
+      challengeCreateModal.classList.add("hidden")
+    );
   }
   if (challengeJoinAccept) {
     challengeJoinAccept.addEventListener("click", async () => {
@@ -6671,7 +7477,8 @@ async function initGame() {
     appDownloadLink.addEventListener("click", (e) => {
       if (appInstallModal) {
         e.preventDefault();
-        if (appInstallPwaRow && deferredInstallPrompt) appInstallPwaRow.style.display = "flex";
+        if (appInstallPwaRow && deferredInstallPrompt)
+          appInstallPwaRow.style.display = "flex";
         else if (appInstallPwaRow) appInstallPwaRow.style.display = "none";
         appInstallModal.classList.remove("hidden");
       }
@@ -6688,7 +7495,9 @@ async function initGame() {
     });
   }
   if (appInstallClose && appInstallModal) {
-    appInstallClose.addEventListener("click", () => appInstallModal.classList.add("hidden"));
+    appInstallClose.addEventListener("click", () =>
+      appInstallModal.classList.add("hidden")
+    );
   }
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
@@ -6697,13 +7506,43 @@ async function initGame() {
   });
 
   if (shareBtn) shareBtn.addEventListener("click", handleShare);
-  if (shareWhatsappBtn) shareWhatsappBtn.addEventListener("click", handleShareWhatsapp);
-  if (shareDiscordBtn) shareDiscordBtn.addEventListener("click", handleShareDiscord);
-  if (shareResultBtn) shareResultBtn.addEventListener("click", handleShareResult);
+  if (shareWhatsappBtn)
+    shareWhatsappBtn.addEventListener("click", handleShareWhatsapp);
+  if (shareDiscordBtn)
+    shareDiscordBtn.addEventListener("click", handleShareDiscord);
+  if (shareResultBtn)
+    shareResultBtn.addEventListener("click", handleShareResult);
   if (shareResultWhatsappBtn)
     shareResultWhatsappBtn.addEventListener("click", handleShareResultWhatsapp);
   if (shareResultDiscordBtn)
     shareResultDiscordBtn.addEventListener("click", handleShareResultDiscord);
+  if (tournamentRefreshBtnEl) {
+    tournamentRefreshBtnEl.addEventListener("click", () =>
+      refreshTournamentCard(true)
+    );
+  }
+  if (tournamentReportBtnEl) {
+    tournamentReportBtnEl.addEventListener(
+      "click",
+      handleTournamentReportSubmit
+    );
+  }
+  if (tournamentScore1InputEl) {
+    tournamentScore1InputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleTournamentReportSubmit();
+      }
+    });
+  }
+  if (tournamentScore2InputEl) {
+    tournamentScore2InputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleTournamentReportSubmit();
+      }
+    });
+  }
 
   if (friendAddBtnEl && friendAddInputEl) {
     friendAddBtnEl.addEventListener("click", () => {
@@ -6721,7 +7560,9 @@ async function initGame() {
   }
 
   if (playerAvatarUploadBtnEl && playerAvatarFileEl) {
-    playerAvatarUploadBtnEl.addEventListener("click", () => playerAvatarFileEl.click());
+    playerAvatarUploadBtnEl.addEventListener("click", () =>
+      playerAvatarFileEl.click()
+    );
     playerAvatarFileEl.addEventListener("change", handleAvatarUpload);
   }
 
@@ -6730,57 +7571,66 @@ async function initGame() {
   keepActionButtonsTogether();
   window.addEventListener("resize", scheduleFitGrid);
   // mobilajā pārlūkā "adreses joslas" lēkāšana maina viewport -> pārrēķinam režģi
-try {
-  const vv = window.visualViewport;
-  if (vv) {
-    vv.addEventListener("resize", scheduleFitGrid);
-    vv.addEventListener("scroll", scheduleFitGrid);
-  }
-} catch {}
+  try {
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener("resize", scheduleFitGrid);
+      vv.addEventListener("scroll", scheduleFitGrid);
+    }
+  } catch {}
   initRadioUi();
-ensureDmUi();
-// DM FAB long-press: toggle paziņojumus (ieliekam 1x)
-setTimeout(() => {
-  const fab = document.getElementById("vz-dm-fab");
-  const toast = document.getElementById("vz-dm-toast");
-  if (!fab) return;
-  if (fab.dataset.lpBound === "1") return;
-  fab.dataset.lpBound = "1";
- 
-  let t = null;
- 
-  const clear = () => { if (t) clearTimeout(t); t = null; };
- 
-  const start = () => {
-    clear();
-    t = setTimeout(() => {
-      // atzīmējam, lai click pēc long-press neatver DM
-      fab.dataset.lpJustDid = "1";
-      setTimeout(() => { fab.dataset.lpJustDid = "0"; }, 400);
- 
-      const next = !state.dmNotifyOn;
-      state.dmNotifyOn = next;
-      try { localStorage.setItem("vz_dm_notify", next ? "on" : "off"); } catch {}
- 
-      // parādam statusu pat tad, ja tikko izslēdzi (apejam dmToast “off” check)
-      if (toast) {
-        toast.textContent = next ? "DM paziņojumi: ON" : "DM paziņojumi: OFF";
-        toast.dataset.from = "";
-        toast.style.display = "block";
-        setTimeout(() => { toast.style.display = "none"; }, 1500);
-      }
-    }, 650);
-  };
- 
-  // touch
-  fab.addEventListener("touchstart", start, { passive: true });
-  fab.addEventListener("touchend", clear, { passive: true });
-  fab.addEventListener("touchcancel", clear, { passive: true });
- 
-  // mouse (lai strādā arī desktop)
-  fab.addEventListener("mousedown", start);
-  window.addEventListener("mouseup", clear);
-}, 0);
+  ensureDmUi();
+  // DM FAB long-press: toggle paziņojumus (ieliekam 1x)
+  setTimeout(() => {
+    const fab = document.getElementById("vz-dm-fab");
+    const toast = document.getElementById("vz-dm-toast");
+    if (!fab) return;
+    if (fab.dataset.lpBound === "1") return;
+    fab.dataset.lpBound = "1";
+
+    let t = null;
+
+    const clear = () => {
+      if (t) clearTimeout(t);
+      t = null;
+    };
+
+    const start = () => {
+      clear();
+      t = setTimeout(() => {
+        // atzīmējam, lai click pēc long-press neatver DM
+        fab.dataset.lpJustDid = "1";
+        setTimeout(() => {
+          fab.dataset.lpJustDid = "0";
+        }, 400);
+
+        const next = !state.dmNotifyOn;
+        state.dmNotifyOn = next;
+        try {
+          localStorage.setItem("vz_dm_notify", next ? "on" : "off");
+        } catch {}
+
+        // parādam statusu pat tad, ja tikko izslēdzi (apejam dmToast “off” check)
+        if (toast) {
+          toast.textContent = next ? "DM paziņojumi: ON" : "DM paziņojumi: OFF";
+          toast.dataset.from = "";
+          toast.style.display = "block";
+          setTimeout(() => {
+            toast.style.display = "none";
+          }, 1500);
+        }
+      }, 650);
+    };
+
+    // touch
+    fab.addEventListener("touchstart", start, { passive: true });
+    fab.addEventListener("touchend", clear, { passive: true });
+    fab.addEventListener("touchcancel", clear, { passive: true });
+
+    // mouse (lai strādā arī desktop)
+    fab.addEventListener("mousedown", start);
+    window.addEventListener("mouseup", clear);
+  }, 0);
 
   updateLatviaClock();
   setInterval(updateLatviaClock, 30_000);
@@ -6797,6 +7647,10 @@ setTimeout(() => {
         state.socket.disconnect();
         state.socket = null;
       }
+      if (tournamentRefreshTimer) {
+        clearInterval(tournamentRefreshTimer);
+        tournamentRefreshTimer = null;
+      }
       clearStoredAuth();
       window.location.href = "index.html";
     });
@@ -6810,7 +7664,9 @@ setTimeout(() => {
         return;
       }
       if (!state.roundFinished) {
-        if (gameMessageEl) gameMessageEl.textContent = "Pabeidz raundu līdz galam, tad var sākt jaunu.";
+        if (gameMessageEl)
+          gameMessageEl.textContent =
+            "Pabeidz raundu līdz galam, tad var sākt jaunu.";
         return;
       }
       if (!state.duelMode) startNewRound();
@@ -6837,19 +7693,19 @@ setTimeout(() => {
     });
   }
 
-   if (mobileFsBtn) {
+  if (mobileFsBtn) {
     mobileFsBtn.addEventListener("click", () => {
       const body = document.body;
       const rightArea = document.querySelector(".vz-right-area");
       const leftArea = document.querySelector(".vz-left-area");
       const container = document.querySelector(".vz-game-container");
- 
+
       const isFullscreenOn = body.classList.contains("vz-mobile-game-only");
- 
+
       if (!isFullscreenOn) {
         body.classList.add("vz-mobile-game-only", "vz-mobile-big-keys");
         mobileFsBtn.textContent = "🔙 Parastais režīms";
- 
+
         if (rightArea) rightArea.style.display = "none";
         if (leftArea) {
           leftArea.style.maxWidth = "100%";
@@ -6859,7 +7715,7 @@ setTimeout(() => {
       } else {
         body.classList.remove("vz-mobile-game-only", "vz-mobile-big-keys");
         mobileFsBtn.textContent = "📱 Pilnekrāna spēle";
- 
+
         if (rightArea) rightArea.style.display = "";
         if (leftArea) {
           leftArea.style.maxWidth = "";
@@ -6867,11 +7723,13 @@ setTimeout(() => {
         }
         if (container) container.style.maxWidth = "";
       }
- 
- setFullscreenBottomButtons(!isFullscreenOn);   // <-- ŠEIT
+
+      setFullscreenBottomButtons(!isFullscreenOn); // <-- ŠEIT
       // pēc režīma pārslēgšanas pārrēķinam režģi (DOM vēl pārkārtojas)
       try {
-        document.activeElement && document.activeElement.blur && document.activeElement.blur();
+        document.activeElement &&
+          document.activeElement.blur &&
+          document.activeElement.blur();
       } catch {}
       setTimeout(scheduleFitGrid, 0);
       setTimeout(scheduleFitGrid, 250);
@@ -6890,7 +7748,8 @@ setTimeout(() => {
     chatInputEl.addEventListener("focus", () => clearUnreadIfNeeded());
   }
 
-  if (chatMessagesEl) chatMessagesEl.addEventListener("scroll", () => clearUnreadIfNeeded());
+  if (chatMessagesEl)
+    chatMessagesEl.addEventListener("scroll", () => clearUnreadIfNeeded());
   document.addEventListener("visibilitychange", () => clearUnreadIfNeeded());
 
   if (chatMentionBadgeEl) {
@@ -6899,11 +7758,14 @@ setTimeout(() => {
         showMentionPopup("Nav pieminējumu.");
         return;
       }
-      const t = new Date(lastMention.ts || Date.now()).toLocaleTimeString("lv-LV", {
-        hour: "2-digit",
-        minute: "2-digit",
-        timeZone: "Europe/Riga",
-      });
+      const t = new Date(lastMention.ts || Date.now()).toLocaleTimeString(
+        "lv-LV",
+        {
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "Europe/Riga",
+        }
+      );
       showMentionPopup(`🔔 [${t}] ${lastMention.from}: ${lastMention.text}`);
       chatMentionBadgeEl.classList.remove("vz-mention-active");
     });
@@ -6918,16 +7780,20 @@ setTimeout(() => {
     });
   }
 
-  if (profileCloseBtn) profileCloseBtn.addEventListener("click", hidePlayerProfile);
+  if (profileCloseBtn)
+    profileCloseBtn.addEventListener("click", hidePlayerProfile);
   if (profilePopupEl) {
     profilePopupEl.addEventListener("click", (e) => {
       if (e.target === profilePopupEl) hidePlayerProfile();
     });
   }
 
-  if (ppMsgBtnEl) ppMsgBtnEl.addEventListener("click", handlePersonalMessageClick);
-  if (ppEmailSaveBtn) ppEmailSaveBtn.addEventListener("click", handleProfileEmailSave);
-  if (ppEmailRemoveBtn) ppEmailRemoveBtn.addEventListener("click", handleProfileEmailRemove);
+  if (ppMsgBtnEl)
+    ppMsgBtnEl.addEventListener("click", handlePersonalMessageClick);
+  if (ppEmailSaveBtn)
+    ppEmailSaveBtn.addEventListener("click", handleProfileEmailSave);
+  if (ppEmailRemoveBtn)
+    ppEmailRemoveBtn.addEventListener("click", handleProfileEmailRemove);
   if (ppEmailInputEl) {
     ppEmailInputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter") handleProfileEmailSave();
@@ -6935,14 +7801,14 @@ setTimeout(() => {
   }
 
   if (duelOkBtn) {
-  duelOkBtn.type = "button";
-  duelOkBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    hideDuelResultOverlay();
-    startNewRound();
-  });
-}
+    duelOkBtn.type = "button";
+    duelOkBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      hideDuelResultOverlay();
+      startNewRound();
+    });
+  }
   if (duelOverlayEl) {
     duelOverlayEl.addEventListener("click", (e) => {
       if (e.target === duelOverlayEl) {
@@ -6953,7 +7819,10 @@ setTimeout(() => {
   }
 
   window.addEventListener("unhandledrejection", (ev) => {
-    const msg = ev && ev.reason && ev.reason.message ? ev.reason.message : "Nezināma kļūda (Promise).";
+    const msg =
+      ev && ev.reason && ev.reason.message
+        ? ev.reason.message
+        : "Nezināma kļūda (Promise).";
     console.error("unhandledrejection:", ev.reason);
     appendSystemMessage("⚠️ Kļūda: " + msg);
   });
@@ -6979,13 +7848,25 @@ setTimeout(() => {
 
       if (localAvatar && !serverAvatar && state.token) {
         await apiPost("/avatar", { avatar: localAvatar });
-        appendSystemMessage("Tavs lokālais avatārs nosūtīts uz serveri (sync).");
+        appendSystemMessage(
+          "Tavs lokālais avatārs nosūtīts uz serveri (sync)."
+        );
       }
 
       if (!localAvatar && serverAvatar) {
         setLocalAvatar(me.username, serverAvatar, serverExp);
-        setAvatar(playerAvatarImgEl, playerAvatarInitialsEl, serverAvatar, state.username);
-        setAvatar(ppAvatarImgEl, ppAvatarInitialsEl, serverAvatar, state.username);
+        setAvatar(
+          playerAvatarImgEl,
+          playerAvatarInitialsEl,
+          serverAvatar,
+          state.username
+        );
+        setAvatar(
+          ppAvatarImgEl,
+          ppAvatarInitialsEl,
+          serverAvatar,
+          state.username
+        );
       }
     } catch (e) {
       console.warn("Avatāra auto-sync kļūda init laikā:", e);
@@ -7012,5 +7893,8 @@ function triggerWinFlash() {
   if (!flashElement) return;
 
   flashElement.classList.add("vz-screen-flash-active");
-  setTimeout(() => flashElement.classList.remove("vz-screen-flash-active"), 300);
+  setTimeout(
+    () => flashElement.classList.remove("vz-screen-flash-active"),
+    300
+  );
 }

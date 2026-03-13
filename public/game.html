@@ -313,6 +313,40 @@
               <summary class="vz-side-group-summary">Sacensības un rangi</summary>
               <div class="vz-side-group-content">
                 <div class="vz-top-panels">
+                  <!-- TURNĪRI -->
+                  <div class="vz-leaderboard-card vz-tournament-card" id="tournament-card">
+                    <div class="vz-card-header">🏟️ Turnīri</div>
+                    <div id="tournament-status" class="vz-tournament-status">Ielādē turnīrus…</div>
+                    <div id="tournament-meta" class="vz-tournament-meta hidden"></div>
+                    <ul id="tournament-match-list" class="vz-tournament-list hidden"></ul>
+                    <div id="tournament-empty" class="mission-status hidden"></div>
+
+                    <div id="tournament-my-match" class="vz-tournament-my-match hidden">
+                      <div class="vz-card-header-sub">Mans mačs</div>
+                      <div id="tournament-my-match-text" class="vz-support-text">—</div>
+
+                      <div id="tournament-report-form" class="vz-tournament-report-form hidden">
+                        <label class="vz-tournament-score-field">
+                          <span id="tournament-score1-label">Spēlētājs 1</span>
+                          <input id="tournament-score1" type="number" min="0" max="99" inputmode="numeric" />
+                        </label>
+                        <label class="vz-tournament-score-field">
+                          <span id="tournament-score2-label">Spēlētājs 2</span>
+                          <input id="tournament-score2" type="number" min="0" max="99" inputmode="numeric" />
+                        </label>
+                        <button id="tournament-report-btn" class="mission-claim-btn" type="button">Iesniegt rezultātu</button>
+                      </div>
+
+                      <div id="tournament-report-status" class="mission-status"></div>
+                    </div>
+
+                    <div class="vz-tournament-actions">
+                      <button id="tournament-refresh-btn" class="vz-tournament-refresh-btn" type="button">
+                        Atjaunot
+                      </button>
+                    </div>
+                  </div>
+
                   <!-- TOP 10 -->
                   <div class="vz-leaderboard-card">
                     <div class="vz-card-header">TOP 10 spēlētāji</div>
