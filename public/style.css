@@ -2952,6 +2952,18 @@ summary:focus-visible {
    =========================== */
 
 .vz-support-text { margin: 3px 0; font-size: 12px; color: #ddd; }
+#vip-status {
+  font-weight: 600;
+  color: #e7eefc;
+}
+#vip-buy-status.vz-ok {
+  color: #8bc34a;
+  font-weight: 700;
+}
+#vip-buy-status.vz-error {
+  color: #ff8a80;
+  font-weight: 700;
+}
 
 .vz-support-btn {
   margin-top: 6px;

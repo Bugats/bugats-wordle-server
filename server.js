@@ -92,6 +92,27 @@ const REVEAL_LETTER_COST_COINS = Number(
 );
 
 const BASE_TOKEN_PRICE = 150;
+const VIP_PRICE_TOKENS = (() => {
+  const v = parseInt(process.env.VIP_PRICE_TOKENS || "12", 10);
+  return Number.isFinite(v) && v >= 1 && v <= 10000 ? v : 12;
+})();
+const VIP_DURATION_DAYS = (() => {
+  const v = parseInt(process.env.VIP_DURATION_DAYS || "30", 10);
+  return Number.isFinite(v) && v >= 1 && v <= 365 ? v : 30;
+})();
+const VIP_MAX_ACTIVE_TOURNAMENTS = (() => {
+  const v = parseInt(process.env.VIP_MAX_ACTIVE_TOURNAMENTS || "1", 10);
+  return Number.isFinite(v) && v >= 1 && v <= 10 ? v : 1;
+})();
+const VIP_TOURNAMENT_COOLDOWN_MINUTES = (() => {
+  const v = parseInt(process.env.VIP_TOURNAMENT_COOLDOWN_MINUTES || "180", 10);
+  return Number.isFinite(v) && v >= 0 && v <= 10080 ? v : 180;
+})();
+const VIP_TOURNAMENT_MAX_PARTICIPANTS = (() => {
+  const v = parseInt(process.env.VIP_TOURNAMENT_MAX_PARTICIPANTS || "16", 10);
+  return Number.isFinite(v) && v >= 2 && v <= 128 ? v : 16;
+})();
+const DAY_MS = 24 * 60 * 60 * 1000;
 const TITLE_MAX_LEN = (() => {
   const v = parseInt(process.env.TITLE_MAX_LEN || "32", 10);
   return Number.isFinite(v) && v >= 8 && v <= 64 ? v : 32;
@@ -695,6 +716,96 @@ function saveTournamentStore() {
   saveJsonAtomic(TOURNAMENTS_FILE, tournamentStore);
 }
 
+function ensureVipFields(u) {
+  if (!u || typeof u !== "object") return;
+  if (!Number.isFinite(Number(u.vipUntil))) u.vipUntil = 0;
+  u.vipUntil = Math.max(0, Math.floor(Number(u.vipUntil) || 0));
+  if (typeof u.vipTier !== "string") u.vipTier = "none";
+  if (typeof u.vipLastTournamentAt !== "number") u.vipLastTournamentAt = 0;
+  if (typeof u.vipLastPurchaseAt !== "number") u.vipLastPurchaseAt = 0;
+}
+
+function isVipActive(u, now = Date.now()) {
+  ensureVipFields(u);
+  return Number(u?.vipUntil || 0) > now;
+}
+
+function canCreateTournament(u, now = Date.now()) {
+  return isAdminUser(u) || isVipActive(u, now);
+}
+
+function countActiveTournamentsByCreator(username) {
+  const name = String(username || "")
+    .trim()
+    .toLowerCase();
+  if (!name) return 0;
+  return (tournamentStore.tournaments || []).filter((t) => {
+    const creator = String(t?.createdBy || "")
+      .trim()
+      .toLowerCase();
+    const status = String(t?.status || "active")
+      .trim()
+      .toLowerCase();
+    return creator === name && status !== "completed" && status !== "archived";
+  }).length;
+}
+
+function formatMinutesLabel(mins) {
+  const m = Math.max(0, Math.floor(Number(mins) || 0));
+  if (!m) return "0 min";
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  if (!h) return `${rest} min`;
+  if (!rest) return `${h}h`;
+  return `${h}h ${rest}m`;
+}
+
+function validateTournamentCreateAccess(user, seedingLen) {
+  if (isAdminUser(user)) return { ok: true, mode: "admin" };
+
+  if (!isVipActive(user)) {
+    return {
+      ok: false,
+      status: 403,
+      message: "Turnīru veidošanai vajag aktīvu VIP statusu.",
+    };
+  }
+
+  if (seedingLen > VIP_TOURNAMENT_MAX_PARTICIPANTS) {
+    return {
+      ok: false,
+      status: 400,
+      message: `VIP turnīrā max ${VIP_TOURNAMENT_MAX_PARTICIPANTS} dalībnieki.`,
+    };
+  }
+
+  const activeByUser = countActiveTournamentsByCreator(user?.username);
+  if (activeByUser >= VIP_MAX_ACTIVE_TOURNAMENTS) {
+    return {
+      ok: false,
+      status: 400,
+      message: `VIP limits: max ${VIP_MAX_ACTIVE_TOURNAMENTS} aktīvs turnīrs.`,
+    };
+  }
+
+  const cooldownMs = VIP_TOURNAMENT_COOLDOWN_MINUTES * 60 * 1000;
+  const last = Math.max(0, Number(user?.vipLastTournamentAt) || 0);
+  if (cooldownMs > 0 && last > 0) {
+    const waitMs = cooldownMs - (Date.now() - last);
+    if (waitMs > 0) {
+      return {
+        ok: false,
+        status: 400,
+        message: `VIP cooldown: pagaidi ${formatMinutesLabel(
+          Math.ceil(waitMs / 60000)
+        )}.`,
+      };
+    }
+  }
+
+  return { ok: true, mode: "vip" };
+}
+
 function parseNonNegativeIntId(raw) {
   const id = Number(raw);
   if (!Number.isFinite(id) || id < 0 || !Number.isInteger(id)) return null;
@@ -907,6 +1018,7 @@ function loadUsers(listOverride) {
 
       // Supporter flag
       if (typeof u.supporter !== "boolean") u.supporter = false;
+      ensureVipFields(u);
 
       // Tituls (cosmetic)
       if (typeof u.title !== "string") u.title = "";
@@ -3152,6 +3264,7 @@ function startSeasonFlow({ byAdminUsername } = {}) {
 
 // ======== JWT helperi ========
 async function buildMePayload(u) {
+  ensureVipFields(u);
   const rankInfo = ensureRankFields(u);
   ensureDuelEloFields(u);
   const dynamicMedals = computeMedalsForUser(u);
@@ -3205,6 +3318,16 @@ async function buildMePayload(u) {
     avatarUrl: avatarUrl || null,
     avatarUrlExpiresAt: avatarUrlExpiresAt || null,
     supporter: !!u.supporter,
+    vip: {
+      active: isVipActive(u),
+      until: Number(u.vipUntil || 0),
+      tier: u.vipTier || "none",
+      canCreateTournament: canCreateTournament(u),
+      priceTokens: VIP_PRICE_TOKENS,
+      durationDays: VIP_DURATION_DAYS,
+    },
+    canCreateTournament: canCreateTournament(u),
+    isAdmin: isAdminUser(u),
     revealLetterCostCoins: REVEAL_LETTER_COST_COINS,
     blockedUsers: listBlocks(u),
   };
@@ -4592,6 +4715,10 @@ async function signupHandler(req, res) {
     regionBoost: 0,
     regionAttacks: {},
     supporter: false,
+    vipUntil: 0,
+    vipTier: "none",
+    vipLastTournamentAt: 0,
+    vipLastPurchaseAt: 0,
     dailyChest: { lastDate: "", streak: 0, totalOpens: 0 },
     specialMedals: [],
     blocks: {},
@@ -4871,8 +4998,119 @@ app.get("/me", authMiddleware, async (req, res) => {
   ensureSpecialMedals(u);
   ensureRankFields(u);
   if (typeof u.supporter !== "boolean") u.supporter = false;
+  ensureVipFields(u);
   saveUsers(USERS);
   res.json(await buildMePayload(u));
+});
+
+app.get("/vip/status", authMiddleware, (req, res) => {
+  const user = req.user;
+  ensureVipFields(user);
+  res.json({
+    active: isVipActive(user),
+    until: Number(user.vipUntil || 0),
+    tier: user.vipTier || "none",
+    canCreateTournament: canCreateTournament(user),
+    priceTokens: VIP_PRICE_TOKENS,
+    durationDays: VIP_DURATION_DAYS,
+  });
+});
+
+app.post("/vip/buy", authMiddleware, async (req, res) => {
+  const user = req.user;
+  ensureVipFields(user);
+  markActivity(user);
+  ensureDailyMissions(user);
+  resetDailyCountersIfNeeded(user);
+  ensureDailyChest(user);
+
+  if (isAdminUser(user)) {
+    return res.status(400).json({ message: "Adminam VIP nav nepieciešams." });
+  }
+
+  const price = VIP_PRICE_TOKENS;
+  if ((user.tokens || 0) < price) {
+    return res
+      .status(400)
+      .json({ message: `Nepietiek žetoni. Vajag ${price} žetonus.` });
+  }
+
+  user.tokens = Math.max(0, Math.floor(user.tokens || 0) - price);
+  const now = Date.now();
+  const startAt = Math.max(now, Number(user.vipUntil || 0));
+  user.vipUntil = startAt + VIP_DURATION_DAYS * DAY_MS;
+  user.vipTier = "vip_basic";
+  user.vipLastPurchaseAt = now;
+
+  saveUsers(USERS);
+  wheelSyncTokenSlots(true);
+  wheelEmitUpdate(true);
+  io.emit("vip:updated", {
+    username: user.username,
+    active: isVipActive(user),
+    until: Number(user.vipUntil || 0),
+  });
+
+  return res.json({
+    ok: true,
+    tokens: user.tokens || 0,
+    vip: {
+      active: isVipActive(user),
+      until: Number(user.vipUntil || 0),
+      tier: user.vipTier || "vip_basic",
+      canCreateTournament: canCreateTournament(user),
+    },
+    me: await buildMePayload(user),
+  });
+});
+
+app.post("/admin/vip/grant", authMiddleware, async (req, res) => {
+  const admin = req.user;
+  if (!isAdminUser(admin)) {
+    return res.status(403).json({ message: "Tikai admins." });
+  }
+
+  const targetName = String(req.body?.username || "").trim();
+  if (!targetName) {
+    return res.status(400).json({ message: "Norādi username." });
+  }
+
+  const key = findUserKeyCaseInsensitive(targetName);
+  const target = key ? USERS[key] : null;
+  if (!target) {
+    return res.status(404).json({ message: "Lietotājs nav atrasts." });
+  }
+
+  ensureVipFields(target);
+  const daysRaw = parseInt(req.body?.days ?? VIP_DURATION_DAYS, 10);
+  const days =
+    Number.isFinite(daysRaw) && daysRaw >= 1 && daysRaw <= 365
+      ? daysRaw
+      : VIP_DURATION_DAYS;
+  const now = Date.now();
+  const startAt = Math.max(now, Number(target.vipUntil || 0));
+  target.vipUntil = startAt + days * DAY_MS;
+  target.vipTier = "vip_basic";
+  target.vipLastPurchaseAt = now;
+
+  saveUsers(USERS);
+
+  io.emit("vip:updated", {
+    username: target.username,
+    active: isVipActive(target),
+    until: Number(target.vipUntil || 0),
+  });
+
+  return res.json({
+    ok: true,
+    username: target.username,
+    vip: {
+      active: isVipActive(target),
+      until: Number(target.vipUntil || 0),
+      tier: target.vipTier || "vip_basic",
+      canCreateTournament: canCreateTournament(target),
+    },
+  });
 });
 
 // ======== E-pasta piesaiste (tikai savam profilam) ========
@@ -5489,10 +5727,8 @@ app.get("/tournaments", authMiddleware, (_req, res) => {
 
 app.post("/tournaments", authMiddleware, async (req, res) => {
   try {
-    const admin = req.user;
-    if (!isAdminUser(admin)) {
-      return res.status(403).json({ message: "Tikai admins." });
-    }
+    const requester = req.user;
+    ensureVipFields(requester);
 
     const name = normalizeTournamentName(req.body?.name);
     if (!name) {
@@ -5505,6 +5741,13 @@ app.post("/tournaments", authMiddleware, async (req, res) => {
       return res
         .status(400)
         .json({ message: "Turnīram vajag vismaz 2 dalībniekus." });
+    }
+
+    const access = validateTournamentCreateAccess(requester, seeding.length);
+    if (!access.ok) {
+      return res
+        .status(Number(access.status) || 403)
+        .json({ message: access.message || "Nav tiesību veidot turnīru." });
     }
 
     const tournamentId = Number(tournamentStore.nextTournamentId || 1);
@@ -5524,7 +5767,7 @@ app.post("/tournaments", authMiddleware, async (req, res) => {
       type,
       stageId: stage?.id ?? null,
       createdAt: Date.now(),
-      createdBy: admin.username,
+      createdBy: requester.username,
       participantCount: seeding.length,
       status: "active",
       completedAt: 0,
@@ -5532,6 +5775,10 @@ app.post("/tournaments", authMiddleware, async (req, res) => {
 
     tournamentStore.tournaments.push(meta);
     saveTournamentStore();
+    if (!isAdminUser(requester)) {
+      requester.vipLastTournamentAt = Date.now();
+      saveUsers(USERS);
+    }
 
     io.emit("tournament:update", {
       tournamentId,

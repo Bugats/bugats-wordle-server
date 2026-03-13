@@ -32,7 +32,7 @@ async function ensureUserToken({
 }
 
 describe("Tournament brackets API", () => {
-  it("rejects tournament creation for non-admin users", async () => {
+  it("rejects tournament creation for non-VIP users", async () => {
     const username = `user${Date.now().toString().slice(-8)}`;
     const token = await ensureUserToken({
       username,
@@ -50,7 +50,7 @@ describe("Tournament brackets API", () => {
       });
 
     expect(res.status).toBe(403);
-    expect(String(res.body?.message || "")).toContain("Tikai admins");
+    expect(String(res.body?.message || "")).toContain("VIP");
   });
 
   it("creates a bracket tournament and reports match result", async () => {

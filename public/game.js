@@ -401,6 +401,11 @@ const state = {
   tournaments: [],
   tournamentActiveId: null,
   tournamentReportCtx: null,
+  vipActive: false,
+  vipUntil: 0,
+  vipTier: "none",
+  canCreateTournament: false,
+  isAdmin: false,
 
   // Globālā skaņa
   soundOn: true,
@@ -442,6 +447,9 @@ const screenFlashEl = $("#screen-flash");
 const newRoundBtn = $("#new-round-btn");
 const logoutBtn = $("#logout-btn");
 const buyTokenBtn = $("#buy-token-btn");
+const buyVipBtn = $("#buy-vip-btn");
+const vipStatusEl = $("#vip-status");
+const vipBuyStatusEl = $("#vip-buy-status");
 const mobileFsBtn = $("#mobile-fullscreen-btn");
 const shareBtn = $("#share-btn");
 const shareWhatsappBtn = $("#share-whatsapp-btn");
@@ -1463,6 +1471,68 @@ async function handleRegionAttack() {
   }
 }
 
+function formatVipUntil(ts) {
+  const v = Number(ts) || 0;
+  if (!v) return "—";
+  try {
+    return new Date(v).toLocaleDateString("lv-LV", {
+      timeZone: "Europe/Riga",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  } catch {
+    return "—";
+  }
+}
+
+function setVipBuyStatus(message, kind = "") {
+  if (!vipBuyStatusEl) return;
+  vipBuyStatusEl.textContent = String(message || "");
+  vipBuyStatusEl.classList.remove("vz-ok", "vz-error");
+  if (kind === "ok") vipBuyStatusEl.classList.add("vz-ok");
+  if (kind === "error") vipBuyStatusEl.classList.add("vz-error");
+}
+
+function updateVipUi(me) {
+  if (!me) return;
+  const vip = me.vip && typeof me.vip === "object" ? me.vip : {};
+  const active = !!vip.active;
+  const until = Number(vip.until || 0);
+  const tier = String(vip.tier || "none");
+  const canCreateTournament = !!me.canCreateTournament;
+  const isAdmin = !!me.isAdmin;
+
+  state.vipActive = active;
+  state.vipUntil = until;
+  state.vipTier = tier;
+  state.canCreateTournament = canCreateTournament;
+  state.isAdmin = isAdmin;
+
+  if (vipStatusEl) {
+    if (isAdmin) {
+      vipStatusEl.textContent = "Admins: turnīru pārvaldība pieejama bez VIP.";
+    } else if (active) {
+      vipStatusEl.textContent = `VIP aktīvs līdz ${formatVipUntil(
+        until
+      )} · vari veidot turnīru.`;
+    } else {
+      vipStatusEl.textContent = "VIP nav aktīvs.";
+    }
+  }
+
+  if (buyVipBtn) {
+    const priceTokens = Number(vip.priceTokens || 0);
+    const durationDays = Number(vip.durationDays || 0);
+    buyVipBtn.textContent =
+      priceTokens > 0 && durationDays > 0
+        ? `Aktivizēt VIP (${priceTokens} žetoni / ${durationDays} dienas)`
+        : "Aktivizēt VIP";
+    buyVipBtn.disabled = isAdmin;
+    buyVipBtn.style.display = isAdmin ? "none" : "";
+  }
+}
+
 function updatePlayerCard(me) {
   if (!me) return;
 
@@ -1525,6 +1595,7 @@ function updatePlayerCard(me) {
   }
 
   if (playerTokensEl) playerTokensEl.textContent = me.tokens;
+  updateVipUi(me);
   if (playerMedalsStripEl)
     renderPlayerMedals(me.medals, playerMedalsStripEl, false);
 
@@ -6629,6 +6700,29 @@ async function handleBuyToken() {
   }
 }
 
+async function handleBuyVip() {
+  if (!state.token || !buyVipBtn) return;
+  setVipBuyStatus("");
+  buyVipBtn.disabled = true;
+  try {
+    const data = await apiPost("/vip/buy", {});
+    if (data?.me) {
+      updatePlayerCard(data.me);
+    } else {
+      const me = await apiGet("/me");
+      updatePlayerCard(me);
+    }
+    const until = Number(data?.vip?.until || 0);
+    setVipBuyStatus(`VIP aktivizēts līdz ${formatVipUntil(until)}.`, "ok");
+    appendSystemMessage("👑 VIP aktivizēts. Tagad vari veidot turnīrus.");
+  } catch (err) {
+    setVipBuyStatus(err.message || "Neizdevās aktivizēt VIP.", "error");
+    appendSystemMessage(err.message || "Neizdevās aktivizēt VIP.");
+  } finally {
+    if (!state.isAdmin) buyVipBtn.disabled = false;
+  }
+}
+
 // ==================== DAILY CHEST (frontend) ====================
 let _chestStatus = null;
 let _chestTickTimer = null;
@@ -7674,6 +7768,7 @@ async function initGame() {
   }
 
   if (buyTokenBtn) buyTokenBtn.addEventListener("click", handleBuyToken);
+  if (buyVipBtn) buyVipBtn.addEventListener("click", handleBuyVip);
 
   if (seasonStartBtn) {
     seasonStartBtn.addEventListener("click", async () => {
