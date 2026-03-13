@@ -2876,6 +2876,13 @@ summary:focus-visible {
   margin-bottom: 5px;
 }
 
+.vz-tournament-legend {
+  font-size: 11px;
+  color: #aeb8cb;
+  margin-bottom: 6px;
+  line-height: 1.35;
+}
+
 .vz-tournament-list {
   margin: 0;
   padding-left: 18px;

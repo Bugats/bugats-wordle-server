@@ -3682,17 +3682,17 @@ function tournamentTypeLabel(type) {
   const key = String(type || "")
     .trim()
     .toLowerCase();
-  if (key === "single_elimination") return "Single elimination";
-  if (key === "double_elimination") return "Double elimination";
-  if (key === "round_robin") return "Round robin";
+  if (key === "single_elimination") return "Izslēgšanas turnīrs";
+  if (key === "double_elimination") return "Dubultā izslēgšana";
+  if (key === "round_robin") return "Apļa turnīrs";
   return "Turnīrs";
 }
 
 function tournamentMatchStatusLabel(status) {
   const code = Number(status);
-  if (code === 0) return "Bloķēts";
+  if (code === 0) return "Vēl nav pieejams";
   if (code === 1) return "Gaida pretinieku";
-  if (code === 2) return "Gatavs";
+  if (code === 2) return "Var spēlēt";
   if (code === 3) return "Notiek";
   if (code === 4) return "Pabeigts";
   if (code === 5) return "Arhivēts";
