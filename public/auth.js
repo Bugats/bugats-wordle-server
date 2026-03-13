@@ -2,22 +2,55 @@
 
 const API_BASE = "https://bugats-wordle-server.onrender.com";
 
-const signupForm  = document.getElementById("signup-form");
-const loginForm   = document.getElementById("login-form");
+const signupForm = document.getElementById("signup-form");
+const loginForm = document.getElementById("login-form");
 const authErrorEl = document.getElementById("auth-error");
+const tabLoginBtn = document.getElementById("auth-tab-login");
+const tabSignupBtn = document.getElementById("auth-tab-signup");
+const loginPanel = document.getElementById("auth-panel-login");
+const signupPanel = document.getElementById("auth-panel-signup");
 
 // Mazs helperis kļūdas rādīšanai
 function showAuthError(msg) {
   if (!authErrorEl) return;
   authErrorEl.textContent = msg || "";
 }
+
+function setAuthTab(tab) {
+  const isLogin = tab !== "signup";
+  if (loginPanel) {
+    loginPanel.hidden = !isLogin;
+    loginPanel.classList.toggle("is-active", isLogin);
+  }
+  if (signupPanel) {
+    signupPanel.hidden = isLogin;
+    signupPanel.classList.toggle("is-active", !isLogin);
+  }
+  if (tabLoginBtn) {
+    tabLoginBtn.classList.toggle("is-active", isLogin);
+    tabLoginBtn.setAttribute("aria-selected", String(isLogin));
+  }
+  if (tabSignupBtn) {
+    tabSignupBtn.classList.toggle("is-active", !isLogin);
+    tabSignupBtn.setAttribute("aria-selected", String(!isLogin));
+  }
+  showAuthError("");
+}
+
+if (tabLoginBtn) {
+  tabLoginBtn.addEventListener("click", () => setAuthTab("login"));
+}
+if (tabSignupBtn) {
+  tabSignupBtn.addEventListener("click", () => setAuthTab("signup"));
+}
+setAuthTab(window.location.hash === "#signup" ? "signup" : "login");
 function getOrCreateDeviceId() {
   try {
     let id = localStorage.getItem("vz_device_id");
     if (id && String(id).trim()) return String(id).trim();
-    id = (crypto?.randomUUID
+    id = crypto?.randomUUID
       ? crypto.randomUUID()
-      : ("vz_" + Math.random().toString(16).slice(2) + Date.now()));
+      : "vz_" + Math.random().toString(16).slice(2) + Date.now();
     localStorage.setItem("vz_device_id", id);
     return id;
   } catch {
@@ -74,18 +107,14 @@ function handleAuthSuccess(data) {
 if (signupForm) {
   signupForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    setAuthTab("signup");
     showAuthError("");
 
-    const username = document
-      .getElementById("signup-username")
-      .value.trim();
-    const email = document
-      .getElementById("signup-email")
-      ?.value?.trim() || "";
-    const password = document
-      .getElementById("signup-password")
-      .value.trim();
-    const region = document.getElementById("signup-region")?.value?.trim() || "";
+    const username = document.getElementById("signup-username").value.trim();
+    const email = document.getElementById("signup-email")?.value?.trim() || "";
+    const password = document.getElementById("signup-password").value.trim();
+    const region =
+      document.getElementById("signup-region")?.value?.trim() || "";
 
     if (!username || !password) {
       showAuthError("Aizpildi lietotājvārdu un paroli.");
@@ -97,7 +126,13 @@ if (signupForm) {
     }
 
     try {
-     const data = await apiPost("/signup", { username, email, password, region, deviceId: getOrCreateDeviceId() });
+      const data = await apiPost("/signup", {
+        username,
+        email,
+        password,
+        region,
+        deviceId: getOrCreateDeviceId(),
+      });
       // uzreiz ielogojam un metam uz spēli
       handleAuthSuccess(data);
     } catch (err) {
@@ -111,14 +146,11 @@ if (signupForm) {
 if (loginForm) {
   loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    setAuthTab("login");
     showAuthError("");
 
-    const identifier = document
-      .getElementById("login-username")
-      .value.trim();
-    const password = document
-      .getElementById("login-password")
-      .value.trim();
+    const identifier = document.getElementById("login-username").value.trim();
+    const password = document.getElementById("login-password").value.trim();
 
     if (!identifier || !password) {
       showAuthError("Aizpildi lietotājvārdu vai e-pastu un paroli.");
@@ -126,7 +158,11 @@ if (loginForm) {
     }
 
     try {
-     const data = await apiPost("/login", { username: identifier, password, deviceId: getOrCreateDeviceId() });
+      const data = await apiPost("/login", {
+        username: identifier,
+        password,
+        deviceId: getOrCreateDeviceId(),
+      });
       handleAuthSuccess(data);
     } catch (err) {
       console.error("Login error:", err);
@@ -138,10 +174,10 @@ if (loginForm) {
 // Neliela migrācija no vecajiem key -> jaunajiem
 function migrateLegacyKeysIfAny() {
   const legacyToken = localStorage.getItem("varduZonaToken");
-  const legacyUser  = localStorage.getItem("varduZonaUser");
+  const legacyUser = localStorage.getItem("varduZonaUser");
 
   const newToken = localStorage.getItem("vz_token");
-  const newUser  = localStorage.getItem("vz_username");
+  const newUser = localStorage.getItem("vz_username");
 
   // ja jaunie jau ir, neko nedaram
   if (newToken && newUser) return;

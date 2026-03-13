@@ -30,14 +30,65 @@
   <body class="auth-page-body">
     <!-- ================= AUTH EKRĀNS ================= -->
     <div id="auth-screen">
-      <div class="container">
+      <div class="container auth-card">
         <h1>VĀRDU ZONA</h1>
         <p class="subtitle">
-          Ienāc ar lietotājvārdu vai e-pastu, vai izveido jaunu profilu.
+          Viena vieta ielogošanās un reģistrācijai.
         </p>
 
-        <div class="form-block">
-          <h2>Reģistrācija</h2>
+        <div class="auth-switch" role="tablist" aria-label="Autentifikācijas režīms">
+          <button
+            id="auth-tab-login"
+            class="auth-switch-btn is-active"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="auth-panel-login">
+            Pierakstīšanās
+          </button>
+          <button
+            id="auth-tab-signup"
+            class="auth-switch-btn"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="auth-panel-signup">
+            Reģistrācija
+          </button>
+        </div>
+
+        <div id="auth-error" class="error-message" aria-live="polite"></div>
+
+        <section
+          id="auth-panel-login"
+          class="auth-panel is-active"
+          role="tabpanel"
+          aria-labelledby="auth-tab-login">
+          <form id="login-form">
+            <label for="login-username">Lietotājvārds vai e-pasts</label>
+            <input
+              type="text"
+              id="login-username"
+              autocomplete="username"
+              required
+            />
+            <label for="login-password">Parole</label>
+            <input
+              type="password"
+              id="login-password"
+              autocomplete="current-password"
+              required
+            />
+            <button type="submit" class="btn-primary">Ienākt</button>
+          </form>
+        </section>
+
+        <section
+          id="auth-panel-signup"
+          class="auth-panel"
+          role="tabpanel"
+          aria-labelledby="auth-tab-signup"
+          hidden>
           <form id="signup-form">
             <label for="signup-username">Lietotājvārds</label>
             <input
@@ -53,7 +104,9 @@
               autocomplete="email"
               required
             />
-            <p class="signup-email-note">Vajadzīgs paroles atjaunošanai un jaunumiem (reti, bez spama). Vari jebkurā laikā noņemt profilā.</p>
+            <p class="signup-email-note">
+              Vajadzīgs paroles atjaunošanai un jaunumiem (reti, bez spama).
+            </p>
             <label for="signup-password">Parole</label>
             <input
               type="password"
@@ -71,37 +124,15 @@
             </select>
             <button type="submit" class="btn-primary">Reģistrēties</button>
           </form>
-        </div>
+        </section>
 
-        <div class="form-block">
-          <h2>Pierakstīšanās</h2>
-          <form id="login-form">
-            <label for="login-username">Lietotājvārds vai e-pasts</label>
-            <input
-              type="text"
-              id="login-username"
-              autocomplete="username"
-              required
-            />
-            <label for="login-password">Parole</label>
-            <input
-              type="password"
-              id="login-password"
-              autocomplete="current-password"
-              required
-            />
-            <button type="submit" class="btn-primary">Ienākt</button>
-            <p class="auth-link-row">
-              <a href="forgot.html">Aizmirsi paroli?</a>
-            </p>
-          </form>
+        <div class="auth-help-row">
+          <a href="forgot.html">Aizmirsi paroli?</a>
+          <a href="privacy.html" target="_blank" rel="noopener">Privātuma politika</a>
         </div>
-
-        <div id="auth-error" class="error-message"></div>
-
-        <div class="auth-footer">
-          <a href="privacy.html" target="_blank" rel="noopener">Privatuma politika</a>
-        </div>
+        <p class="auth-mini-note">
+          E-pasts vajadzīgs paroles atjaunošanai un retiem jaunumiem. Vari noņemt profilā jebkurā brīdī.
+        </p>
       </div>
     </div>
 
