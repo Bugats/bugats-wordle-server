@@ -1961,14 +1961,18 @@ summary:focus-visible {
   transition: opacity 0.25s ease;
 }
 
-/* grid anchor PIXI overlay */
-#grid { position: relative; }
+/* grid anchor PIXI overlay + single tile-size source */
+#grid {
+  position: relative;
+  --tile-size: 56px;
+  --tile-gap: 6px;
+}
 
 .vz-row,
 .grid-row {
   display: flex;
   justify-content: center;
-  gap: 6px;
+  gap: var(--tile-gap, 6px);
   margin-bottom: 6px;
   perspective: 900px;
   position: relative;
@@ -1977,8 +1981,8 @@ summary:focus-visible {
 
 .vz-tile,
 .tile {
-  width: 58px;
-  height: 58px;
+  width: var(--tile-size, 56px);
+  height: var(--tile-size, 56px);
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -1991,7 +1995,7 @@ summary:focus-visible {
   border: 2px solid var(--vz-tile-border);
   color: var(--vz-tile-text);
   font-weight: 700;
-  font-size: 30px;
+  font-size: calc(var(--tile-size, 56px) * 0.56);
   text-shadow: 0 0 6px rgba(0, 0, 0, 0.85);
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
   backface-visibility: hidden;
@@ -3305,18 +3309,11 @@ summary:focus-visible {
   .vz-footer-link { margin-top: 4px; font-size: 12px; }
   .vz-keyboard { margin-top: 4px; max-width: 100%; }
   .vz-bottom-buttons { margin-top: 4px; gap: 6px; }
-
-  .vz-tile, .tile {
-    width: clamp(36px, 8vw, 48px);
-    height: clamp(36px, 8vw, 48px);
-    font-size: 18px;
-  }
 }
 
 @media (max-width: 600px) {
   .vz-game-container { margin-top: 12px; padding: 0 6px 20px; }
   .vz-main-layout { gap: 10px; }
-  .vz-tile, .tile { width: 42px; height: 42px; font-size: 22px; }
   .vz-key, .kb-key { min-width: 30px; padding: 7px 4px; font-size: 12px; }
   .vz-bottom-buttons button { flex: 1; padding: 8px 0; font-size: 13px; }
   .vz-footer-link { display: none !important; }
@@ -3738,17 +3735,7 @@ body.vz-mobile-game-only #grid{
   font-size: var(--kb-font);
   touch-action: manipulation;
 }
-/* ===== AUTO-FIT GRID (tile size mainīgais) ===== */
-#grid{
-  --tile-size: 56px;
-  --tile-gap: 6px;
-}
-.grid-row{ gap: var(--tile-gap); }
-.tile{
-  width: var(--tile-size);
-  height: var(--tile-size);
-  font-size: calc(var(--tile-size) * 0.56);
-}
+/* ===== AUTO-FIT GRID (tile size mainīgie ir definēti pie #grid) ===== */
 /* Pilnekrānā: apakšā vienmēr viena rinda ar 2 pogām */
 body.vz-mobile-game-only .vz-bottom-buttons,
 body.vz-mobile-game-only #vz-fs-bottom-bar{
