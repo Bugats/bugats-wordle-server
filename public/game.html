@@ -48,7 +48,7 @@
 
   <body class="vz-body-game">
     <noscript>
-      <div style="padding: 12px; margin: 12px; border-radius: 12px; background: rgba(0,0,0,.35); color: #fff;">
+      <div class="vz-noscript-note">
         Lai spēle darbotos, pārlūkā jābūt ieslēgtam JavaScript.
       </div>
     </noscript>
@@ -140,13 +140,13 @@
         <span id="season-countdown" class="vz-season-timer">—</span>
 
         <!-- šo pogu rādām tikai adminam ar JS -->
-        <button id="season-start-btn" class="vz-season-start-btn" type="button" style="display: none">
+        <button id="season-start-btn" class="vz-season-start-btn u-hidden-initial" type="button">
           Startēt sezonu
         </button>
       </div>
 
       <!-- HOT STREAK -->
-      <div id="hot-streak-banner" class="vz-hot-banner" style="display: none">
+      <div id="hot-streak-banner" class="vz-hot-banner u-hidden-initial">
         🔥 HOT STREAK! 🔥
       </div>
 
@@ -168,12 +168,12 @@
           <div id="keyboard" class="vz-keyboard"></div>
 
           <div class="vz-bottom-buttons">
-            <button id="new-round-btn" type="button" style="display: none">Jauns raunds</button>
+            <button id="new-round-btn" class="u-hidden-initial" type="button">Jauns raunds</button>
           </div>
 
           <div class="vz-region-race-card" id="region-race-card">
             <div class="vz-card-header">Novadu sacīkste</div>
-            <div id="region-my-rank" class="vz-region-my-rank" style="display: none;"></div>
+            <div id="region-my-rank" class="vz-region-my-rank u-hidden-initial"></div>
             <div class="vz-region-total">
               <div class="vz-region-total-label">
                 Latvija kopā:
@@ -223,7 +223,7 @@
                       <button id="player-avatar-upload-btn" type="button" class="vz-avatar-upload-btn">
                         Mainīt bildi
                       </button>
-                      <input id="player-avatar-file" type="file" accept="image/*" style="display: none" />
+                      <input id="player-avatar-file" class="u-hidden-initial" type="file" accept="image/*" />
                     </div>
                   </div>
 
@@ -264,24 +264,22 @@
                     🎮 Dalīties Discord
                   </button>
                   <p class="vz-share-note">Uzspied un padalies ar spēli TikTok, WhatsApp vai citur.</p>
-                  <button id="share-result-btn" class="vz-share-btn" type="button" style="display: none">
+                  <button id="share-result-btn" class="vz-share-btn u-hidden-initial" type="button">
                     📣 Dalīties ar rezultātu
                   </button>
                   <button
                     id="share-result-wa-btn"
-                    class="vz-share-btn vz-share-btn-wa"
-                    type="button"
-                    style="display: none">
+                    class="vz-share-btn vz-share-btn-wa u-hidden-initial"
+                    type="button">
                     💬 Dalīties rezultātu WhatsApp
                   </button>
                   <button
                     id="share-result-discord-btn"
-                    class="vz-share-btn vz-share-btn-discord"
-                    type="button"
-                    style="display: none">
+                    class="vz-share-btn vz-share-btn-discord u-hidden-initial"
+                    type="button">
                     🎮 Dalīties rezultātu Discord
                   </button>
-                  <p id="share-result-note" class="vz-share-note" style="display: none">
+                  <p id="share-result-note" class="vz-share-note u-hidden-initial">
                     Uztaisu uzlīmīti ar tavu rezultātu un VĀRDU ZONU.
                   </p>
                 </div>
@@ -319,7 +317,7 @@
                   <div class="vz-leaderboard-card">
                     <div class="vz-card-header">TOP 10 spēlētāji</div>
                     <ol id="lb-list" class="vz-lb-list"></ol>
-                    <div id="lb-target-line" class="vz-lb-target-line" style="display: none;"></div>
+                    <div id="lb-target-line" class="vz-lb-target-line u-hidden-initial"></div>
                   </div>
 
                   <!-- WEEKLY CHALLENGE -->
@@ -405,7 +403,7 @@
               <span id="chat-unread-badge" class="hidden">JAUNAS</span>
               <span
                 id="chat-mention-badge"
-                style="margin-left: 10px; cursor: pointer"
+                class="vz-chat-mention-badge"
                 role="button"
                 tabindex="0"
                 aria-label="Atvērt pieminējumus">
@@ -595,7 +593,7 @@
           <div id="pp-email-status" class="vz-profile-email-status"></div>
         </div>
 
-        <div class="profile-row" style="margin-top: 10px; justify-content: center">
+        <div class="profile-row profile-row--center-actions">
           <button id="pp-msg-btn" class="vz-profile-msg-btn" type="button">Rakstīt personiski</button>
         </div>
       </div>
@@ -658,16 +656,21 @@
       <div class="vz-modal-inner vz-challenge-modal">
         <h3 id="app-install-title">Lejupielādēt lietotni</h3>
         <p class="vz-challenge-create-note">Spēli vari izmantot kā lietotni – ātrāk atveras un ērtāk no sākumekrāna.</p>
-        <div id="app-install-pwa-row" class="vz-challenge-join-btns" style="display: none;">
+        <div id="app-install-pwa-row" class="vz-challenge-join-btns u-hidden-initial">
           <button id="app-install-pwa-btn" type="button" class="vz-btn-primary">Pievienot sākumekrānam</button>
         </div>
-        <p class="vz-challenge-create-note" style="margin-top: 0.5em;">
+        <p class="vz-challenge-create-note vz-app-install-platform-note">
           <strong>Android:</strong> lejupielādē no Play Store.<br />
           <strong>iPhone / iPad:</strong> Safari → izvēlne (kvadrāts ar bultiņu) → „Pievienot sākumekrānam”.<br />
           <strong>Dators:</strong> Chrome izvēlnē → „Instalēt VĀRDU ZONA” vai „Pievienot sākumekrānam”.
         </p>
-        <a id="app-install-play-link" class="vz-btn-primary" href="https://play.google.com/store/apps/details?id=lv.thezone.wordle" target="_blank" rel="noopener" style="display: inline-block; margin-top: 0.75em; text-decoration: none; text-align: center;">Atvērt Play Store</a>
-        <button id="app-install-close" type="button" class="vz-modal-close-btn" style="margin-top: 0.5em;">Aizvērt</button>
+        <a
+          id="app-install-play-link"
+          class="vz-btn-primary vz-app-install-play-link"
+          href="https://play.google.com/store/apps/details?id=lv.thezone.wordle"
+          target="_blank"
+          rel="noopener">Atvērt Play Store</a>
+        <button id="app-install-close" type="button" class="vz-modal-close-btn vz-app-install-close-btn">Aizvērt</button>
       </div>
     </div>
 

@@ -36,6 +36,19 @@ body {
   display: none !important;
 }
 
+/* Initial hidden state (without !important) for nodes JS toggles via style.display. */
+.u-hidden-initial {
+  display: none;
+}
+
+.vz-noscript-note {
+  padding: 12px;
+  margin: 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+}
+
 /* ===========================
    INDEX.HTML – reģistrācija / pierakstīšanās
    =========================== */
@@ -1732,6 +1745,11 @@ input:focus-visible {
 }
 #chat-unread-badge.hidden { display: none !important; }
 
+.vz-chat-mention-badge {
+  margin-left: 10px;
+  cursor: pointer;
+}
+
 .vz-chat-messages {
   padding: 14px 2px 4px; /* FIX: augša, lai nenogriež 1. rindas */
   border-radius: 4px;
@@ -2567,6 +2585,7 @@ input:focus-visible {
 }
 .vz-challenge-modal h3 { margin: 0 0 12px; font-size: 18px; color: #fff; }
 .vz-challenge-create-note, .vz-challenge-join-text { margin: 0 0 14px; font-size: 14px; color: #b0b0b0; }
+.vz-app-install-platform-note { margin-top: 0.5em; }
 .vz-challenge-url-row { display: flex; gap: 8px; margin-bottom: 8px; }
 .vz-challenge-url-input { flex: 1; padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: #0f1222; color: #fff; font-size: 13px; }
 .vz-challenge-copy-btn { padding: 8px 14px; border-radius: 6px; border: none; background: #00c853; color: #fff; font-weight: 600; cursor: pointer; }
@@ -2575,6 +2594,13 @@ input:focus-visible {
 .vz-challenge-join-btns { display: flex; gap: 10px; margin-top: 16px; }
 .vz-btn-primary { padding: 10px 20px; border-radius: 8px; border: none; background: #00c853; color: #fff; font-weight: 600; cursor: pointer; }
 .vz-btn-secondary { padding: 10px 20px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.3); background: transparent; color: #ccc; cursor: pointer; }
+.vz-app-install-play-link {
+  display: inline-block;
+  margin-top: 0.75em;
+  text-decoration: none;
+  text-align: center;
+}
+.vz-app-install-close-btn { margin-top: 0.5em; }
 }
 
 /* ===========================
@@ -2626,6 +2652,11 @@ input:focus-visible {
   justify-content: space-between;
   margin: 2px 0;
   color: #ddd;
+}
+
+.profile-row--center-actions {
+  margin-top: 10px;
+  justify-content: center;
 }
 .vz-profile-email-block {
   margin-top: 10px;
