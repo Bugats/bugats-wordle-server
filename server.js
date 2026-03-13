@@ -25,6 +25,8 @@ import crypto from "crypto";
 import pino from "pino";
 import pinoHttp from "pino-http";
 import { createClient } from "@supabase/supabase-js";
+import bracketsManagerPkg from "brackets-manager";
+import bracketsJsonDbPkg from "brackets-json-db";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,6 +48,14 @@ const SEASONS_FILE =
 // Static frontend (Render)
 const STATIC_DIR = process.env.STATIC_DIR || path.join(__dirname, "public");
 const STATIC_INDEX = path.join(STATIC_DIR, "index.html");
+const TOURNAMENTS_FILE =
+  process.env.TOURNAMENTS_FILE || path.join(__dirname, "tournaments.json");
+const TOURNAMENTS_DB_FILE =
+  process.env.TOURNAMENTS_DB_FILE ||
+  path.join(__dirname, "tournaments.brackets.json");
+
+const { BracketsManager } = bracketsManagerPkg;
+const { JsonDatabase } = bracketsJsonDbPkg;
 
 // ====== Supabase (storage + optional DB) ======
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").trim();
@@ -627,6 +637,187 @@ function saveJsonAtomic(file, data) {
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
   fs.renameSync(tmp, file);
 }
+
+// ======== TURNĪRI (brackets-manager) ========
+const TOURNAMENT_NAME_MAX_LEN = 64;
+const TOURNAMENT_MAX_PARTICIPANTS = 128;
+const TOURNAMENT_STAGE_TYPES = new Set([
+  "single_elimination",
+  "double_elimination",
+  "round_robin",
+]);
+const TOURNAMENT_GRAND_FINAL_TYPES = new Set(["none", "simple", "double"]);
+
+function buildInitialTournamentStore() {
+  return {
+    nextTournamentId: 1,
+    tournaments: [],
+  };
+}
+
+function normalizeTournamentStore(raw) {
+  const base = buildInitialTournamentStore();
+  const out = raw && typeof raw === "object" ? raw : base;
+
+  if (!Array.isArray(out.tournaments)) out.tournaments = [];
+  out.tournaments = out.tournaments
+    .filter((t) => t && typeof t === "object")
+    .map((t) => ({
+      id: Math.max(1, Math.floor(Number(t.id) || 0)),
+      name: normalizeTournamentName(t.name),
+      type: normalizeTournamentType(t.type),
+      stageId: Number.isFinite(Number(t.stageId))
+        ? Math.floor(Number(t.stageId))
+        : null,
+      createdAt: Math.max(0, Number(t.createdAt) || 0),
+      createdBy: String(t.createdBy || "").trim(),
+      participantCount: Math.max(
+        0,
+        Math.floor(Number(t.participantCount) || 0)
+      ),
+      status:
+        t.status === "completed" || t.status === "archived"
+          ? t.status
+          : "active",
+      completedAt: Math.max(0, Number(t.completedAt) || 0),
+    }));
+
+  const maxId = out.tournaments.reduce(
+    (m, t) => Math.max(m, Math.floor(Number(t.id) || 0)),
+    0
+  );
+  const next = Math.floor(Number(out.nextTournamentId) || 0);
+  out.nextTournamentId = Math.max(maxId + 1, next || 1);
+  return out;
+}
+
+function saveTournamentStore() {
+  saveJsonAtomic(TOURNAMENTS_FILE, tournamentStore);
+}
+
+function parseNonNegativeIntId(raw) {
+  const id = Number(raw);
+  if (!Number.isFinite(id) || id < 0 || !Number.isInteger(id)) return null;
+  return id;
+}
+
+function parseTournamentId(raw) {
+  const id = parseNonNegativeIntId(raw);
+  if (id == null || id < 1) return null;
+  return id;
+}
+
+function getTournamentMetaById(tournamentId) {
+  const id = parseTournamentId(tournamentId);
+  if (!id) return null;
+  return (
+    tournamentStore.tournaments.find((t) => Number(t?.id) === Number(id)) ||
+    null
+  );
+}
+
+function normalizeTournamentName(raw) {
+  const name = String(raw || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!name) return "";
+  return name.slice(0, TOURNAMENT_NAME_MAX_LEN);
+}
+
+function normalizeTournamentType(raw) {
+  const type = String(raw || "single_elimination")
+    .trim()
+    .toLowerCase();
+  if (TOURNAMENT_STAGE_TYPES.has(type)) return type;
+  return "single_elimination";
+}
+
+function sanitizeTournamentSeeding(seeding) {
+  if (!Array.isArray(seeding)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const item of seeding) {
+    const name = String(item || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!name) continue;
+    const normalized = name.slice(0, 30);
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(normalized);
+    if (out.length >= TOURNAMENT_MAX_PARTICIPANTS) break;
+  }
+  return out;
+}
+
+function buildTournamentStageSettings(type, rawSettings) {
+  const settings = {};
+  const src = rawSettings && typeof rawSettings === "object" ? rawSettings : {};
+
+  if (Number.isFinite(Number(src.matchesChildCount))) {
+    const cc = Math.floor(Number(src.matchesChildCount));
+    if (cc >= 1 && cc <= 9) settings.matchesChildCount = cc;
+  }
+
+  if (type === "single_elimination") {
+    if (typeof src.consolationFinal === "boolean") {
+      settings.consolationFinal = src.consolationFinal;
+    }
+  }
+
+  if (type === "double_elimination") {
+    const gf = String(src.grandFinal || "simple")
+      .trim()
+      .toLowerCase();
+    settings.grandFinal = TOURNAMENT_GRAND_FINAL_TYPES.has(gf) ? gf : "simple";
+  }
+
+  if (type === "round_robin") {
+    const mode = String(src.roundRobinMode || "simple")
+      .trim()
+      .toLowerCase();
+    settings.roundRobinMode = mode === "double" ? "double" : "simple";
+    if (Number.isFinite(Number(src.groupCount))) {
+      const gc = Math.floor(Number(src.groupCount));
+      if (gc >= 1 && gc <= 32) settings.groupCount = gc;
+    }
+  }
+
+  return Object.keys(settings).length ? settings : undefined;
+}
+
+async function getTournamentSnapshot(tournamentId) {
+  const data = await tournamentManager.get.tournamentData(tournamentId);
+  const currentStage = await tournamentManager.get.currentStage(tournamentId);
+  const currentRound = currentStage
+    ? await tournamentManager.get.currentRound(currentStage.id)
+    : null;
+  const currentMatches = currentStage
+    ? await tournamentManager.get.currentMatches(currentStage.id)
+    : [];
+  return { data, currentStage, currentRound, currentMatches };
+}
+
+async function getTournamentParticipantNameMap(tournamentId) {
+  const rows =
+    (await tournamentDb.select("participant", {
+      tournament_id: tournamentId,
+    })) || [];
+  const out = new Map();
+  for (const p of rows) {
+    if (!p || p.id == null) continue;
+    out.set(Number(p.id), String(p.name || "").trim());
+  }
+  return out;
+}
+
+let tournamentStore = normalizeTournamentStore(
+  loadJsonSafe(TOURNAMENTS_FILE, null)
+);
+saveTournamentStore();
+const tournamentDb = new JsonDatabase(TOURNAMENTS_DB_FILE);
+const tournamentManager = new BracketsManager(tournamentDb);
 
 function loadUsers(listOverride) {
   try {
@@ -5287,6 +5478,250 @@ app.post("/season/start", authMiddleware, (req, res) => {
     didReset: !!result.didReset,
   });
 });
+
+// ======== TURNĪRI (brackets-manager) ========
+app.get("/tournaments", authMiddleware, (_req, res) => {
+  const list = [...(tournamentStore.tournaments || [])].sort(
+    (a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)
+  );
+  res.json({ tournaments: list });
+});
+
+app.post("/tournaments", authMiddleware, async (req, res) => {
+  try {
+    const admin = req.user;
+    if (!isAdminUser(admin)) {
+      return res.status(403).json({ message: "Tikai admins." });
+    }
+
+    const name = normalizeTournamentName(req.body?.name);
+    if (!name) {
+      return res.status(400).json({ message: "Norādi turnīra nosaukumu." });
+    }
+
+    const type = normalizeTournamentType(req.body?.type);
+    const seeding = sanitizeTournamentSeeding(req.body?.seeding);
+    if (seeding.length < 2) {
+      return res
+        .status(400)
+        .json({ message: "Turnīram vajag vismaz 2 dalībniekus." });
+    }
+
+    const tournamentId = Number(tournamentStore.nextTournamentId || 1);
+    tournamentStore.nextTournamentId = tournamentId + 1;
+
+    const stage = await tournamentManager.create.stage({
+      tournamentId,
+      name,
+      type,
+      seeding,
+      settings: buildTournamentStageSettings(type, req.body?.settings),
+    });
+
+    const meta = {
+      id: tournamentId,
+      name,
+      type,
+      stageId: stage?.id ?? null,
+      createdAt: Date.now(),
+      createdBy: admin.username,
+      participantCount: seeding.length,
+      status: "active",
+      completedAt: 0,
+    };
+
+    tournamentStore.tournaments.push(meta);
+    saveTournamentStore();
+
+    io.emit("tournament:update", {
+      tournamentId,
+      event: "created",
+    });
+
+    return res.json({ ok: true, tournament: meta, stage });
+  } catch (err) {
+    console.error("Tournament create error:", err);
+    return res.status(400).json({
+      message: "Neizdevās izveidot turnīru.",
+      detail: String(err?.message || err || ""),
+    });
+  }
+});
+
+app.get("/tournaments/:id", authMiddleware, async (req, res) => {
+  try {
+    const tournamentId = parseTournamentId(req.params.id);
+    if (!tournamentId) {
+      return res.status(400).json({ message: "Nederīgs turnīra ID." });
+    }
+    const meta = getTournamentMetaById(tournamentId);
+    if (!meta) return res.status(404).json({ message: "Turnīrs nav atrasts." });
+
+    const snapshot = await getTournamentSnapshot(tournamentId);
+
+    if (!snapshot.currentStage && meta.status !== "completed") {
+      meta.status = "completed";
+      if (!meta.completedAt) meta.completedAt = Date.now();
+      saveTournamentStore();
+    }
+
+    let finalStandings = [];
+    try {
+      if (meta.stageId != null && !snapshot.currentStage) {
+        finalStandings = await tournamentManager.get.finalStandings(
+          meta.stageId
+        );
+      }
+    } catch {
+      finalStandings = [];
+    }
+
+    return res.json({
+      tournament: meta,
+      ...snapshot,
+      finalStandings,
+    });
+  } catch (err) {
+    console.error("Tournament load error:", err);
+    return res.status(500).json({ message: "Neizdevās ielādēt turnīru." });
+  }
+});
+
+app.post(
+  "/tournaments/:id/matches/:matchId/report",
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const tournamentId = parseTournamentId(req.params.id);
+      const matchId = parseNonNegativeIntId(req.params.matchId);
+      if (!tournamentId || matchId == null) {
+        return res
+          .status(400)
+          .json({ message: "Nederīgs turnīra vai mača ID." });
+      }
+
+      const meta = getTournamentMetaById(tournamentId);
+      if (!meta)
+        return res.status(404).json({ message: "Turnīrs nav atrasts." });
+
+      const match = await tournamentDb.select("match", matchId);
+      if (!match) return res.status(404).json({ message: "Mačs nav atrasts." });
+
+      const stage = await tournamentDb.select("stage", match.stage_id);
+      if (!stage || Number(stage.tournament_id) !== Number(tournamentId)) {
+        return res
+          .status(404)
+          .json({ message: "Mačs neietilpst norādītajā turnīrā." });
+      }
+
+      const participantMap =
+        await getTournamentParticipantNameMap(tournamentId);
+      const p1Name =
+        match?.opponent1?.id != null
+          ? participantMap.get(Number(match.opponent1.id)) || ""
+          : "";
+      const p2Name =
+        match?.opponent2?.id != null
+          ? participantMap.get(Number(match.opponent2.id)) || ""
+          : "";
+
+      const requester = String(req.user?.username || "")
+        .trim()
+        .toLowerCase();
+      const canReportAsPlayer =
+        (p1Name && p1Name.toLowerCase() === requester) ||
+        (p2Name && p2Name.toLowerCase() === requester);
+      if (!isAdminUser(req.user) && !canReportAsPlayer) {
+        return res.status(403).json({
+          message:
+            "Šī mača rezultātu drīkst iesniegt tikai dalībnieks vai admins.",
+        });
+      }
+
+      const forfeitRaw = String(req.body?.forfeit || "")
+        .trim()
+        .toLowerCase();
+      if (
+        forfeitRaw === "opponent1" ||
+        forfeitRaw === "1" ||
+        forfeitRaw === "opponent2" ||
+        forfeitRaw === "2"
+      ) {
+        const op1Forfeit = forfeitRaw === "opponent1" || forfeitRaw === "1";
+        await tournamentManager.update.match({
+          id: matchId,
+          opponent1: op1Forfeit
+            ? { forfeit: true, result: "loss" }
+            : { result: "win" },
+          opponent2: op1Forfeit
+            ? { result: "win" }
+            : { forfeit: true, result: "loss" },
+        });
+      } else {
+        const score1 = Number(req.body?.score1);
+        const score2 = Number(req.body?.score2);
+        if (
+          !Number.isFinite(score1) ||
+          !Number.isFinite(score2) ||
+          score1 < 0 ||
+          score2 < 0
+        ) {
+          return res.status(400).json({
+            message: "Norādi korektus score1 un score2 (>= 0).",
+          });
+        }
+        if (score1 === score2) {
+          return res.status(400).json({
+            message: "Neizšķirts nav atbalstīts šim mačam.",
+          });
+        }
+        await tournamentManager.update.match({
+          id: matchId,
+          opponent1: {
+            score: Math.floor(score1),
+            result: score1 > score2 ? "win" : "loss",
+          },
+          opponent2: {
+            score: Math.floor(score2),
+            result: score2 > score1 ? "win" : "loss",
+          },
+        });
+      }
+
+      const updated = await tournamentDb.select("match", matchId);
+      if (!updated) {
+        return res
+          .status(500)
+          .json({ message: "Neizdevās nolasīt atjaunināto maču." });
+      }
+
+      const snapshot = await getTournamentSnapshot(tournamentId);
+      if (!snapshot.currentStage && meta.status !== "completed") {
+        meta.status = "completed";
+        if (!meta.completedAt) meta.completedAt = Date.now();
+        saveTournamentStore();
+      }
+
+      io.emit("tournament:update", {
+        tournamentId,
+        event: "match_reported",
+        matchId,
+      });
+
+      return res.json({
+        ok: true,
+        tournament: meta,
+        match: updated,
+      });
+    } catch (err) {
+      console.error("Tournament match report error:", err);
+      return res.status(400).json({
+        message: "Neizdevās iesniegt mača rezultātu.",
+        detail: String(err?.message || err || ""),
+      });
+    }
+  }
+);
 
 // ======== Spēles loģika ========
 function pickRandomWord() {
