@@ -4203,3 +4203,40 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 #vz-dm-typing {
   color: rgba(255, 255, 255, 0.8);
 }
+
+/* ===========================
+   Mobile readability floor
+   =========================== */
+@media (max-width: 768px) {
+  .vz-topbar,
+  .vz-topbar-right,
+  .vz-topbar-left,
+  .vz-topbar-link,
+  .vz-topbar-more-trigger,
+  .vz-topbar-right #logout-btn,
+  #sound-toggle-btn,
+  .vz-footer-link,
+  .vz-footer-link .vz-how-to-write,
+  .vz-radio-volume-label,
+  .vz-radio-note,
+  .mission-progress,
+  .mission-rewards,
+  .mission-status,
+  .mission-status-done,
+  .vz-support-note,
+  .vz-share-note,
+  .chat-time,
+  .vz-medal-empty,
+  .vz-medal-extra,
+  .vz-ability-btn,
+  .vz-abilities button,
+  .vz-hint-row,
+  #hint-row,
+  #vz-hint-row,
+  #vz-dm-drawer .dm-reply-preview,
+  #vz-dm-drawer .dm-meta,
+  #vz-dm-drawer .dm-rank-badge {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+}
