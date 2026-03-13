@@ -100,10 +100,30 @@
           </button>
 
           <button id="sound-toggle-btn" class="vz-sound-btn" type="button">🔊 Skaņa: ON</button>
-          <button id="theme-toggle-btn" class="vz-topbar-link" type="button" title="Tēma: tumšs / gaišs / augsta kontrasta" aria-label="Mainīt tēmu">🌙 Tēma</button>
           <button id="logout-btn" type="button">Izlogoties</button>
-          <a id="app-download-link" class="vz-topbar-link" href="https://play.google.com/store/apps/details?id=lv.thezone.wordle" target="_blank" rel="noopener" title="Lejupielādēt VĀRDU ZONA no Play Store vai pievienot sākumekrānam">📲 Lietotne</a>
-          <a class="vz-topbar-link" href="privacy.html" target="_blank" rel="noopener">Privatums</a>
+          <details class="vz-topbar-more">
+            <summary class="vz-topbar-more-trigger">⋯ Vairāk</summary>
+            <div class="vz-topbar-more-menu">
+              <button
+                id="theme-toggle-btn"
+                class="vz-topbar-link"
+                type="button"
+                title="Tēma: tumšs / gaišs / augsta kontrasta"
+                aria-label="Mainīt tēmu">
+                🌙 Tēma
+              </button>
+              <a
+                id="app-download-link"
+                class="vz-topbar-link"
+                href="https://play.google.com/store/apps/details?id=lv.thezone.wordle"
+                target="_blank"
+                rel="noopener"
+                title="Lejupielādēt VĀRDU ZONA no Play Store vai pievienot sākumekrānam">
+                📲 Lietotne
+              </a>
+              <a class="vz-topbar-link" href="privacy.html" target="_blank" rel="noopener">Privatums</a>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -185,183 +205,197 @@
 
         <!-- LABĀ PUSE -->
         <div class="vz-right-area">
-          <div class="vz-top-panels">
-            <!-- PROFILS -->
-            <div class="vz-player-card">
-              <div class="vz-card-header">Tavs profils</div>
+          <div class="vz-side-groups">
+            <section class="vz-side-group">
+              <div class="vz-side-group-title">Galvenais</div>
+              <div class="vz-top-panels">
+                <!-- PROFILS -->
+                <div class="vz-player-card">
+                  <div class="vz-card-header">Tavs profils</div>
 
-              <div class="vz-card-avatar-row">
-                <div class="vz-avatar-circle">
-                  <img id="player-avatar-img" alt="Avatar" decoding="async" />
-                  <span id="player-avatar-initials">B</span>
-                </div>
+                  <div class="vz-card-avatar-row">
+                    <div class="vz-avatar-circle">
+                      <img id="player-avatar-img" alt="Avatar" decoding="async" />
+                      <span id="player-avatar-initials">B</span>
+                    </div>
 
-                <div class="vz-avatar-controls">
-                  <button id="player-avatar-upload-btn" type="button" class="vz-avatar-upload-btn">
-                    Mainīt bildi
+                    <div class="vz-avatar-controls">
+                      <button id="player-avatar-upload-btn" type="button" class="vz-avatar-upload-btn">
+                        Mainīt bildi
+                      </button>
+                      <input id="player-avatar-file" type="file" accept="image/*" style="display: none" />
+                    </div>
+                  </div>
+
+                  <div class="vz-card-row"><span>Nickname:</span><span id="player-name"></span></div>
+                  <div class="vz-card-row"><span>Novads:</span><span id="player-region">—</span></div>
+                  <div class="vz-card-row vz-title-row">
+                    <span>Tituls:</span><span id="player-title" class="vz-title-value">—</span>
+                  </div>
+                  <div class="vz-card-row"><span>Rank:</span><span id="player-rank"></span></div>
+                  <div class="vz-card-row"><span>XP:</span><span id="player-xp"></span></div>
+
+                  <div class="vz-xp-bar-wrapper">
+                    <div class="vz-xp-bar-bg">
+                      <div id="player-xp-bar" class="vz-xp-bar-fill"></div>
+                    </div>
+                    <div id="player-xp-label" class="vz-xp-bar-label"></div>
+                  </div>
+
+                  <div class="vz-card-row"><span>Punkti:</span><span id="player-score"></span></div>
+                  <div class="vz-card-row"><span>Streak:</span><span id="player-streak"></span></div>
+                  <div class="vz-card-row"><span>Lab. streak:</span><span id="player-best-streak"></span></div>
+                  <div class="vz-card-row"><span>Coins:</span><span id="player-coins"></span></div>
+                  <div class="vz-card-row"><span>Žetoni:</span><span id="player-tokens"></span></div>
+
+                  <div class="vz-card-row vz-card-row-medals">
+                    <span>Medaļas:</span>
+                    <div id="player-medals" class="vz-medals-strip"></div>
+                  </div>
+
+                  <hr class="vz-divider" />
+
+                  <button id="challenge-friend-btn" class="vz-share-btn" type="button" title="Izaicināt draugu – abi min to pašu vārdu, uzvar tas, kam mazāk mēģinājumu">⚔️ Izaicināt draugu</button>
+                  <button id="share-btn" class="vz-share-btn" type="button">🔗 Dalīties ar VĀRDU ZONU</button>
+                  <button id="share-whatsapp-btn" class="vz-share-btn vz-share-btn-wa" type="button">
+                    💬 Dalīties WhatsApp
                   </button>
-                  <input id="player-avatar-file" type="file" accept="image/*" style="display: none" />
+                  <button id="share-discord-btn" class="vz-share-btn vz-share-btn-discord" type="button">
+                    🎮 Dalīties Discord
+                  </button>
+                  <p class="vz-share-note">Uzspied un padalies ar spēli TikTok, WhatsApp vai citur.</p>
+                  <button id="share-result-btn" class="vz-share-btn" type="button" style="display: none">
+                    📣 Dalīties ar rezultātu
+                  </button>
+                  <button
+                    id="share-result-wa-btn"
+                    class="vz-share-btn vz-share-btn-wa"
+                    type="button"
+                    style="display: none">
+                    💬 Dalīties rezultātu WhatsApp
+                  </button>
+                  <button
+                    id="share-result-discord-btn"
+                    class="vz-share-btn vz-share-btn-discord"
+                    type="button"
+                    style="display: none">
+                    🎮 Dalīties rezultātu Discord
+                  </button>
+                  <p id="share-result-note" class="vz-share-note" style="display: none">
+                    Uztaisu uzlīmīti ar tavu rezultātu un VĀRDU ZONU.
+                  </p>
+                </div>
+
+                <!-- MISIJAS -->
+                <div class="vz-leaderboard-card">
+                  <div class="vz-card-header">Dienas misijas</div>
+                  <ul id="missions-list" class="vz-missions-list"></ul>
+                </div>
+
+                <!-- ONLINE -->
+                <div class="vz-online-card">
+                  <div class="vz-card-header">Online: <span id="online-count">0</span></div>
+                  <ul id="online-list" class="vz-online-list"></ul>
+                </div>
+
+                <!-- DRAUGI -->
+                <div class="vz-online-card" id="friends-card">
+                  <div class="vz-card-header">Draugi</div>
+                  <div class="vz-friends-add">
+                    <input id="friend-add-input" type="text" placeholder="Lietotājvārds" />
+                    <button id="friend-add-btn" type="button">Pievienot</button>
+                  </div>
+                  <div id="friends-invites" class="vz-friends-invites"></div>
+                  <ul id="friends-list" class="vz-friends-list"></ul>
                 </div>
               </div>
+            </section>
 
-              <div class="vz-card-row"><span>Nickname:</span><span id="player-name"></span></div>
-              <div class="vz-card-row"><span>Novads:</span><span id="player-region">—</span></div>
-              <div class="vz-card-row vz-title-row">
-                <span>Tituls:</span><span id="player-title" class="vz-title-value">—</span>
-              </div>
-              <div class="vz-card-row"><span>Rank:</span><span id="player-rank"></span></div>
-              <div class="vz-card-row"><span>XP:</span><span id="player-xp"></span></div>
+            <details class="vz-side-group vz-side-group-collapsible">
+              <summary class="vz-side-group-summary">Sacensības un rangi</summary>
+              <div class="vz-side-group-content">
+                <div class="vz-top-panels">
+                  <!-- TOP 10 -->
+                  <div class="vz-leaderboard-card">
+                    <div class="vz-card-header">TOP 10 spēlētāji</div>
+                    <ol id="lb-list" class="vz-lb-list"></ol>
+                    <div id="lb-target-line" class="vz-lb-target-line" style="display: none;"></div>
+                  </div>
 
-              <div class="vz-xp-bar-wrapper">
-                <div class="vz-xp-bar-bg">
-                  <div id="player-xp-bar" class="vz-xp-bar-fill"></div>
-                </div>
-                <div id="player-xp-label" class="vz-xp-bar-label"></div>
-              </div>
+                  <!-- WEEKLY CHALLENGE -->
+                  <div class="vz-leaderboard-card" id="weekly-card">
+                    <div class="vz-card-header">Nedēļas izaicinājums</div>
+                    <div class="vz-weekly-sub" id="weekly-sub">Šonedēļ</div>
+                    <ol id="weekly-list" class="vz-lb-list"></ol>
+                    <div id="weekly-you" class="vz-weekly-you"></div>
+                  </div>
 
-              <div class="vz-card-row"><span>Punkti:</span><span id="player-score"></span></div>
-              <div class="vz-card-row"><span>Streak:</span><span id="player-streak"></span></div>
-              <div class="vz-card-row"><span>Lab. streak:</span><span id="player-best-streak"></span></div>
-              <div class="vz-card-row"><span>Coins:</span><span id="player-coins"></span></div>
-              <div class="vz-card-row"><span>Žetoni:</span><span id="player-tokens"></span></div>
+                  <!-- STREAK LĪDERI (sacensības) -->
+                  <div class="vz-leaderboard-card" id="streak-lb-card">
+                    <div class="vz-card-header">🔥 Streak līderi</div>
+                    <ol id="streak-list" class="vz-lb-list"></ol>
+                  </div>
 
-              <div class="vz-card-row vz-card-row-medals">
-                <span>Medaļas:</span>
-                <div id="player-medals" class="vz-medals-strip"></div>
-              </div>
+                  <!-- ŠODIENAS LĪDERI (sacensības) -->
+                  <div class="vz-leaderboard-card" id="daily-lb-card">
+                    <div class="vz-card-header">📅 Šodienas līderi</div>
+                    <ol id="daily-list" class="vz-lb-list"></ol>
+                  </div>
 
-              <hr class="vz-divider" />
-
-              <button id="challenge-friend-btn" class="vz-share-btn" type="button" title="Izaicināt draugu – abi min to pašu vārdu, uzvar tas, kam mazāk mēģinājumu">⚔️ Izaicināt draugu</button>
-              <button id="share-btn" class="vz-share-btn" type="button">🔗 Dalīties ar VĀRDU ZONU</button>
-              <button id="share-whatsapp-btn" class="vz-share-btn vz-share-btn-wa" type="button">
-                💬 Dalīties WhatsApp
-              </button>
-              <button id="share-discord-btn" class="vz-share-btn vz-share-btn-discord" type="button">
-                🎮 Dalīties Discord
-              </button>
-              <p class="vz-share-note">Uzspied un padalies ar spēli TikTok, WhatsApp vai citur.</p>
-              <button id="share-result-btn" class="vz-share-btn" type="button" style="display: none">
-                📣 Dalīties ar rezultātu
-              </button>
-              <button
-                id="share-result-wa-btn"
-                class="vz-share-btn vz-share-btn-wa"
-                type="button"
-                style="display: none">
-                💬 Dalīties rezultātu WhatsApp
-              </button>
-              <button
-                id="share-result-discord-btn"
-                class="vz-share-btn vz-share-btn-discord"
-                type="button"
-                style="display: none">
-                🎮 Dalīties rezultātu Discord
-              </button>
-              <p id="share-result-note" class="vz-share-note" style="display: none">
-                Uztaisu uzlīmīti ar tavu rezultātu un VĀRDU ZONU.
-              </p>
-            </div>
-
-            <!-- TOP 10 -->
-            <div class="vz-leaderboard-card">
-              <div class="vz-card-header">TOP 10 spēlētāji</div>
-              <ol id="lb-list" class="vz-lb-list"></ol>
-              <div id="lb-target-line" class="vz-lb-target-line" style="display: none;"></div>
-            </div>
-
-            <!-- WEEKLY CHALLENGE -->
-            <div class="vz-leaderboard-card" id="weekly-card">
-              <div class="vz-card-header">Weekly challenge</div>
-              <div class="vz-weekly-sub" id="weekly-sub">Šonedēļ</div>
-              <ol id="weekly-list" class="vz-lb-list"></ol>
-              <div id="weekly-you" class="vz-weekly-you"></div>
-            </div>
-
-            <!-- STREAK LĪDERI (sacensības) -->
-            <div class="vz-leaderboard-card" id="streak-lb-card">
-              <div class="vz-card-header">🔥 Streak līderi</div>
-              <ol id="streak-list" class="vz-lb-list"></ol>
-            </div>
-
-            <!-- ŠODIENAS LĪDERI (sacensības) -->
-            <div class="vz-leaderboard-card" id="daily-lb-card">
-              <div class="vz-card-header">📅 Šodienas līderi</div>
-              <ol id="daily-list" class="vz-lb-list"></ol>
-            </div>
-
-            <!-- HALL OF FAME -->
-            <div class="vz-leaderboard-card hidden" id="hof-box">
-              <div class="vz-card-header">🏆 Hall of Fame</div>
-              <div id="hof-season1" class="vz-hof-row"></div>
-            </div>
-
-            <!-- ONLINE -->
-            <div class="vz-online-card">
-              <div class="vz-card-header">Online: <span id="online-count">0</span></div>
-              <ul id="online-list" class="vz-online-list"></ul>
-            </div>
-
-            <!-- DRAUGI -->
-            <div class="vz-online-card" id="friends-card">
-              <div class="vz-card-header">Draugi</div>
-              <div class="vz-friends-add">
-                <input id="friend-add-input" type="text" placeholder="Lietotājvārds" />
-                <button id="friend-add-btn" type="button">Pievienot</button>
-              </div>
-              <div id="friends-invites" class="vz-friends-invites"></div>
-              <ul id="friends-list" class="vz-friends-list"></ul>
-            </div>
-
-            <!-- ATBALSTS -->
-            <div class="vz-support-card">
-              <div class="vz-card-header">Atbalsti VĀRDU ZONU</div>
-
-              <p class="vz-support-text"></p>
-              <p class="vz-support-text">
-              
-              </p>
-
-              <button
-                class="vz-support-btn"
-                type="button"
-                onclick="window.open('https://streamlabs.com/bugats1', '_blank', 'noopener,noreferrer')">
-                Atbalstīt projektu
-              </button>
-
-              <p class="vz-support-note">Žetoni ir pateicības bonuss par atbalstu, nevis oficiāls pirkums.</p>
-
-              <hr class="vz-divider" />
-
-              <div class="vz-card-header-sub">Žetonu veikals (par coins)</div>
-              <p class="vz-support-text">1 žetons = 150 coins.</p>
-
-              <button id="buy-token-btn" class="vz-support-btn" type="button">Pirkt 1 žetonu (150 coins)</button>
-
-              <p class="vz-support-note">Coins tiks automātiski noņemti, kad nopērc žetonu.</p>
-            </div>
-
-            <!-- RADIO -->
-            <div class="vz-radio-card">
-              <div class="vz-card-header">BUGATS RADIO</div>
-              <div id="radio-status" class="vz-radio-status">Radio izslēgts</div>
-
-              <div class="vz-radio-controls">
-                <button id="radio-toggle-btn" class="vz-radio-btn" type="button">▶ Spēlēt</button>
-                <div class="vz-radio-volume-wrap">
-                  <span class="vz-radio-volume-label">Skaļums</span>
-                  <input id="radio-volume" type="range" min="0" max="1" step="0.01" value="0.6" />
+                  <!-- HALL OF FAME -->
+                  <div class="vz-leaderboard-card hidden" id="hof-box">
+                    <div class="vz-card-header">🏆 Hall of Fame</div>
+                    <div id="hof-season1" class="vz-hof-row"></div>
+                  </div>
                 </div>
               </div>
+            </details>
 
-              <div class="vz-radio-note">Radio nesākas automātiski – nospied “Spēlēt”.</div>
-            </div>
+            <details class="vz-side-group vz-side-group-collapsible">
+              <summary class="vz-side-group-summary">Papildus</summary>
+              <div class="vz-side-group-content">
+                <div class="vz-top-panels">
+                  <!-- ATBALSTS -->
+                  <div class="vz-support-card">
+                    <div class="vz-card-header">Atbalsti VĀRDU ZONU</div>
 
-            <!-- MISIJAS -->
-            <div class="vz-leaderboard-card">
-              <div class="vz-card-header">Dienas misijas</div>
-              <ul id="missions-list" class="vz-missions-list"></ul>
-            </div>
+                    <button
+                      class="vz-support-btn"
+                      type="button"
+                      onclick="window.open('https://streamlabs.com/bugats1', '_blank', 'noopener,noreferrer')">
+                      Atbalstīt projektu
+                    </button>
+
+                    <p class="vz-support-note">Žetoni ir pateicības bonuss par atbalstu, nevis oficiāls pirkums.</p>
+
+                    <hr class="vz-divider" />
+
+                    <div class="vz-card-header-sub">Žetonu veikals (par coins)</div>
+                    <p class="vz-support-text">1 žetons = 150 coins.</p>
+
+                    <button id="buy-token-btn" class="vz-support-btn" type="button">Pirkt 1 žetonu (150 coins)</button>
+
+                    <p class="vz-support-note">Coins tiks automātiski noņemti, kad nopērc žetonu.</p>
+                  </div>
+
+                  <!-- RADIO -->
+                  <div class="vz-radio-card">
+                    <div class="vz-card-header">BUGATS RADIO</div>
+                    <div id="radio-status" class="vz-radio-status">Radio izslēgts</div>
+
+                    <div class="vz-radio-controls">
+                      <button id="radio-toggle-btn" class="vz-radio-btn" type="button">▶ Spēlēt</button>
+                      <div class="vz-radio-volume-wrap">
+                        <span class="vz-radio-volume-label">Skaļums</span>
+                        <input id="radio-volume" type="range" min="0" max="1" step="0.01" value="0.6" />
+                      </div>
+                    </div>
+
+                    <div class="vz-radio-note">Radio nesākas automātiski – nospied “Spēlēt”.</div>
+                  </div>
+                </div>
+              </div>
+            </details>
           </div>
 
           <!-- ČATS -->

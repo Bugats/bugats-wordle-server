@@ -432,6 +432,11 @@ input:focus-visible {
   gap: 8px;
 }
 
+.vz-topbar-right {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .vz-topbar-link {
   display: inline-flex;
   align-items: center;
@@ -463,6 +468,58 @@ input:focus-visible {
 .vz-topbar-right #logout-btn:hover {
   background: rgba(255, 0, 64, 0.2);
   box-shadow: 0 0 10px rgba(255, 0, 64, 0.45);
+}
+
+.vz-topbar-more {
+  position: relative;
+}
+
+.vz-topbar-more > summary {
+  list-style: none;
+}
+
+.vz-topbar-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.vz-topbar-more-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 74px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--vz-topbar-link-text);
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.vz-topbar-more[open] .vz-topbar-more-trigger {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.vz-topbar-more-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 15;
+  min-width: 170px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(12, 14, 24, 0.95);
+  box-shadow: 0 0 18px rgba(0, 0, 0, 0.85);
+}
+
+.vz-topbar-more-menu .vz-topbar-link {
+  width: 100%;
+  justify-content: flex-start;
 }
 
 /* NOTE: noņemts margin-right, lai gap nav dubultā */
@@ -497,6 +554,9 @@ input:focus-visible {
   .vz-topbar-right {
     align-self: flex-end;
     font-size: 11px;
+  }
+  .vz-topbar-more-menu {
+    min-width: 150px;
   }
 }
 
@@ -564,6 +624,62 @@ input:focus-visible {
   justify-content: flex-start;
   gap: 10px;
   margin-bottom: 10px;
+}
+
+.vz-side-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vz-side-group {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(10, 12, 22, 0.45);
+  padding: 8px;
+}
+
+.vz-side-group-title,
+.vz-side-group-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e8ecff;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.vz-side-group-summary {
+  list-style: none;
+  margin-bottom: 0;
+  cursor: pointer;
+}
+
+.vz-side-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.vz-side-group-summary::after {
+  content: "▾";
+  opacity: 0.9;
+}
+
+.vz-side-group-collapsible:not([open]) .vz-side-group-summary::after {
+  transform: rotate(-90deg);
+}
+
+.vz-side-group-collapsible > .vz-side-group-content {
+  margin-top: 8px;
+}
+
+.vz-side-group .vz-top-panels {
+  margin-bottom: 0;
 }
 
 .vz-player-card,
