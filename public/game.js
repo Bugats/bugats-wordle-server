@@ -1500,6 +1500,7 @@ function updateVipUi(me) {
   const active = !!vip.active;
   const until = Number(vip.until || 0);
   const tier = String(vip.tier || "none");
+  const purchaseEnabled = !!vip.purchaseEnabled;
   const canCreateTournament = !!me.canCreateTournament;
   const isAdmin = !!me.isAdmin;
 
@@ -1522,14 +1523,12 @@ function updateVipUi(me) {
   }
 
   if (buyVipBtn) {
-    const priceTokens = Number(vip.priceTokens || 0);
-    const durationDays = Number(vip.durationDays || 0);
-    buyVipBtn.textContent =
-      priceTokens > 0 && durationDays > 0
-        ? `Aktivizēt VIP (${priceTokens} žetoni / ${durationDays} dienas)`
-        : "Aktivizēt VIP";
-    buyVipBtn.disabled = isAdmin;
+    buyVipBtn.textContent = "VIP iegāde drīzumā";
+    buyVipBtn.disabled = isAdmin || !purchaseEnabled;
     buyVipBtn.style.display = isAdmin ? "none" : "";
+  }
+  if (!isAdmin && !active && !purchaseEnabled) {
+    setVipBuyStatus("VIP pirkšana ar žetoniem nav pieejama.", "");
   }
 }
 
@@ -6702,25 +6701,10 @@ async function handleBuyToken() {
 
 async function handleBuyVip() {
   if (!state.token || !buyVipBtn) return;
-  setVipBuyStatus("");
-  buyVipBtn.disabled = true;
-  try {
-    const data = await apiPost("/vip/buy", {});
-    if (data?.me) {
-      updatePlayerCard(data.me);
-    } else {
-      const me = await apiGet("/me");
-      updatePlayerCard(me);
-    }
-    const until = Number(data?.vip?.until || 0);
-    setVipBuyStatus(`VIP aktivizēts līdz ${formatVipUntil(until)}.`, "ok");
-    appendSystemMessage("👑 VIP aktivizēts. Tagad vari veidot turnīrus.");
-  } catch (err) {
-    setVipBuyStatus(err.message || "Neizdevās aktivizēt VIP.", "error");
-    appendSystemMessage(err.message || "Neizdevās aktivizēt VIP.");
-  } finally {
-    if (!state.isAdmin) buyVipBtn.disabled = false;
-  }
+  setVipBuyStatus("VIP pirkšana ar žetoniem nav pieejama.", "error");
+  appendSystemMessage(
+    "👑 VIP pirkšana ar žetoniem ir izslēgta. Žetoni ir paredzēti laimes ratam."
+  );
 }
 
 // ==================== DAILY CHEST (frontend) ====================

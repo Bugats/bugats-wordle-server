@@ -92,10 +92,6 @@ const REVEAL_LETTER_COST_COINS = Number(
 );
 
 const BASE_TOKEN_PRICE = 150;
-const VIP_PRICE_TOKENS = (() => {
-  const v = parseInt(process.env.VIP_PRICE_TOKENS || "12", 10);
-  return Number.isFinite(v) && v >= 1 && v <= 10000 ? v : 12;
-})();
 const VIP_DURATION_DAYS = (() => {
   const v = parseInt(process.env.VIP_DURATION_DAYS || "30", 10);
   return Number.isFinite(v) && v >= 1 && v <= 365 ? v : 30;
@@ -3323,8 +3319,7 @@ async function buildMePayload(u) {
       until: Number(u.vipUntil || 0),
       tier: u.vipTier || "none",
       canCreateTournament: canCreateTournament(u),
-      priceTokens: VIP_PRICE_TOKENS,
-      durationDays: VIP_DURATION_DAYS,
+      purchaseEnabled: false,
     },
     canCreateTournament: canCreateTournament(u),
     isAdmin: isAdminUser(u),
@@ -5011,56 +5006,16 @@ app.get("/vip/status", authMiddleware, (req, res) => {
     until: Number(user.vipUntil || 0),
     tier: user.vipTier || "none",
     canCreateTournament: canCreateTournament(user),
-    priceTokens: VIP_PRICE_TOKENS,
-    durationDays: VIP_DURATION_DAYS,
+    purchaseEnabled: false,
+    message:
+      "VIP par žetoniem nav pieejams. Žetoni paredzēti laimes rata slotiem.",
   });
 });
 
 app.post("/vip/buy", authMiddleware, async (req, res) => {
-  const user = req.user;
-  ensureVipFields(user);
-  markActivity(user);
-  ensureDailyMissions(user);
-  resetDailyCountersIfNeeded(user);
-  ensureDailyChest(user);
-
-  if (isAdminUser(user)) {
-    return res.status(400).json({ message: "Adminam VIP nav nepieciešams." });
-  }
-
-  const price = VIP_PRICE_TOKENS;
-  if ((user.tokens || 0) < price) {
-    return res
-      .status(400)
-      .json({ message: `Nepietiek žetoni. Vajag ${price} žetonus.` });
-  }
-
-  user.tokens = Math.max(0, Math.floor(user.tokens || 0) - price);
-  const now = Date.now();
-  const startAt = Math.max(now, Number(user.vipUntil || 0));
-  user.vipUntil = startAt + VIP_DURATION_DAYS * DAY_MS;
-  user.vipTier = "vip_basic";
-  user.vipLastPurchaseAt = now;
-
-  saveUsers(USERS);
-  wheelSyncTokenSlots(true);
-  wheelEmitUpdate(true);
-  io.emit("vip:updated", {
-    username: user.username,
-    active: isVipActive(user),
-    until: Number(user.vipUntil || 0),
-  });
-
-  return res.json({
-    ok: true,
-    tokens: user.tokens || 0,
-    vip: {
-      active: isVipActive(user),
-      until: Number(user.vipUntil || 0),
-      tier: user.vipTier || "vip_basic",
-      canCreateTournament: canCreateTournament(user),
-    },
-    me: await buildMePayload(user),
+  return res.status(403).json({
+    message:
+      "VIP pirkšana ar žetoniem ir izslēgta. Žetoni paredzēti tikai laimes ratam.",
   });
 });
 

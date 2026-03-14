@@ -76,4 +76,21 @@ describe("VIP tournament access", () => {
       .send({});
     expect(seasonStartRes.status).toBe(403);
   });
+
+  it("rejects buying VIP with tokens", async () => {
+    const username = `vipbuy${Date.now().toString().slice(-8)}`;
+    const token = await ensureUserToken({
+      username,
+      password: "Test12345",
+      email: `${username}@example.com`,
+    });
+
+    const res = await request(app)
+      .post("/vip/buy")
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+
+    expect(res.status).toBe(403);
+    expect(String(res.body?.message || "")).toContain("žetoniem");
+  });
 });
