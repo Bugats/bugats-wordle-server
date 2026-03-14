@@ -178,6 +178,9 @@
 
           <div class="vz-region-race-card" id="region-race-card">
             <div class="vz-card-header">Novadu sacīkste</div>
+            <div class="vz-region-help" id="region-help">
+              Uzvari raundus, pelni novada punktus un izvēlies: celt savu novadu vai samazināt pretinieku.
+            </div>
             <div id="region-my-rank" class="vz-region-my-rank u-hidden-initial"></div>
             <div class="vz-region-total">
               <div class="vz-region-total-label">
@@ -194,6 +197,12 @@
                 Novadu punkti:
                 <span id="region-points">0</span>
               </div>
+              <div id="region-bonus-window" class="vz-region-status-row">
+                Bonusa logs: ielādē...
+              </div>
+              <div id="region-attack-cap" class="vz-region-status-row">
+                Uzbrukumu limits: ielādē...
+              </div>
               <div class="vz-region-actions-row">
                 <button id="region-boost-btn" type="button" class="vz-region-action-btn">
                   +1 savam novadam
@@ -204,6 +213,7 @@
                 </button>
               </div>
             </div>
+            <ul id="region-rules" class="vz-region-rules"></ul>
             <ul id="region-list" class="vz-region-list"></ul>
           </div>
         </div>

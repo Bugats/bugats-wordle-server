@@ -217,6 +217,10 @@ const REGION_MVP_BOOST = (() => {
   const v = parseInt(process.env.REGION_MVP_BOOST || "20", 10);
   return Number.isFinite(v) && v >= 0 && v <= 1000 ? v : 20;
 })();
+const REGION_ATTACK_DAILY_CAP = (() => {
+  const v = parseInt(process.env.REGION_ATTACK_DAILY_CAP || "5", 10);
+  return Number.isFinite(v) && v >= 0 && v <= 500 ? v : 5;
+})();
 
 // ======== Season rollover: coins/tokens reset (ENV slēdzis) ========
 const RESET_COINS_TOKENS_ON_ROLLOVER =
@@ -1578,6 +1582,13 @@ function loadUsers(listOverride) {
       if (!Number.isFinite(u.regionBoost)) u.regionBoost = 0;
       u.regionPoints = Math.max(0, Math.floor(u.regionPoints));
       u.regionBoost = Math.max(0, Math.floor(u.regionBoost));
+      if (typeof u.regionAttackDate !== "string") u.regionAttackDate = "";
+      if (!Number.isFinite(u.regionAttackUsedToday))
+        u.regionAttackUsedToday = 0;
+      u.regionAttackUsedToday = Math.max(
+        0,
+        Math.floor(u.regionAttackUsedToday)
+      );
       if (!u.regionAttacks || typeof u.regionAttacks !== "object")
         u.regionAttacks = {};
       try {
@@ -2314,6 +2325,48 @@ function findUserKeyCaseInsensitive(nameRaw) {
   }
   return null;
 }
+
+function getUserByNameForTestOnly(username) {
+  const key = findUserKeyCaseInsensitive(username);
+  if (!key) return null;
+  return USERS[key] || null;
+}
+
+function setRegionStateForTestOnly(username, patch = {}) {
+  if (process.env.NODE_ENV !== "test") return false;
+  const user = getUserByNameForTestOnly(username);
+  if (!user) return false;
+
+  if (patch.region && typeof patch.region === "string") {
+    user.region = normalizeRegion(patch.region);
+  }
+  if (Number.isFinite(patch.regionPoints)) {
+    user.regionPoints = Math.max(
+      0,
+      Math.floor(Number(patch.regionPoints) || 0)
+    );
+  }
+  if (Number.isFinite(patch.regionAttackUsedToday)) {
+    user.regionAttackUsedToday = Math.max(
+      0,
+      Math.floor(Number(patch.regionAttackUsedToday) || 0)
+    );
+  }
+  if (typeof patch.regionAttackDate === "string") {
+    user.regionAttackDate = patch.regionAttackDate;
+  }
+
+  saveUsers(USERS);
+  return true;
+}
+
+function getCurrentRoundWordForTestOnly(username) {
+  if (process.env.NODE_ENV !== "test") return "";
+  const user = getUserByNameForTestOnly(username);
+  return String(user?.currentRound?.word || "")
+    .trim()
+    .toUpperCase();
+}
 function findUserKeyByEmail(emailRaw) {
   const email = normalizeEmail(emailRaw);
   if (!email) return null;
@@ -2742,6 +2795,153 @@ function isRegionBonusActive(date = new Date()) {
     }
   }
   return false;
+}
+
+function formatMinuteLabel(minute) {
+  const safe = Math.max(0, Math.floor(Number(minute) || 0)) % (24 * 60);
+  const hh = Math.floor(safe / 60);
+  const mm = safe % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(hh)}:${pad(mm)}`;
+}
+
+function shiftTzDateParts(parts, deltaDays = 0, tz = TZ) {
+  const probe = new Date(
+    Date.UTC(parts.y || 1970, (parts.m || 1) - 1, parts.d || 1, 12, 0, 0)
+  );
+  probe.setUTCDate(probe.getUTCDate() + deltaDays);
+  return datePartsInTz(probe, tz);
+}
+
+function tsForTzDateMinute(parts, minute, tz = TZ) {
+  const mins = Math.max(0, Math.floor(Number(minute) || 0)) % (24 * 60);
+  const hh = Math.floor(mins / 60);
+  const mm = mins % 60;
+  const utc = Date.UTC(parts.y, parts.m - 1, parts.d, hh, mm, 0);
+  const probe = new Date(utc);
+  const offsetMin = getTzOffsetMinutes(tz, probe);
+  return utc - offsetMin * 60 * 1000;
+}
+
+function getRegionBonusWindowStatus(now = new Date()) {
+  const enabled =
+    REGION_BONUS_WINDOWS.length > 0 && REGION_BONUS_MULTIPLIER > 1;
+  const windowsLabel = REGION_BONUS_WINDOWS.map(
+    (w) => `${formatMinuteLabel(w.start)}-${formatMinuteLabel(w.end)}`
+  ).join(", ");
+
+  if (!enabled) {
+    return {
+      enabled: false,
+      active: false,
+      multiplier: REGION_BONUS_MULTIPLIER,
+      windowsLabel: windowsLabel || "",
+      currentWindowLabel: "",
+      nextWindowLabel: "",
+      windowEndsAt: 0,
+      nextStartsAt: 0,
+      countdownTargetAt: 0,
+      resetsAt: nextMidnightRigaTs(now),
+    };
+  }
+
+  const today = datePartsInTz(now, TZ);
+  const days = [
+    shiftTzDateParts(today, -1, TZ),
+    today,
+    shiftTzDateParts(today, 1, TZ),
+  ];
+  const intervals = [];
+
+  for (const day of days) {
+    for (const w of REGION_BONUS_WINDOWS) {
+      const startTs = tsForTzDateMinute(day, w.start, TZ);
+      const endDay = w.end > w.start ? day : shiftTzDateParts(day, 1, TZ);
+      const endTs = tsForTzDateMinute(endDay, w.end, TZ);
+      if (endTs <= startTs) continue;
+      intervals.push({ startTs, endTs, start: w.start, end: w.end });
+    }
+  }
+
+  intervals.sort((a, b) => a.startTs - b.startTs);
+  const nowTs = now.getTime();
+  const active = intervals.find((x) => nowTs >= x.startTs && nowTs < x.endTs);
+  const next = intervals.find((x) => x.startTs > nowTs) || null;
+
+  return {
+    enabled: true,
+    active: !!active,
+    multiplier: REGION_BONUS_MULTIPLIER,
+    windowsLabel,
+    currentWindowLabel: active
+      ? `${formatMinuteLabel(active.start)}-${formatMinuteLabel(active.end)}`
+      : "",
+    nextWindowLabel: next
+      ? `${formatMinuteLabel(next.start)}-${formatMinuteLabel(next.end)}`
+      : "",
+    windowEndsAt: active ? active.endTs : 0,
+    nextStartsAt: next ? next.startTs : 0,
+    countdownTargetAt: active ? active.endTs : next ? next.startTs : 0,
+    resetsAt: nextMidnightRigaTs(now),
+  };
+}
+
+function ensureRegionAttackCounters(user, now = new Date()) {
+  const today = todayKey(now);
+  let changed = false;
+  if (typeof user.regionAttackDate !== "string") {
+    user.regionAttackDate = "";
+    changed = true;
+  }
+  if (!Number.isFinite(user.regionAttackUsedToday)) {
+    user.regionAttackUsedToday = 0;
+    changed = true;
+  } else {
+    const normalized = Math.max(0, Math.floor(user.regionAttackUsedToday));
+    if (normalized !== user.regionAttackUsedToday) {
+      user.regionAttackUsedToday = normalized;
+      changed = true;
+    }
+  }
+  if (user.regionAttackDate !== today) {
+    user.regionAttackDate = today;
+    user.regionAttackUsedToday = 0;
+    changed = true;
+  }
+  return changed;
+}
+
+function getRegionAttackLimitStatus(user, now = new Date()) {
+  const cap = Math.max(0, Math.floor(Number(REGION_ATTACK_DAILY_CAP) || 0));
+  const used = Math.max(0, Math.floor(Number(user.regionAttackUsedToday) || 0));
+  const enabled = cap > 0;
+  const remaining = enabled ? Math.max(0, cap - used) : null;
+  return {
+    enabled,
+    cap,
+    used,
+    remaining,
+    resetsAt: nextMidnightRigaTs(now),
+  };
+}
+
+function buildRegionRulesPayload(attackLimit, bonusStatus) {
+  const out = [
+    "Par katru uzvarētu raundu iegūsti novada punktus.",
+    "'+1 savam novadam' paceļ tava novada rezultātu.",
+    "'-1 pretiniekam' samazina izvēlētā novada rezultātu.",
+  ];
+  if (attackLimit?.enabled) {
+    out.push(
+      `Dienas limits uzbrukumiem: ${attackLimit.cap} punkti (atiestatās pusnaktī).`
+    );
+  }
+  if (bonusStatus?.enabled) {
+    out.push(
+      `Bonusa logs x${bonusStatus.multiplier}: ${bonusStatus.windowsLabel}.`
+    );
+  }
+  return out;
 }
 
 // ======== Daily Chest helperi ========
@@ -5327,6 +5527,8 @@ async function signupHandler(req, res) {
     region: canonRegion,
     regionPoints: 0,
     regionBoost: 0,
+    regionAttackDate: "",
+    regionAttackUsedToday: 0,
     regionAttacks: {},
     supporter: false,
     vipUntil: 0,
@@ -7339,9 +7541,15 @@ function computeMyRegionRank(user) {
 }
 
 app.get("/regions/stats", authMiddleware, (req, res) => {
+  const now = new Date();
+  const didReset = ensureRegionAttackCounters(req.user, now);
+  if (didReset) saveUsers(USERS);
   const regions = computeRegionStats();
   const myRegionRank = computeMyRegionRank(req.user);
-  res.json({ regions, myRegionRank });
+  const bonus = getRegionBonusWindowStatus(now);
+  const attackLimit = getRegionAttackLimitStatus(req.user, now);
+  const rules = buildRegionRulesPayload(attackLimit, bonus);
+  res.json({ regions, myRegionRank, bonus, attackLimit, rules });
 });
 
 app.post("/region", authMiddleware, async (req, res) => {
@@ -7376,6 +7584,8 @@ app.post("/region/boost", authMiddleware, async (req, res) => {
 
 app.post("/region/attack", authMiddleware, async (req, res) => {
   const user = req.user;
+  ensureRegionAttackCounters(user);
+  const attackLimit = getRegionAttackLimitStatus(user);
   const target = normalizeRegion(req.body?.region);
   if (!target) {
     return res.status(400).json({ message: "Izvēlies pretinieka novadu." });
@@ -7384,17 +7594,29 @@ app.post("/region/attack", authMiddleware, async (req, res) => {
     return res.status(400).json({ message: "Nevari uzbrukt savam novadam." });
   }
   const amount = clampInt(req.body?.amount, 1, REGION_POINTS_MAX_ACTION, 1);
+  if (attackLimit.enabled && Number(attackLimit.remaining) < amount) {
+    return res.status(429).json({
+      message: `Sasniegts dienas uzbrukumu limits (${attackLimit.cap}).`,
+      attackLimit,
+    });
+  }
   const points = Math.max(0, Math.floor(user.regionPoints || 0));
   if (points < amount) {
     return res.status(400).json({ message: "Nepietiek novada punktu." });
   }
   user.regionPoints = points - amount;
+  user.regionAttackUsedToday =
+    Math.max(0, Math.floor(user.regionAttackUsedToday || 0)) + amount;
   if (!user.regionAttacks || typeof user.regionAttacks !== "object")
     user.regionAttacks = {};
   user.regionAttacks[target] =
     (Number(user.regionAttacks[target]) || 0) + amount;
   saveUsers(USERS);
-  res.json({ ok: true, me: await buildMePayload(user) });
+  res.json({
+    ok: true,
+    me: await buildMePayload(user),
+    attackLimit: getRegionAttackLimitStatus(user),
+  });
 });
 
 // ===== DUEĻU HELPERI (Socket.IO pusē) =====
@@ -8808,4 +9030,9 @@ if (process.env.NODE_ENV !== "test") {
   });
 }
 
-export { app, httpServer, io, logger, startServer };
+const __testHooks = {
+  setRegionStateForTestOnly,
+  getCurrentRoundWordForTestOnly,
+};
+
+export { app, httpServer, io, logger, startServer, __testHooks };

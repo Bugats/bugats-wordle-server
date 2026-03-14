@@ -547,6 +547,9 @@ const state = {
   regionPoints: 0,
   regionAttackTarget: "",
   regionAttackRegion: "",
+  regionAttackLimit: null,
+  regionBonusStatus: null,
+  regionRules: [],
   // DM (privāts čats)
   dmOpenWith: null,
   dmThreads: new Map(), // username -> [{id,from,to,text,ts}]
@@ -936,6 +939,9 @@ const regionPointsEl = document.getElementById("region-points");
 const regionBoostBtn = document.getElementById("region-boost-btn");
 const regionAttackBtn = document.getElementById("region-attack-btn");
 const regionAttackSelect = document.getElementById("region-attack-target");
+const regionBonusWindowEl = document.getElementById("region-bonus-window");
+const regionAttackCapEl = document.getElementById("region-attack-cap");
+const regionRulesEl = document.getElementById("region-rules");
 
 // Audio MP3
 const sClick = $("#s-click");
@@ -1638,6 +1644,113 @@ function renderRegionAttackOptions(currentRegion, preferredTarget = "") {
   state.regionAttackRegion = currentRegion || "";
 }
 
+function normalizeRegionBonusStatus(raw) {
+  const enabled = !!raw?.enabled;
+  return {
+    enabled,
+    active: enabled && !!raw?.active,
+    multiplier: Math.max(1, Math.floor(Number(raw?.multiplier) || 1)),
+    windowsLabel: String(raw?.windowsLabel || "").trim(),
+    currentWindowLabel: String(raw?.currentWindowLabel || "").trim(),
+    nextWindowLabel: String(raw?.nextWindowLabel || "").trim(),
+    windowEndsAt: Number(raw?.windowEndsAt || 0),
+    nextStartsAt: Number(raw?.nextStartsAt || 0),
+    countdownTargetAt: Number(raw?.countdownTargetAt || 0),
+  };
+}
+
+function normalizeRegionAttackLimit(raw) {
+  const enabled = !!raw?.enabled;
+  const cap = Math.max(0, Math.floor(Number(raw?.cap) || 0));
+  const used = Math.max(0, Math.floor(Number(raw?.used) || 0));
+  const remaining = enabled
+    ? Math.max(0, Math.floor(Number(raw?.remaining) || 0))
+    : null;
+  return {
+    enabled,
+    cap,
+    used,
+    remaining,
+    resetsAt: Number(raw?.resetsAt || 0),
+  };
+}
+
+function formatRegionCountdown(ms) {
+  const total = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+  const hours = Math.floor(total / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hours > 0) return `${hours}h ${mins}m ${secs}s`;
+  return `${mins}m ${secs}s`;
+}
+
+function renderRegionRules(rules) {
+  if (!regionRulesEl) return;
+  const list = Array.isArray(rules)
+    ? rules.map((x) => String(x || "").trim()).filter(Boolean)
+    : [];
+  const fallback = [
+    "Par uzvarām iegūsti novada punktus.",
+    "Ar +1 palīdzi savam novadam.",
+    "Ar -1 samazini izvēlēto pretinieku.",
+  ];
+  const rows = list.length ? list : fallback;
+  regionRulesEl.innerHTML = "";
+  rows.forEach((row) => {
+    const li = document.createElement("li");
+    li.textContent = row;
+    regionRulesEl.appendChild(li);
+  });
+}
+
+function renderRegionStatusUi() {
+  const now = Date.now();
+  const bonus = state.regionBonusStatus;
+  const attackLimit = state.regionAttackLimit;
+
+  if (regionBonusWindowEl) {
+    let text = "Bonusa logs: nav pieejams.";
+    if (bonus && bonus.enabled) {
+      if (bonus.active) {
+        const left = bonus.windowEndsAt > now ? bonus.windowEndsAt - now : 0;
+        text = `Bonuss x${bonus.multiplier} aktīvs vēl ${formatRegionCountdown(
+          left
+        )} (${bonus.currentWindowLabel || bonus.windowsLabel || "logs"}).`;
+      } else if (bonus.nextStartsAt > now) {
+        const until = bonus.nextStartsAt - now;
+        text = `Nākamais bonuss x${bonus.multiplier} pēc ${formatRegionCountdown(
+          until
+        )} (${bonus.nextWindowLabel || bonus.windowsLabel || "logs"}).`;
+      } else if (bonus.windowsLabel) {
+        text = `Bonusa logi: ${bonus.windowsLabel}.`;
+      }
+    }
+    regionBonusWindowEl.textContent = text;
+  }
+
+  if (regionAttackCapEl) {
+    let text = "Uzbrukumu limits: nav iestatīts.";
+    let isWarning = false;
+    if (attackLimit && attackLimit.enabled) {
+      const rem = Math.max(0, Number(attackLimit.remaining) || 0);
+      const resetLeft =
+        attackLimit.resetsAt > now ? attackLimit.resetsAt - now : 0;
+      text = `Uzbrukumi šodien: ${attackLimit.used}/${attackLimit.cap} · Atlikušais: ${rem} · Resets pēc ${formatRegionCountdown(
+        resetLeft
+      )}.`;
+      isWarning = rem <= 0;
+    }
+    regionAttackCapEl.textContent = text;
+    regionAttackCapEl.classList.toggle("vz-region-status-warning", isWarning);
+  }
+}
+
+function canUseRegionAttack() {
+  const limit = state.regionAttackLimit;
+  if (!limit || !limit.enabled) return true;
+  return Number(limit.remaining) > 0;
+}
+
 function updateRegionPointsUi(points, region) {
   const p = Math.max(0, Math.floor(points || 0));
   state.regionPoints = p;
@@ -1659,7 +1772,7 @@ function updateRegionPointsUi(points, region) {
   if (regionBoostBtn) regionBoostBtn.disabled = !canSpend;
   if (regionAttackBtn) {
     const target = regionAttackSelect ? regionAttackSelect.value : "";
-    regionAttackBtn.disabled = !canSpend || !target;
+    regionAttackBtn.disabled = !canSpend || !target || !canUseRegionAttack();
   }
 }
 
@@ -1681,6 +1794,10 @@ async function handleRegionBoost() {
 async function handleRegionAttack() {
   if (!state.token) return;
   if (state.regionPoints <= 0) return;
+  if (!canUseRegionAttack()) {
+    appendSystemMessage("Sasniegts dienas uzbrukumu limits.");
+    return;
+  }
   const target = regionAttackSelect ? regionAttackSelect.value : "";
   if (!target) return;
   if (regionAttackBtn) regionAttackBtn.disabled = true;
@@ -1690,6 +1807,7 @@ async function handleRegionAttack() {
     await refreshRegionStats();
   } catch (err) {
     appendSystemMessage(err.message || "Neizdevās noņemt pretiniekam.");
+    await refreshRegionStats();
   } finally {
     if (regionAttackBtn) regionAttackBtn.disabled = false;
   }
@@ -1944,6 +2062,14 @@ async function refreshRegionStats() {
     const raw = await apiGet("/regions/stats");
     const list = Array.isArray(raw) ? raw : raw?.regions || raw?.list || [];
     if (!Array.isArray(list)) return;
+    state.regionBonusStatus = normalizeRegionBonusStatus(raw?.bonus || {});
+    state.regionAttackLimit = normalizeRegionAttackLimit(
+      raw?.attackLimit || {}
+    );
+    state.regionRules = Array.isArray(raw?.rules) ? raw.rules : [];
+    renderRegionRules(state.regionRules);
+    renderRegionStatusUi();
+    updateRegionPointsUi(state.regionPoints, state.region);
 
     if (regionMyRankEl && raw?.myRegionRank) {
       const r = raw.myRegionRank;
@@ -2050,6 +2176,7 @@ async function runPostLoginInit() {
         _chestTickTimer = setInterval(refreshDailyChestStatus, 60_000);
         setInterval(() => {
           if (_chestStatus) renderDailyChestUi(_chestStatus);
+          renderRegionStatusUi();
         }, 1000);
         setInterval(refreshRegionStats, 60_000);
         setInterval(refreshStreakLeaderboard, 90_000);
@@ -2087,6 +2214,7 @@ async function runPostLoginInit() {
   _chestTickTimer = setInterval(refreshDailyChestStatus, 60_000);
   setInterval(() => {
     if (_chestStatus) renderDailyChestUi(_chestStatus);
+    renderRegionStatusUi();
   }, 1000);
   setInterval(refreshRegionStats, 60_000);
   setInterval(refreshStreakLeaderboard, 90_000);

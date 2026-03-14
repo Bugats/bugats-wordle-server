@@ -1551,6 +1551,12 @@ summary:focus-visible {
   border-radius: 8px;
   box-shadow: 0 0 16px rgba(0, 0, 0, 0.9), 0 0 16px rgba(0, 0, 0, 0.8);
 }
+.vz-region-help {
+  margin: 2px 0 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(233, 245, 255, 0.88);
+}
 .vz-region-total {
   margin: 4px 0 10px;
 }
@@ -1595,6 +1601,14 @@ summary:focus-visible {
   align-items: center;
   font-size: 12px;
 }
+.vz-region-status-row {
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(216, 232, 255, 0.9);
+}
+.vz-region-status-row.vz-region-status-warning {
+  color: rgba(255, 190, 126, 0.96);
+}
 .vz-region-action-btn {
   border: none;
   border-radius: 8px;
@@ -1620,6 +1634,16 @@ summary:focus-visible {
   background: rgba(0, 0, 0, 0.35);
   color: #fff;
   font-size: 12px;
+}
+.vz-region-rules {
+  list-style: disc;
+  margin: 0 0 10px 18px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: rgba(224, 236, 255, 0.9);
 }
 .vz-region-list {
   list-style: none;
