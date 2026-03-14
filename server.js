@@ -152,7 +152,7 @@ const WEEKLY_TOURNAMENT_MIN_ACCOUNT_AGE_HOURS = (() => {
   return Number.isFinite(v) && v >= 0 && v <= 720 ? v : fallback;
 })();
 const WEEKLY_TOURNAMENT_MIN_TOTAL_GUESSES = (() => {
-  const fallback = process.env.NODE_ENV === "test" ? 0 : 3;
+  const fallback = process.env.NODE_ENV === "test" ? 0 : 0;
   const v = parseInt(
     process.env.WEEKLY_TOURNAMENT_MIN_TOTAL_GUESSES || `${fallback}`,
     10
