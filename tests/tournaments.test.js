@@ -7,19 +7,28 @@ async function ensureUserToken({
   password,
   email,
   region = "Zemgale",
+  deviceId = "",
+  loginDeviceId = "",
+  forceLogin = false,
 }) {
+  const signupDid =
+    String(deviceId || "").trim() || `test-signup-${username}-${Date.now()}`;
+  const loginDid =
+    String(loginDeviceId || "").trim() ||
+    signupDid ||
+    `test-login-${username}-${Date.now()}`;
   const signupRes = await request(app)
     .post("/signup")
-    .set("x-vz-device-id", `test-signup-${username}-${Date.now()}`)
+    .set("x-vz-device-id", signupDid)
     .send({ username, password, email, region });
 
-  if (signupRes.status === 200 && signupRes.body?.token) {
+  if (signupRes.status === 200 && signupRes.body?.token && !forceLogin) {
     return signupRes.body.token;
   }
 
   const loginRes = await request(app)
     .post("/login")
-    .set("x-vz-device-id", `test-login-${username}-${Date.now()}`)
+    .set("x-vz-device-id", loginDid)
     .send({ username, password });
 
   if (loginRes.status !== 200 || !loginRes.body?.token) {
@@ -107,5 +116,42 @@ describe("Tournament brackets API", () => {
     expect(reportRes.body?.match?.id).toBe(match.id);
     expect(Number(reportRes.body?.match?.opponent1?.score)).toBe(3);
     expect(Number(reportRes.body?.match?.opponent2?.score)).toBe(1);
+  });
+
+  it("allows weekly queue join but blocks same-device fake profile", async () => {
+    const sharedDeviceId = `shared-device-${Date.now().toString().slice(-8)}`;
+    const u1 = `wq${Date.now().toString().slice(-6)}a`;
+    const u2 = `wq${Date.now().toString().slice(-6)}b`;
+
+    const t1 = await ensureUserToken({
+      username: u1,
+      password: "Test12345",
+      email: `${u1}@example.com`,
+      deviceId: sharedDeviceId,
+    });
+    const t2 = await ensureUserToken({
+      username: u2,
+      password: "Test12345",
+      email: `${u2}@example.com`,
+      deviceId: `${sharedDeviceId}-signup`,
+      loginDeviceId: sharedDeviceId,
+      forceLogin: true,
+    });
+
+    const join1 = await request(app)
+      .post("/tournaments/weekly/join")
+      .set("Authorization", `Bearer ${t1}`)
+      .send({});
+    expect(join1.status).toBe(200);
+    expect(join1.body?.ok).toBe(true);
+    expect(join1.body?.joined).toBe(true);
+    expect(join1.body?.schedule?.isJoined).toBe(true);
+
+    const join2 = await request(app)
+      .post("/tournaments/weekly/join")
+      .set("Authorization", `Bearer ${t2}`)
+      .send({});
+    expect(join2.status).toBe(403);
+    expect(String(join2.body?.message || "").toLowerCase()).toContain("ierīce");
   });
 });

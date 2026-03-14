@@ -602,6 +602,7 @@ const state = {
   tournaments: [],
   tournamentActiveId: null,
   tournamentReportCtx: null,
+  tournamentSchedule: null,
   vipActive: false,
   vipUntil: 0,
   vipTier: "none",
@@ -630,6 +631,7 @@ const AVATAR_STORAGE_MAX_KEYS = 50;
 
 let seasonTimerId = null;
 let tournamentRefreshTimer = null;
+let tournamentCountdownTimer = null;
 let currentProfileName = null; // popupā atvērtais profila vārds
 
 // kešs citu spēlētāju mini avatāriem (username -> url vai null)
@@ -779,6 +781,10 @@ const tournamentScore2InputEl = $("#tournament-score2");
 const tournamentReportBtnEl = $("#tournament-report-btn");
 const tournamentReportStatusEl = $("#tournament-report-status");
 const tournamentRefreshBtnEl = $("#tournament-refresh-btn");
+const tournamentScheduleLineEl = $("#tournament-schedule-line");
+const tournamentScheduleSlotsEl = $("#tournament-schedule-slots");
+const tournamentWeeklyJoinBtnEl = $("#tournament-weekly-join-btn");
+const tournamentWeeklyJoinStatusEl = $("#tournament-weekly-join-status");
 
 // Draugi
 const friendsListEl = $("#friends-list");
@@ -2032,6 +2038,7 @@ async function runPostLoginInit() {
         setInterval(refreshStreakLeaderboard, 90_000);
         setInterval(refreshDailyLeaderboard, 90_000);
         startTournamentRefreshTimer();
+        startTournamentCountdownTimer();
         initSocket();
         return;
       } else if (c && c.status === "waiting" && c.player1 !== state.username) {
@@ -2066,6 +2073,7 @@ async function runPostLoginInit() {
   setInterval(refreshStreakLeaderboard, 90_000);
   setInterval(refreshDailyLeaderboard, 90_000);
   startTournamentRefreshTimer();
+  startTournamentCountdownTimer();
   initSocket();
 }
 
@@ -3979,6 +3987,142 @@ function normalizeTournamentList(payload) {
   return list.filter((t) => t && Number.isFinite(Number(t.id)));
 }
 
+function normalizeTournamentSchedule(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const startAt = Math.max(0, Number(raw.startAt) || 0);
+  const slots = Math.max(2, Math.floor(Number(raw.slots) || 0));
+  const joinedCount = Math.max(0, Math.floor(Number(raw.joinedCount) || 0));
+  const participants = Array.isArray(raw.participants)
+    ? raw.participants
+        .map((u) => String(u || "").trim())
+        .filter(Boolean)
+        .slice(0, slots || 32)
+    : [];
+  return {
+    enabled: !!raw.enabled,
+    title: String(raw.title || "Nedēļas turnīrs"),
+    startAt,
+    slots,
+    joinedCount,
+    participants,
+    isJoined: !!raw.isJoined,
+    canJoin: !!raw.canJoin,
+    startsOnlyWhenFull: !!raw.startsOnlyWhenFull,
+    waitForAllSlots: !!raw.waitForAllSlots,
+    joinBlockedReason: String(raw.joinBlockedReason || ""),
+    lastCycle:
+      raw.lastCycle && typeof raw.lastCycle === "object" ? raw.lastCycle : null,
+  };
+}
+
+function formatTournamentCountdown(ms) {
+  const total = Math.max(0, Math.floor(Number(ms) / 1000));
+  const days = Math.floor(total / 86_400);
+  const hours = Math.floor((total % 86_400) / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (days > 0) return `${days}d ${hours}h ${mins}m ${secs}s`;
+  if (hours > 0) return `${hours}h ${mins}m ${secs}s`;
+  return `${mins}m ${secs}s`;
+}
+
+function setTournamentWeeklyJoinStatus(message, kind = "") {
+  if (!tournamentWeeklyJoinStatusEl) return;
+  tournamentWeeklyJoinStatusEl.textContent = String(message || "");
+  tournamentWeeklyJoinStatusEl.classList.remove("vz-ok", "vz-error");
+  if (kind === "ok") tournamentWeeklyJoinStatusEl.classList.add("vz-ok");
+  if (kind === "error") tournamentWeeklyJoinStatusEl.classList.add("vz-error");
+}
+
+function renderTournamentSchedule() {
+  const s = state.tournamentSchedule;
+  if (tournamentScheduleLineEl) {
+    if (!s || !s.enabled || !s.startAt) {
+      tournamentScheduleLineEl.textContent =
+        "Fiksētais turnīrs šobrīd nav pieejams.";
+    } else {
+      const now = Date.now();
+      const left = s.startAt - now;
+      const localStart = new Date(s.startAt).toLocaleString("lv-LV", {
+        timeZone: "Europe/Riga",
+        weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        day: "2-digit",
+        month: "2-digit",
+      });
+      if (left > 0) {
+        tournamentScheduleLineEl.textContent = `${s.title}: starts ${localStart} · līdz startam ${formatTournamentCountdown(
+          left
+        )}`;
+      } else {
+        tournamentScheduleLineEl.textContent = `${s.title}: starts tiek apstrādāts. Ja nav pilni sloti, turnīrs netiek startēts.`;
+      }
+    }
+  }
+
+  if (tournamentScheduleSlotsEl) {
+    if (!s || !s.enabled) {
+      tournamentScheduleSlotsEl.textContent = "Sloti: —";
+    } else {
+      let txt = `Sloti: ${s.joinedCount}/${s.slots}. Ja trūkst sloti, aicini draugu.`;
+      if (s.lastCycle?.kind === "not_full") {
+        txt += " Iepriekšējais starts nenotika, jo nebija pilni sloti.";
+      }
+      tournamentScheduleSlotsEl.textContent = txt;
+    }
+  }
+
+  if (tournamentWeeklyJoinBtnEl) {
+    if (!s || !s.enabled) {
+      tournamentWeeklyJoinBtnEl.disabled = true;
+      tournamentWeeklyJoinBtnEl.textContent = "Nedēļas turnīrs nav pieejams";
+      return;
+    }
+
+    if (s.isJoined) {
+      tournamentWeeklyJoinBtnEl.disabled = true;
+      tournamentWeeklyJoinBtnEl.textContent = "Tu jau esi pieteicies";
+    } else if (s.canJoin) {
+      tournamentWeeklyJoinBtnEl.disabled = false;
+      tournamentWeeklyJoinBtnEl.textContent =
+        "Pieteikties piektdienas turnīram";
+    } else if (s.joinedCount >= s.slots) {
+      tournamentWeeklyJoinBtnEl.disabled = true;
+      tournamentWeeklyJoinBtnEl.textContent = "Visi sloti aizņemti";
+    } else {
+      tournamentWeeklyJoinBtnEl.disabled = true;
+      tournamentWeeklyJoinBtnEl.textContent = "Pieteikšanās nav pieejama";
+    }
+  }
+}
+
+async function handleTournamentWeeklyJoin() {
+  if (!state.token) return;
+  if (!tournamentWeeklyJoinBtnEl) return;
+  try {
+    tournamentWeeklyJoinBtnEl.disabled = true;
+    const data = await apiPost("/tournaments/weekly/join", {});
+    if (data?.schedule) {
+      state.tournamentSchedule = normalizeTournamentSchedule(data.schedule);
+    }
+    renderTournamentSchedule();
+    setTournamentWeeklyJoinStatus(
+      data?.message || "Pieteikšanās saglabāta.",
+      "ok"
+    );
+    await refreshTournamentCard(true);
+  } catch (err) {
+    setTournamentWeeklyJoinStatus(
+      err.message || "Neizdevās pieteikties turnīram.",
+      "error"
+    );
+    await refreshTournamentCard(true);
+  } finally {
+    renderTournamentSchedule();
+  }
+}
+
 function setTournamentReportStatus(message, kind = "") {
   if (!tournamentReportStatusEl) return;
   tournamentReportStatusEl.textContent = String(message || "");
@@ -4066,6 +4210,13 @@ function startTournamentRefreshTimer() {
   tournamentRefreshTimer = setInterval(() => {
     refreshTournamentCard(false);
   }, 60_000);
+}
+
+function startTournamentCountdownTimer() {
+  if (tournamentCountdownTimer) clearInterval(tournamentCountdownTimer);
+  tournamentCountdownTimer = setInterval(() => {
+    if (state.tournamentSchedule) renderTournamentSchedule();
+  }, 1000);
 }
 
 function renderTournamentCard(meta, details) {
@@ -4209,6 +4360,10 @@ async function refreshTournamentCard(force = false) {
   if (tournamentRefreshBtnEl) tournamentRefreshBtnEl.disabled = true;
   try {
     const listPayload = await apiGet("/tournaments");
+    state.tournamentSchedule = normalizeTournamentSchedule(
+      listPayload?.schedule
+    );
+    renderTournamentSchedule();
     const list = normalizeTournamentList(listPayload);
     state.tournaments = list;
 
@@ -4239,6 +4394,7 @@ async function refreshTournamentCard(force = false) {
     state.tournamentActiveId = Number(selected.id);
     const details = await apiGet(`/tournaments/${selected.id}`);
     renderTournamentCard(selected, details);
+    renderTournamentSchedule();
   } catch (err) {
     console.error("Turnīru ielādes kļūda:", err);
     renderTournamentCardEmpty(err.message || "Neizdevās ielādēt turnīrus.");
@@ -7806,6 +7962,12 @@ async function initGame() {
       handleTournamentReportSubmit
     );
   }
+  if (tournamentWeeklyJoinBtnEl) {
+    tournamentWeeklyJoinBtnEl.addEventListener(
+      "click",
+      handleTournamentWeeklyJoin
+    );
+  }
   if (tournamentScore1InputEl) {
     tournamentScore1InputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
@@ -7930,6 +8092,10 @@ async function initGame() {
       if (tournamentRefreshTimer) {
         clearInterval(tournamentRefreshTimer);
         tournamentRefreshTimer = null;
+      }
+      if (tournamentCountdownTimer) {
+        clearInterval(tournamentCountdownTimer);
+        tournamentCountdownTimer = null;
       }
       clearStoredAuth();
       window.location.href = "index.html";

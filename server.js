@@ -120,6 +120,47 @@ const VIP_TOURNAMENT_MAX_PARTICIPANTS = (() => {
   const v = parseInt(process.env.VIP_TOURNAMENT_MAX_PARTICIPANTS || "16", 10);
   return Number.isFinite(v) && v >= 2 && v <= 128 ? v : 16;
 })();
+const WEEKLY_TOURNAMENT_ENABLED =
+  String(process.env.WEEKLY_TOURNAMENT_ENABLED || "1") === "1";
+const WEEKLY_TOURNAMENT_TITLE = String(
+  process.env.WEEKLY_TOURNAMENT_TITLE || "Piektdienas turnīrs"
+).trim();
+const WEEKLY_TOURNAMENT_WEEKDAY = 5; // 1=Mon ... 7=Sun (Riga TZ)
+const WEEKLY_TOURNAMENT_HOUR = (() => {
+  const v = parseInt(process.env.WEEKLY_TOURNAMENT_HOUR || "20", 10);
+  return Number.isFinite(v) && v >= 0 && v <= 23 ? v : 20;
+})();
+const WEEKLY_TOURNAMENT_MINUTE = (() => {
+  const v = parseInt(process.env.WEEKLY_TOURNAMENT_MINUTE || "0", 10);
+  return Number.isFinite(v) && v >= 0 && v <= 59 ? v : 0;
+})();
+const WEEKLY_TOURNAMENT_SLOTS = (() => {
+  const fallback = process.env.NODE_ENV === "test" ? 32 : 8;
+  const v = parseInt(process.env.WEEKLY_TOURNAMENT_SLOTS || `${fallback}`, 10);
+  return Number.isFinite(v) && v >= 2 && v <= 32 ? v : fallback;
+})();
+const WEEKLY_TOURNAMENT_STAGE_TYPE = "single_elimination";
+const WEEKLY_TOURNAMENT_MIN_ACCOUNT_AGE_HOURS = (() => {
+  const fallback = process.env.NODE_ENV === "test" ? 0 : 24;
+  const v = parseInt(
+    process.env.WEEKLY_TOURNAMENT_MIN_ACCOUNT_AGE_HOURS || `${fallback}`,
+    10
+  );
+  return Number.isFinite(v) && v >= 0 && v <= 720 ? v : fallback;
+})();
+const WEEKLY_TOURNAMENT_MIN_TOTAL_GUESSES = (() => {
+  const fallback = process.env.NODE_ENV === "test" ? 0 : 15;
+  const v = parseInt(
+    process.env.WEEKLY_TOURNAMENT_MIN_TOTAL_GUESSES || `${fallback}`,
+    10
+  );
+  return Number.isFinite(v) && v >= 0 && v <= 500 ? v : fallback;
+})();
+const WEEKLY_TOURNAMENT_REQUIRE_UNIQUE_DEVICE =
+  String(process.env.WEEKLY_TOURNAMENT_REQUIRE_UNIQUE_DEVICE || "1") === "1";
+const ONESIGNAL_REST_API_KEY = String(
+  process.env.ONESIGNAL_REST_API_KEY || ""
+).trim();
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TITLE_MAX_LEN = (() => {
   const v = parseInt(process.env.TITLE_MAX_LEN || "32", 10);
@@ -682,11 +723,105 @@ const TOURNAMENT_STAGE_TYPES = new Set([
 ]);
 const TOURNAMENT_GRAND_FINAL_TYPES = new Set(["none", "simple", "double"]);
 
+function weekdayInTz(date = new Date(), tz = TZ) {
+  const short = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    weekday: "short",
+  }).format(date);
+  const map = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+  return map[short] || 1;
+}
+
+function rigaLocalDateToUtcTs(y, mo, d, hh, mm) {
+  const probe = new Date(Date.UTC(y, mo - 1, d, 12, 0, 0));
+  const offsetMin = getTzOffsetMinutes(TZ, probe);
+  return Date.UTC(y, mo - 1, d, hh, mm, 0) - offsetMin * 60 * 1000;
+}
+
+function nextWeeklyTournamentStartAt(nowTs = Date.now()) {
+  const now = new Date(nowTs);
+  const parts = datePartsInTz(now, TZ);
+  const curWeekday = weekdayInTz(now, TZ);
+  const nowMinutes = minutesInTz(now, TZ);
+  const targetMinutes = WEEKLY_TOURNAMENT_HOUR * 60 + WEEKLY_TOURNAMENT_MINUTE;
+
+  let addDays = (WEEKLY_TOURNAMENT_WEEKDAY - curWeekday + 7) % 7;
+  if (addDays === 0 && nowMinutes >= targetMinutes) addDays = 7;
+
+  const base = new Date(Date.UTC(parts.y, parts.m - 1, parts.d));
+  base.setUTCDate(base.getUTCDate() + addDays);
+  const y = base.getUTCFullYear();
+  const mo = base.getUTCMonth() + 1;
+  const d = base.getUTCDate();
+  return rigaLocalDateToUtcTs(
+    y,
+    mo,
+    d,
+    WEEKLY_TOURNAMENT_HOUR,
+    WEEKLY_TOURNAMENT_MINUTE
+  );
+}
+
+function buildInitialWeeklyQueue(nowTs = Date.now()) {
+  return {
+    startAt: nextWeeklyTournamentStartAt(nowTs),
+    slots: WEEKLY_TOURNAMENT_SLOTS,
+    participants: [],
+    remindersSent: [],
+    lastCycle: null, // { kind, at, joined, tournamentId, note }
+    createdAt: nowTs,
+  };
+}
+
 function buildInitialTournamentStore() {
   return {
     nextTournamentId: 1,
     tournaments: [],
+    weeklyQueue: buildInitialWeeklyQueue(Date.now()),
   };
+}
+
+function normalizeWeeklyQueue(raw, nowTs = Date.now()) {
+  const base = buildInitialWeeklyQueue(nowTs);
+  const src = raw && typeof raw === "object" ? raw : {};
+  const startAt = Math.max(0, Number(src.startAt) || 0);
+  const slots = Math.max(
+    2,
+    Math.min(32, Math.floor(Number(src.slots) || WEEKLY_TOURNAMENT_SLOTS))
+  );
+  const participants = Array.isArray(src.participants)
+    ? src.participants
+        .map((u) => String(u || "").trim())
+        .filter(Boolean)
+        .slice(0, slots)
+    : [];
+  const seen = new Set();
+  const deduped = [];
+  for (const name of participants) {
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(name);
+  }
+  const remindersSent = Array.isArray(src.remindersSent)
+    ? src.remindersSent
+        .map((x) => String(x || "").trim())
+        .filter(Boolean)
+        .slice(0, 6)
+    : [];
+  const out = {
+    startAt: startAt > nowTs - 8 * DAY_MS ? startAt : base.startAt,
+    slots,
+    participants: deduped,
+    remindersSent,
+    lastCycle:
+      src.lastCycle && typeof src.lastCycle === "object" ? src.lastCycle : null,
+    createdAt: Math.max(0, Number(src.createdAt) || nowTs),
+  };
+  if (out.participants.length > out.slots) {
+    out.participants = out.participants.slice(0, out.slots);
+  }
+  return out;
 }
 
 function normalizeTournamentStore(raw) {
@@ -722,6 +857,7 @@ function normalizeTournamentStore(raw) {
   );
   const next = Math.floor(Number(out.nextTournamentId) || 0);
   out.nextTournamentId = Math.max(maxId + 1, next || 1);
+  out.weeklyQueue = normalizeWeeklyQueue(out.weeklyQueue, Date.now());
   return out;
 }
 
@@ -942,6 +1078,337 @@ let tournamentStore = normalizeTournamentStore(
 saveTournamentStore();
 const tournamentDb = new JsonDatabase(TOURNAMENTS_DB_FILE);
 const tournamentManager = new BracketsManager(tournamentDb);
+
+function getUserByUsernameLoose(username) {
+  const target = String(username || "")
+    .trim()
+    .toLowerCase();
+  if (!target) return null;
+  for (const u of Object.values(USERS || {})) {
+    if (!u) continue;
+    if (
+      String(u.username || "")
+        .trim()
+        .toLowerCase() === target
+    )
+      return u;
+  }
+  return null;
+}
+
+function getUserDeviceIdSet(user) {
+  const set = new Set();
+  if (!user || typeof user !== "object") return set;
+  const first = String(user.createdDeviceId || "").trim();
+  if (first) set.add(first);
+  const many = Array.isArray(user.deviceIds) ? user.deviceIds : [];
+  for (const raw of many) {
+    const v = String(raw || "").trim();
+    if (v) set.add(v);
+  }
+  return set;
+}
+
+function hasSharedDevice(candidate, usernames) {
+  if (!WEEKLY_TOURNAMENT_REQUIRE_UNIQUE_DEVICE) return false;
+  const mine = getUserDeviceIdSet(candidate);
+  if (!mine.size) return false;
+  for (const uname of usernames || []) {
+    const other = getUserByUsernameLoose(uname);
+    if (!other || other.username === candidate.username) continue;
+    const theirs = getUserDeviceIdSet(other);
+    if (!theirs.size) continue;
+    for (const did of mine) {
+      if (theirs.has(did)) return true;
+    }
+  }
+  return false;
+}
+
+function evaluateWeeklyJoinEligibility(user, queuedUsers = []) {
+  if (!user) {
+    return { ok: false, message: "Lietotājs nav atrasts." };
+  }
+  if (isAdminUser(user)) return { ok: true };
+
+  const now = Date.now();
+  const createdAt = Math.max(0, Number(user.createdAt) || 0);
+  const ageHours = createdAt ? (now - createdAt) / (60 * 60 * 1000) : null;
+  if (ageHours !== null && ageHours < WEEKLY_TOURNAMENT_MIN_ACCOUNT_AGE_HOURS) {
+    return {
+      ok: false,
+      message: `Profils ir pārāk jauns. Vajag vismaz ${WEEKLY_TOURNAMENT_MIN_ACCOUNT_AGE_HOURS}h kopš reģistrācijas.`,
+    };
+  }
+
+  const guesses = Math.max(0, Number(user.totalGuesses) || 0);
+  if (guesses < WEEKLY_TOURNAMENT_MIN_TOTAL_GUESSES) {
+    return {
+      ok: false,
+      message: `Lai pieteiktos turnīram, vispirms nospēlē vismaz ${WEEKLY_TOURNAMENT_MIN_TOTAL_GUESSES} minējumus.`,
+    };
+  }
+
+  if (hasSharedDevice(user, queuedUsers)) {
+    return {
+      ok: false,
+      message:
+        "Šis profils izskatās pēc alt/fake (sakrīt ierīce ar citu dalībnieku). Izmanto unikālu spēlētāja kontu.",
+    };
+  }
+
+  return { ok: true };
+}
+
+function ensureWeeklyQueueState(nowTs = Date.now()) {
+  if (
+    !tournamentStore.weeklyQueue ||
+    typeof tournamentStore.weeklyQueue !== "object"
+  ) {
+    tournamentStore.weeklyQueue = buildInitialWeeklyQueue(nowTs);
+    saveTournamentStore();
+    return tournamentStore.weeklyQueue;
+  }
+  const q = tournamentStore.weeklyQueue;
+  const slots = Math.max(
+    2,
+    Math.min(32, Math.floor(Number(q.slots) || WEEKLY_TOURNAMENT_SLOTS))
+  );
+  let changed = false;
+  if (slots !== Number(q.slots)) {
+    q.slots = slots;
+    changed = true;
+  }
+  if (!Array.isArray(q.participants)) {
+    q.participants = [];
+    changed = true;
+  }
+  if (!Array.isArray(q.remindersSent)) {
+    q.remindersSent = [];
+    changed = true;
+  }
+  if (!Number.isFinite(Number(q.startAt)) || Number(q.startAt) <= 0) {
+    q.startAt = nextWeeklyTournamentStartAt(nowTs);
+    q.participants = [];
+    q.remindersSent = [];
+    changed = true;
+  }
+  if (changed) saveTournamentStore();
+  return q;
+}
+
+function resetWeeklyQueueCycle(reason = "", nowTs = Date.now(), extra = {}) {
+  const q = ensureWeeklyQueueState(nowTs);
+  q.lastCycle = {
+    kind: String(reason || "rolled").trim() || "rolled",
+    at: nowTs,
+    joined: Array.isArray(q.participants) ? q.participants.length : 0,
+    ...extra,
+  };
+  q.startAt = nextWeeklyTournamentStartAt(
+    Math.max(nowTs + 1000, q.startAt + 1000)
+  );
+  q.participants = [];
+  q.remindersSent = [];
+  q.createdAt = nowTs;
+  q.slots = WEEKLY_TOURNAMENT_SLOTS;
+  saveTournamentStore();
+  return q;
+}
+
+function formatWeeklyTournamentName(startAtTs) {
+  const dt = new Date(Number(startAtTs) || Date.now());
+  const datePart = dt.toLocaleDateString("lv-LV", {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const timePart = dt.toLocaleTimeString("lv-LV", {
+    timeZone: TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return `${WEEKLY_TOURNAMENT_TITLE} ${datePart} ${timePart}`;
+}
+
+function buildWeeklyQueuePayload(user) {
+  const q = ensureWeeklyQueueState(Date.now());
+  const participants = Array.isArray(q.participants) ? q.participants : [];
+  const username = String(user?.username || "").trim();
+  const isJoined = !!participants.find(
+    (u) =>
+      String(u || "")
+        .trim()
+        .toLowerCase() === username.toLowerCase()
+  );
+  const now = Date.now();
+  const startedWindowPassed = now >= Number(q.startAt || 0);
+  const slots = Math.max(
+    2,
+    Math.floor(Number(q.slots) || WEEKLY_TOURNAMENT_SLOTS)
+  );
+  const full = participants.length >= slots;
+  const elig = evaluateWeeklyJoinEligibility(user, participants);
+  const canJoin =
+    WEEKLY_TOURNAMENT_ENABLED &&
+    !startedWindowPassed &&
+    !full &&
+    !isJoined &&
+    !!elig.ok;
+
+  return {
+    enabled: WEEKLY_TOURNAMENT_ENABLED,
+    title: WEEKLY_TOURNAMENT_TITLE,
+    startAt: Number(q.startAt || 0),
+    now,
+    slots,
+    joinedCount: participants.length,
+    participants: participants.slice(0, slots),
+    isJoined,
+    canJoin,
+    startsOnlyWhenFull: true,
+    waitForAllSlots: true,
+    joinBlockedReason: canJoin
+      ? ""
+      : isJoined
+        ? "Tu jau esi pieteicies."
+        : elig.message || "",
+    lastCycle: q.lastCycle || null,
+  };
+}
+
+async function sendOneSignalNotificationToUsers(usernames, heading, content) {
+  if (!ONESIGNAL_APP_ID || !ONESIGNAL_REST_API_KEY) return false;
+  const ids = Array.isArray(usernames)
+    ? usernames.map((u) => String(u || "").trim()).filter(Boolean)
+    : [];
+  if (!ids.length) return false;
+  try {
+    const response = await fetch("https://api.onesignal.com/notifications", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        Authorization: `Key ${ONESIGNAL_REST_API_KEY}`,
+      },
+      body: JSON.stringify({
+        app_id: ONESIGNAL_APP_ID,
+        include_external_user_ids: ids,
+        headings: { en: heading },
+        contents: { en: content },
+        url: "/game.html",
+      }),
+    });
+    return response.ok;
+  } catch (err) {
+    console.warn("OneSignal push send error:", err);
+    return false;
+  }
+}
+
+async function maybeSendWeeklyQueueReminders(nowTs = Date.now()) {
+  const q = ensureWeeklyQueueState(nowTs);
+  const participants = Array.isArray(q.participants) ? q.participants : [];
+  if (!participants.length) return;
+  const msToStart = Number(q.startAt || 0) - nowTs;
+  if (msToStart <= 0) return;
+
+  const reminders = [
+    { key: "60m", ms: 60 * 60 * 1000, msg: "Turnīrs sākas pēc ~60 minūtēm." },
+    { key: "15m", ms: 15 * 60 * 1000, msg: "Turnīrs sākas pēc ~15 minūtēm." },
+  ];
+
+  for (const r of reminders) {
+    if (msToStart > r.ms) continue;
+    if (q.remindersSent.includes(r.key)) continue;
+    q.remindersSent.push(r.key);
+    saveTournamentStore();
+    await sendOneSignalNotificationToUsers(
+      participants,
+      "VĀRDU ZONA turnīra atgādinājums",
+      `${r.msg} Ja trūkst sloti, aicini draugu.`
+    );
+  }
+}
+
+async function createTournamentFromWeeklyQueue(queue, nowTs = Date.now()) {
+  const participants = Array.isArray(queue?.participants)
+    ? queue.participants.map((u) => String(u || "").trim()).filter(Boolean)
+    : [];
+  const slots = Math.max(
+    2,
+    Math.floor(Number(queue?.slots) || WEEKLY_TOURNAMENT_SLOTS)
+  );
+  if (participants.length < slots) return null;
+  const seeding = participants.slice(0, slots);
+  const tournamentId = Number(tournamentStore.nextTournamentId || 1);
+  tournamentStore.nextTournamentId = tournamentId + 1;
+
+  const name = formatWeeklyTournamentName(Number(queue?.startAt) || nowTs);
+  const stage = await tournamentManager.create.stage({
+    tournamentId,
+    name,
+    type: WEEKLY_TOURNAMENT_STAGE_TYPE,
+    seeding,
+    settings: buildTournamentStageSettings(WEEKLY_TOURNAMENT_STAGE_TYPE, {}),
+  });
+
+  const meta = {
+    id: tournamentId,
+    name,
+    type: WEEKLY_TOURNAMENT_STAGE_TYPE,
+    stageId: stage?.id ?? null,
+    createdAt: nowTs,
+    createdBy: "SYSTEM",
+    participantCount: seeding.length,
+    status: "active",
+    completedAt: 0,
+  };
+  tournamentStore.tournaments.push(meta);
+  saveTournamentStore();
+  io.emit("tournament:update", { tournamentId, event: "created" });
+  broadcastSystemMessage(
+    `🏟️ ${name} ir sācies! (${seeding.length}/${slots} dalībnieki)`
+  );
+  await sendOneSignalNotificationToUsers(
+    seeding,
+    "Turnīrs ir sācies",
+    `${name} starts tagad. Veiksmi!`
+  );
+  return meta;
+}
+
+async function processWeeklyTournamentQueue(nowTs = Date.now()) {
+  if (!WEEKLY_TOURNAMENT_ENABLED) return;
+  const q = ensureWeeklyQueueState(nowTs);
+  await maybeSendWeeklyQueueReminders(nowTs);
+  if (nowTs < Number(q.startAt || 0)) return;
+
+  const slots = Math.max(
+    2,
+    Math.floor(Number(q.slots) || WEEKLY_TOURNAMENT_SLOTS)
+  );
+  const joined = Array.isArray(q.participants) ? q.participants.length : 0;
+  if (joined < slots) {
+    const next = resetWeeklyQueueCycle("not_full", nowTs, {
+      note: `Sākums atcelts: sloti ${joined}/${slots}.`,
+    });
+    broadcastSystemMessage(
+      `⏸️ Nedēļas turnīrs nestartēja (${joined}/${slots}). Nākamais starts: ${new Date(
+        next.startAt
+      ).toLocaleString("lv-LV", { timeZone: TZ })}.`
+    );
+    return;
+  }
+
+  const created = await createTournamentFromWeeklyQueue(q, nowTs);
+  if (!created) return;
+  resetWeeklyQueueCycle("started", nowTs, {
+    tournamentId: created.id,
+    note: `Starts ar ${joined}/${slots}.`,
+  });
+}
 
 function loadUsers(listOverride) {
   try {
@@ -3578,6 +4045,14 @@ function broadcastOnlineList(force = false) {
   io.emit("onlineList", { count: users.length, users });
 }
 setInterval(() => broadcastOnlineList(false), 30 * 1000);
+setInterval(() => {
+  processWeeklyTournamentQueue(Date.now()).catch((err) => {
+    console.warn("Weekly queue scheduler error:", err);
+  });
+}, 15 * 1000);
+processWeeklyTournamentQueue(Date.now()).catch((err) => {
+  console.warn("Weekly queue initial tick error:", err);
+});
 
 function socketRateLimited(socket, key, minMs) {
   if (!socket || !minMs || minMs <= 0) return false;
@@ -5754,11 +6229,19 @@ app.post("/season/start", authMiddleware, (req, res) => {
 });
 
 // ======== TURNĪRI (brackets-manager) ========
-app.get("/tournaments", authMiddleware, (_req, res) => {
+app.get("/tournaments", authMiddleware, async (req, res) => {
+  try {
+    await processWeeklyTournamentQueue(Date.now());
+  } catch (err) {
+    console.warn("Weekly queue tick on /tournaments failed:", err);
+  }
   const list = [...(tournamentStore.tournaments || [])].sort(
     (a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)
   );
-  res.json({ tournaments: list });
+  res.json({
+    tournaments: list,
+    schedule: buildWeeklyQueuePayload(req.user),
+  });
 });
 
 app.post("/tournaments", authMiddleware, async (req, res) => {
@@ -5829,6 +6312,93 @@ app.post("/tournaments", authMiddleware, async (req, res) => {
       detail: String(err?.message || err || ""),
     });
   }
+});
+
+app.post("/tournaments/weekly/join", authMiddleware, async (req, res) => {
+  if (!WEEKLY_TOURNAMENT_ENABLED) {
+    return res.status(404).json({ message: "Nedēļas turnīrs nav ieslēgts." });
+  }
+  try {
+    await processWeeklyTournamentQueue(Date.now());
+  } catch (err) {
+    console.warn("Weekly queue pre-join tick failed:", err);
+  }
+
+  const q = ensureWeeklyQueueState(Date.now());
+  const now = Date.now();
+  const username = String(req.user?.username || "").trim();
+  if (!username) return res.status(401).json({ message: "Nav lietotāja." });
+
+  const slots = Math.max(
+    2,
+    Math.floor(Number(q.slots) || WEEKLY_TOURNAMENT_SLOTS)
+  );
+  const participants = Array.isArray(q.participants) ? q.participants : [];
+  const alreadyJoined = participants.some(
+    (u) =>
+      String(u || "")
+        .trim()
+        .toLowerCase() === username.toLowerCase()
+  );
+  if (alreadyJoined) {
+    return res.json({
+      ok: true,
+      joined: true,
+      message: "Tu jau esi pieteicies nedēļas turnīram.",
+      schedule: buildWeeklyQueuePayload(req.user),
+    });
+  }
+
+  if (now >= Number(q.startAt || 0)) {
+    return res.status(409).json({
+      message:
+        "Pieteikšanās logs šim turnīram ir beidzies. Piesakies nākamajai nedēļai.",
+      schedule: buildWeeklyQueuePayload(req.user),
+    });
+  }
+
+  if (participants.length >= slots) {
+    return res.status(409).json({
+      message: "Visi turnīra sloti jau aizņemti.",
+      schedule: buildWeeklyQueuePayload(req.user),
+    });
+  }
+
+  const eligibility = evaluateWeeklyJoinEligibility(req.user, participants);
+  if (!eligibility.ok) {
+    return res.status(403).json({
+      message:
+        eligibility.message ||
+        "Profils neatbilst nedēļas turnīra drošības prasībām.",
+      schedule: buildWeeklyQueuePayload(req.user),
+    });
+  }
+
+  q.participants.push(username);
+  saveTournamentStore();
+  io.emit("tournament:update", { event: "weekly_join", username });
+
+  const joinedCount = q.participants.length;
+  if (joinedCount >= slots) {
+    broadcastSystemMessage(
+      `✅ Nedēļas turnīra sloti ir pilni (${joinedCount}/${slots}). Starts piektdien plkst. ${String(
+        WEEKLY_TOURNAMENT_HOUR
+      ).padStart(
+        2,
+        "0"
+      )}:${String(WEEKLY_TOURNAMENT_MINUTE).padStart(2, "0")} (${TZ}).`
+    );
+  }
+
+  return res.json({
+    ok: true,
+    joined: true,
+    message:
+      joinedCount >= slots
+        ? "Pieteikts! Visi sloti aizņemti — turnīrs startēs grafikā."
+        : "Pieteikts nedēļas turnīram. Ja trūkst sloti, aicini draugu.",
+    schedule: buildWeeklyQueuePayload(req.user),
+  });
 });
 
 app.get("/tournaments/:id", authMiddleware, async (req, res) => {
