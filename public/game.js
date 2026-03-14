@@ -620,6 +620,11 @@ const state = {
   challengeOpponent: null,
   challengeLen: null,
   challengeFinished: false,
+
+  // UI loop cache (lai spēlētājs nepaliek strupceļā)
+  missions: [],
+  missionBonus: null,
+  loopPrimaryAction: null,
 };
 
 const DM_THREAD_MAX_LOCAL = 200;
@@ -632,6 +637,8 @@ const AVATAR_STORAGE_MAX_KEYS = 50;
 let seasonTimerId = null;
 let tournamentRefreshTimer = null;
 let tournamentCountdownTimer = null;
+let engagementLoopTimer = null;
+let engagementLoopBusy = false;
 let currentProfileName = null; // popupā atvērtais profila vārds
 
 // kešs citu spēlētāju mini avatāriem (username -> url vai null)
@@ -763,6 +770,13 @@ const hofSeason1El = document.getElementById("hof-season1");
 
 // Misijas
 const missionsListEl = $("#missions-list");
+const engagementLoopCardEl = $("#engagement-loop-card");
+const engagementLoopSummaryEl = $("#engagement-loop-summary");
+const engagementLoopPrimaryBtnEl = $("#engagement-loop-primary-btn");
+const engagementLoopPrimaryNoteEl = $("#engagement-loop-primary-note");
+const engagementLoopSecondaryActionsEl = $(
+  "#engagement-loop-secondary-actions"
+);
 const weeklyListEl = $("#weekly-list");
 const weeklySubEl = $("#weekly-sub");
 const weeklyYouEl = $("#weekly-you");
@@ -2041,6 +2055,8 @@ async function runPostLoginInit() {
         setInterval(refreshDailyLeaderboard, 90_000);
         startTournamentRefreshTimer();
         startTournamentCountdownTimer();
+        startEngagementLoopTimer();
+        renderEngagementLoopCard();
         initSocket();
         return;
       } else if (c && c.status === "waiting" && c.player1 !== state.username) {
@@ -2076,6 +2092,8 @@ async function runPostLoginInit() {
   setInterval(refreshDailyLeaderboard, 90_000);
   startTournamentRefreshTimer();
   startTournamentCountdownTimer();
+  startEngagementLoopTimer();
+  renderEngagementLoopCard();
   initSocket();
 }
 
@@ -2332,6 +2350,8 @@ function handleProfileDuelClick() {
 // ==================== DIENAS MISIJAS ====================
 function renderMissions(missions, bonus) {
   if (!missionsListEl) return;
+  state.missions = Array.isArray(missions) ? missions : [];
+  state.missionBonus = bonus && typeof bonus === "object" ? bonus : null;
   missionsListEl.innerHTML = "";
 
   if (!missions || !missions.length) {
@@ -2340,6 +2360,7 @@ function renderMissions(missions, bonus) {
     status.textContent = "Šodien nav pieejamu misiju.";
     li.appendChild(status);
     missionsListEl.appendChild(li);
+    renderEngagementLoopCard();
     return;
   }
 
@@ -2438,6 +2459,7 @@ function renderMissions(missions, bonus) {
 
     missionsListEl.appendChild(li);
   }
+  renderEngagementLoopCard();
 }
 
 function extractMissions(data) {
@@ -2452,6 +2474,253 @@ function extractMissionBonus(data) {
   if (!data || typeof data !== "object") return null;
   if (data.bonus && typeof data.bonus === "object") return data.bonus;
   return null;
+}
+
+function startEngagementLoopTimer() {
+  if (engagementLoopTimer) clearInterval(engagementLoopTimer);
+  engagementLoopTimer = setInterval(() => {
+    renderEngagementLoopCard();
+  }, 15_000);
+}
+
+function getClaimableMissionForLoop() {
+  const missions = Array.isArray(state.missions) ? state.missions : [];
+  return missions.find((m) => m && m.isCompleted && !m.isClaimed) || null;
+}
+
+function getClaimableBonusForLoop() {
+  const b = state.missionBonus;
+  if (!b || typeof b !== "object") return null;
+  return b.isCompleted && !b.isClaimed ? b : null;
+}
+
+function buildEngagementLoopActions() {
+  const actions = [];
+
+  const claimableMission = getClaimableMissionForLoop();
+  if (claimableMission && claimableMission.id != null) {
+    actions.push({
+      key: `claim_mission:${claimableMission.id}`,
+      type: "claim_mission",
+      missionId: claimableMission.id,
+      label: "Saņemt misijas balvu",
+      note: `${String(claimableMission.title || "Misija")} ir gatava saņemšanai.`,
+    });
+  }
+
+  const claimableBonus = getClaimableBonusForLoop();
+  if (claimableBonus) {
+    actions.push({
+      key: "claim_bonus",
+      type: "claim_bonus",
+      label: "Saņemt dienas bonusu",
+      note: "Dienas bonus balva ir gatava saņemšanai.",
+    });
+  }
+
+  if (_chestStatus?.available) {
+    actions.push({
+      key: "open_daily_chest",
+      type: "open_daily_chest",
+      label: "Atvērt Daily Chest",
+      note: "Atver lādi uzreiz, lai nezaudētu dienas loop tempu.",
+    });
+  }
+
+  if (!state.roundFinished && !state.challengeId && !state.duelMode) {
+    actions.push({
+      key: "continue_round",
+      type: "continue_round",
+      label: "Turpināt šo raundu",
+      note: "Ievadi nākamo minējumu, lai progress neapstājas.",
+    });
+  }
+
+  if (state.roundFinished && !state.duelMode) {
+    actions.push({
+      key: "new_round",
+      type: "new_round",
+      label: "Sākt jaunu raundu",
+      note: "Raunds ir pabeigts, vari uzreiz turpināt spēli.",
+    });
+  }
+
+  if (state.tournamentReportCtx?.matchId) {
+    actions.push({
+      key: "focus_tournament_report",
+      type: "focus_tournament_report",
+      label: "Iesniegt turnīra rezultātu",
+      note: "Tavs turnīra mačs gaida rezultāta iesniegšanu.",
+    });
+  }
+
+  if (state.tournamentSchedule?.canJoin) {
+    actions.push({
+      key: "join_weekly_tournament",
+      type: "join_weekly_tournament",
+      label: "Pieteikties nedēļas turnīram",
+      note: "Aizņem slotu turnīrā un turpini sacensību loopu.",
+    });
+  }
+
+  if (Array.isArray(state.friendInvitesIn) && state.friendInvitesIn.length) {
+    const fromName = String(state.friendInvitesIn[0]?.name || "").trim();
+    if (fromName) {
+      actions.push({
+        key: `accept_friend:${fromName.toLowerCase()}`,
+        type: "accept_friend",
+        from: fromName,
+        label: `Pieņemt draugu: ${fromName}`,
+        note: "Draugu loks atslēdz vairāk duelus un lielāku iesaisti.",
+      });
+    }
+  }
+
+  if (!state.challengeId && challengeFriendBtn) {
+    actions.push({
+      key: "challenge_friend",
+      type: "challenge_friend",
+      label: "Izaicināt draugu",
+      note: "Izaicinājums dod skaidru mērķi abiem spēlētājiem.",
+    });
+  }
+
+  if (state.lastShareResult) {
+    actions.push({
+      key: "share_result",
+      type: "share_result",
+      label: "Dalīties ar rezultātu",
+      note: "Padalies ar rezultātu, lai atgriežas vairāk spēlētāju.",
+    });
+  }
+
+  actions.push({
+    key: "share_game",
+    type: "share_game",
+    label: "Dalīties ar spēli",
+    note: "Ja nav citu darbību, uzaicini jaunus spēlētājus.",
+  });
+
+  const out = [];
+  const seen = new Set();
+  for (const action of actions) {
+    const key = String(action?.key || "");
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(action);
+  }
+  return out;
+}
+
+async function runEngagementLoopAction(action) {
+  if (!action || engagementLoopBusy) return;
+  engagementLoopBusy = true;
+  try {
+    switch (action.type) {
+      case "claim_mission":
+        await claimMission(action.missionId);
+        break;
+      case "claim_bonus":
+        await claimMissionBonus();
+        break;
+      case "open_daily_chest":
+        handleDailyChestClick();
+        break;
+      case "new_round":
+        if (newRoundBtn) newRoundBtn.click();
+        else if (!state.duelMode) await startNewRound();
+        break;
+      case "continue_round":
+        if (gridEl)
+          gridEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        if (gameMessageEl && !state.roundFinished) {
+          gameMessageEl.textContent =
+            "Turpini minēt — nākamais solis ir tavs gājiens.";
+        }
+        break;
+      case "focus_tournament_report":
+        if (tournamentCardEl) {
+          tournamentCardEl.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        }
+        if (tournamentScore1InputEl) tournamentScore1InputEl.focus();
+        setTournamentReportStatus(
+          "Ievadi rezultātu un pabeidz maču, lai loop turpinās."
+        );
+        break;
+      case "join_weekly_tournament":
+        await handleTournamentWeeklyJoin();
+        break;
+      case "accept_friend":
+        if (action.from) await friendAccept(action.from);
+        break;
+      case "challenge_friend":
+        if (challengeFriendBtn) challengeFriendBtn.click();
+        break;
+      case "share_result":
+        handleShareResult();
+        break;
+      case "share_game":
+        handleShare();
+        break;
+      default:
+        break;
+    }
+  } finally {
+    engagementLoopBusy = false;
+    setTimeout(renderEngagementLoopCard, 120);
+  }
+}
+
+function renderEngagementLoopCard() {
+  if (!engagementLoopCardEl) return;
+  const actions = buildEngagementLoopActions();
+  const primary = actions[0] || null;
+  state.loopPrimaryAction = primary;
+
+  if (engagementLoopSummaryEl) {
+    engagementLoopSummaryEl.textContent = primary
+      ? `Nākamais solis: ${primary.label}`
+      : "Turpini aktuālo raundu un krāj progresu.";
+  }
+
+  if (engagementLoopPrimaryBtnEl) {
+    if (!primary) {
+      engagementLoopPrimaryBtnEl.textContent = "Turpināt spēli";
+      engagementLoopPrimaryBtnEl.disabled = true;
+    } else {
+      engagementLoopPrimaryBtnEl.textContent = primary.label;
+      engagementLoopPrimaryBtnEl.disabled = false;
+    }
+  }
+
+  if (engagementLoopPrimaryNoteEl) {
+    if (!primary) {
+      engagementLoopPrimaryNoteEl.textContent =
+        "Loop panelis automātiski atjaunojas pēc katras darbības.";
+    } else {
+      const nextLabels = actions
+        .slice(1, 3)
+        .map((x) => x.label)
+        .join(" · ");
+      const chain = nextLabels ? ` Pēc tam: ${nextLabels}.` : "";
+      engagementLoopPrimaryNoteEl.textContent =
+        `${primary.note || ""}${chain}`.trim();
+    }
+  }
+
+  if (engagementLoopSecondaryActionsEl) {
+    engagementLoopSecondaryActionsEl.innerHTML = "";
+    actions.slice(1, 4).forEach((action) => {
+      const btn = createEl("button", "mission-claim-btn vz-loop-secondary-btn");
+      btn.type = "button";
+      btn.textContent = action.label;
+      btn.addEventListener("click", () => runEngagementLoopAction(action));
+      engagementLoopSecondaryActionsEl.appendChild(btn);
+    });
+  }
 }
 
 async function refreshMissions() {
@@ -2517,6 +2786,7 @@ function applyFriendsPayload(payload) {
     : [];
   renderFriends();
   updateProfileFriendButton();
+  renderEngagementLoopCard();
 }
 
 function friendRelation(name) {
@@ -2927,6 +3197,7 @@ function resetGrid(len) {
     newRoundBtn.disabled = true;
   }
 
+  renderEngagementLoopCard();
   scheduleFitGrid();
 }
 
@@ -2978,10 +3249,13 @@ async function startNewRound() {
     }
     if (gameMessageEl)
       gameMessageEl.textContent = `Jauns raunds (${len} burti).`;
+    state.roundFinished = false;
+    renderEngagementLoopCard();
   } catch (err) {
     console.error("start-round kļūda:", err);
     if (gameMessageEl)
       gameMessageEl.textContent = err.message || "Neizdevās sākt raundu.";
+    renderEngagementLoopCard();
   }
 }
 
@@ -3377,6 +3651,7 @@ async function submitGuess() {
       playSound(sWin);
       setTimeout(() => showWinEffects(), Math.min(120, unlockAfter));
       state.roundFinished = true;
+      renderEngagementLoopCard();
       setTimeout(
         () => prepareShareResult(true, rowIndex + 1),
         unlockAfter + 50
@@ -3405,6 +3680,7 @@ async function submitGuess() {
     if (finished) {
       if (gameMessageEl) gameMessageEl.textContent = "Raunds beidzies!";
       state.roundFinished = true;
+      renderEngagementLoopCard();
       setTimeout(
         () => prepareShareResult(false, rowIndex + 1),
         unlockAfter + 50
@@ -4161,6 +4437,7 @@ async function handleTournamentWeeklyJoin() {
     await refreshTournamentCard(true);
   } finally {
     renderTournamentSchedule();
+    renderEngagementLoopCard();
   }
 }
 
@@ -4440,6 +4717,7 @@ async function refreshTournamentCard(force = false) {
     console.error("Turnīru ielādes kļūda:", err);
     renderTournamentCardEmpty(err.message || "Neizdevās ielādēt turnīrus.");
   } finally {
+    renderEngagementLoopCard();
     if (tournamentRefreshBtnEl) tournamentRefreshBtnEl.disabled = false;
   }
 }
@@ -6904,6 +7182,7 @@ function initSocket() {
       setTimeout(() => showWinEffects(), Math.min(120, unlockAfter));
       state.roundFinished = true;
       state.isLocked = true;
+      renderEngagementLoopCard();
       setTimeout(recordWinAndMaybeShowRatePrompt, unlockAfter + 600);
       return;
     }
@@ -6914,6 +7193,7 @@ function initSocket() {
       setTimeout(() => playSound(sLose), Math.min(120, unlockAfter));
       state.roundFinished = true;
       state.isLocked = true;
+      renderEngagementLoopCard();
       return;
     }
 
@@ -6953,6 +7233,7 @@ function initSocket() {
     state.duelOpponent = null;
     state.isLocked = true;
     state.roundFinished = true;
+    renderEngagementLoopCard();
 
     let msg = "";
     if (youWin) msg = "⚔️ Duēlis beidzies — tu uzvarēji!";
@@ -7182,6 +7463,7 @@ async function refreshDailyChestStatus() {
     _chestStatus = s;
     ensureDailyChestUi();
     renderDailyChestUi(s);
+    renderEngagementLoopCard();
   } catch (err) {
     console.warn("Daily Chest status kļūda:", err);
   }
@@ -7643,6 +7925,7 @@ function prepareShareResult(isWin, attemptsUsed) {
     gridText,
   };
   setShareResultVisible(true);
+  renderEngagementLoopCard();
 }
 
 async function handleShareResult() {
@@ -7992,6 +8275,11 @@ async function initGame() {
     shareResultWhatsappBtn.addEventListener("click", handleShareResultWhatsapp);
   if (shareResultDiscordBtn)
     shareResultDiscordBtn.addEventListener("click", handleShareResultDiscord);
+  if (engagementLoopPrimaryBtnEl) {
+    engagementLoopPrimaryBtnEl.addEventListener("click", () =>
+      runEngagementLoopAction(state.loopPrimaryAction)
+    );
+  }
   if (tournamentRefreshBtnEl) {
     tournamentRefreshBtnEl.addEventListener("click", () =>
       refreshTournamentCard(true)
@@ -8137,6 +8425,10 @@ async function initGame() {
       if (tournamentCountdownTimer) {
         clearInterval(tournamentCountdownTimer);
         tournamentCountdownTimer = null;
+      }
+      if (engagementLoopTimer) {
+        clearInterval(engagementLoopTimer);
+        engagementLoopTimer = null;
       }
       clearStoredAuth();
       window.location.href = "index.html";

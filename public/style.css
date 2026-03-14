@@ -2855,6 +2855,21 @@ summary:focus-visible {
 .mission-status { font-size: 11px; color: #aaa; }
 .mission-status-done { font-size: 11px; color: #8bc34a; font-weight: 600; }
 
+.vz-loop-secondary-actions {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.vz-loop-secondary-btn {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.vz-loop-secondary-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
 /* ===========================
    Turniri
    =========================== */
