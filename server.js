@@ -33,8 +33,12 @@ const __dirname = path.dirname(__filename);
 
 // ======== Konstantes ========
 const PORT = process.env.PORT || 10080;
-const JWT_SECRET =
-  process.env.JWT_SECRET || "BUGATS_VARDU_ZONA_SUPER_SLEPENS_JWT";
+const JWT_SECRET = (() => {
+  const configured = String(process.env.JWT_SECRET || "").trim();
+  if (configured) return configured;
+  if (process.env.NODE_ENV === "test") return "test-only-jwt-secret";
+  throw new Error("JWT_SECRET is required");
+})();
 
 const USERS_FILE = process.env.USERS_FILE || path.join(__dirname, "users.json");
 const REPORTS_FILE =
@@ -217,6 +221,11 @@ const ADMIN_USERNAMES = (() => {
     .filter(Boolean);
   return Array.from(new Set([...defaults, ...extra]));
 })();
+const ALLOW_ADMIN_SIGNUP =
+  String(
+    process.env.ALLOW_ADMIN_SIGNUP ??
+      (process.env.NODE_ENV === "test" ? "1" : "0")
+  ) === "1";
 const ADMIN_USERNAMES_LC = new Set(
   ADMIN_USERNAMES.map((x) => String(x || "").toLowerCase())
 );
@@ -3403,6 +3412,35 @@ const globalRateLimiter = rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false,
 });
+const signupRateLimiter = rateLimit({
+  windowMs: Number(process.env.SIGNUP_RATE_LIMIT_WINDOW_MS || 60_000),
+  limit: Number(process.env.SIGNUP_RATE_LIMIT_MAX || 30),
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { message: "Pārāk daudz reģistrācijas mēģinājumu. Pamēģini vēlāk." },
+});
+const loginRateLimiter = rateLimit({
+  windowMs: Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS || 60_000),
+  limit: Number(process.env.LOGIN_RATE_LIMIT_MAX || 50),
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: { message: "Pārāk daudz login mēģinājumu. Pamēģini vēlāk." },
+});
+const passwordResetRateLimiter = rateLimit({
+  windowMs: Number(process.env.PASSWORD_RESET_RATE_LIMIT_WINDOW_MS || 60_000),
+  limit: Number(process.env.PASSWORD_RESET_RATE_LIMIT_MAX || 20),
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { message: "Pārāk daudz paroles atjaunošanas mēģinājumu." },
+});
+const guessRateLimiter = rateLimit({
+  windowMs: Number(process.env.GUESS_RATE_LIMIT_WINDOW_MS || 60_000),
+  limit: Number(process.env.GUESS_RATE_LIMIT_MAX || 180),
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { message: "Pārāk daudz minējumu īsā laikā." },
+});
 app.use((req, res, next) => {
   if (req.path.startsWith("/socket.io")) return next();
   return globalRateLimiter(req, res, next);
@@ -4622,8 +4660,15 @@ async function signupHandler(req, res) {
       message: "Nickname: 3-20 simboli, tikai burti/cipari/ - _",
     });
   }
-  if (USERS[name]) {
+  const existingUserKey = findUserKeyCaseInsensitive(name);
+  if (existingUserKey) {
     return res.status(400).json({ message: "Šāds lietotājs jau eksistē" });
+  }
+  if (isAdminName(name) && !ALLOW_ADMIN_SIGNUP) {
+    return res.status(403).json({
+      message:
+        "Šis nickname ir rezervēts. Izvēlies citu vai sazinies ar administratoru.",
+    });
   }
 
   // Anti-alt: 24h limits uz ierīci (deviceId)
@@ -4744,7 +4789,7 @@ async function signupHandler(req, res) {
   return res.json({ ...(await buildMePayload(user)), token });
 }
 
-app.post("/signup", signupHandler);
+app.post("/signup", signupRateLimiter, signupHandler);
 
 async function loginHandler(req, res) {
   const { username, password, email, identifier, login } = req.body || {};
@@ -4806,8 +4851,8 @@ async function loginHandler(req, res) {
   return res.json({ ...(await buildMePayload(user)), token });
 }
 
-app.post("/login", loginHandler);
-app.post("/signin", loginHandler);
+app.post("/login", loginRateLimiter, loginHandler);
+app.post("/signin", loginRateLimiter, loginHandler);
 
 // ======== Paroles atjaunošana ========
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 h
@@ -4853,67 +4898,71 @@ async function sendPasswordResetEmail(toEmail, resetLink) {
   return res.ok;
 }
 
-app.post("/password-reset-request", async (req, res) => {
-  const rawEmail = String(req.body?.email ?? "").trim();
-  const rawUsername = String(req.body?.username ?? "").trim();
-  const cleanedEmail = normalizeEmail(rawEmail);
-  if (!RESEND_API_KEY) {
-    return res.status(503).json({
-      message:
-        "Paroles atjaunošana pagaidām nav pieejama. Sazinies: thezone@news.thezone.lv",
-    });
-  }
-  if (!cleanedEmail && !rawUsername) {
-    return res
-      .status(400)
-      .json({ message: "Ievadi e-pastu vai lietotājvārdu." });
-  }
-  prunePasswordResetTokens();
-  let key = null;
-  let toEmail = null;
-  if (cleanedEmail) {
-    key = findUserKeyByEmail(cleanedEmail);
-    if (key && USERS[key] && USERS[key].email) toEmail = USERS[key].email;
-  }
-  if (!key && rawUsername) {
-    key = findUserKeyCaseInsensitive(rawUsername);
-    if (key && USERS[key] && USERS[key].email) toEmail = USERS[key].email;
-    if (key && USERS[key] && !USERS[key].email) {
-      return res.json({
-        ok: true,
-        noEmailOnAccount: true,
+app.post(
+  "/password-reset-request",
+  passwordResetRateLimiter,
+  async (req, res) => {
+    const rawEmail = String(req.body?.email ?? "").trim();
+    const rawUsername = String(req.body?.username ?? "").trim();
+    const cleanedEmail = normalizeEmail(rawEmail);
+    if (!RESEND_API_KEY) {
+      return res.status(503).json({
         message:
-          "Šim kontam nav reģistrēts e-pasts. Pievieno e-pastu profilā (ja atceries paroli) vai raksti uz thezone@news.thezone.lv ar lietotājvārdu.",
+          "Paroles atjaunošana pagaidām nav pieejama. Sazinies: thezone@news.thezone.lv",
       });
     }
-  }
-  if (!key || !toEmail) {
+    if (!cleanedEmail && !rawUsername) {
+      return res
+        .status(400)
+        .json({ message: "Ievadi e-pastu vai lietotājvārdu." });
+    }
+    prunePasswordResetTokens();
+    let key = null;
+    let toEmail = null;
+    if (cleanedEmail) {
+      key = findUserKeyByEmail(cleanedEmail);
+      if (key && USERS[key] && USERS[key].email) toEmail = USERS[key].email;
+    }
+    if (!key && rawUsername) {
+      key = findUserKeyCaseInsensitive(rawUsername);
+      if (key && USERS[key] && USERS[key].email) toEmail = USERS[key].email;
+      if (key && USERS[key] && !USERS[key].email) {
+        return res.json({
+          ok: true,
+          noEmailOnAccount: true,
+          message:
+            "Šim kontam nav reģistrēts e-pasts. Pievieno e-pastu profilā (ja atceries paroli) vai raksti uz thezone@news.thezone.lv ar lietotājvārdu.",
+        });
+      }
+    }
+    if (!key || !toEmail) {
+      return res.json({
+        ok: true,
+        message:
+          "Ja konts ar šādu e-pastu vai lietotājvārdu eksistē un ir e-pasts, saņemsi e-pastu ar norādījumiem.",
+      });
+    }
+    const username = USERS[key].username;
+    const token = crypto.randomBytes(32).toString("hex");
+    passwordResetTokens.set(token, {
+      username,
+      expiresAt: Date.now() + PASSWORD_RESET_TTL_MS,
+    });
+    const resetLink = `${BASE_URL}/reset-password.html?token=${encodeURIComponent(token)}`;
+    const sent = await sendPasswordResetEmail(toEmail, resetLink);
+    if (!sent) {
+      passwordResetTokens.delete(token);
+      return res
+        .status(500)
+        .json({ message: "Neizdevās nosūtīt e-pastu. Mēģini vēlreiz vēlāk." });
+    }
     return res.json({
       ok: true,
       message:
         "Ja konts ar šādu e-pastu vai lietotājvārdu eksistē un ir e-pasts, saņemsi e-pastu ar norādījumiem.",
     });
   }
-  const username = USERS[key].username;
-  const token = crypto.randomBytes(32).toString("hex");
-  passwordResetTokens.set(token, {
-    username,
-    expiresAt: Date.now() + PASSWORD_RESET_TTL_MS,
-  });
-  const resetLink = `${BASE_URL}/reset-password.html?token=${encodeURIComponent(token)}`;
-  const sent = await sendPasswordResetEmail(toEmail, resetLink);
-  if (!sent) {
-    passwordResetTokens.delete(token);
-    return res
-      .status(500)
-      .json({ message: "Neizdevās nosūtīt e-pastu. Mēģini vēlreiz vēlāk." });
-  }
-  return res.json({
-    ok: true,
-    message:
-      "Ja konts ar šādu e-pastu vai lietotājvārdu eksistē un ir e-pasts, saņemsi e-pastu ar norādījumiem.",
-  });
-});
+);
 
 app.post("/password-reset", async (req, res) => {
   const { token, newPassword } = req.body || {};
@@ -6381,7 +6430,7 @@ function trackBadLength(user) {
   return false;
 }
 
-app.post("/guess", authMiddleware, (req, res) => {
+app.post("/guess", guessRateLimiter, authMiddleware, (req, res) => {
   const user = req.user;
   markActivity(user);
   ensureDailyMissions(user);
