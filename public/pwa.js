@@ -1,7 +1,7 @@
 (() => {
   if (!("serviceWorker" in navigator)) return;
 
-  const SW_VERSION = "2026-03-21";
+  const SW_VERSION = "2026-03-26";
   const SW_VERSION_KEY = "vz_sw_version";
   const SW_URL = "sw.js?v=" + SW_VERSION;
 
@@ -35,7 +35,10 @@
             const worker = reg.installing;
             if (!worker) return;
             worker.addEventListener("statechange", () => {
-              if (worker.state === "installed" && navigator.serviceWorker.controller) {
+              if (
+                worker.state === "installed" &&
+                navigator.serviceWorker.controller
+              ) {
                 worker.postMessage({ type: "SKIP_WAITING" });
               }
             });

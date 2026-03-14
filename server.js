@@ -79,6 +79,14 @@ const SUPABASE_AVATAR_SIGNED_TTL = (() => {
   return Number.isFinite(v) && v >= 60 && v <= 86400 ? v : 3600;
 })();
 const SUPABASE_ENABLED = !!(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
+const ONESIGNAL_APP_ID = String(process.env.ONESIGNAL_APP_ID || "").trim();
+const ONESIGNAL_SAFARI_WEB_ID = String(
+  process.env.ONESIGNAL_SAFARI_WEB_ID || ""
+).trim();
+const ONESIGNAL_PROMPT_DELAY_SECONDS = (() => {
+  const v = parseInt(process.env.ONESIGNAL_PROMPT_DELAY_SECONDS || "25", 10);
+  return Number.isFinite(v) && v >= 0 && v <= 300 ? v : 25;
+})();
 const supabase = SUPABASE_ENABLED
   ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -3398,6 +3406,16 @@ app.use(
           "'self'",
           "https://bugats-wordle-server.onrender.com",
           "wss://bugats-wordle-server.onrender.com",
+          "https://cdn.onesignal.com",
+          "https://onesignal.com",
+          "https://*.onesignal.com",
+        ],
+        // Frontend uses local bundle + selected external SDK hosts.
+        "script-src": [
+          "'self'",
+          "https://cdn.jsdelivr.net",
+          "https://unpkg.com",
+          "https://cdn.onesignal.com",
         ],
         // Allow the in-game radio stream host while keeping strict defaults.
         "media-src": ["'self'", "https://stream.nightride.fm"],
@@ -3469,6 +3487,20 @@ app.get("/", (_req, res) => {
 });
 app.get("/health", (_req, res) => res.json({ ok: true }));
 app.post("/logout", (_req, res) => res.json({ ok: true }));
+app.get("/runtime-config.js", (_req, res) => {
+  const payload = {
+    oneSignalAppId: ONESIGNAL_APP_ID || "",
+    oneSignalSafariWebId: ONESIGNAL_SAFARI_WEB_ID || "",
+    oneSignalPromptDelaySeconds: ONESIGNAL_PROMPT_DELAY_SECONDS,
+  };
+  res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.send(
+    `window.VZ_RUNTIME_CONFIG = Object.assign({}, window.VZ_RUNTIME_CONFIG || {}, ${JSON.stringify(
+      payload
+    )});`
+  );
+});
 
 if (HAS_STATIC_INDEX) {
   app.use(express.static(STATIC_DIR));

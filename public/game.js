@@ -23,6 +23,207 @@ const API_BASE = (() => {
   }
   return "https://bugats-wordle-server.onrender.com";
 })();
+const ONESIGNAL_SDK_SRC =
+  "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js";
+const ONESIGNAL_PROMPT_LS_KEY = "vz_onesignal_prompt_v1";
+let oneSignalInitPromise = null;
+let oneSignalInitialized = false;
+let oneSignalLoggedInAs = "";
+
+function getRuntimeConfig() {
+  const cfg =
+    window &&
+    window.VZ_RUNTIME_CONFIG &&
+    typeof window.VZ_RUNTIME_CONFIG === "object"
+      ? window.VZ_RUNTIME_CONFIG
+      : {};
+  return cfg;
+}
+
+function getOneSignalConfig() {
+  const cfg = getRuntimeConfig();
+  let appId = String(cfg.oneSignalAppId || "").trim();
+  let safariWebId = String(cfg.oneSignalSafariWebId || "").trim();
+  let promptDelaySeconds = Number(cfg.oneSignalPromptDelaySeconds || 0);
+
+  try {
+    const overrideAppId = String(
+      localStorage.getItem("vz_onesignal_app_id") || ""
+    ).trim();
+    if (overrideAppId) appId = overrideAppId;
+    const overrideSafariWebId = String(
+      localStorage.getItem("vz_onesignal_safari_web_id") || ""
+    ).trim();
+    if (overrideSafariWebId) safariWebId = overrideSafariWebId;
+    const overrideDelay = parseInt(
+      localStorage.getItem("vz_onesignal_prompt_delay") || "",
+      10
+    );
+    if (Number.isFinite(overrideDelay)) promptDelaySeconds = overrideDelay;
+  } catch {}
+
+  if (!Number.isFinite(promptDelaySeconds) || promptDelaySeconds < 0) {
+    promptDelaySeconds = 0;
+  }
+
+  return {
+    appId,
+    safariWebId,
+    promptDelaySeconds: Math.min(300, Math.floor(promptDelaySeconds)),
+  };
+}
+
+function loadOneSignalSdk() {
+  if (window.OneSignal && typeof window.OneSignal.init === "function") {
+    return Promise.resolve();
+  }
+  const existing = document.getElementById("onesignal-sdk");
+  if (existing) {
+    return new Promise((resolve, reject) => {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener(
+        "error",
+        () => reject(new Error("OneSignal SDK load failed")),
+        {
+          once: true,
+        }
+      );
+    });
+  }
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.id = "onesignal-sdk";
+    script.src = ONESIGNAL_SDK_SRC;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("OneSignal SDK load failed"));
+    document.head.appendChild(script);
+  });
+}
+
+function shouldPromptOneSignal() {
+  try {
+    return localStorage.getItem(ONESIGNAL_PROMPT_LS_KEY) !== "1";
+  } catch {
+    return true;
+  }
+}
+
+function markOneSignalPrompted() {
+  try {
+    localStorage.setItem(ONESIGNAL_PROMPT_LS_KEY, "1");
+  } catch {}
+}
+
+async function initOneSignalPush(username = "") {
+  const cfg = getOneSignalConfig();
+  if (!cfg.appId) return;
+  if (!("Notification" in window) || !("serviceWorker" in navigator)) return;
+
+  if (!oneSignalInitPromise) {
+    oneSignalInitPromise = (async () => {
+      const initAndLink = async (OneSignal) => {
+        if (!oneSignalInitialized) {
+          await OneSignal.init({
+            appId: cfg.appId,
+            safari_web_id: cfg.safariWebId || undefined,
+            serviceWorkerPath: "sw.js",
+            serviceWorkerUpdaterPath: "sw.js",
+            notifyButton: { enable: false },
+            autoResubscribe: true,
+            allowLocalhostAsSecureOrigin:
+              window.location.hostname === "localhost" ||
+              window.location.hostname === "127.0.0.1",
+          });
+          oneSignalInitialized = true;
+
+          if (
+            cfg.promptDelaySeconds >= 0 &&
+            Notification.permission === "default" &&
+            shouldPromptOneSignal()
+          ) {
+            markOneSignalPrompted();
+            setTimeout(() => {
+              try {
+                if (
+                  OneSignal.Notifications &&
+                  typeof OneSignal.Notifications.requestPermission ===
+                    "function"
+                ) {
+                  OneSignal.Notifications.requestPermission().catch(() => {});
+                }
+              } catch {}
+            }, cfg.promptDelaySeconds * 1000);
+          }
+        }
+
+        const externalId = String(username || state.username || "").trim();
+        if (
+          externalId &&
+          externalId !== oneSignalLoggedInAs &&
+          typeof OneSignal.login === "function"
+        ) {
+          await OneSignal.login(externalId);
+          oneSignalLoggedInAs = externalId;
+        }
+      };
+
+      if (window.OneSignal && typeof window.OneSignal.init === "function") {
+        await initAndLink(window.OneSignal);
+        return;
+      }
+
+      const queued = new Promise((resolve) => {
+        window.OneSignalDeferred = window.OneSignalDeferred || [];
+        window.OneSignalDeferred.push(async (OneSignal) => {
+          try {
+            await initAndLink(OneSignal);
+          } catch (err) {
+            console.warn("OneSignal init kļūda:", err);
+          } finally {
+            resolve();
+          }
+        });
+      });
+      await loadOneSignalSdk();
+      await queued;
+    })().catch((err) => {
+      console.warn("OneSignal SDK ielādes kļūda:", err);
+    });
+  } else {
+    await oneSignalInitPromise;
+    if (
+      window.OneSignal &&
+      typeof window.OneSignal.login === "function" &&
+      username &&
+      username !== oneSignalLoggedInAs
+    ) {
+      try {
+        await window.OneSignal.login(String(username).trim());
+        oneSignalLoggedInAs = String(username).trim();
+      } catch {}
+    }
+  }
+}
+
+async function clearOneSignalIdentity() {
+  oneSignalLoggedInAs = "";
+  try {
+    if (window.OneSignal && typeof window.OneSignal.logout === "function") {
+      await window.OneSignal.logout();
+      return;
+    }
+    if (Array.isArray(window.OneSignalDeferred)) {
+      window.OneSignalDeferred.push(async (OneSignal) => {
+        if (OneSignal && typeof OneSignal.logout === "function") {
+          try {
+            await OneSignal.logout();
+          } catch {}
+        }
+      });
+    }
+  } catch {}
+}
 
 // Admin lietotāji (tāpat kā serverī / UI)
 const ADMIN_USERNAMES = ["Bugats", "BugatsLV"];
@@ -7721,6 +7922,7 @@ async function initGame() {
 
   if (logoutBtn) {
     logoutBtn.addEventListener("click", () => {
+      clearOneSignalIdentity();
       if (state.socket) {
         state.socket.disconnect();
         state.socket = null;
@@ -7917,6 +8119,7 @@ async function initGame() {
   try {
     const me = await apiGet("/me");
     updatePlayerCard(me);
+    initOneSignalPush(me.username || state.username);
 
     // Avatar auto-sync (per-user)
     try {

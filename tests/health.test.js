@@ -22,6 +22,18 @@ describe("CSP headers", () => {
   });
 });
 
+describe("Runtime config", () => {
+  it("serves runtime-config.js payload", async () => {
+    const res = await request(app).get("/runtime-config.js");
+    expect(res.status).toBe(200);
+    expect(String(res.headers["content-type"] || "")).toContain(
+      "application/javascript"
+    );
+    expect(String(res.text || "")).toContain("window.VZ_RUNTIME_CONFIG");
+    expect(String(res.headers["cache-control"] || "")).toContain("no-store");
+  });
+});
+
 describe("Legal pages", () => {
   it("serves terms, copyright, and DMCA pages", async () => {
     const routes = [
@@ -35,5 +47,13 @@ describe("Legal pages", () => {
       expect(res.status).toBe(200);
       expect(String(res.text || "")).toContain(marker);
     }
+  });
+});
+
+describe("Push worker integration", () => {
+  it("serves service worker with OneSignal bridge", async () => {
+    const res = await request(app).get("/sw.js");
+    expect(res.status).toBe(200);
+    expect(String(res.text || "")).toContain("OneSignalSDK.sw.js");
   });
 });

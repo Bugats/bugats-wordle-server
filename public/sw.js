@@ -1,4 +1,8 @@
-const CACHE_VERSION = "vz-pwa-v10";
+try {
+  importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
+} catch {}
+
+const CACHE_VERSION = "vz-pwa-v11";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -12,10 +16,16 @@ const CORE_ASSETS = [
   "./manifest.json",
   "./icon.svg",
   "./icon-maskable.svg",
-  "./pwa.js"
+  "./pwa.js",
 ];
 
-const STATIC_DESTINATIONS = new Set(["style", "script", "image", "font", "audio"]);
+const STATIC_DESTINATIONS = new Set([
+  "style",
+  "script",
+  "image",
+  "font",
+  "audio",
+]);
 const NETWORK_FIRST_PATHS = new Set([
   "/",
   "/index.html",
@@ -27,7 +37,8 @@ const NETWORK_FIRST_PATHS = new Set([
   "/phaser-logo.js",
   "/grid-fx.js",
   "/manifest.json",
-  "/pwa.js"
+  "/pwa.js",
+  "/runtime-config.js",
 ]);
 
 self.addEventListener("install", (event) => {
@@ -44,7 +55,11 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((key) => key !== CACHE_VERSION).map((key) => caches.delete(key)))
+        Promise.all(
+          keys
+            .filter((key) => key !== CACHE_VERSION)
+            .map((key) => caches.delete(key))
+        )
       )
       .then(() => self.clients.claim())
   );
