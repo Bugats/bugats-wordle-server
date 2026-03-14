@@ -782,9 +782,11 @@ const tournamentReportBtnEl = $("#tournament-report-btn");
 const tournamentReportStatusEl = $("#tournament-report-status");
 const tournamentRefreshBtnEl = $("#tournament-refresh-btn");
 const tournamentScheduleLineEl = $("#tournament-schedule-line");
+const tournamentScheduleModeEl = $("#tournament-schedule-mode");
 const tournamentScheduleSlotsEl = $("#tournament-schedule-slots");
 const tournamentWeeklyJoinBtnEl = $("#tournament-weekly-join-btn");
 const tournamentWeeklyJoinStatusEl = $("#tournament-weekly-join-status");
+const tournamentRulesListEl = $("#tournament-rules-list");
 
 // Draugi
 const friendsListEl = $("#friends-list");
@@ -3998,9 +4000,17 @@ function normalizeTournamentSchedule(raw) {
         .filter(Boolean)
         .slice(0, slots || 32)
     : [];
+  const rules = Array.isArray(raw.rules)
+    ? raw.rules
+        .map((r) => String(r || "").trim())
+        .filter(Boolean)
+        .slice(0, 8)
+    : [];
   return {
     enabled: !!raw.enabled,
     title: String(raw.title || "Nedēļas turnīrs"),
+    mode: String(raw.mode || "").trim(),
+    modeLabel: String(raw.modeLabel || "").trim(),
     startAt,
     slots,
     joinedCount,
@@ -4010,6 +4020,7 @@ function normalizeTournamentSchedule(raw) {
     startsOnlyWhenFull: !!raw.startsOnlyWhenFull,
     waitForAllSlots: !!raw.waitForAllSlots,
     joinBlockedReason: String(raw.joinBlockedReason || ""),
+    rules,
     lastCycle:
       raw.lastCycle && typeof raw.lastCycle === "object" ? raw.lastCycle : null,
   };
@@ -4036,6 +4047,15 @@ function setTournamentWeeklyJoinStatus(message, kind = "") {
 
 function renderTournamentSchedule() {
   const s = state.tournamentSchedule;
+  if (tournamentScheduleModeEl) {
+    if (!s || !s.enabled) {
+      tournamentScheduleModeEl.textContent = "Turnīra režīms: —";
+    } else {
+      const label = String(s.modeLabel || s.mode || "Turnīrs");
+      tournamentScheduleModeEl.textContent = `Turnīra režīms: ${label} (rotē katru nedēļu)`;
+    }
+  }
+
   if (tournamentScheduleLineEl) {
     if (!s || !s.enabled || !s.startAt) {
       tournamentScheduleLineEl.textContent =
@@ -4073,6 +4093,18 @@ function renderTournamentSchedule() {
     }
   }
 
+  if (tournamentRulesListEl) {
+    tournamentRulesListEl.innerHTML = "";
+    const list = s && Array.isArray(s.rules) ? s.rules : [];
+    for (const rule of list) {
+      const li = createEl("li");
+      const text = createEl("span", "mission-title");
+      text.textContent = rule;
+      li.appendChild(text);
+      tournamentRulesListEl.appendChild(li);
+    }
+  }
+
   if (tournamentWeeklyJoinBtnEl) {
     if (!s || !s.enabled) {
       tournamentWeeklyJoinBtnEl.disabled = true;
@@ -4093,6 +4125,15 @@ function renderTournamentSchedule() {
     } else {
       tournamentWeeklyJoinBtnEl.disabled = true;
       tournamentWeeklyJoinBtnEl.textContent = "Pieteikšanās nav pieejama";
+    }
+  }
+
+  if (s && !s.isJoined && !s.canJoin && s.joinBlockedReason) {
+    setTournamentWeeklyJoinStatus(s.joinBlockedReason, "error");
+  } else if (s && s.canJoin && tournamentWeeklyJoinStatusEl) {
+    const msg = String(tournamentWeeklyJoinStatusEl.textContent || "").trim();
+    if (!msg || msg === String(s.joinBlockedReason || "").trim()) {
+      setTournamentWeeklyJoinStatus("");
     }
   }
 }

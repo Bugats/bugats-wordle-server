@@ -89,6 +89,15 @@ describe("Tournament brackets API", () => {
       .set("Authorization", `Bearer ${adminToken}`);
     expect(listRes.status).toBe(200);
     expect(Array.isArray(listRes.body?.tournaments)).toBe(true);
+    expect(listRes.body?.schedule?.enabled).toBe(true);
+    expect(typeof listRes.body?.schedule?.mode).toBe("string");
+    expect([
+      "single_elimination",
+      "double_elimination",
+      "round_robin",
+    ]).toContain(listRes.body?.schedule?.mode);
+    expect(Array.isArray(listRes.body?.schedule?.rules)).toBe(true);
+    expect(listRes.body.schedule.rules.length).toBeGreaterThan(0);
     expect(listRes.body.tournaments.some((t) => t.id === tournamentId)).toBe(
       true
     );
@@ -146,6 +155,9 @@ describe("Tournament brackets API", () => {
     expect(join1.body?.ok).toBe(true);
     expect(join1.body?.joined).toBe(true);
     expect(join1.body?.schedule?.isJoined).toBe(true);
+    expect(typeof join1.body?.schedule?.modeLabel).toBe("string");
+    expect(Array.isArray(join1.body?.schedule?.rules)).toBe(true);
+    expect(join1.body.schedule.rules.length).toBeGreaterThan(0);
 
     const join2 = await request(app)
       .post("/tournaments/weekly/join")

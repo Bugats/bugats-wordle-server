@@ -139,9 +139,12 @@ const WEEKLY_TOURNAMENT_SLOTS = (() => {
   const v = parseInt(process.env.WEEKLY_TOURNAMENT_SLOTS || `${fallback}`, 10);
   return Number.isFinite(v) && v >= 2 && v <= 32 ? v : fallback;
 })();
-const WEEKLY_TOURNAMENT_STAGE_TYPE = "single_elimination";
+const WEEKLY_TOURNAMENT_MODE_ROTATION_RAW = String(
+  process.env.WEEKLY_TOURNAMENT_MODE_ROTATION ||
+    "single_elimination,double_elimination,round_robin"
+).trim();
 const WEEKLY_TOURNAMENT_MIN_ACCOUNT_AGE_HOURS = (() => {
-  const fallback = process.env.NODE_ENV === "test" ? 0 : 24;
+  const fallback = process.env.NODE_ENV === "test" ? 0 : 0;
   const v = parseInt(
     process.env.WEEKLY_TOURNAMENT_MIN_ACCOUNT_AGE_HOURS || `${fallback}`,
     10
@@ -149,7 +152,7 @@ const WEEKLY_TOURNAMENT_MIN_ACCOUNT_AGE_HOURS = (() => {
   return Number.isFinite(v) && v >= 0 && v <= 720 ? v : fallback;
 })();
 const WEEKLY_TOURNAMENT_MIN_TOTAL_GUESSES = (() => {
-  const fallback = process.env.NODE_ENV === "test" ? 0 : 15;
+  const fallback = process.env.NODE_ENV === "test" ? 0 : 3;
   const v = parseInt(
     process.env.WEEKLY_TOURNAMENT_MIN_TOTAL_GUESSES || `${fallback}`,
     10
@@ -708,7 +711,10 @@ function loadJsonSafe(file, fallback) {
 
 // atomic save
 function saveJsonAtomic(file, data) {
-  const tmp = file + ".tmp";
+  const suffix = `${process.pid}.${Date.now()}.${Math.random()
+    .toString(16)
+    .slice(2)}`;
+  const tmp = `${file}.${suffix}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
   fs.renameSync(tmp, file);
 }
@@ -722,6 +728,39 @@ const TOURNAMENT_STAGE_TYPES = new Set([
   "round_robin",
 ]);
 const TOURNAMENT_GRAND_FINAL_TYPES = new Set(["none", "simple", "double"]);
+
+function normalizeWeeklyTournamentModes(raw) {
+  const list = String(raw || "")
+    .split(",")
+    .map((x) =>
+      String(x || "")
+        .trim()
+        .toLowerCase()
+    )
+    .filter((x) => TOURNAMENT_STAGE_TYPES.has(x));
+  const uniq = [];
+  const seen = new Set();
+  for (const mode of list) {
+    if (seen.has(mode)) continue;
+    seen.add(mode);
+    uniq.push(mode);
+  }
+  return uniq.length ? uniq : ["single_elimination"];
+}
+
+const WEEKLY_TOURNAMENT_MODES = normalizeWeeklyTournamentModes(
+  WEEKLY_TOURNAMENT_MODE_ROTATION_RAW
+);
+
+function tournamentModeLabel(mode) {
+  const key = String(mode || "")
+    .trim()
+    .toLowerCase();
+  if (key === "single_elimination") return "Izslēgšanas turnīrs";
+  if (key === "double_elimination") return "Dubultā izslēgšana";
+  if (key === "round_robin") return "Apļa turnīrs";
+  return "Turnīrs";
+}
 
 function weekdayInTz(date = new Date(), tz = TZ) {
   const short = new Intl.DateTimeFormat("en-GB", {
@@ -760,6 +799,21 @@ function nextWeeklyTournamentStartAt(nowTs = Date.now()) {
     WEEKLY_TOURNAMENT_HOUR,
     WEEKLY_TOURNAMENT_MINUTE
   );
+}
+
+function weeklyModeForStartAt(startAtTs) {
+  const ts = Math.max(0, Number(startAtTs) || Date.now());
+  const weekAnchor = weekKey(new Date(ts), TZ); // YYYY-MM-DD (Monday)
+  const [y, mo, d] = String(weekAnchor)
+    .split("-")
+    .map((x) => parseInt(x, 10));
+  const asUtc = Date.UTC(y || 1970, (mo || 1) - 1, d || 1);
+  const refMondayUtc = Date.UTC(1970, 0, 5); // first Monday of 1970
+  const idx = Math.max(0, Math.floor((asUtc - refMondayUtc) / (7 * DAY_MS)));
+  const modes = Array.isArray(WEEKLY_TOURNAMENT_MODES)
+    ? WEEKLY_TOURNAMENT_MODES
+    : ["single_elimination"];
+  return modes[idx % modes.length] || "single_elimination";
 }
 
 function buildInitialWeeklyQueue(nowTs = Date.now()) {
@@ -1236,6 +1290,7 @@ function formatWeeklyTournamentName(startAtTs) {
 function buildWeeklyQueuePayload(user) {
   const q = ensureWeeklyQueueState(Date.now());
   const participants = Array.isArray(q.participants) ? q.participants : [];
+  const mode = weeklyModeForStartAt(Number(q.startAt) || Date.now());
   const username = String(user?.username || "").trim();
   const isJoined = !!participants.find(
     (u) =>
@@ -1261,6 +1316,8 @@ function buildWeeklyQueuePayload(user) {
   return {
     enabled: WEEKLY_TOURNAMENT_ENABLED,
     title: WEEKLY_TOURNAMENT_TITLE,
+    mode,
+    modeLabel: tournamentModeLabel(mode),
     startAt: Number(q.startAt || 0),
     now,
     slots,
@@ -1275,6 +1332,15 @@ function buildWeeklyQueuePayload(user) {
       : isJoined
         ? "Tu jau esi pieteicies."
         : elig.message || "",
+    rules: [
+      "Starts tikai tad, ja aizņemti visi sloti.",
+      `Nākamais starts: piektdien ${String(WEEKLY_TOURNAMENT_HOUR).padStart(
+        2,
+        "0"
+      )}:${String(WEEKLY_TOURNAMENT_MINUTE).padStart(2, "0")} (Rīga).`,
+      "Neizšķirts mačā nav atļauts.",
+      `Anti-fake: vismaz ${WEEKLY_TOURNAMENT_MIN_TOTAL_GUESSES} minējumi + unikāla ierīce starp dalībniekiem.`,
+    ],
     lastCycle: q.lastCycle || null,
   };
 }
@@ -1342,6 +1408,7 @@ async function createTournamentFromWeeklyQueue(queue, nowTs = Date.now()) {
   );
   if (participants.length < slots) return null;
   const seeding = participants.slice(0, slots);
+  const mode = weeklyModeForStartAt(Number(queue?.startAt) || nowTs);
   const tournamentId = Number(tournamentStore.nextTournamentId || 1);
   tournamentStore.nextTournamentId = tournamentId + 1;
 
@@ -1349,15 +1416,15 @@ async function createTournamentFromWeeklyQueue(queue, nowTs = Date.now()) {
   const stage = await tournamentManager.create.stage({
     tournamentId,
     name,
-    type: WEEKLY_TOURNAMENT_STAGE_TYPE,
+    type: mode,
     seeding,
-    settings: buildTournamentStageSettings(WEEKLY_TOURNAMENT_STAGE_TYPE, {}),
+    settings: buildTournamentStageSettings(mode, {}),
   });
 
   const meta = {
     id: tournamentId,
     name,
-    type: WEEKLY_TOURNAMENT_STAGE_TYPE,
+    type: mode,
     stageId: stage?.id ?? null,
     createdAt: nowTs,
     createdBy: "SYSTEM",
@@ -1369,7 +1436,7 @@ async function createTournamentFromWeeklyQueue(queue, nowTs = Date.now()) {
   saveTournamentStore();
   io.emit("tournament:update", { tournamentId, event: "created" });
   broadcastSystemMessage(
-    `🏟️ ${name} ir sācies! (${seeding.length}/${slots} dalībnieki)`
+    `🏟️ ${name} (${tournamentModeLabel(mode)}) ir sācies! (${seeding.length}/${slots} dalībnieki)`
   );
   await sendOneSignalNotificationToUsers(
     seeding,
