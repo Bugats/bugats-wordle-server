@@ -625,6 +625,7 @@ const state = {
   missions: [],
   missionBonus: null,
   loopPrimaryAction: null,
+  loopPrimaryActionKey: "",
 };
 
 const DM_THREAD_MAX_LOCAL = 200;
@@ -2476,6 +2477,71 @@ function extractMissionBonus(data) {
   return null;
 }
 
+function getGsap() {
+  return window && typeof window.gsap === "object" ? window.gsap : null;
+}
+
+function animateLoopCardTransition(primaryChanged) {
+  const gsap = getGsap();
+  if (!gsap || !engagementLoopCardEl) return;
+  if (primaryChanged) {
+    gsap.fromTo(
+      engagementLoopCardEl,
+      { opacity: 0.84, y: 4 },
+      { opacity: 1, y: 0, duration: 0.28, ease: "power2.out" }
+    );
+  }
+  if (engagementLoopPrimaryBtnEl && !engagementLoopPrimaryBtnEl.disabled) {
+    gsap.fromTo(
+      engagementLoopPrimaryBtnEl,
+      { scale: 0.98 },
+      { scale: 1, duration: 0.22, ease: "power2.out" }
+    );
+  }
+}
+
+function animateDailyChestReward() {
+  const gsap = getGsap();
+  if (!gsap) return;
+  const chestWrap = document.getElementById("vz-daily-chest-wrap");
+  if (chestWrap) {
+    gsap.fromTo(
+      chestWrap,
+      { opacity: 0.85, y: 3 },
+      { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }
+    );
+  }
+  if (playerCoinsEl) {
+    gsap.fromTo(
+      playerCoinsEl,
+      { scale: 1.18, color: "#ffe082" },
+      {
+        scale: 1,
+        color: "",
+        duration: 0.45,
+        ease: "back.out(1.4)",
+      }
+    );
+  }
+}
+
+function animateTournamentJoinSuccess() {
+  const gsap = getGsap();
+  if (!gsap || !tournamentCardEl) return;
+  gsap.fromTo(
+    tournamentCardEl,
+    { opacity: 0.88, y: 4 },
+    { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }
+  );
+  if (tournamentWeeklyJoinBtnEl) {
+    gsap.fromTo(
+      tournamentWeeklyJoinBtnEl,
+      { scale: 0.98 },
+      { scale: 1, duration: 0.24, ease: "power2.out" }
+    );
+  }
+}
+
 function startEngagementLoopTimer() {
   if (engagementLoopTimer) clearInterval(engagementLoopTimer);
   engagementLoopTimer = setInterval(() => {
@@ -2678,7 +2744,10 @@ function renderEngagementLoopCard() {
   if (!engagementLoopCardEl) return;
   const actions = buildEngagementLoopActions();
   const primary = actions[0] || null;
+  const nextKey = String(primary?.key || "");
+  const primaryChanged = nextKey !== String(state.loopPrimaryActionKey || "");
   state.loopPrimaryAction = primary;
+  state.loopPrimaryActionKey = nextKey;
 
   if (engagementLoopSummaryEl) {
     engagementLoopSummaryEl.textContent = primary
@@ -2721,6 +2790,7 @@ function renderEngagementLoopCard() {
       engagementLoopSecondaryActionsEl.appendChild(btn);
     });
   }
+  animateLoopCardTransition(primaryChanged);
 }
 
 async function refreshMissions() {
@@ -4428,6 +4498,7 @@ async function handleTournamentWeeklyJoin() {
       data?.message || "Pieteikšanās saglabāta.",
       "ok"
     );
+    animateTournamentJoinSuccess();
     await refreshTournamentCard(true);
   } catch (err) {
     setTournamentWeeklyJoinStatus(
@@ -7493,6 +7564,7 @@ async function openDailyChestNow() {
     appendSystemMessage(
       `🎁 Daily Chest atvērts: ${parts.join(", ") || "balva"} (streak ${streak})`
     );
+    animateDailyChestReward();
     playSound(sCoin);
     if (rw.tokens) playSound(sToken);
   } catch (err) {
