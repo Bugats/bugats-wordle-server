@@ -172,6 +172,108 @@ describe("Tournament brackets API", () => {
     ).toBe(1);
   });
 
+  it("lets VIP room owner invite friends into empty slots", async () => {
+    const suffix = Date.now().toString().slice(-7);
+    const owner = `viproom_${suffix}`;
+    const friendA = `vipa_${suffix}`;
+    const friendB = `vipb_${suffix}`;
+
+    const adminToken = await ensureUserToken({
+      username: "BugatsLV",
+      password: "Test12345",
+      email: "bugatslv_test@example.com",
+    });
+    const ownerToken = await ensureUserToken({
+      username: owner,
+      password: "Test12345",
+      email: `${owner}@example.com`,
+    });
+    const friendAToken = await ensureUserToken({
+      username: friendA,
+      password: "Test12345",
+      email: `${friendA}@example.com`,
+    });
+    const friendBToken = await ensureUserToken({
+      username: friendB,
+      password: "Test12345",
+      email: `${friendB}@example.com`,
+    });
+
+    const grantRes = await request(app)
+      .post("/admin/vip/grant")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ username: owner, days: 30 });
+    expect(grantRes.status).toBe(200);
+    expect(grantRes.body?.ok).toBe(true);
+
+    const reqA = await request(app)
+      .post("/friends/request")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ to: friendA });
+    expect(reqA.status).toBe(200);
+    const accA = await request(app)
+      .post("/friends/accept")
+      .set("Authorization", `Bearer ${friendAToken}`)
+      .send({ from: owner });
+    expect(accA.status).toBe(200);
+
+    const reqB = await request(app)
+      .post("/friends/request")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ to: friendB });
+    expect(reqB.status).toBe(200);
+    const accB = await request(app)
+      .post("/friends/accept")
+      .set("Authorization", `Bearer ${friendBToken}`)
+      .send({ from: owner });
+    expect(accB.status).toBe(200);
+
+    const createRoom = await request(app)
+      .post("/tournaments/vip-rooms")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({
+        name: `VIP Room ${suffix}`,
+        type: "round_robin",
+        playMode: "survival",
+        slots: 3,
+        invitedFriends: [friendA],
+      });
+    expect(createRoom.status).toBe(200);
+    expect(createRoom.body?.ok).toBe(true);
+    expect(Number(createRoom.body?.room?.emptySlots)).toBe(1);
+    const roomId = String(createRoom.body?.room?.id || "");
+    expect(roomId.length).toBeGreaterThan(0);
+
+    const inviteB = await request(app)
+      .post(`/tournaments/vip-rooms/${roomId}/invite`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ friend: friendB });
+    expect(inviteB.status).toBe(200);
+    expect(Array.isArray(inviteB.body?.room?.invited)).toBe(true);
+    expect(
+      inviteB.body.room.invited.some(
+        (n) => String(n || "").toLowerCase() === friendB.toLowerCase()
+      )
+    ).toBe(true);
+
+    const joinA = await request(app)
+      .post(`/tournaments/vip-rooms/${roomId}/join`)
+      .set("Authorization", `Bearer ${friendAToken}`)
+      .send({});
+    expect(joinA.status).toBe(200);
+    expect(joinA.body?.started).toBe(false);
+
+    const joinB = await request(app)
+      .post(`/tournaments/vip-rooms/${roomId}/join`)
+      .set("Authorization", `Bearer ${friendBToken}`)
+      .send({});
+    expect(joinB.status).toBe(200);
+    expect(joinB.body?.started).toBe(true);
+    expect(Number.isFinite(Number(joinB.body?.tournament?.id))).toBe(true);
+    expect(joinB.body?.tournament?.playMode).toBe("survival");
+    expect(joinB.body?.tournament?.roomId).toBe(roomId);
+  });
+
   it("allows weekly queue join but blocks same-device fake profile", async () => {
     const sharedDeviceId = `shared-device-${Date.now().toString().slice(-8)}`;
     const u1 = `wq${Date.now().toString().slice(-6)}a`;

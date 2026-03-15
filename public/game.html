@@ -361,6 +361,55 @@
                     </button>
                     <div id="tournament-weekly-join-status" class="mission-status"></div>
                     <ul id="tournament-rules-list" class="vz-missions-list"></ul>
+
+                    <div id="vip-room-panel" class="vz-vip-room-panel hidden">
+                      <div class="vz-card-header-sub">VIP istaba draugiem</div>
+                      <div id="vip-room-help" class="vz-support-text">
+                        Izveido savu istabu, izvēlies modu un aizpildi slotus ar draugiem.
+                      </div>
+                      <label class="vz-tournament-score-field">
+                        <span>Istabas nosaukums</span>
+                        <input id="vip-room-name" type="text" maxlength="64" placeholder="Mana VIP istaba" />
+                      </label>
+                      <div class="vz-vip-room-form-grid">
+                        <label class="vz-tournament-score-field">
+                          <span>Turnīra režīms</span>
+                          <select id="vip-room-type">
+                            <option value="single_elimination">Izslēgšanas turnīrs</option>
+                            <option value="double_elimination">Dubultā izslēgšana</option>
+                            <option value="round_robin">Apļa turnīrs</option>
+                          </select>
+                        </label>
+                        <label class="vz-tournament-score-field">
+                          <span>Spēles mods</span>
+                          <select id="vip-room-play-mode">
+                            <option value="classic">Classic</option>
+                            <option value="speed">Speed</option>
+                            <option value="accuracy">Accuracy</option>
+                            <option value="survival">Survival</option>
+                          </select>
+                        </label>
+                        <label class="vz-tournament-score-field">
+                          <span>Sloti</span>
+                          <select id="vip-room-slots">
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4" selected>4</option>
+                            <option value="5">5</option>
+                            <option value="6">6</option>
+                            <option value="7">7</option>
+                            <option value="8">8</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div id="vip-room-friends" class="vz-vip-room-friends"></div>
+                      <button id="vip-room-create-btn" class="mission-claim-btn" type="button">
+                        Izveidot VIP istabu
+                      </button>
+                      <div id="vip-room-create-status" class="mission-status"></div>
+                      <div id="vip-room-list" class="vz-vip-room-list"></div>
+                    </div>
+
                     <ul id="tournament-match-list" class="vz-tournament-list hidden"></ul>
                     <div id="tournament-empty" class="mission-status hidden"></div>
 

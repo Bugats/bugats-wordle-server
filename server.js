@@ -912,6 +912,7 @@ function buildInitialTournamentStore() {
     nextTournamentId: 1,
     tournaments: [],
     weeklyQueue: buildInitialWeeklyQueue(Date.now()),
+    vipRooms: [],
   };
 }
 
@@ -983,7 +984,59 @@ function normalizeTournamentStore(raw) {
           ? t.status
           : "active",
       completedAt: Math.max(0, Number(t.completedAt) || 0),
+      playMode: normalizeTournamentPlayMode(t.playMode),
+      autoReportOnly: !!t.autoReportOnly,
+      roomId: String(t.roomId || "").trim(),
+      roomOwner: String(t.roomOwner || "").trim(),
     }));
+
+  if (!Array.isArray(out.vipRooms)) out.vipRooms = [];
+  out.vipRooms = out.vipRooms
+    .filter((room) => room && typeof room === "object")
+    .map((room) => {
+      const slots = Math.max(
+        2,
+        Math.min(
+          VIP_TOURNAMENT_MAX_PARTICIPANTS,
+          Math.floor(Number(room.slots) || 0)
+        )
+      );
+      const participants = sanitizeTournamentSeeding(room.participants).slice(
+        0,
+        slots
+      );
+      const participantSet = new Set(
+        participants.map((name) => String(name || "").toLowerCase())
+      );
+      const invited = sanitizeTournamentSeeding(room.invited)
+        .filter((name) => !participantSet.has(String(name || "").toLowerCase()))
+        .slice(0, Math.max(0, slots - participants.length));
+      const statusRaw = String(room.status || "open")
+        .trim()
+        .toLowerCase();
+      const status =
+        statusRaw === "started" || statusRaw === "cancelled"
+          ? statusRaw
+          : "open";
+      return {
+        id: String(room.id || "").trim(),
+        name: normalizeTournamentName(room.name),
+        owner: String(room.owner || "").trim(),
+        type: normalizeTournamentType(room.type),
+        playMode: normalizeTournamentPlayMode(room.playMode),
+        autoReportOnly: room.autoReportOnly !== false,
+        slots,
+        participants,
+        invited,
+        status,
+        createdAt: Math.max(0, Number(room.createdAt) || 0),
+        startedAt: Math.max(0, Number(room.startedAt) || 0),
+        tournamentId: Number.isFinite(Number(room.tournamentId))
+          ? Math.floor(Number(room.tournamentId))
+          : null,
+      };
+    })
+    .filter((room) => room.id && room.owner && room.name);
 
   const maxId = out.tournaments.reduce(
     (m, t) => Math.max(m, Math.floor(Number(t.id) || 0)),
@@ -1033,6 +1086,133 @@ function countActiveTournamentsByCreator(username) {
   }).length;
 }
 
+function createVipRoomId() {
+  const stamp = Date.now().toString(36);
+  const rnd = crypto.randomBytes(3).toString("hex");
+  return `vipr_${stamp}_${rnd}`;
+}
+
+function getVipRoomById(roomIdRaw) {
+  const roomId = String(roomIdRaw || "").trim();
+  if (!roomId) return null;
+  return (
+    (tournamentStore.vipRooms || []).find(
+      (room) => String(room?.id || "") === roomId
+    ) || null
+  );
+}
+
+function userHasRoomAccess(room, user) {
+  if (!room || !user) return false;
+  if (isAdminUser(user)) return true;
+  const key = String(user.username || "")
+    .trim()
+    .toLowerCase();
+  if (!key) return false;
+  if (String(room.owner || "").toLowerCase() === key) return true;
+  if (
+    (Array.isArray(room.participants) ? room.participants : []).some(
+      (name) => String(name || "").toLowerCase() === key
+    )
+  ) {
+    return true;
+  }
+  return (Array.isArray(room.invited) ? room.invited : []).some(
+    (name) => String(name || "").toLowerCase() === key
+  );
+}
+
+function buildVipRoomPayload(room, user) {
+  const username = String(user?.username || "");
+  const key = username.trim().toLowerCase();
+  const participants = Array.isArray(room?.participants)
+    ? room.participants
+    : [];
+  const invited = Array.isArray(room?.invited) ? room.invited : [];
+  const isOwner = !!key && String(room?.owner || "").toLowerCase() === key;
+  const isParticipant = !!key
+    ? participants.some((name) => String(name || "").toLowerCase() === key)
+    : false;
+  const isInvited = !!key
+    ? invited.some((name) => String(name || "").toLowerCase() === key)
+    : false;
+  const slots = Math.max(2, Math.floor(Number(room?.slots) || 2));
+  const usedSlots = participants.length + invited.length;
+  const emptySlots = Math.max(0, slots - usedSlots);
+  return {
+    id: String(room?.id || ""),
+    name: String(room?.name || ""),
+    owner: String(room?.owner || ""),
+    type: normalizeTournamentType(room?.type),
+    playMode: normalizeTournamentPlayMode(room?.playMode),
+    autoReportOnly: room?.autoReportOnly !== false,
+    slots,
+    participants: participants.slice(0, slots),
+    invited: invited.slice(0, Math.max(0, slots - participants.length)),
+    status: String(room?.status || "open"),
+    createdAt: Math.max(0, Number(room?.createdAt) || 0),
+    startedAt: Math.max(0, Number(room?.startedAt) || 0),
+    tournamentId: Number.isFinite(Number(room?.tournamentId))
+      ? Number(room.tournamentId)
+      : null,
+    emptySlots,
+    isOwner,
+    isParticipant,
+    isInvited,
+    canInvite:
+      (isOwner || isAdminUser(user)) &&
+      String(room?.status || "open") === "open" &&
+      emptySlots > 0,
+    canJoin:
+      !isParticipant &&
+      (isInvited || isOwner || isAdminUser(user)) &&
+      String(room?.status || "open") === "open",
+  };
+}
+
+function getVipRoomsForUser(user) {
+  const list = Array.isArray(tournamentStore.vipRooms)
+    ? tournamentStore.vipRooms
+    : [];
+  return list
+    .filter((room) => userHasRoomAccess(room, user))
+    .sort((a, b) => Number(b?.createdAt || 0) - Number(a?.createdAt || 0))
+    .map((room) => buildVipRoomPayload(room, user));
+}
+
+function sanitizeVipRoomInviteNames(owner, inviteNamesRaw, limit) {
+  ensureFriends(owner);
+  const max = Math.max(0, Math.floor(Number(limit) || 0));
+  if (!max) return [];
+  const source = sanitizeTournamentSeeding(inviteNamesRaw);
+  if (!source.length) return [];
+
+  const friendMap = new Map();
+  for (const friendNameRaw of owner.friends || []) {
+    const key = findUserKeyCaseInsensitive(friendNameRaw);
+    if (!key) continue;
+    const target = USERS[key];
+    if (!target) continue;
+    const lower = String(target.username || "").toLowerCase();
+    if (!lower || friendMap.has(lower)) continue;
+    friendMap.set(lower, target.username);
+  }
+
+  const out = [];
+  const seen = new Set();
+  const ownerKey = String(owner.username || "").toLowerCase();
+  for (const wanted of source) {
+    const key = String(wanted || "").toLowerCase();
+    if (!key || key === ownerKey || seen.has(key)) continue;
+    const canonical = friendMap.get(key);
+    if (!canonical) continue;
+    seen.add(key);
+    out.push(canonical);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
 function formatMinutesLabel(mins) {
   const m = Math.max(0, Math.floor(Number(mins) || 0));
   if (!m) return "0 min";
@@ -1041,6 +1221,28 @@ function formatMinutesLabel(mins) {
   if (!h) return `${rest} min`;
   if (!rest) return `${h}h`;
   return `${h}h ${rest}m`;
+}
+
+function isPowerOfTwo(n) {
+  const v = Math.floor(Number(n) || 0);
+  return v > 0 && (v & (v - 1)) === 0;
+}
+
+function validateTournamentSizeByType(typeRaw, participantCountRaw) {
+  const type = normalizeTournamentType(typeRaw);
+  const participantCount = Math.max(
+    0,
+    Math.floor(Number(participantCountRaw) || 0)
+  );
+  if (type === "single_elimination" && !isPowerOfTwo(participantCount)) {
+    return {
+      ok: false,
+      status: 400,
+      message:
+        "Izslēgšanas turnīram vajag 2/4/8/16/... dalībniekus (2 pakāpes).",
+    };
+  }
+  return { ok: true };
 }
 
 function validateTournamentCreateAccess(user, seedingLen) {
@@ -1172,6 +1374,7 @@ function buildTournamentStageSettings(type, rawSettings) {
       .trim()
       .toLowerCase();
     settings.roundRobinMode = mode === "double" ? "double" : "simple";
+    settings.groupCount = 1;
     if (Number.isFinite(Number(src.groupCount))) {
       const gc = Math.floor(Number(src.groupCount));
       if (gc >= 1 && gc <= 32) settings.groupCount = gc;
@@ -1179,6 +1382,48 @@ function buildTournamentStageSettings(type, rawSettings) {
   }
 
   return Object.keys(settings).length ? settings : undefined;
+}
+
+async function createTournamentRecord({
+  name,
+  type,
+  seeding,
+  settings,
+  createdBy,
+  playMode,
+  autoReportOnly,
+  roomId = "",
+  roomOwner = "",
+  createdAt = Date.now(),
+}) {
+  const tournamentId = Number(tournamentStore.nextTournamentId || 1);
+  tournamentStore.nextTournamentId = tournamentId + 1;
+
+  const stage = await tournamentManager.create.stage({
+    tournamentId,
+    name,
+    type,
+    seeding,
+    settings,
+  });
+
+  const meta = {
+    id: tournamentId,
+    name,
+    type,
+    stageId: stage?.id ?? null,
+    createdAt: Math.max(0, Number(createdAt) || Date.now()),
+    createdBy: String(createdBy || "").trim(),
+    participantCount: seeding.length,
+    status: "active",
+    completedAt: 0,
+    playMode: normalizeTournamentPlayMode(playMode),
+    autoReportOnly: !!autoReportOnly,
+    roomId: String(roomId || "").trim(),
+    roomOwner: String(roomOwner || "").trim(),
+  };
+  tournamentStore.tournaments.push(meta);
+  return { tournamentId, stage, meta };
 }
 
 async function getTournamentSnapshot(tournamentId) {
@@ -1619,34 +1864,23 @@ async function createTournamentFromWeeklyQueue(queue, nowTs = Date.now()) {
   const seeding = participants.slice(0, slots);
   const mode = weeklyModeForStartAt(Number(queue?.startAt) || nowTs);
   const playMode = weeklyPlayModeForStartAt(Number(queue?.startAt) || nowTs);
-  const tournamentId = Number(tournamentStore.nextTournamentId || 1);
-  tournamentStore.nextTournamentId = tournamentId + 1;
-
   const name = formatWeeklyTournamentName(Number(queue?.startAt) || nowTs);
-  const stage = await tournamentManager.create.stage({
-    tournamentId,
+  const created = await createTournamentRecord({
     name,
     type: mode,
     seeding,
     settings: buildTournamentStageSettings(mode, {}),
-  });
-
-  const meta = {
-    id: tournamentId,
-    name,
-    type: mode,
-    stageId: stage?.id ?? null,
-    createdAt: nowTs,
     createdBy: "SYSTEM",
-    participantCount: seeding.length,
-    status: "active",
-    completedAt: 0,
     playMode,
     autoReportOnly: true,
-  };
-  tournamentStore.tournaments.push(meta);
+    createdAt: nowTs,
+  });
+  const meta = created.meta;
   saveTournamentStore();
-  io.emit("tournament:update", { tournamentId, event: "created" });
+  io.emit("tournament:update", {
+    tournamentId: created.tournamentId,
+    event: "created",
+  });
   broadcastSystemMessage(
     `🏟️ ${name} (${tournamentModeLabel(mode)} · ${tournamentPlayModeLabel(
       playMode
@@ -6720,6 +6954,7 @@ app.get("/tournaments", authMiddleware, async (req, res) => {
   res.json({
     tournaments: list,
     schedule: buildWeeklyQueuePayload(req.user),
+    vipRooms: getVipRoomsForUser(req.user),
   });
 });
 
@@ -6742,6 +6977,14 @@ app.post("/tournaments", authMiddleware, async (req, res) => {
         .status(400)
         .json({ message: "Turnīram vajag vismaz 2 dalībniekus." });
     }
+    const sizeValidation = validateTournamentSizeByType(type, seeding.length);
+    if (!sizeValidation.ok) {
+      return res
+        .status(Number(sizeValidation.status) || 400)
+        .json({
+          message: sizeValidation.message || "Nederīgs dalībnieku skaits.",
+        });
+    }
 
     const access = validateTournamentCreateAccess(requester, seeding.length);
     if (!access.ok) {
@@ -6750,44 +6993,30 @@ app.post("/tournaments", authMiddleware, async (req, res) => {
         .json({ message: access.message || "Nav tiesību veidot turnīru." });
     }
 
-    const tournamentId = Number(tournamentStore.nextTournamentId || 1);
-    tournamentStore.nextTournamentId = tournamentId + 1;
-
-    const stage = await tournamentManager.create.stage({
-      tournamentId,
+    const createdAt = Date.now();
+    const created = await createTournamentRecord({
       name,
       type,
       seeding,
       settings: buildTournamentStageSettings(type, req.body?.settings),
-    });
-
-    const meta = {
-      id: tournamentId,
-      name,
-      type,
-      stageId: stage?.id ?? null,
-      createdAt: Date.now(),
       createdBy: requester.username,
-      participantCount: seeding.length,
-      status: "active",
-      completedAt: 0,
       playMode,
       autoReportOnly,
-    };
-
-    tournamentStore.tournaments.push(meta);
+      createdAt,
+    });
+    const meta = created.meta;
     saveTournamentStore();
     if (!isAdminUser(requester)) {
-      requester.vipLastTournamentAt = Date.now();
+      requester.vipLastTournamentAt = createdAt;
       saveUsers(USERS);
     }
 
     io.emit("tournament:update", {
-      tournamentId,
+      tournamentId: created.tournamentId,
       event: "created",
     });
 
-    return res.json({ ok: true, tournament: meta, stage });
+    return res.json({ ok: true, tournament: meta, stage: created.stage });
   } catch (err) {
     console.error("Tournament create error:", err);
     return res.status(400).json({
@@ -6796,6 +7025,335 @@ app.post("/tournaments", authMiddleware, async (req, res) => {
     });
   }
 });
+
+app.post("/tournaments/vip-rooms", authMiddleware, async (req, res) => {
+  try {
+    const requester = req.user;
+    ensureVipFields(requester);
+
+    const slots = Math.max(
+      2,
+      Math.min(
+        VIP_TOURNAMENT_MAX_PARTICIPANTS,
+        Math.floor(Number(req.body?.slots) || 4)
+      )
+    );
+    const access = validateTournamentCreateAccess(requester, slots);
+    if (!access.ok) {
+      return res
+        .status(Number(access.status) || 403)
+        .json({ message: access.message || "Nav tiesību veidot VIP istabu." });
+    }
+
+    const roomName =
+      normalizeTournamentName(req.body?.name) ||
+      `VIP istaba ${new Date().toLocaleTimeString("lv-LV", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })}`;
+    const type = normalizeTournamentType(req.body?.type);
+    const playMode = normalizeTournamentPlayMode(req.body?.playMode);
+    const autoReportOnly = req.body?.autoReportOnly !== false;
+    const sizeValidation = validateTournamentSizeByType(type, slots);
+    if (!sizeValidation.ok) {
+      return res
+        .status(Number(sizeValidation.status) || 400)
+        .json({ message: sizeValidation.message || "Nederīgs slotu skaits." });
+    }
+    const inviteLimit = Math.max(0, slots - 1);
+    const invited = sanitizeVipRoomInviteNames(
+      requester,
+      req.body?.invitedFriends,
+      inviteLimit
+    );
+    const createdAt = Date.now();
+    const room = {
+      id: createVipRoomId(),
+      name: roomName,
+      owner: requester.username,
+      type,
+      playMode,
+      autoReportOnly,
+      slots,
+      participants: [requester.username],
+      invited,
+      status: "open",
+      createdAt,
+      startedAt: 0,
+      tournamentId: null,
+    };
+    if (!Array.isArray(tournamentStore.vipRooms)) tournamentStore.vipRooms = [];
+    tournamentStore.vipRooms.push(room);
+    saveTournamentStore();
+    io.emit("tournament:update", {
+      event: "vip_room_created",
+      roomId: room.id,
+    });
+
+    const payload = buildVipRoomPayload(room, requester);
+    return res.json({
+      ok: true,
+      room: payload,
+      message:
+        payload.emptySlots > 0
+          ? `VIP istaba izveidota. Brīvi sloti: ${payload.emptySlots} — uzaicini draugus.`
+          : "VIP istaba izveidota.",
+    });
+  } catch (err) {
+    console.error("VIP room create error:", err);
+    return res.status(400).json({
+      message: "Neizdevās izveidot VIP istabu.",
+      detail: String(err?.message || err || ""),
+    });
+  }
+});
+
+app.post(
+  "/tournaments/vip-rooms/:roomId/invite",
+  authMiddleware,
+  (req, res) => {
+    const requester = req.user;
+    const room = getVipRoomById(req.params.roomId);
+    if (!room)
+      return res.status(404).json({ message: "VIP istaba nav atrasta." });
+    if (String(room.status || "open") !== "open") {
+      return res
+        .status(409)
+        .json({ message: "Šī VIP istaba vairs nav atvērta." });
+    }
+
+    const isOwner =
+      String(room.owner || "").toLowerCase() ===
+      String(requester.username || "").toLowerCase();
+    if (!isOwner && !isAdminUser(requester)) {
+      return res
+        .status(403)
+        .json({
+          message: "Draugus VIP istabā drīkst aicināt tikai īpašnieks.",
+        });
+    }
+
+    const ownerKey = findUserKeyCaseInsensitive(room.owner);
+    const owner = ownerKey ? USERS[ownerKey] : null;
+    if (!owner) {
+      return res
+        .status(404)
+        .json({ message: "VIP istabas īpašnieks nav atrasts." });
+    }
+
+    const freeSlots = Math.max(
+      0,
+      Number(room.slots || 0) -
+        (Array.isArray(room.participants) ? room.participants.length : 0) -
+        (Array.isArray(room.invited) ? room.invited.length : 0)
+    );
+    if (freeSlots <= 0) {
+      return res
+        .status(409)
+        .json({ message: "VIP istabā vairs nav brīvu slotu ielūgumiem." });
+    }
+
+    const inviteTargetRaw =
+      req.body?.friend || req.body?.username || req.body?.user || "";
+    const invitedList = sanitizeVipRoomInviteNames(owner, [inviteTargetRaw], 1);
+    if (!invitedList.length) {
+      return res.status(400).json({
+        message: "Vari uzaicināt tikai savu draugu no saraksta.",
+      });
+    }
+    const invitedName = invitedList[0];
+    const invitedKey = String(invitedName || "").toLowerCase();
+    const alreadyInParticipants = (
+      Array.isArray(room.participants) ? room.participants : []
+    ).some((name) => String(name || "").toLowerCase() === invitedKey);
+    if (alreadyInParticipants) {
+      return res
+        .status(400)
+        .json({ message: "Šis draugs jau ir pievienojies VIP istabai." });
+    }
+    const alreadyInvited = (
+      Array.isArray(room.invited) ? room.invited : []
+    ).some((name) => String(name || "").toLowerCase() === invitedKey);
+    if (alreadyInvited) {
+      return res.status(400).json({ message: "Šis draugs jau ir uzaicināts." });
+    }
+
+    room.invited.push(invitedName);
+    saveTournamentStore();
+    io.emit("tournament:update", {
+      event: "vip_room_invited",
+      roomId: room.id,
+      invited: invitedName,
+    });
+    return res.json({ ok: true, room: buildVipRoomPayload(room, requester) });
+  }
+);
+
+app.post(
+  "/tournaments/vip-rooms/:roomId/join",
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const requester = req.user;
+      const room = getVipRoomById(req.params.roomId);
+      if (!room)
+        return res.status(404).json({ message: "VIP istaba nav atrasta." });
+      if (String(room.status || "open") !== "open") {
+        return res.status(409).json({ message: "VIP istaba jau ir aizvērta." });
+      }
+
+      const requesterName = String(requester.username || "").trim();
+      const requesterKey = requesterName.toLowerCase();
+      const participants = Array.isArray(room.participants)
+        ? room.participants
+        : [];
+      const invited = Array.isArray(room.invited) ? room.invited : [];
+      const isParticipant = participants.some(
+        (name) => String(name || "").toLowerCase() === requesterKey
+      );
+      const isOwner =
+        String(room.owner || "").toLowerCase() === String(requesterKey || "");
+      const isInvited = invited.some(
+        (name) => String(name || "").toLowerCase() === requesterKey
+      );
+
+      if (!isParticipant && !isOwner && !isInvited && !isAdminUser(requester)) {
+        return res.status(403).json({
+          message: "Šai VIP istabai vari pievienoties tikai ar ielūgumu.",
+        });
+      }
+
+      if (!isParticipant) {
+        if (participants.length >= Number(room.slots || 0)) {
+          return res.status(409).json({ message: "VIP istaba jau ir pilna." });
+        }
+        room.participants.push(requesterName);
+        room.invited = invited.filter(
+          (name) => String(name || "").toLowerCase() !== requesterKey
+        );
+      }
+
+      const now = Date.now();
+      const stillOpenSlots = Math.max(
+        0,
+        Number(room.slots || 0) - Number(room.participants?.length || 0)
+      );
+      if (stillOpenSlots > 0) {
+        saveTournamentStore();
+        io.emit("tournament:update", {
+          event: "vip_room_joined",
+          roomId: room.id,
+          username: requesterName,
+        });
+        return res.json({
+          ok: true,
+          joined: true,
+          started: false,
+          room: buildVipRoomPayload(room, requester),
+          message: `Pievienojies VIP istabai. Brīvi sloti: ${stillOpenSlots}.`,
+        });
+      }
+
+      const ownerKey = findUserKeyCaseInsensitive(room.owner);
+      const owner = ownerKey ? USERS[ownerKey] : null;
+      if (!owner) {
+        room.participants = participants.filter(
+          (name) => String(name || "").toLowerCase() !== requesterKey
+        );
+        saveTournamentStore();
+        return res
+          .status(404)
+          .json({ message: "VIP istabas īpašnieks nav atrasts." });
+      }
+      ensureVipFields(owner);
+      const access = validateTournamentCreateAccess(
+        owner,
+        room.participants.length
+      );
+      if (!access.ok) {
+        room.participants = participants.filter(
+          (name) => String(name || "").toLowerCase() !== requesterKey
+        );
+        saveTournamentStore();
+        return res.status(409).json({
+          message:
+            access.message ||
+            "Neizdevās startēt turnīru no VIP istabas. Pārbaudi VIP statusu.",
+        });
+      }
+
+      const seeding = sanitizeTournamentSeeding(room.participants);
+      if (seeding.length < 2) {
+        room.participants = participants.filter(
+          (name) => String(name || "").toLowerCase() !== requesterKey
+        );
+        saveTournamentStore();
+        return res
+          .status(409)
+          .json({ message: "VIP istabā vajag vismaz 2 dalībniekus." });
+      }
+      const sizeValidation = validateTournamentSizeByType(
+        room.type,
+        seeding.length
+      );
+      if (!sizeValidation.ok) {
+        room.participants = participants.filter(
+          (name) => String(name || "").toLowerCase() !== requesterKey
+        );
+        saveTournamentStore();
+        return res
+          .status(Number(sizeValidation.status) || 400)
+          .json({
+            message: sizeValidation.message || "Nederīgs slotu skaits.",
+          });
+      }
+
+      const created = await createTournamentRecord({
+        name: room.name,
+        type: room.type,
+        seeding,
+        settings: buildTournamentStageSettings(room.type, req.body?.settings),
+        createdBy: room.owner,
+        playMode: room.playMode,
+        autoReportOnly: room.autoReportOnly !== false,
+        roomId: room.id,
+        roomOwner: room.owner,
+        createdAt: now,
+      });
+
+      room.status = "started";
+      room.startedAt = now;
+      room.tournamentId = created.tournamentId;
+      room.invited = [];
+
+      if (!isAdminUser(owner)) {
+        owner.vipLastTournamentAt = now;
+        saveUsers(USERS);
+      }
+      saveTournamentStore();
+      io.emit("tournament:update", {
+        event: "vip_room_started",
+        roomId: room.id,
+        tournamentId: created.tournamentId,
+      });
+
+      return res.json({
+        ok: true,
+        joined: true,
+        started: true,
+        room: buildVipRoomPayload(room, requester),
+        tournament: created.meta,
+        stage: created.stage,
+      });
+    } catch (err) {
+      console.error("VIP room join error:", err);
+      return res.status(400).json({
+        message: "Neizdevās pievienoties VIP istabai.",
+        detail: String(err?.message || err || ""),
+      });
+    }
+  }
+);
 
 app.post("/tournaments/weekly/join", authMiddleware, async (req, res) => {
   if (!WEEKLY_TOURNAMENT_ENABLED) {
@@ -7093,11 +7651,9 @@ app.post(
 
       const apply = await finalizeTournamentMatchResult(tournamentId, matchId);
       if (!apply.ok) {
-        return res
-          .status(Number(apply.status) || 500)
-          .json({
-            message: apply.message || "Neizdevās iesniegt auto rezultātu.",
-          });
+        return res.status(Number(apply.status) || 500).json({
+          message: apply.message || "Neizdevās iesniegt auto rezultātu.",
+        });
       }
 
       return res.json({

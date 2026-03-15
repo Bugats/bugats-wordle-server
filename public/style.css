@@ -2965,6 +2965,107 @@ summary:focus-visible {
   font-size: 13px;
 }
 
+.vz-tournament-score-field > select {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 13px;
+}
+
+.vz-vip-room-panel {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  display: grid;
+  gap: 7px;
+}
+
+.vz-vip-room-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.vz-vip-room-friends,
+.vz-vip-room-list {
+  display: grid;
+  gap: 6px;
+}
+
+.vz-vip-room-friends-empty {
+  font-size: 11px;
+  color: #b8c2d4;
+}
+
+.vz-vip-room-friend-row,
+.vz-vip-room-item {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 6px 8px;
+}
+
+.vz-vip-room-friend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.vz-vip-room-friend-row button {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.vz-vip-room-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.vz-vip-room-item-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #e9eef9;
+}
+
+.vz-vip-room-item-meta {
+  font-size: 11px;
+  color: #b8c2d4;
+}
+
+.vz-vip-room-item-users {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #d8e0ef;
+  line-height: 1.4;
+}
+
+.vz-vip-room-inline-select {
+  margin-top: 6px;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 12px;
+}
+
+.vz-vip-room-item button {
+  margin-top: 6px;
+}
+
 .vz-tournament-actions {
   margin-top: 8px;
   display: flex;
@@ -2984,6 +3085,12 @@ summary:focus-visible {
 
 .vz-tournament-refresh-btn:hover {
   background: rgba(255, 255, 255, 0.14);
+}
+
+@media (max-width: 520px) {
+  .vz-vip-room-form-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ===========================
