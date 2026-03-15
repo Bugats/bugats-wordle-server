@@ -127,6 +127,51 @@ describe("Tournament brackets API", () => {
     expect(Number(reportRes.body?.match?.opponent2?.score)).toBe(1);
   });
 
+  it("supports automatic match reporting for auto tournaments", async () => {
+    const adminToken = await ensureUserToken({
+      username: "BugatsLV",
+      password: "Test12345",
+      email: "bugatslv_test@example.com",
+    });
+
+    const createRes = await request(app)
+      .post("/tournaments")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        name: `Auto Cup ${Date.now().toString().slice(-6)}`,
+        type: "single_elimination",
+        playMode: "speed",
+        autoReportOnly: true,
+        seeding: ["AutoA", "AutoB", "AutoC", "AutoD"],
+      });
+
+    expect(createRes.status).toBe(200);
+    const tournamentId = createRes.body?.tournament?.id;
+    expect(Number.isFinite(Number(tournamentId))).toBe(true);
+
+    const detailRes = await request(app)
+      .get(`/tournaments/${tournamentId}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(detailRes.status).toBe(200);
+
+    const match = Array.isArray(detailRes.body?.data?.match)
+      ? detailRes.body.data.match.find((m) => m && Number(m.status) >= 1)
+      : null;
+    expect(Number.isFinite(Number(match?.id))).toBe(true);
+
+    const autoRes = await request(app)
+      .post(`/tournaments/${tournamentId}/matches/${match.id}/report/auto`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({});
+    expect(autoRes.status).toBe(200);
+    expect(autoRes.body?.ok).toBe(true);
+    expect(autoRes.body?.auto?.mode).toBe("speed");
+    expect(
+      Number(autoRes.body?.match?.opponent1?.score) +
+        Number(autoRes.body?.match?.opponent2?.score)
+    ).toBe(1);
+  });
+
   it("allows weekly queue join but blocks same-device fake profile", async () => {
     const sharedDeviceId = `shared-device-${Date.now().toString().slice(-8)}`;
     const u1 = `wq${Date.now().toString().slice(-6)}a`;

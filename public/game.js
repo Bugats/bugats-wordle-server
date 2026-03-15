@@ -796,6 +796,12 @@ const tournamentScore1LabelEl = $("#tournament-score1-label");
 const tournamentScore2LabelEl = $("#tournament-score2-label");
 const tournamentScore1InputEl = $("#tournament-score1");
 const tournamentScore2InputEl = $("#tournament-score2");
+const tournamentScore1FieldEl = tournamentScore1InputEl
+  ? tournamentScore1InputEl.closest(".vz-tournament-score-field")
+  : null;
+const tournamentScore2FieldEl = tournamentScore2InputEl
+  ? tournamentScore2InputEl.closest(".vz-tournament-score-field")
+  : null;
 const tournamentReportBtnEl = $("#tournament-report-btn");
 const tournamentReportStatusEl = $("#tournament-report-status");
 const tournamentRefreshBtnEl = $("#tournament-refresh-btn");
@@ -4443,6 +4449,17 @@ function tournamentTypeLabel(type) {
   return "Turnīrs";
 }
 
+function tournamentPlayModeText(mode) {
+  const key = String(mode || "")
+    .trim()
+    .toLowerCase();
+  if (key === "classic") return "Classic";
+  if (key === "speed") return "Speed";
+  if (key === "accuracy") return "Accuracy";
+  if (key === "survival") return "Survival";
+  return "";
+}
+
 function tournamentMatchStatusLabel(status) {
   const code = Number(status);
   if (code === 0) return "Vēl nav pieejams";
@@ -4485,6 +4502,8 @@ function normalizeTournamentSchedule(raw) {
     title: String(raw.title || "Nedēļas turnīrs"),
     mode: String(raw.mode || "").trim(),
     modeLabel: String(raw.modeLabel || "").trim(),
+    playMode: String(raw.playMode || "").trim(),
+    playModeLabel: String(raw.playModeLabel || "").trim(),
     startAt,
     slots,
     joinedCount,
@@ -4526,7 +4545,10 @@ function renderTournamentSchedule() {
       tournamentScheduleModeEl.textContent = "Turnīra režīms: —";
     } else {
       const label = String(s.modeLabel || s.mode || "Turnīrs");
-      tournamentScheduleModeEl.textContent = `Turnīra režīms: ${label} (rotē katru nedēļu)`;
+      const playLabel = String(s.playModeLabel || s.playMode || "").trim();
+      tournamentScheduleModeEl.textContent = playLabel
+        ? `Turnīra režīms: ${label} · Spēles mods: ${playLabel}`
+        : `Turnīra režīms: ${label} (rotē katru nedēļu)`;
     }
   }
 
@@ -4670,6 +4692,12 @@ function clearTournamentCardUi() {
     tournamentScore1LabelEl.textContent = "Spēlētājs 1";
   if (tournamentScore2LabelEl)
     tournamentScore2LabelEl.textContent = "Spēlētājs 2";
+  if (tournamentScore1FieldEl)
+    tournamentScore1FieldEl.classList.remove("hidden");
+  if (tournamentScore2FieldEl)
+    tournamentScore2FieldEl.classList.remove("hidden");
+  if (tournamentReportBtnEl)
+    tournamentReportBtnEl.textContent = "Iesniegt rezultātu";
   setTournamentReportStatus("");
   state.tournamentReportCtx = null;
 }
@@ -4761,7 +4789,9 @@ function renderTournamentCard(meta, details) {
       0,
       Number(meta?.participantCount || 0) || participants.length
     );
-    tournamentMetaEl.textContent = `${tournamentTypeLabel(meta?.type)} · ${participantCount} spēlētāji`;
+    const playMode = tournamentPlayModeText(meta?.playMode);
+    const playModePart = playMode ? ` · ${playMode}` : "";
+    tournamentMetaEl.textContent = `${tournamentTypeLabel(meta?.type)}${playModePart} · ${participantCount} spēlētāji`;
     tournamentMetaEl.classList.remove("hidden");
   }
 
@@ -4843,6 +4873,8 @@ function renderTournamentCard(meta, details) {
     myMatch?.opponent1?.id != null &&
     myMatch?.opponent2?.id != null;
   if (!canReportFromUi) return;
+  const autoReportOnly = !!meta?.autoReportOnly;
+  const playModeLabel = tournamentPlayModeText(meta?.playMode) || "Classic";
 
   if (tournamentScore1LabelEl) tournamentScore1LabelEl.textContent = p1Name;
   if (tournamentScore2LabelEl) tournamentScore2LabelEl.textContent = p2Name;
@@ -4859,16 +4891,29 @@ function renderTournamentCard(meta, details) {
       ? String(Math.max(0, Math.floor(v2)))
       : "";
   }
+  if (tournamentScore1FieldEl)
+    tournamentScore1FieldEl.classList.toggle("hidden", autoReportOnly);
+  if (tournamentScore2FieldEl)
+    tournamentScore2FieldEl.classList.toggle("hidden", autoReportOnly);
 
   if (tournamentReportFormEl) tournamentReportFormEl.classList.remove("hidden");
+  if (tournamentReportBtnEl) {
+    tournamentReportBtnEl.textContent = autoReportOnly
+      ? "Automātiski izrēķināt rezultātu"
+      : "Iesniegt rezultātu";
+  }
   setTournamentReportStatus(
-    "Ievadi rezultātu un nospied “Iesniegt rezultātu”."
+    autoReportOnly
+      ? `Auto režīms (${playModeLabel}): rezultāts tiks aprēķināts automātiski.`
+      : "Ievadi rezultātu un nospied “Iesniegt rezultātu”."
   );
   state.tournamentReportCtx = {
     tournamentId: Number(meta?.id),
     matchId: Number(myMatch.id),
     p1Name,
     p2Name,
+    autoReportOnly,
+    playMode: playModeLabel,
   };
 }
 
@@ -4933,6 +4978,30 @@ async function handleTournamentReportSubmit() {
       "Šobrīd nav mača, kam iesniegt rezultātu.",
       "error"
     );
+    return;
+  }
+  const autoMode = !!ctx.autoReportOnly;
+  if (autoMode) {
+    if (tournamentReportBtnEl) tournamentReportBtnEl.disabled = true;
+    try {
+      const resp = await apiPost(
+        `/tournaments/${ctx.tournamentId}/matches/${ctx.matchId}/report/auto`,
+        {}
+      );
+      const label = String(resp?.auto?.modeLabel || ctx.playMode || "auto");
+      setTournamentReportStatus(`Auto rezultāts iesniegts (${label}).`, "ok");
+      appendSystemMessage(
+        `🏟️ Turnīra mača rezultāts aprēķināts automātiski (${label}).`
+      );
+      await refreshTournamentCard(true);
+    } catch (err) {
+      setTournamentReportStatus(
+        err.message || "Neizdevās automātiski iesniegt rezultātu.",
+        "error"
+      );
+    } finally {
+      if (tournamentReportBtnEl) tournamentReportBtnEl.disabled = false;
+    }
     return;
   }
   const score1 = parseInt(tournamentScore1InputEl?.value || "", 10);

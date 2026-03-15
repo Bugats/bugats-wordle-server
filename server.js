@@ -143,6 +143,10 @@ const WEEKLY_TOURNAMENT_MODE_ROTATION_RAW = String(
   process.env.WEEKLY_TOURNAMENT_MODE_ROTATION ||
     "single_elimination,double_elimination,round_robin"
 ).trim();
+const WEEKLY_TOURNAMENT_PLAYMODE_ROTATION_RAW = String(
+  process.env.WEEKLY_TOURNAMENT_PLAYMODE_ROTATION ||
+    "classic,speed,accuracy,survival"
+).trim();
 const WEEKLY_TOURNAMENT_MIN_ACCOUNT_AGE_HOURS = (() => {
   const fallback = process.env.NODE_ENV === "test" ? 0 : 0;
   const v = parseInt(
@@ -731,6 +735,12 @@ const TOURNAMENT_STAGE_TYPES = new Set([
   "double_elimination",
   "round_robin",
 ]);
+const TOURNAMENT_PLAY_MODES = new Set([
+  "classic",
+  "speed",
+  "accuracy",
+  "survival",
+]);
 const TOURNAMENT_GRAND_FINAL_TYPES = new Set(["none", "simple", "double"]);
 
 function normalizeWeeklyTournamentModes(raw) {
@@ -752,8 +762,37 @@ function normalizeWeeklyTournamentModes(raw) {
   return uniq.length ? uniq : ["single_elimination"];
 }
 
+function normalizeTournamentPlayModes(raw) {
+  const list = String(raw || "")
+    .split(",")
+    .map((x) =>
+      String(x || "")
+        .trim()
+        .toLowerCase()
+    )
+    .filter((x) => TOURNAMENT_PLAY_MODES.has(x));
+  const uniq = [];
+  const seen = new Set();
+  for (const mode of list) {
+    if (seen.has(mode)) continue;
+    seen.add(mode);
+    uniq.push(mode);
+  }
+  return uniq.length ? uniq : ["classic"];
+}
+
+function normalizeTournamentPlayMode(modeRaw) {
+  const key = String(modeRaw || "")
+    .trim()
+    .toLowerCase();
+  return TOURNAMENT_PLAY_MODES.has(key) ? key : "classic";
+}
+
 const WEEKLY_TOURNAMENT_MODES = normalizeWeeklyTournamentModes(
   WEEKLY_TOURNAMENT_MODE_ROTATION_RAW
+);
+const WEEKLY_TOURNAMENT_PLAY_MODES = normalizeTournamentPlayModes(
+  WEEKLY_TOURNAMENT_PLAYMODE_ROTATION_RAW
 );
 
 function tournamentModeLabel(mode) {
@@ -764,6 +803,28 @@ function tournamentModeLabel(mode) {
   if (key === "double_elimination") return "Dubultā izslēgšana";
   if (key === "round_robin") return "Apļa turnīrs";
   return "Turnīrs";
+}
+
+function tournamentPlayModeLabel(mode) {
+  const key = normalizeTournamentPlayMode(mode);
+  if (key === "classic") return "Classic duel (pirmais atmin vārdu)";
+  if (key === "speed") return "Speed duel (laiks ir galvenais)";
+  if (key === "accuracy") return "Accuracy duel (precīzākie minējumi)";
+  if (key === "survival") return "Survival duel (streak izturība)";
+  return "Classic duel";
+}
+
+function tournamentPlayModeRule(mode) {
+  const key = normalizeTournamentPlayMode(mode);
+  if (key === "classic")
+    return "Classic: automātiska uzvara spēlētājam ar augstāku kopējo score.";
+  if (key === "speed")
+    return "Speed: automātiska uzvara spēlētājam ar labāku (zemāku) best win time.";
+  if (key === "accuracy")
+    return "Accuracy: automātiska uzvara spēlētājam ar labāku win/guess attiecību.";
+  if (key === "survival")
+    return "Survival: automātiska uzvara spēlētājam ar augstāku best streak.";
+  return "Classic: automātiska uzvara spēlētājam ar augstāku kopējo score.";
 }
 
 function weekdayInTz(date = new Date(), tz = TZ) {
@@ -818,6 +879,21 @@ function weeklyModeForStartAt(startAtTs) {
     ? WEEKLY_TOURNAMENT_MODES
     : ["single_elimination"];
   return modes[idx % modes.length] || "single_elimination";
+}
+
+function weeklyPlayModeForStartAt(startAtTs) {
+  const ts = Math.max(0, Number(startAtTs) || Date.now());
+  const weekAnchor = weekKey(new Date(ts), TZ); // YYYY-MM-DD (Monday)
+  const [y, mo, d] = String(weekAnchor)
+    .split("-")
+    .map((x) => parseInt(x, 10));
+  const asUtc = Date.UTC(y || 1970, (mo || 1) - 1, d || 1);
+  const refMondayUtc = Date.UTC(1970, 0, 5); // first Monday of 1970
+  const idx = Math.max(0, Math.floor((asUtc - refMondayUtc) / (7 * DAY_MS)));
+  const modes = Array.isArray(WEEKLY_TOURNAMENT_PLAY_MODES)
+    ? WEEKLY_TOURNAMENT_PLAY_MODES
+    : ["classic"];
+  return modes[idx % modes.length] || "classic";
 }
 
 function buildInitialWeeklyQueue(nowTs = Date.now()) {
@@ -1130,6 +1206,129 @@ async function getTournamentParticipantNameMap(tournamentId) {
   return out;
 }
 
+async function getTournamentMatchContext(tournamentId, matchId) {
+  const meta = getTournamentMetaById(tournamentId);
+  if (!meta) return { ok: false, status: 404, message: "Turnīrs nav atrasts." };
+
+  const match = await tournamentDb.select("match", matchId);
+  if (!match) return { ok: false, status: 404, message: "Mačs nav atrasts." };
+
+  const stage = await tournamentDb.select("stage", match.stage_id);
+  if (!stage || Number(stage.tournament_id) !== Number(tournamentId)) {
+    return {
+      ok: false,
+      status: 404,
+      message: "Mačs neietilpst norādītajā turnīrā.",
+    };
+  }
+
+  const participantMap = await getTournamentParticipantNameMap(tournamentId);
+  const p1Name =
+    match?.opponent1?.id != null
+      ? participantMap.get(Number(match.opponent1.id)) || ""
+      : "";
+  const p2Name =
+    match?.opponent2?.id != null
+      ? participantMap.get(Number(match.opponent2.id)) || ""
+      : "";
+
+  return { ok: true, meta, match, p1Name, p2Name };
+}
+
+function getTournamentPlayerRef(nameRaw) {
+  const key = findUserKeyCaseInsensitive(nameRaw);
+  if (!key) return null;
+  return USERS[key] || null;
+}
+
+function tournamentAutoMetricByMode(user, modeRaw) {
+  const mode = normalizeTournamentPlayMode(modeRaw);
+  if (!user) return Number.NEGATIVE_INFINITY;
+
+  if (mode === "classic") {
+    return Math.max(0, Number(user.score) || 0);
+  }
+  if (mode === "speed") {
+    const bestMs = Math.max(0, Number(user.bestWinTimeMs) || 0);
+    if (!bestMs) return Number.NEGATIVE_INFINITY;
+    return -bestMs;
+  }
+  if (mode === "accuracy") {
+    const wins = Math.max(0, Number(user.score) || 0);
+    const guesses = Math.max(0, Number(user.totalGuesses) || 0);
+    if (!wins || !guesses) return Number.NEGATIVE_INFINITY;
+    return wins / guesses;
+  }
+  if (mode === "survival") {
+    return Math.max(0, Number(user.bestStreak) || 0, Number(user.streak) || 0);
+  }
+  return Math.max(0, Number(user.score) || 0);
+}
+
+function computeAutoTournamentMatchResult(modeRaw, p1Name, p2Name) {
+  const mode = normalizeTournamentPlayMode(modeRaw);
+  const u1 = getTournamentPlayerRef(p1Name);
+  const u2 = getTournamentPlayerRef(p2Name);
+
+  const m1 = tournamentAutoMetricByMode(u1, mode);
+  const m2 = tournamentAutoMetricByMode(u2, mode);
+
+  let winner = "";
+  if (m1 > m2) winner = String(p1Name || "");
+  else if (m2 > m1) winner = String(p2Name || "");
+  else {
+    const elo1 = Math.max(0, Number(u1?.duelElo) || 0);
+    const elo2 = Math.max(0, Number(u2?.duelElo) || 0);
+    if (elo1 > elo2) winner = String(p1Name || "");
+    else if (elo2 > elo1) winner = String(p2Name || "");
+    else {
+      const a = String(p1Name || "").toLowerCase();
+      const b = String(p2Name || "").toLowerCase();
+      winner = a <= b ? String(p1Name || "") : String(p2Name || "");
+    }
+  }
+
+  const score1 =
+    winner && winner.toLowerCase() === String(p1Name).toLowerCase() ? 1 : 0;
+  const score2 = score1 === 1 ? 0 : 1;
+  return {
+    mode,
+    winner,
+    score1,
+    score2,
+    metric1: Number.isFinite(m1) ? m1 : null,
+    metric2: Number.isFinite(m2) ? m2 : null,
+  };
+}
+
+async function finalizeTournamentMatchResult(tournamentId, matchId) {
+  const updated = await tournamentDb.select("match", matchId);
+  if (!updated) {
+    return {
+      ok: false,
+      status: 500,
+      message: "Neizdevās nolasīt atjaunināto maču.",
+    };
+  }
+
+  const meta = getTournamentMetaById(tournamentId);
+  if (!meta) return { ok: false, status: 404, message: "Turnīrs nav atrasts." };
+  const snapshot = await getTournamentSnapshot(tournamentId);
+  if (!snapshot.currentStage && meta.status !== "completed") {
+    meta.status = "completed";
+    if (!meta.completedAt) meta.completedAt = Date.now();
+    saveTournamentStore();
+  }
+
+  io.emit("tournament:update", {
+    tournamentId,
+    event: "match_reported",
+    matchId,
+  });
+
+  return { ok: true, updated, meta };
+}
+
 let tournamentStore = normalizeTournamentStore(
   loadJsonSafe(TOURNAMENTS_FILE, null)
 );
@@ -1295,6 +1494,7 @@ function buildWeeklyQueuePayload(user) {
   const q = ensureWeeklyQueueState(Date.now());
   const participants = Array.isArray(q.participants) ? q.participants : [];
   const mode = weeklyModeForStartAt(Number(q.startAt) || Date.now());
+  const playMode = weeklyPlayModeForStartAt(Number(q.startAt) || Date.now());
   const username = String(user?.username || "").trim();
   const isJoined = !!participants.find(
     (u) =>
@@ -1322,6 +1522,8 @@ function buildWeeklyQueuePayload(user) {
     title: WEEKLY_TOURNAMENT_TITLE,
     mode,
     modeLabel: tournamentModeLabel(mode),
+    playMode,
+    playModeLabel: tournamentPlayModeLabel(playMode),
     startAt: Number(q.startAt || 0),
     now,
     slots,
@@ -1344,6 +1546,9 @@ function buildWeeklyQueuePayload(user) {
       )}:${String(WEEKLY_TOURNAMENT_MINUTE).padStart(2, "0")} (Rīga).`,
       "Neizšķirts mačā nav atļauts.",
       `Anti-fake: vismaz ${WEEKLY_TOURNAMENT_MIN_TOTAL_GUESSES} minējumi + unikāla ierīce starp dalībniekiem.`,
+      `Spēles mods: ${tournamentPlayModeLabel(playMode)}.`,
+      tournamentPlayModeRule(playMode),
+      "Rezultāts tiek iesniegts automātiski (nav manuālas ciparu ievades).",
     ],
     lastCycle: q.lastCycle || null,
   };
@@ -1413,6 +1618,7 @@ async function createTournamentFromWeeklyQueue(queue, nowTs = Date.now()) {
   if (participants.length < slots) return null;
   const seeding = participants.slice(0, slots);
   const mode = weeklyModeForStartAt(Number(queue?.startAt) || nowTs);
+  const playMode = weeklyPlayModeForStartAt(Number(queue?.startAt) || nowTs);
   const tournamentId = Number(tournamentStore.nextTournamentId || 1);
   tournamentStore.nextTournamentId = tournamentId + 1;
 
@@ -1435,12 +1641,16 @@ async function createTournamentFromWeeklyQueue(queue, nowTs = Date.now()) {
     participantCount: seeding.length,
     status: "active",
     completedAt: 0,
+    playMode,
+    autoReportOnly: true,
   };
   tournamentStore.tournaments.push(meta);
   saveTournamentStore();
   io.emit("tournament:update", { tournamentId, event: "created" });
   broadcastSystemMessage(
-    `🏟️ ${name} (${tournamentModeLabel(mode)}) ir sācies! (${seeding.length}/${slots} dalībnieki)`
+    `🏟️ ${name} (${tournamentModeLabel(mode)} · ${tournamentPlayModeLabel(
+      playMode
+    )}) ir sācies! (${seeding.length}/${slots} dalībnieki)`
   );
   await sendOneSignalNotificationToUsers(
     seeding,
@@ -6524,6 +6734,8 @@ app.post("/tournaments", authMiddleware, async (req, res) => {
     }
 
     const type = normalizeTournamentType(req.body?.type);
+    const playMode = normalizeTournamentPlayMode(req.body?.playMode);
+    const autoReportOnly = !!req.body?.autoReportOnly;
     const seeding = sanitizeTournamentSeeding(req.body?.seeding);
     if (seeding.length < 2) {
       return res
@@ -6559,6 +6771,8 @@ app.post("/tournaments", authMiddleware, async (req, res) => {
       participantCount: seeding.length,
       status: "active",
       completedAt: 0,
+      playMode,
+      autoReportOnly,
     };
 
     tournamentStore.tournaments.push(meta);
@@ -6722,30 +6936,18 @@ app.post(
           .json({ message: "Nederīgs turnīra vai mača ID." });
       }
 
-      const meta = getTournamentMetaById(tournamentId);
-      if (!meta)
-        return res.status(404).json({ message: "Turnīrs nav atrasts." });
-
-      const match = await tournamentDb.select("match", matchId);
-      if (!match) return res.status(404).json({ message: "Mačs nav atrasts." });
-
-      const stage = await tournamentDb.select("stage", match.stage_id);
-      if (!stage || Number(stage.tournament_id) !== Number(tournamentId)) {
+      const ctx = await getTournamentMatchContext(tournamentId, matchId);
+      if (!ctx.ok) {
         return res
-          .status(404)
-          .json({ message: "Mačs neietilpst norādītajā turnīrā." });
+          .status(Number(ctx.status) || 400)
+          .json({ message: ctx.message || "Nederīgs turnīra mačs." });
       }
-
-      const participantMap =
-        await getTournamentParticipantNameMap(tournamentId);
-      const p1Name =
-        match?.opponent1?.id != null
-          ? participantMap.get(Number(match.opponent1.id)) || ""
-          : "";
-      const p2Name =
-        match?.opponent2?.id != null
-          ? participantMap.get(Number(match.opponent2.id)) || ""
-          : "";
+      const { meta, p1Name, p2Name } = ctx;
+      if (!p1Name || !p2Name) {
+        return res.status(409).json({
+          message: "Mačam vēl nav abi dalībnieki. Pagaidi pretinieku.",
+        });
+      }
 
       const requester = String(req.user?.username || "")
         .trim()
@@ -6757,6 +6959,12 @@ app.post(
         return res.status(403).json({
           message:
             "Šī mača rezultātu drīkst iesniegt tikai dalībnieks vai admins.",
+        });
+      }
+      if (meta.autoReportOnly && !isAdminUser(req.user)) {
+        return res.status(409).json({
+          message:
+            "Šim turnīram rezultāts tiek aprēķināts automātiski. Manuāla iesniegšana nav vajadzīga.",
         });
       }
 
@@ -6810,35 +7018,103 @@ app.post(
         });
       }
 
-      const updated = await tournamentDb.select("match", matchId);
-      if (!updated) {
+      const apply = await finalizeTournamentMatchResult(tournamentId, matchId);
+      if (!apply.ok) {
         return res
-          .status(500)
-          .json({ message: "Neizdevās nolasīt atjaunināto maču." });
+          .status(Number(apply.status) || 500)
+          .json({ message: apply.message || "Neizdevās iesniegt rezultātu." });
       }
-
-      const snapshot = await getTournamentSnapshot(tournamentId);
-      if (!snapshot.currentStage && meta.status !== "completed") {
-        meta.status = "completed";
-        if (!meta.completedAt) meta.completedAt = Date.now();
-        saveTournamentStore();
-      }
-
-      io.emit("tournament:update", {
-        tournamentId,
-        event: "match_reported",
-        matchId,
-      });
 
       return res.json({
         ok: true,
-        tournament: meta,
-        match: updated,
+        tournament: apply.meta,
+        match: apply.updated,
       });
     } catch (err) {
       console.error("Tournament match report error:", err);
       return res.status(400).json({
         message: "Neizdevās iesniegt mača rezultātu.",
+        detail: String(err?.message || err || ""),
+      });
+    }
+  }
+);
+
+app.post(
+  "/tournaments/:id/matches/:matchId/report/auto",
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const tournamentId = parseTournamentId(req.params.id);
+      const matchId = parseNonNegativeIntId(req.params.matchId);
+      if (!tournamentId || matchId == null) {
+        return res
+          .status(400)
+          .json({ message: "Nederīgs turnīra vai mača ID." });
+      }
+
+      const ctx = await getTournamentMatchContext(tournamentId, matchId);
+      if (!ctx.ok) {
+        return res
+          .status(Number(ctx.status) || 400)
+          .json({ message: ctx.message || "Nederīgs turnīra mačs." });
+      }
+      const { meta, p1Name, p2Name } = ctx;
+
+      const requester = String(req.user?.username || "")
+        .trim()
+        .toLowerCase();
+      const canReportAsPlayer =
+        (p1Name && p1Name.toLowerCase() === requester) ||
+        (p2Name && p2Name.toLowerCase() === requester);
+      if (!isAdminUser(req.user) && !canReportAsPlayer) {
+        return res.status(403).json({
+          message:
+            "Šī mača auto rezultātu drīkst iedarbināt tikai dalībnieks vai admins.",
+        });
+      }
+
+      const auto = computeAutoTournamentMatchResult(
+        meta.playMode,
+        p1Name,
+        p2Name
+      );
+      await tournamentManager.update.match({
+        id: matchId,
+        opponent1: {
+          score: Math.floor(auto.score1),
+          result: auto.score1 > auto.score2 ? "win" : "loss",
+        },
+        opponent2: {
+          score: Math.floor(auto.score2),
+          result: auto.score2 > auto.score1 ? "win" : "loss",
+        },
+      });
+
+      const apply = await finalizeTournamentMatchResult(tournamentId, matchId);
+      if (!apply.ok) {
+        return res
+          .status(Number(apply.status) || 500)
+          .json({
+            message: apply.message || "Neizdevās iesniegt auto rezultātu.",
+          });
+      }
+
+      return res.json({
+        ok: true,
+        auto: {
+          mode: auto.mode,
+          modeLabel: tournamentPlayModeLabel(auto.mode),
+          rule: tournamentPlayModeRule(auto.mode),
+          winner: auto.winner,
+        },
+        tournament: apply.meta,
+        match: apply.updated,
+      });
+    } catch (err) {
+      console.error("Tournament auto-report error:", err);
+      return res.status(400).json({
+        message: "Neizdevās automātiski iesniegt mača rezultātu.",
         detail: String(err?.message || err || ""),
       });
     }
