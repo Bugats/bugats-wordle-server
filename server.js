@@ -120,6 +120,17 @@ const VIP_TOURNAMENT_MAX_PARTICIPANTS = (() => {
   const v = parseInt(process.env.VIP_TOURNAMENT_MAX_PARTICIPANTS || "16", 10);
   return Number.isFinite(v) && v >= 2 && v <= 128 ? v : 16;
 })();
+const VIP_ROOM_OPEN_TTL_MINUTES = (() => {
+  const v = parseInt(process.env.VIP_ROOM_OPEN_TTL_MINUTES || "180", 10);
+  return Number.isFinite(v) && v >= 5 && v <= 43200 ? v : 180;
+})();
+const VIP_ROOM_CLOSED_RETENTION_MINUTES = (() => {
+  const v = parseInt(
+    process.env.VIP_ROOM_CLOSED_RETENTION_MINUTES || "1440",
+    10
+  );
+  return Number.isFinite(v) && v >= 10 && v <= 43200 ? v : 1440;
+})();
 const WEEKLY_TOURNAMENT_ENABLED =
   String(process.env.WEEKLY_TOURNAMENT_ENABLED || "1") === "1";
 const WEEKLY_TOURNAMENT_TITLE = String(
@@ -1015,7 +1026,9 @@ function normalizeTournamentStore(raw) {
         .trim()
         .toLowerCase();
       const status =
-        statusRaw === "started" || statusRaw === "cancelled"
+        statusRaw === "started" ||
+        statusRaw === "cancelled" ||
+        statusRaw === "completed"
           ? statusRaw
           : "open";
       return {
@@ -1034,6 +1047,10 @@ function normalizeTournamentStore(raw) {
         tournamentId: Number.isFinite(Number(room.tournamentId))
           ? Math.floor(Number(room.tournamentId))
           : null,
+        closedAt: Math.max(0, Number(room.closedAt) || 0),
+        closeReason: String(room.closeReason || "")
+          .trim()
+          .toLowerCase(),
       };
     })
     .filter((room) => room.id && room.owner && room.name);
@@ -1125,6 +1142,9 @@ function userHasRoomAccess(room, user) {
 function buildVipRoomPayload(room, user) {
   const username = String(user?.username || "");
   const key = username.trim().toLowerCase();
+  const roomStatus = String(room?.status || "open")
+    .trim()
+    .toLowerCase();
   const participants = Array.isArray(room?.participants)
     ? room.participants
     : [];
@@ -1139,6 +1159,47 @@ function buildVipRoomPayload(room, user) {
   const slots = Math.max(2, Math.floor(Number(room?.slots) || 2));
   const usedSlots = participants.length + invited.length;
   const emptySlots = Math.max(0, slots - usedSlots);
+  const closeReason = String(room?.closeReason || "")
+    .trim()
+    .toLowerCase();
+  const isAdmin = isAdminUser(user);
+
+  let statusText = "Gaida spēlētājus.";
+  if (roomStatus === "started") {
+    statusText = Number.isFinite(Number(room?.tournamentId))
+      ? `Turnīrs startēts (#${Number(room.tournamentId)}).`
+      : "Turnīrs ir startēts.";
+  } else if (roomStatus === "completed") {
+    statusText = "Spēle pabeigta.";
+  } else if (roomStatus === "cancelled") {
+    statusText =
+      closeReason === "expired"
+        ? "Istaba beidzās automātiski (laiks iztecēja)."
+        : "Istaba tika atcelta.";
+  } else if (emptySlots > 0) {
+    statusText = `Gaida spēlētājus. Brīvi sloti: ${emptySlots}.`;
+  } else {
+    statusText = "Visi sloti aizņemti. Starts notiek automātiski.";
+  }
+
+  let nextActionText = "";
+  if (roomStatus === "open") {
+    if (!isParticipant && (isInvited || isOwner || isAdmin)) {
+      nextActionText = "Pievienojies istabai, lai apstiprinātu dalību.";
+    } else if (emptySlots > 0 && (isOwner || isAdmin)) {
+      nextActionText = "Uzaicini draugus, lai aizpildītu tukšos slotus.";
+    } else if (emptySlots > 0) {
+      nextActionText = "Gaidi ielūgumu vai īpašnieka uzaicinājumu.";
+    } else {
+      nextActionText = "Gaidi automātisku turnīra startu.";
+    }
+  } else if (
+    roomStatus === "started" &&
+    Number.isFinite(Number(room?.tournamentId))
+  ) {
+    nextActionText = `Atver turnīru #${Number(room.tournamentId)} un spēlē maču.`;
+  }
+
   return {
     id: String(room?.id || ""),
     name: String(room?.name || ""),
@@ -1149,24 +1210,27 @@ function buildVipRoomPayload(room, user) {
     slots,
     participants: participants.slice(0, slots),
     invited: invited.slice(0, Math.max(0, slots - participants.length)),
-    status: String(room?.status || "open"),
+    status: roomStatus,
     createdAt: Math.max(0, Number(room?.createdAt) || 0),
     startedAt: Math.max(0, Number(room?.startedAt) || 0),
     tournamentId: Number.isFinite(Number(room?.tournamentId))
       ? Number(room.tournamentId)
       : null,
+    closedAt: Math.max(0, Number(room?.closedAt) || 0),
+    closeReason,
     emptySlots,
     isOwner,
     isParticipant,
     isInvited,
-    canInvite:
-      (isOwner || isAdminUser(user)) &&
-      String(room?.status || "open") === "open" &&
-      emptySlots > 0,
+    statusText,
+    nextActionText,
+    canInvite: (isOwner || isAdmin) && roomStatus === "open" && emptySlots > 0,
     canJoin:
       !isParticipant &&
-      (isInvited || isOwner || isAdminUser(user)) &&
-      String(room?.status || "open") === "open",
+      (isInvited || isOwner || isAdmin) &&
+      roomStatus === "open",
+    canCancel: (isOwner || isAdmin) && roomStatus === "open",
+    canDelete: (isOwner || isAdmin) && roomStatus !== "open",
   };
 }
 
@@ -1178,6 +1242,123 @@ function getVipRoomsForUser(user) {
     .filter((room) => userHasRoomAccess(room, user))
     .sort((a, b) => Number(b?.createdAt || 0) - Number(a?.createdAt || 0))
     .map((room) => buildVipRoomPayload(room, user));
+}
+
+function findVipRoomIndexById(roomIdRaw) {
+  const roomId = String(roomIdRaw || "").trim();
+  if (!roomId || !Array.isArray(tournamentStore.vipRooms)) return -1;
+  return tournamentStore.vipRooms.findIndex(
+    (room) => String(room?.id || "") === roomId
+  );
+}
+
+function closeVipRoom(room, status, reason, nowTs = Date.now()) {
+  if (!room || typeof room !== "object") return false;
+  let changed = false;
+  const wantedStatus = String(status || "cancelled")
+    .trim()
+    .toLowerCase();
+  if (room.status !== wantedStatus) {
+    room.status = wantedStatus;
+    changed = true;
+  }
+  const reasonNorm = String(reason || "")
+    .trim()
+    .toLowerCase();
+  if (room.closeReason !== reasonNorm) {
+    room.closeReason = reasonNorm;
+    changed = true;
+  }
+  const ts = Math.max(0, Number(nowTs) || Date.now());
+  if (!Number(room.closedAt)) {
+    room.closedAt = ts;
+    changed = true;
+  }
+  if (Array.isArray(room.invited) && room.invited.length) {
+    room.invited = [];
+    changed = true;
+  }
+  return changed;
+}
+
+function syncVipRoomsLifecycle(nowTs = Date.now()) {
+  if (
+    !Array.isArray(tournamentStore.vipRooms) ||
+    !tournamentStore.vipRooms.length
+  )
+    return false;
+
+  const now = Math.max(0, Number(nowTs) || Date.now());
+  const openTtlMs = Math.max(1, VIP_ROOM_OPEN_TTL_MINUTES) * 60 * 1000;
+  const closedRetentionMs =
+    Math.max(1, VIP_ROOM_CLOSED_RETENTION_MINUTES) * 60 * 1000;
+
+  let changed = false;
+  let removed = false;
+
+  for (const room of tournamentStore.vipRooms) {
+    if (!room || typeof room !== "object") continue;
+    const status = String(room.status || "open")
+      .trim()
+      .toLowerCase();
+
+    if (status === "started") {
+      const meta = getTournamentMetaById(room.tournamentId);
+      if (!meta) {
+        changed =
+          closeVipRoom(room, "cancelled", "tournament_missing", now) || changed;
+        continue;
+      }
+      const tStatus = String(meta.status || "active")
+        .trim()
+        .toLowerCase();
+      if (tStatus === "completed" || tStatus === "archived") {
+        const doneAt = Math.max(0, Number(meta.completedAt) || now);
+        changed =
+          closeVipRoom(room, "completed", "tournament_finished", doneAt) ||
+          changed;
+      }
+      continue;
+    }
+
+    if (status !== "open") continue;
+    const createdAt = Math.max(0, Number(room.createdAt) || 0);
+    if (!createdAt) continue;
+    if (now - createdAt >= openTtlMs) {
+      changed = closeVipRoom(room, "cancelled", "expired", now) || changed;
+    }
+  }
+
+  const nextRooms = [];
+  for (const room of tournamentStore.vipRooms) {
+    if (!room || typeof room !== "object") continue;
+    const status = String(room.status || "open")
+      .trim()
+      .toLowerCase();
+    if (status === "open" || status === "started") {
+      nextRooms.push(room);
+      continue;
+    }
+
+    const closedAt = Math.max(
+      0,
+      Number(room.closedAt) ||
+        Number(room.startedAt) ||
+        Number(room.createdAt) ||
+        0
+    );
+    if (closedAt > 0 && now - closedAt >= closedRetentionMs) {
+      removed = true;
+      continue;
+    }
+    nextRooms.push(room);
+  }
+  if (removed) {
+    tournamentStore.vipRooms = nextRooms;
+    changed = true;
+  }
+  if (changed) saveTournamentStore();
+  return changed;
 }
 
 function sanitizeVipRoomInviteNames(owner, inviteNamesRaw, limit) {
@@ -1564,6 +1745,9 @@ async function finalizeTournamentMatchResult(tournamentId, matchId) {
     if (!meta.completedAt) meta.completedAt = Date.now();
     saveTournamentStore();
   }
+  if (meta.roomId) {
+    syncVipRoomsLifecycle(Date.now());
+  }
 
   io.emit("tournament:update", {
     tournamentId,
@@ -1577,6 +1761,7 @@ async function finalizeTournamentMatchResult(tournamentId, matchId) {
 let tournamentStore = normalizeTournamentStore(
   loadJsonSafe(TOURNAMENTS_FILE, null)
 );
+syncVipRoomsLifecycle(Date.now());
 saveTournamentStore();
 const tournamentDb = new JsonDatabase(TOURNAMENTS_DB_FILE);
 const tournamentManager = new BracketsManager(tournamentDb);
@@ -4760,6 +4945,14 @@ setInterval(() => {
   processWeeklyTournamentQueue(Date.now()).catch((err) => {
     console.warn("Weekly queue scheduler error:", err);
   });
+  try {
+    const changed = syncVipRoomsLifecycle(Date.now());
+    if (changed) {
+      io.emit("tournament:update", { event: "vip_room_lifecycle_sync" });
+    }
+  } catch (err) {
+    console.warn("VIP room lifecycle scheduler error:", err);
+  }
 }, 15 * 1000);
 processWeeklyTournamentQueue(Date.now()).catch((err) => {
   console.warn("Weekly queue initial tick error:", err);
@@ -6948,6 +7141,11 @@ app.get("/tournaments", authMiddleware, async (req, res) => {
   } catch (err) {
     console.warn("Weekly queue tick on /tournaments failed:", err);
   }
+  try {
+    syncVipRoomsLifecycle(Date.now());
+  } catch (err) {
+    console.warn("VIP room lifecycle tick on /tournaments failed:", err);
+  }
   const list = [...(tournamentStore.tournaments || [])].sort(
     (a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)
   );
@@ -6979,11 +7177,9 @@ app.post("/tournaments", authMiddleware, async (req, res) => {
     }
     const sizeValidation = validateTournamentSizeByType(type, seeding.length);
     if (!sizeValidation.ok) {
-      return res
-        .status(Number(sizeValidation.status) || 400)
-        .json({
-          message: sizeValidation.message || "Nederīgs dalībnieku skaits.",
-        });
+      return res.status(Number(sizeValidation.status) || 400).json({
+        message: sizeValidation.message || "Nederīgs dalībnieku skaits.",
+      });
     }
 
     const access = validateTournamentCreateAccess(requester, seeding.length);
@@ -7028,6 +7224,7 @@ app.post("/tournaments", authMiddleware, async (req, res) => {
 
 app.post("/tournaments/vip-rooms", authMiddleware, async (req, res) => {
   try {
+    syncVipRoomsLifecycle(Date.now());
     const requester = req.user;
     ensureVipFields(requester);
 
@@ -7081,6 +7278,8 @@ app.post("/tournaments/vip-rooms", authMiddleware, async (req, res) => {
       createdAt,
       startedAt: 0,
       tournamentId: null,
+      closedAt: 0,
+      closeReason: "",
     };
     if (!Array.isArray(tournamentStore.vipRooms)) tournamentStore.vipRooms = [];
     tournamentStore.vipRooms.push(room);
@@ -7112,6 +7311,7 @@ app.post(
   "/tournaments/vip-rooms/:roomId/invite",
   authMiddleware,
   (req, res) => {
+    syncVipRoomsLifecycle(Date.now());
     const requester = req.user;
     const room = getVipRoomById(req.params.roomId);
     if (!room)
@@ -7126,11 +7326,9 @@ app.post(
       String(room.owner || "").toLowerCase() ===
       String(requester.username || "").toLowerCase();
     if (!isOwner && !isAdminUser(requester)) {
-      return res
-        .status(403)
-        .json({
-          message: "Draugus VIP istabā drīkst aicināt tikai īpašnieks.",
-        });
+      return res.status(403).json({
+        message: "Draugus VIP istabā drīkst aicināt tikai īpašnieks.",
+      });
     }
 
     const ownerKey = findUserKeyCaseInsensitive(room.owner);
@@ -7194,6 +7392,7 @@ app.post(
   authMiddleware,
   async (req, res) => {
     try {
+      syncVipRoomsLifecycle(Date.now());
       const requester = req.user;
       const room = getVipRoomById(req.params.roomId);
       if (!room)
@@ -7301,11 +7500,9 @@ app.post(
           (name) => String(name || "").toLowerCase() !== requesterKey
         );
         saveTournamentStore();
-        return res
-          .status(Number(sizeValidation.status) || 400)
-          .json({
-            message: sizeValidation.message || "Nederīgs slotu skaits.",
-          });
+        return res.status(Number(sizeValidation.status) || 400).json({
+          message: sizeValidation.message || "Nederīgs slotu skaits.",
+        });
       }
 
       const created = await createTournamentRecord({
@@ -7325,6 +7522,8 @@ app.post(
       room.startedAt = now;
       room.tournamentId = created.tournamentId;
       room.invited = [];
+      room.closedAt = 0;
+      room.closeReason = "";
 
       if (!isAdminUser(owner)) {
         owner.vipLastTournamentAt = now;
@@ -7354,6 +7553,81 @@ app.post(
     }
   }
 );
+
+app.post(
+  "/tournaments/vip-rooms/:roomId/cancel",
+  authMiddleware,
+  (req, res) => {
+    syncVipRoomsLifecycle(Date.now());
+    const requester = req.user;
+    const room = getVipRoomById(req.params.roomId);
+    if (!room)
+      return res.status(404).json({ message: "VIP istaba nav atrasta." });
+
+    const isOwner =
+      String(room.owner || "").toLowerCase() ===
+      String(requester?.username || "").toLowerCase();
+    if (!isOwner && !isAdminUser(requester)) {
+      return res.status(403).json({
+        message: "VIP istabu atcelt drīkst tikai īpašnieks.",
+      });
+    }
+
+    if (String(room.status || "open") !== "open") {
+      return res.status(409).json({
+        message: "Var atcelt tikai atvērtu VIP istabu.",
+        room: buildVipRoomPayload(room, requester),
+      });
+    }
+
+    closeVipRoom(room, "cancelled", "owner_cancelled", Date.now());
+    saveTournamentStore();
+    io.emit("tournament:update", {
+      event: "vip_room_cancelled",
+      roomId: room.id,
+      username: requester.username,
+    });
+    return res.json({
+      ok: true,
+      cancelled: true,
+      room: buildVipRoomPayload(room, requester),
+      message: "VIP istaba atcelta.",
+    });
+  }
+);
+
+app.delete("/tournaments/vip-rooms/:roomId", authMiddleware, (req, res) => {
+  syncVipRoomsLifecycle(Date.now());
+  const requester = req.user;
+  const roomIndex = findVipRoomIndexById(req.params.roomId);
+  if (roomIndex < 0) {
+    return res.status(404).json({ message: "VIP istaba nav atrasta." });
+  }
+  const room = tournamentStore.vipRooms[roomIndex];
+  const isOwner =
+    String(room?.owner || "").toLowerCase() ===
+    String(requester?.username || "").toLowerCase();
+  if (!isOwner && !isAdminUser(requester)) {
+    return res.status(403).json({
+      message: "VIP istabu dzēst drīkst tikai īpašnieks.",
+    });
+  }
+
+  const roomId = String(room?.id || "");
+  tournamentStore.vipRooms.splice(roomIndex, 1);
+  saveTournamentStore();
+  io.emit("tournament:update", {
+    event: "vip_room_deleted",
+    roomId,
+    username: requester.username,
+  });
+  return res.json({
+    ok: true,
+    deleted: true,
+    roomId,
+    message: "VIP istaba izdzēsta no saraksta.",
+  });
+});
 
 app.post("/tournaments/weekly/join", authMiddleware, async (req, res) => {
   if (!WEEKLY_TOURNAMENT_ENABLED) {

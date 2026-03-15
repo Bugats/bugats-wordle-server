@@ -274,6 +274,69 @@ describe("Tournament brackets API", () => {
     expect(joinB.body?.tournament?.roomId).toBe(roomId);
   });
 
+  it("allows VIP room owner to cancel and delete room lifecycle", async () => {
+    const suffix = Date.now().toString().slice(-7);
+    const owner = `vipctrl_${suffix}`;
+
+    const adminToken = await ensureUserToken({
+      username: "BugatsLV",
+      password: "Test12345",
+      email: "bugatslv_test@example.com",
+    });
+    const ownerToken = await ensureUserToken({
+      username: owner,
+      password: "Test12345",
+      email: `${owner}@example.com`,
+    });
+
+    const grantRes = await request(app)
+      .post("/admin/vip/grant")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ username: owner, days: 30 });
+    expect(grantRes.status).toBe(200);
+    expect(grantRes.body?.ok).toBe(true);
+
+    const createRoom = await request(app)
+      .post("/tournaments/vip-rooms")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({
+        name: `VIP Control ${suffix}`,
+        type: "round_robin",
+        playMode: "classic",
+        slots: 3,
+      });
+    expect(createRoom.status).toBe(200);
+    const roomId = String(createRoom.body?.room?.id || "");
+    expect(roomId.length).toBeGreaterThan(0);
+
+    const cancelRes = await request(app)
+      .post(`/tournaments/vip-rooms/${roomId}/cancel`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({});
+    expect(cancelRes.status).toBe(200);
+    expect(cancelRes.body?.ok).toBe(true);
+    expect(cancelRes.body?.cancelled).toBe(true);
+    expect(cancelRes.body?.room?.status).toBe("cancelled");
+    expect(Number(cancelRes.body?.room?.closedAt)).toBeGreaterThan(0);
+
+    const deleteRes = await request(app)
+      .delete(`/tournaments/vip-rooms/${roomId}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(deleteRes.status).toBe(200);
+    expect(deleteRes.body?.ok).toBe(true);
+    expect(deleteRes.body?.deleted).toBe(true);
+    expect(String(deleteRes.body?.roomId || "")).toBe(roomId);
+
+    const afterList = await request(app)
+      .get("/tournaments")
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(afterList.status).toBe(200);
+    const rooms = Array.isArray(afterList.body?.vipRooms)
+      ? afterList.body.vipRooms
+      : [];
+    expect(rooms.some((r) => String(r?.id || "") === roomId)).toBe(false);
+  });
+
   it("allows weekly queue join but blocks same-device fake profile", async () => {
     const sharedDeviceId = `shared-device-${Date.now().toString().slice(-8)}`;
     const u1 = `wq${Date.now().toString().slice(-6)}a`;

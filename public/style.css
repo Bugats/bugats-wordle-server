@@ -3093,8 +3093,26 @@ summary:focus-visible {
   line-height: 1.4;
 }
 
-.vz-vip-room-inline-select {
+.vz-vip-room-next-action {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #a4e2ff;
+}
+
+.vz-vip-room-invite-row {
   margin-top: 6px;
+  display: grid;
+  gap: 6px;
+}
+
+.vz-vip-room-actions {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.vz-vip-room-inline-select {
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 6px;
@@ -3105,7 +3123,17 @@ summary:focus-visible {
 }
 
 .vz-vip-room-item button {
-  margin-top: 6px;
+  margin-top: 0;
+}
+
+.vz-vip-room-danger-btn {
+  border-color: rgba(255, 112, 112, 0.55) !important;
+  background: rgba(120, 28, 28, 0.32) !important;
+}
+
+.vz-vip-room-secondary-btn {
+  border-color: rgba(170, 185, 210, 0.42) !important;
+  background: rgba(29, 44, 66, 0.45) !important;
 }
 
 .vz-tournament-actions {

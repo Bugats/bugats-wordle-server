@@ -1092,6 +1092,21 @@ async function apiGet(path) {
   return readJsonOrThrow(res);
 }
 
+async function apiDelete(path, body = null) {
+  const options = {
+    method: "DELETE",
+    headers: {
+      ...(state.token ? { Authorization: "Bearer " + state.token } : {}),
+    },
+  };
+  if (body && typeof body === "object") {
+    options.headers["Content-Type"] = "application/json";
+    options.body = JSON.stringify(body);
+  }
+  const res = await fetchWithTimeout(API_BASE + path, options);
+  return readJsonOrThrow(res);
+}
+
 // ==================== AUDIO HELPERIS ====================
 // Rezerves skaņas (Web Audio), ja MP3 nav vai bojāts
 function playFallbackSound(kind) {
@@ -4560,6 +4575,15 @@ function normalizeVipRoomList(raw) {
             .slice(0, Math.max(0, slots - participants.length))
         : [];
       const used = participants.length + invited.length;
+      const statusRaw = String(room.status || "open")
+        .trim()
+        .toLowerCase();
+      const status =
+        statusRaw === "started" ||
+        statusRaw === "cancelled" ||
+        statusRaw === "completed"
+          ? statusRaw
+          : "open";
       return {
         id,
         owner,
@@ -4570,18 +4594,26 @@ function normalizeVipRoomList(raw) {
         slots,
         participants,
         invited,
-        status: String(room.status || "open"),
+        status,
         createdAt: Math.max(0, Number(room.createdAt) || 0),
         startedAt: Math.max(0, Number(room.startedAt) || 0),
         tournamentId: Number.isFinite(Number(room.tournamentId))
           ? Number(room.tournamentId)
           : null,
+        closedAt: Math.max(0, Number(room.closedAt) || 0),
+        closeReason: String(room.closeReason || "")
+          .trim()
+          .toLowerCase(),
+        statusText: String(room.statusText || "").trim(),
+        nextActionText: String(room.nextActionText || "").trim(),
         emptySlots: Math.max(0, Number(room.emptySlots) || slots - used),
         isOwner: !!room.isOwner,
         isParticipant: !!room.isParticipant,
         isInvited: !!room.isInvited,
         canInvite: !!room.canInvite,
         canJoin: !!room.canJoin,
+        canCancel: !!room.canCancel,
+        canDelete: !!room.canDelete,
       };
     })
     .filter(Boolean);
@@ -4699,6 +4731,45 @@ async function handleVipRoomJoin(roomId) {
   }
 }
 
+async function handleVipRoomCancel(roomId) {
+  const roomKey = String(roomId || "").trim();
+  if (!roomKey) return;
+  if (!window.confirm("Atcelt šo VIP istabu?")) return;
+  try {
+    const resp = await apiPost(`/tournaments/vip-rooms/${roomKey}/cancel`, {});
+    setVipRoomCreateStatus(resp?.message || "VIP istaba atcelta.", "ok");
+    await refreshTournamentCard(true);
+  } catch (err) {
+    setVipRoomCreateStatus(
+      err.message || "Neizdevās atcelt VIP istabu.",
+      "error"
+    );
+  }
+}
+
+async function handleVipRoomDelete(roomId) {
+  const roomKey = String(roomId || "").trim();
+  if (!roomKey) return;
+  if (!window.confirm("Dzēst šo VIP istabu no saraksta?")) return;
+  try {
+    const resp = await apiDelete(`/tournaments/vip-rooms/${roomKey}`);
+    setVipRoomCreateStatus(resp?.message || "VIP istaba izdzēsta.", "ok");
+    await refreshTournamentCard(true);
+  } catch (err) {
+    setVipRoomCreateStatus(
+      err.message || "Neizdevās izdzēst VIP istabu.",
+      "error"
+    );
+  }
+}
+
+function openTournamentFromVipRoom(tournamentIdRaw) {
+  const tournamentId = Number(tournamentIdRaw);
+  if (!Number.isFinite(tournamentId) || tournamentId < 1) return;
+  state.tournamentActiveId = tournamentId;
+  refreshTournamentCard(false).catch(() => {});
+}
+
 function renderVipRoomFriendPicker(canCreate) {
   if (!vipRoomFriendsEl) return;
   vipRoomFriendsEl.innerHTML = "";
@@ -4762,7 +4833,10 @@ function renderVipRoomList() {
     const meta = createEl("div", "vz-vip-room-item-meta");
     const modeLabel = tournamentTypeLabel(room.type);
     const playLabel = tournamentPlayModeText(room.playMode) || "Classic";
-    meta.textContent = `${modeLabel} · ${playLabel} · ${room.participants.length}/${room.slots}`;
+    const resultModeLabel = room.autoReportOnly
+      ? "Auto rezultāti"
+      : "Manuāli rezultāti";
+    meta.textContent = `${modeLabel} · ${playLabel} · ${resultModeLabel} · ${room.participants.length}/${room.slots}`;
     head.appendChild(meta);
     item.appendChild(head);
 
@@ -4770,24 +4844,35 @@ function renderVipRoomList() {
     const invitedText = room.invited.length
       ? ` | Uzaicināti: ${room.invited.join(", ")}`
       : "";
-    users.textContent = `Spēlētāji: ${room.participants.join(", ")}${invitedText}`;
+    users.textContent = `Spēlētāji: ${room.participants.join(", ") || "—"}${invitedText}`;
     item.appendChild(users);
 
-    if (
-      room.status === "started" &&
-      Number.isFinite(Number(room.tournamentId))
-    ) {
-      const status = createEl("div", "mission-status vz-ok");
-      status.textContent = `Turnīrs startēts (#${room.tournamentId}).`;
-      item.appendChild(status);
-    } else if (room.status === "open") {
-      const status = createEl("div", "mission-status");
-      status.textContent =
-        room.emptySlots > 0
-          ? `Brīvi sloti: ${room.emptySlots}. Ja tukšs slots, uzaicini draugu.`
-          : "Sloti pilni, starts notiek automātiski.";
-      item.appendChild(status);
+    const status = createEl(
+      "div",
+      room.status === "cancelled" ? "mission-status vz-error" : "mission-status"
+    );
+    status.textContent =
+      room.statusText ||
+      (room.status === "started"
+        ? `Turnīrs startēts (#${room.tournamentId || "?"}).`
+        : room.status === "completed"
+          ? "Spēle pabeigta."
+          : room.status === "cancelled"
+            ? "Istaba atcelta."
+            : room.emptySlots > 0
+              ? `Brīvi sloti: ${room.emptySlots}.`
+              : "Sloti pilni, starts notiek automātiski.");
+    if (room.status === "started" || room.status === "completed")
+      status.classList.add("vz-ok");
+    item.appendChild(status);
+
+    if (room.nextActionText) {
+      const next = createEl("div", "vz-vip-room-next-action");
+      next.textContent = `Tālāk: ${room.nextActionText}`;
+      item.appendChild(next);
     }
+
+    const actions = createEl("div", "vz-vip-room-actions");
 
     if (room.canJoin) {
       const joinBtn = document.createElement("button");
@@ -4795,10 +4880,11 @@ function renderVipRoomList() {
       joinBtn.className = "mission-claim-btn";
       joinBtn.textContent = "Pievienoties istabai";
       joinBtn.addEventListener("click", () => handleVipRoomJoin(room.id));
-      item.appendChild(joinBtn);
+      actions.appendChild(joinBtn);
     }
 
     if (room.canInvite && room.status === "open") {
+      const inviteWrap = createEl("div", "vz-vip-room-invite-row");
       const select = document.createElement("select");
       select.className = "vz-vip-room-inline-select";
       const base = document.createElement("option");
@@ -4818,7 +4904,7 @@ function renderVipRoomList() {
         opt.textContent = friend;
         select.appendChild(opt);
       });
-      item.appendChild(select);
+      inviteWrap.appendChild(select);
 
       const inviteBtn = document.createElement("button");
       inviteBtn.type = "button";
@@ -4828,7 +4914,44 @@ function renderVipRoomList() {
       inviteBtn.addEventListener("click", () =>
         handleVipRoomInvite(room.id, select.value)
       );
-      item.appendChild(inviteBtn);
+      inviteWrap.appendChild(inviteBtn);
+      item.appendChild(inviteWrap);
+    }
+
+    if (room.canCancel) {
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "mission-claim-btn vz-vip-room-danger-btn";
+      cancelBtn.textContent = "Atcelt istabu";
+      cancelBtn.addEventListener("click", () => handleVipRoomCancel(room.id));
+      actions.appendChild(cancelBtn);
+    }
+
+    if (
+      (room.status === "started" || room.status === "completed") &&
+      Number.isFinite(Number(room.tournamentId))
+    ) {
+      const openBtn = document.createElement("button");
+      openBtn.type = "button";
+      openBtn.className = "mission-claim-btn";
+      openBtn.textContent = `Atvērt turnīru #${room.tournamentId}`;
+      openBtn.addEventListener("click", () =>
+        openTournamentFromVipRoom(room.tournamentId)
+      );
+      actions.appendChild(openBtn);
+    }
+
+    if (room.canDelete) {
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "mission-claim-btn vz-vip-room-secondary-btn";
+      delBtn.textContent = "Dzēst no saraksta";
+      delBtn.addEventListener("click", () => handleVipRoomDelete(room.id));
+      actions.appendChild(delBtn);
+    }
+
+    if (actions.children.length) {
+      item.appendChild(actions);
     }
 
     vipRoomListEl.appendChild(item);
