@@ -362,10 +362,38 @@
                     <div id="tournament-weekly-join-status" class="mission-status"></div>
                     <ul id="tournament-rules-list" class="vz-missions-list"></ul>
 
-                    <div id="vip-room-panel" class="vz-vip-room-panel hidden">
-                      <div class="vz-card-header-sub">VIP istaba draugiem</div>
+                    <ul id="tournament-match-list" class="vz-tournament-list hidden"></ul>
+                    <div id="tournament-empty" class="mission-status hidden"></div>
+
+                    <div id="tournament-my-match" class="vz-tournament-my-match hidden">
+                      <div class="vz-card-header-sub">Mans mačs</div>
+                      <div id="tournament-my-match-text" class="vz-support-text">—</div>
+
+                      <div id="tournament-report-form" class="vz-tournament-report-form hidden">
+                        <label class="vz-tournament-score-field">
+                          <span id="tournament-score1-label">Spēlētājs 1</span>
+                          <input id="tournament-score1" type="number" min="0" max="99" inputmode="numeric" />
+                        </label>
+                        <label class="vz-tournament-score-field">
+                          <span id="tournament-score2-label">Spēlētājs 2</span>
+                          <input id="tournament-score2" type="number" min="0" max="99" inputmode="numeric" />
+                        </label>
+                        <button id="tournament-report-btn" class="mission-claim-btn" type="button">Iesniegt rezultātu</button>
+                      </div>
+
+                      <div id="tournament-report-status" class="mission-status"></div>
+                    </div>
+
+                    <div class="vz-tournament-actions">
+                      <button id="tournament-refresh-btn" class="vz-tournament-refresh-btn" type="button">
+                        Atjaunot
+                      </button>
+                    </div>
+
+                    <details id="vip-room-panel" class="vz-vip-room-panel hidden">
+                      <summary class="vz-vip-room-summary">VIP istabas (papildus režīms)</summary>
                       <div id="vip-room-help" class="vz-support-text">
-                        Izveido savu istabu, izvēlies modu un aizpildi slotus ar draugiem.
+                        Turnīri paliek galvenais režīms. VIP istaba ir papildus privātai spēlei ar draugiem.
                       </div>
                       <label class="vz-tournament-score-field">
                         <span>Istabas nosaukums</span>
@@ -408,35 +436,7 @@
                       </button>
                       <div id="vip-room-create-status" class="mission-status"></div>
                       <div id="vip-room-list" class="vz-vip-room-list"></div>
-                    </div>
-
-                    <ul id="tournament-match-list" class="vz-tournament-list hidden"></ul>
-                    <div id="tournament-empty" class="mission-status hidden"></div>
-
-                    <div id="tournament-my-match" class="vz-tournament-my-match hidden">
-                      <div class="vz-card-header-sub">Mans mačs</div>
-                      <div id="tournament-my-match-text" class="vz-support-text">—</div>
-
-                      <div id="tournament-report-form" class="vz-tournament-report-form hidden">
-                        <label class="vz-tournament-score-field">
-                          <span id="tournament-score1-label">Spēlētājs 1</span>
-                          <input id="tournament-score1" type="number" min="0" max="99" inputmode="numeric" />
-                        </label>
-                        <label class="vz-tournament-score-field">
-                          <span id="tournament-score2-label">Spēlētājs 2</span>
-                          <input id="tournament-score2" type="number" min="0" max="99" inputmode="numeric" />
-                        </label>
-                        <button id="tournament-report-btn" class="mission-claim-btn" type="button">Iesniegt rezultātu</button>
-                      </div>
-
-                      <div id="tournament-report-status" class="mission-status"></div>
-                    </div>
-
-                    <div class="vz-tournament-actions">
-                      <button id="tournament-refresh-btn" class="vz-tournament-refresh-btn" type="button">
-                        Atjaunot
-                      </button>
-                    </div>
+                    </details>
                   </div>
 
                   <!-- TOP 10 -->

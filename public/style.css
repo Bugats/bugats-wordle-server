@@ -2982,6 +2982,27 @@ summary:focus-visible {
   gap: 7px;
 }
 
+.vz-vip-room-summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: #d7e3ff;
+  list-style: none;
+}
+
+.vz-vip-room-summary::-webkit-details-marker {
+  display: none;
+}
+
+.vz-vip-room-summary::before {
+  content: "▸ ";
+  color: #7dd3fc;
+}
+
+.vz-vip-room-panel[open] > .vz-vip-room-summary::before {
+  content: "▾ ";
+}
+
 .vz-vip-room-form-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
