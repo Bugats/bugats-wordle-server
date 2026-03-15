@@ -2922,6 +2922,27 @@ summary:focus-visible {
   line-height: 1.35;
 }
 
+.vz-tournament-flow {
+  margin: 5px 0 7px;
+  padding: 6px 8px;
+  border: 1px solid rgba(125, 211, 252, 0.2);
+  border-radius: 8px;
+  background: rgba(14, 28, 44, 0.45);
+}
+
+.vz-tournament-flow-list {
+  margin: 5px 0 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 3px;
+}
+
+.vz-tournament-flow-list li {
+  font-size: 11px;
+  color: #d5e6ff;
+  line-height: 1.35;
+}
+
 .vz-tournament-list {
   margin: 0;
   padding-left: 18px;

@@ -643,6 +643,7 @@ const AVATAR_STORAGE_MAX_KEYS = 50;
 let seasonTimerId = null;
 let tournamentRefreshTimer = null;
 let tournamentCountdownTimer = null;
+let tournamentSocketRefreshTimer = null;
 let engagementLoopTimer = null;
 let engagementLoopBusy = false;
 let currentProfileName = null; // popupā atvērtais profila vārds
@@ -5145,6 +5146,16 @@ function startTournamentCountdownTimer() {
   }, 1000);
 }
 
+function scheduleTournamentSocketRefresh() {
+  if (tournamentSocketRefreshTimer) return;
+  tournamentSocketRefreshTimer = setTimeout(async () => {
+    tournamentSocketRefreshTimer = null;
+    try {
+      await refreshTournamentCard(true);
+    } catch {}
+  }, 350);
+}
+
 function renderTournamentCard(meta, details) {
   if (!tournamentCardEl || !tournamentStatusEl) return;
   clearTournamentCardUi();
@@ -7718,6 +7729,26 @@ function initSocket() {
   socket.on("seasonHofUpdate", (payload) => {
     const entry = payload && payload.top ? payload.top : payload;
     renderHofEntry(entry);
+  });
+
+  socket.on("tournament:update", () => {
+    scheduleTournamentSocketRefresh();
+  });
+
+  socket.on("vip:updated", async (payload) => {
+    const who = String(payload?.username || "")
+      .trim()
+      .toLowerCase();
+    const me = String(state.username || "")
+      .trim()
+      .toLowerCase();
+    if (who && me && who === me) {
+      try {
+        const myPayload = await apiGet("/me");
+        updatePlayerCard(myPayload);
+      } catch {}
+    }
+    scheduleTournamentSocketRefresh();
   });
 
   // ===== DUEĻI =====
