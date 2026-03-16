@@ -2922,6 +2922,46 @@ summary:focus-visible {
   line-height: 1.35;
 }
 
+.vz-mode-guide {
+  display: block;
+  margin: 5px 0 7px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(12, 19, 31, 0.45);
+}
+
+.vz-mode-guide-summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: #d8e7ff;
+  font-weight: 600;
+}
+
+.vz-mode-guide-section {
+  margin-top: 6px;
+}
+
+.vz-mode-guide-title {
+  font-size: 11px;
+  color: #b8c2d4;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.vz-mode-guide-list {
+  margin: 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 2px;
+}
+
+.vz-mode-guide-list li {
+  font-size: 11px;
+  color: #d5e6ff;
+  line-height: 1.35;
+}
+
 .vz-tournament-flow {
   margin: 5px 0 7px;
   padding: 6px 8px;
