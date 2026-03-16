@@ -4865,6 +4865,118 @@ app.get("/runtime-config.js", (_req, res) => {
   );
 });
 
+const LATVIA_WEATHER_URL =
+  "https://api.open-meteo.com/v1/forecast?latitude=56.95&longitude=24.11&current_weather=true&timezone=Europe%2FRiga";
+const LATVIA_NAMEDAY_URL =
+  "https://nameday.abalin.net/api/V1/today?country=lv&timezone=Europe/Riga";
+const META_FETCH_TIMEOUT_MS = Number(
+  process.env.META_FETCH_TIMEOUT_MS || 8000
+);
+const WEATHER_CACHE_TTL_MS = Number(
+  process.env.WEATHER_CACHE_TTL_MS || 10 * 60 * 1000
+);
+const NAMEDAY_CACHE_TTL_MS = Number(
+  process.env.NAMEDAY_CACHE_TTL_MS || 6 * 60 * 60 * 1000
+);
+
+let weatherCache = { data: null, expiresAt: 0 };
+let namedayCache = { data: null, expiresAt: 0, dateKey: "" };
+
+function rigaDateKey(ts = Date.now()) {
+  try {
+    return new Intl.DateTimeFormat("sv-SE", {
+      timeZone: "Europe/Riga",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(ts));
+  } catch {
+    return new Date(ts).toISOString().slice(0, 10);
+  }
+}
+
+async function fetchJsonWithTimeout(url, timeoutMs = META_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+app.get("/meta/weather", async (_req, res) => {
+  const now = Date.now();
+  if (weatherCache.data && weatherCache.expiresAt > now) {
+    return res.json(weatherCache.data);
+  }
+  try {
+    const raw = await fetchJsonWithTimeout(LATVIA_WEATHER_URL);
+    const cw = raw && raw.current_weather ? raw.current_weather : null;
+    if (!cw) throw new Error("Missing current_weather");
+    const payload = {
+      current_weather: {
+        temperature: Number(cw.temperature),
+        windspeed: Number(cw.windspeed),
+        weathercode: Number(cw.weathercode),
+      },
+    };
+    weatherCache = { data: payload, expiresAt: now + WEATHER_CACHE_TTL_MS };
+    return res.json(payload);
+  } catch (err) {
+    logger.warn(
+      { err: err?.message || String(err) },
+      "Weather proxy fetch failed"
+    );
+    if (weatherCache.data) return res.json(weatherCache.data);
+    return res.json({ current_weather: null, unavailable: true });
+  }
+});
+
+app.get("/meta/nameday", async (_req, res) => {
+  const now = Date.now();
+  const dayKey = rigaDateKey(now);
+  if (
+    namedayCache.data &&
+    namedayCache.expiresAt > now &&
+    namedayCache.dateKey === dayKey
+  ) {
+    return res.json(namedayCache.data);
+  }
+  try {
+    const raw = await fetchJsonWithTimeout(LATVIA_NAMEDAY_URL);
+    const lv =
+      raw &&
+      raw.nameday &&
+      typeof raw.nameday === "object" &&
+      (typeof raw.nameday.lv === "string" ||
+        typeof raw.nameday["lv"] === "string")
+        ? String(raw.nameday.lv || raw.nameday["lv"] || "").trim()
+        : "";
+    const payload = { nameday: { lv } };
+    namedayCache = {
+      data: payload,
+      expiresAt: now + NAMEDAY_CACHE_TTL_MS,
+      dateKey: dayKey,
+    };
+    return res.json(payload);
+  } catch (err) {
+    logger.warn(
+      { err: err?.message || String(err) },
+      "Nameday proxy fetch failed"
+    );
+    if (namedayCache.data && namedayCache.dateKey === dayKey) {
+      return res.json(namedayCache.data);
+    }
+    return res.json({ nameday: { lv: "" }, unavailable: true });
+  }
+});
+
 if (HAS_STATIC_INDEX) {
   app.use(express.static(STATIC_DIR));
   // Backward-compat for older /wordle URLs (Hostinger -> Render)

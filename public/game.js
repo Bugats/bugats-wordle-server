@@ -8566,14 +8566,16 @@ async function loadLatviaWeatherOnce() {
 
   try {
     topWeatherEl.textContent = "Ielādē...";
-    const url =
-      "https://api.open-meteo.com/v1/forecast?latitude=56.95&longitude=24.11&current_weather=true&timezone=Europe%2FRiga";
+    const url = API_BASE + "/meta/weather";
     const res = await fetchWithTimeout(url, {}, 10_000);
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
 
     const cw = data.current_weather;
-    if (!cw) throw new Error("Nav current_weather");
+    if (!cw || data.unavailable === true) {
+      topWeatherEl.textContent = "Laikapstākļi nav pieejami";
+      return;
+    }
 
     const temp = Math.round(cw.temperature);
     const wind = Math.round(cw.windspeed);
@@ -8604,8 +8606,7 @@ async function loadLatviaNamedayOnce() {
 
   try {
     topNamedayEl.textContent = "Ielādē vārda dienu...";
-    const url =
-      "https://nameday.abalin.net/api/V1/today?country=lv&timezone=Europe/Riga";
+    const url = API_BASE + "/meta/nameday";
     const res = await fetchWithTimeout(url, {}, 10_000);
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
