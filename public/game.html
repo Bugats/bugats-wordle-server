@@ -179,7 +179,7 @@
           <div class="vz-region-race-card" id="region-race-card">
             <div class="vz-card-header">Novadu sacīkste</div>
             <div class="vz-region-help" id="region-help">
-              Uzvari raundus, pelni novada punktus un izvēlies: celt savu novadu vai samazināt pretinieku.
+              Uzvari raundus, pelni novada punktus, stiprini savu novadu.
             </div>
             <div id="region-my-rank" class="vz-region-my-rank u-hidden-initial"></div>
             <div class="vz-region-total">
@@ -270,7 +270,7 @@
 
                   <hr class="vz-divider" />
 
-                  <button id="challenge-friend-btn" class="vz-share-btn" type="button" title="Izaicināt draugu – abi min to pašu vārdu, uzvar tas, kam mazāk mēģinājumu">⚔️ Izaicināt draugu</button>
+                  <button id="challenge-friend-btn" class="vz-share-btn" type="button" title="Izaicini draugu uz vienu vārdu">⚔️ Izaicināt draugu</button>
                   <button id="share-btn" class="vz-share-btn" type="button">🔗 Dalīties ar VĀRDU ZONU</button>
                   <button id="share-whatsapp-btn" class="vz-share-btn vz-share-btn-wa" type="button">
                     💬 Dalīties WhatsApp
@@ -278,7 +278,7 @@
                   <button id="share-discord-btn" class="vz-share-btn vz-share-btn-discord" type="button">
                     🎮 Dalīties Discord
                   </button>
-                  <p class="vz-share-note">Uzspied un padalies ar spēli TikTok, WhatsApp vai citur.</p>
+                  <p class="vz-share-note">Padalies ar spēli.</p>
                   <button id="share-result-btn" class="vz-share-btn u-hidden-initial" type="button">
                     📣 Dalīties ar rezultātu
                   </button>
@@ -294,9 +294,7 @@
                     type="button">
                     🎮 Dalīties rezultātu Discord
                   </button>
-                  <p id="share-result-note" class="vz-share-note u-hidden-initial">
-                    Uztaisu uzlīmīti ar tavu rezultātu un VĀRDU ZONU.
-                  </p>
+                  <p id="share-result-note" class="vz-share-note u-hidden-initial">Dalies ar savu rezultātu.</p>
                 </div>
 
                 <!-- MISIJAS -->
@@ -350,33 +348,33 @@
                     <div class="vz-card-header">🏟️ Turnīri</div>
                     <div id="tournament-status" class="vz-tournament-status">Ielādē turnīrus…</div>
                     <div id="tournament-meta" class="vz-tournament-meta hidden"></div>
-                    <div class="vz-tournament-legend">Statusi: “Var spēlēt” = var iesniegt (vai auto aprēķināt) rezultātu, “Gaida pretinieku” = gaidi nākamo maču.</div>
-                    <details class="vz-mode-guide" open>
-                      <summary class="vz-mode-guide-summary">🧭 Režīmu skaidrojums</summary>
+                    <div class="vz-tournament-legend">“Var spēlēt” = vari spēlēt, “Gaida pretinieku” = pagaidi.</div>
+                    <details class="vz-mode-guide">
+                      <summary class="vz-mode-guide-summary">🧭 Režīmi īsumā</summary>
                       <div class="vz-mode-guide-section">
                         <div class="vz-mode-guide-title">Spēles modi</div>
                         <ul class="vz-mode-guide-list">
-                          <li><strong>Classic:</strong> standarta režīms — uzvar spēlētājs ar labāko kopējo rezultātu.</li>
-                          <li><strong>Speed:</strong> ātruma režīms — uzvar tas, kurš pirmais atrod pareizo vārdu.</li>
-                          <li><strong>Accuracy:</strong> precizitātes režīms — mazāk kļūdu = labāks rezultāts.</li>
-                          <li><strong>Survival:</strong> izdzīvošanas režīms — katra kļūda dārgāka, svarīga stabilitāte.</li>
+                          <li><strong>Classic:</strong> standarta.</li>
+                          <li><strong>Speed:</strong> svarīgs ātrums.</li>
+                          <li><strong>Accuracy:</strong> svarīga precizitāte.</li>
+                          <li><strong>Survival:</strong> kļūdas maksā dārgi.</li>
                         </ul>
                       </div>
                       <div class="vz-mode-guide-section">
                         <div class="vz-mode-guide-title">Turnīra režīmi</div>
                         <ul class="vz-mode-guide-list">
-                          <li><strong>Izslēgšanas turnīrs:</strong> viens zaudējums un izkrīti no turnīra.</li>
-                          <li><strong>Dubultā izslēgšana:</strong> izkrišana tikai pēc diviem zaudējumiem.</li>
-                          <li><strong>Apļa turnīrs:</strong> katrs spēlē pret katru, vietas nosaka kopējais sniegums.</li>
+                          <li><strong>Izslēgšana:</strong> 1 zaudējums = ārā.</li>
+                          <li><strong>Dubultā:</strong> ārā pēc 2 zaudējumiem.</li>
+                          <li><strong>Apļa:</strong> visi pret visiem.</li>
                         </ul>
                       </div>
                     </details>
                     <div class="vz-tournament-flow">
                       <div class="vz-card-header-sub">Vienota plūsma</div>
                       <ul class="vz-tournament-flow-list">
-                        <li>1) Primāri spēlē turnīrus (fiksētais + aktīvie mači).</li>
-                        <li>2) VIP istabas izmanto kā papildus privātu režīmu ar draugiem.</li>
-                        <li>3) Ja sloti tukši, uzaicini draugu un turpini bez strupceļa.</li>
+                        <li>1) Spēlē turnīrus.</li>
+                        <li>2) VIP istabas izmanto privātām spēlēm.</li>
+                        <li>3) Ja nav mača, izaicini draugu.</li>
                       </ul>
                     </div>
                     <div id="tournament-schedule-line" class="vz-support-note">
@@ -421,7 +419,7 @@
                     <details id="vip-room-panel" class="vz-vip-room-panel hidden">
                       <summary class="vz-vip-room-summary">VIP istabas (papildus režīms)</summary>
                       <div id="vip-room-help" class="vz-support-text">
-                        Turnīri paliek galvenais režīms. VIP istaba ir papildus privātai spēlei ar draugiem (sākums: gaida slotus, beigas: atcelta vai pabeigta, īpašnieks var atcelt/dzēst).
+                        VIP istaba: privāta spēle ar draugiem.
                       </div>
                       <label class="vz-tournament-score-field">
                         <span>Istabas nosaukums</span>
@@ -518,7 +516,7 @@
                       Atbalstīt projektu
                     </button>
 
-                    <p class="vz-support-note">Žetoni ir pateicības bonuss par atbalstu, nevis oficiāls pirkums.</p>
+                    <p class="vz-support-note">Žetoni ir atbalsta bonuss.</p>
 
                     <hr class="vz-divider" />
 
@@ -527,17 +525,12 @@
 
                     <button id="buy-token-btn" class="vz-support-btn" type="button">Pirkt 1 žetonu (150 coins)</button>
 
-                    <p class="vz-support-note">
-                      Coins tiks automātiski noņemti, kad nopērc žetonu. 1 žetons = 1 vieta uz laimes rata.
-                    </p>
+                    <p class="vz-support-note">1 žetons = 1 vieta uz laimes rata.</p>
 
                     <hr class="vz-divider" />
                     <div class="vz-card-header-sub">VIP (bez admin tiesībām)</div>
                     <p id="vip-status" class="vz-support-text">VIP nav aktīvs.</p>
-                    <p class="vz-support-note">
-                      VIP ļauj veidot savus turnīrus, bet nedod admin tiesības (sezonas starts paliek tikai adminam).
-                      VIP pirkšana ar žetoniem nav pieejama.
-                    </p>
+                    <p class="vz-support-note">VIP ļauj veidot savus turnīrus. Admin tiesības nedod.</p>
                     <button id="buy-vip-btn" class="vz-support-btn" type="button">VIP iegāde drīzumā</button>
                     <p id="vip-buy-status" class="vz-support-note"></p>
                   </div>
@@ -555,7 +548,7 @@
                       </div>
                     </div>
 
-                    <div class="vz-radio-note">Radio nesākas automātiski – nospied “Spēlēt”.</div>
+                    <div class="vz-radio-note">Radio ieslēdzas ar pogu “Spēlēt”.</div>
                   </div>
                 </div>
               </div>
@@ -600,7 +593,7 @@
 
       <!-- TikTok + kā rakstīt Bugats + kontakts -->
       <div class="vz-footer-link">
-        <span class="vz-how-to-write" title="Pareizrakstība">Bugats raksta: <strong>B</strong>-u-g-a-t-s (ar lielo B)</span>
+        <span class="vz-how-to-write" title="Pareizrakstība">Bugats: ar lielo B</span>
         <a href="mailto:thezone@news.thezone.lv" title="Sazināties ar Bugats">Sazināties: thezone@news.thezone.lv</a>
         <a href="https://www.tiktok.com/@bugats" target="_blank" rel="noopener noreferrer">TikTok: @bugats</a>
       </div>
@@ -745,7 +738,7 @@
 
         <div id="pp-email-block" class="vz-profile-email-block hidden">
           <div class="vz-profile-email-label">E-pasts (tikai tev redzams)</div>
-          <p class="vz-profile-email-privacy">Tikai jaunumi: jauni atjauninājumi, jaunas funkcijas, sezonu uzvarētāji. Reti, bez spama. Nekad nepārdosim. Vari atstāt tukšu vai noņemt – vairs nesaņemsi jaunumus.</p>
+          <p class="vz-profile-email-privacy">Tikai reti jaunumi. Bez spama. Vari noņemt jebkurā brīdī.</p>
           <div class="vz-profile-email-row">
             <input
               id="pp-email-input"
@@ -769,9 +762,7 @@
     <div id="region-modal" class="vz-region-modal hidden">
       <div class="vz-region-modal-inner">
         <h3>Izvēlies savu novadu</h3>
-        <p class="vz-region-modal-sub">
-          Novads ir tavs klans. To vēlāk nevar mainīt.
-        </p>
+        <p class="vz-region-modal-sub">Novadu vēlāk mainīt nevar.</p>
         <div class="vz-region-grid">
           <button class="vz-region-btn" type="button" data-region="Zemgale">Zemgale</button>
           <button class="vz-region-btn" type="button" data-region="Latgale">Latgale</button>
@@ -786,7 +777,7 @@
     <div id="challenge-create-modal" class="vz-modal-overlay hidden" role="dialog" aria-labelledby="challenge-create-title">
       <div class="vz-modal-inner vz-challenge-modal">
         <h3 id="challenge-create-title">Izaicināt draugu</h3>
-        <p class="vz-challenge-create-note">Kopē linku un nosūti draugam. Abi minēsiet to pašu vārdu – uzvar tas, kam mazāk mēģinājumu.</p>
+        <p class="vz-challenge-create-note">Kopē linku un nosūti draugam. Uzvar ar mazāk mēģinājumiem.</p>
         <div class="vz-challenge-url-row">
           <input id="challenge-share-url" type="text" readonly class="vz-challenge-url-input" />
           <button id="challenge-copy-btn" type="button" class="vz-challenge-copy-btn">Kopēt</button>
@@ -821,7 +812,7 @@
     <div id="app-install-modal" class="vz-modal-overlay hidden" role="dialog" aria-labelledby="app-install-title">
       <div class="vz-modal-inner vz-challenge-modal">
         <h3 id="app-install-title">Lejupielādēt lietotni</h3>
-        <p class="vz-challenge-create-note">Spēli vari izmantot kā lietotni – ātrāk atveras un ērtāk no sākumekrāna.</p>
+        <p class="vz-challenge-create-note">Vari pievienot spēli kā lietotni.</p>
         <div id="app-install-pwa-row" class="vz-challenge-join-btns u-hidden-initial">
           <button id="app-install-pwa-btn" type="button" class="vz-btn-primary">Pievienot sākumekrānam</button>
         </div>
