@@ -263,6 +263,9 @@ const PREFERS_REDUCED_MOTION =
 const AUTH_KEYS = {
   token: ["vz_token", "vzToken", "token"],
   username: ["vz_username", "vzUsername", "username", "nick"],
+  refreshToken: ["vz_refresh_token", "vzRefreshToken", "refreshToken"],
+  accessExpiresAt: ["vz_access_expires_at"],
+  refreshExpiresAt: ["vz_refresh_expires_at"],
 };
 
 function getStoredFirst(keys) {
@@ -275,7 +278,7 @@ function getStoredFirst(keys) {
   return "";
 }
 
-function setStoredAuth(token, username) {
+function setStoredAuth(token, username, session = null) {
   const t = String(token || "").trim();
   const u = String(username || "").trim();
   if (!t || !u) return;
@@ -294,14 +297,49 @@ function setStoredAuth(token, username) {
     localStorage.setItem("username", u);
     localStorage.setItem("nick", u);
   } catch {}
+
+  if (session && typeof session === "object") {
+    const rt = String(session.refreshToken || "").trim();
+    if (rt) {
+      try {
+        localStorage.setItem("vz_refresh_token", rt);
+        localStorage.setItem("vzRefreshToken", rt);
+        localStorage.setItem("refreshToken", rt);
+      } catch {}
+    }
+    const accessExp = Number(session.accessTokenExpiresAt);
+    if (Number.isFinite(accessExp) && accessExp > 0) {
+      try {
+        localStorage.setItem(
+          "vz_access_expires_at",
+          String(Math.floor(accessExp))
+        );
+      } catch {}
+    }
+    const refreshExp = Number(session.refreshTokenExpiresAt);
+    if (Number.isFinite(refreshExp) && refreshExp > 0) {
+      try {
+        localStorage.setItem(
+          "vz_refresh_expires_at",
+          String(Math.floor(refreshExp))
+        );
+      } catch {}
+    }
+  }
 }
 
 function clearStoredAuth() {
   const all = new Set([
     ...AUTH_KEYS.token,
     ...AUTH_KEYS.username,
+    ...AUTH_KEYS.refreshToken,
+    ...AUTH_KEYS.accessExpiresAt,
+    ...AUTH_KEYS.refreshExpiresAt,
     "vz_token",
     "vz_username",
+    "vz_refresh_token",
+    "vz_access_expires_at",
+    "vz_refresh_expires_at",
   ]);
   for (const k of all) {
     try {
@@ -531,16 +569,23 @@ async function readJsonOrThrow(res) {
     console.error("Non-JSON response:", txt);
     throw new Error("Servera kļūda (nav korekts JSON).");
   }
-  if (!res.ok)
-    throw new Error(
+  if (!res.ok) {
+    const err = new Error(
       (data && data.message) || "Servera kļūda (" + res.status + ")."
     );
+    err.status = res.status;
+    err.payload = data;
+    throw err;
+  }
   return data;
 }
 
 // ===== Klienta stāvoklis =====
 const state = {
   token: null,
+  refreshToken: null,
+  accessTokenExpiresAt: 0,
+  refreshTokenExpiresAt: 0,
   username: null,
   email: "",
   region: "",
@@ -605,6 +650,13 @@ const state = {
   tournaments: [],
   tournamentActiveId: null,
   tournamentReportCtx: null,
+  tournamentDisputeCtx: null,
+  tournamentDisputes: [],
+  tournamentLiveMatchKey: "",
+  tournamentLiveMatchStatus: null,
+  tournamentUiPrimed: false,
+  tournamentSocketMatchHint: false,
+  tournamentHintTournamentId: null,
   tournamentSchedule: null,
   vipRooms: [],
   vipRoomDraftInvites: [],
@@ -613,6 +665,8 @@ const state = {
   vipTier: "none",
   canCreateTournament: false,
   isAdmin: false,
+  pendingDuelInvites: [],
+  seenOfflineDuelInviteKeys: new Set(),
 
   // Globālā skaņa
   soundOn: true,
@@ -807,6 +861,8 @@ const tournamentScore2FieldEl = tournamentScore2InputEl
   : null;
 const tournamentReportBtnEl = $("#tournament-report-btn");
 const tournamentReportStatusEl = $("#tournament-report-status");
+const tournamentDisputeBtnEl = $("#tournament-dispute-btn");
+const tournamentDisputeStatusEl = $("#tournament-dispute-status");
 const tournamentRefreshBtnEl = $("#tournament-refresh-btn");
 const tournamentScheduleLineEl = $("#tournament-schedule-line");
 const tournamentScheduleModeEl = $("#tournament-schedule-mode");
@@ -1071,40 +1127,120 @@ function playControlNote(kind) {
 }
 
 // ==================== API HELPERI ====================
+let authRefreshInFlight = null;
+let authRedirectTriggered = false;
+
+function applyAuthSessionFromPayload(payload, fallbackUsername = "") {
+  if (!payload || typeof payload !== "object") return false;
+  const token = String(payload.token || "").trim();
+  const refreshToken = String(payload.refreshToken || "").trim();
+  const username = String(
+    payload.username || fallbackUsername || state.username || ""
+  ).trim();
+  if (!token || !username) return false;
+  state.token = token;
+  state.username = username;
+  if (refreshToken) state.refreshToken = refreshToken;
+  const accessExp = Number(payload.accessTokenExpiresAt);
+  const refreshExp = Number(payload.refreshTokenExpiresAt);
+  state.accessTokenExpiresAt =
+    Number.isFinite(accessExp) && accessExp > 0 ? Math.floor(accessExp) : 0;
+  state.refreshTokenExpiresAt =
+    Number.isFinite(refreshExp) && refreshExp > 0 ? Math.floor(refreshExp) : 0;
+  setStoredAuth(token, username, {
+    refreshToken: state.refreshToken,
+    accessTokenExpiresAt: state.accessTokenExpiresAt,
+    refreshTokenExpiresAt: state.refreshTokenExpiresAt,
+  });
+  if (state.socket) {
+    try {
+      state.socket.auth = { token: state.token };
+    } catch {}
+  }
+  return true;
+}
+
+function handleAuthExpiredRedirect() {
+  if (authRedirectTriggered) return;
+  authRedirectTriggered = true;
+  clearStoredAuth();
+  try {
+    clearOneSignalIdentity();
+  } catch {}
+  window.location.href = "index.html";
+}
+
+async function tryRefreshAccessToken() {
+  const refreshToken = String(state.refreshToken || "").trim();
+  if (!refreshToken) return false;
+  if (authRefreshInFlight) return authRefreshInFlight;
+  authRefreshInFlight = (async () => {
+    try {
+      const res = await fetchWithTimeout(API_BASE + "/auth/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+      const payload = await readJsonOrThrow(res);
+      return applyAuthSessionFromPayload(payload, state.username);
+    } catch (err) {
+      console.warn("Auth refresh failed:", err);
+      return false;
+    } finally {
+      authRefreshInFlight = null;
+    }
+  })();
+  return authRefreshInFlight;
+}
+
+async function apiRequest(path, options = {}, canRetryAuth = true) {
+  const baseHeaders =
+    options.headers && typeof options.headers === "object"
+      ? options.headers
+      : {};
+  const headers = { ...baseHeaders };
+  if (state.token && !headers.Authorization) {
+    headers.Authorization = "Bearer " + state.token;
+  }
+  const requestOptions = { ...options, headers };
+  const res = await fetchWithTimeout(API_BASE + path, requestOptions);
+  try {
+    return await readJsonOrThrow(res);
+  } catch (err) {
+    const shouldRetry =
+      canRetryAuth &&
+      Number(err?.status) === 401 &&
+      path !== "/auth/refresh" &&
+      !!state.refreshToken;
+    if (!shouldRetry) throw err;
+    const refreshed = await tryRefreshAccessToken();
+    if (!refreshed) {
+      handleAuthExpiredRedirect();
+      throw err;
+    }
+    return apiRequest(path, options, false);
+  }
+}
+
 async function apiPost(path, body) {
-  const res = await fetchWithTimeout(API_BASE + path, {
+  return apiRequest(path, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(state.token ? { Authorization: "Bearer " + state.token } : {}),
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body || {}),
   });
-  return readJsonOrThrow(res);
 }
 
 async function apiGet(path) {
-  const res = await fetchWithTimeout(API_BASE + path, {
-    headers: {
-      ...(state.token ? { Authorization: "Bearer " + state.token } : {}),
-    },
-  });
-  return readJsonOrThrow(res);
+  return apiRequest(path, {});
 }
 
 async function apiDelete(path, body = null) {
-  const options = {
-    method: "DELETE",
-    headers: {
-      ...(state.token ? { Authorization: "Bearer " + state.token } : {}),
-    },
-  };
+  const options = { method: "DELETE", headers: {} };
   if (body && typeof body === "object") {
     options.headers["Content-Type"] = "application/json";
     options.body = JSON.stringify(body);
   }
-  const res = await fetchWithTimeout(API_BASE + path, options);
-  return readJsonOrThrow(res);
+  return apiRequest(path, options);
 }
 
 // ==================== AUDIO HELPERIS ====================
@@ -1909,6 +2045,40 @@ function updateVipUi(me) {
   renderVipRoomPanel();
 }
 
+function syncPendingOfflineDuelInvites(me, showPopup = false) {
+  const invites = Array.isArray(me?.pendingDuelInvites)
+    ? me.pendingDuelInvites
+        .map((x) => ({
+          from: String(x?.from || "").trim(),
+          ranked: x?.ranked !== false,
+          len: Math.max(4, Math.min(8, Math.floor(Number(x?.len) || 5))),
+          createdAt: Math.max(0, Number(x?.createdAt) || 0),
+          expiresAt: Math.max(0, Number(x?.expiresAt) || 0),
+        }))
+        .filter((x) => x.from)
+    : [];
+  state.pendingDuelInvites = invites;
+  if (!invites.length) return;
+  for (const invite of invites) {
+    const key = `${invite.from.toLowerCase()}:${invite.createdAt}`;
+    if (state.seenOfflineDuelInviteKeys.has(key)) continue;
+    state.seenOfflineDuelInviteKeys.add(key);
+    appendSystemMessage(
+      `⚔️ Offline dueļa ielūgums no ${invite.from}. Vari pieņemt uzaicinājumu.`
+    );
+    if (showPopup) {
+      ensureDuelInviteUI();
+      showDuelInvite({
+        from: invite.from,
+        len: invite.len,
+        ranked: invite.ranked,
+        offline: true,
+      });
+      showPopup = false;
+    }
+  }
+}
+
 function updatePlayerCard(me) {
   if (!me) return;
 
@@ -1972,6 +2142,7 @@ function updatePlayerCard(me) {
 
   if (playerTokensEl) playerTokensEl.textContent = me.tokens;
   updateVipUi(me);
+  syncPendingOfflineDuelInvites(me, true);
   if (playerMedalsStripEl)
     renderPlayerMedals(me.medals, playerMedalsStripEl, false);
 
@@ -5175,6 +5346,64 @@ function setTournamentReportStatus(message, kind = "") {
   if (kind === "error") tournamentReportStatusEl.classList.add("vz-error");
 }
 
+function setTournamentDisputeStatus(message, kind = "") {
+  if (!tournamentDisputeStatusEl) return;
+  tournamentDisputeStatusEl.textContent = String(message || "");
+  tournamentDisputeStatusEl.classList.remove("vz-ok", "vz-error");
+  if (kind === "ok") tournamentDisputeStatusEl.classList.add("vz-ok");
+  if (kind === "error") tournamentDisputeStatusEl.classList.add("vz-error");
+}
+
+function ensureTournamentMatchStartModal() {
+  let overlay = document.getElementById("tournament-match-start-modal");
+  if (overlay) return overlay;
+  overlay = document.createElement("div");
+  overlay.id = "tournament-match-start-modal";
+  overlay.className = "vz-modal-overlay hidden";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", "Turnīra mačs gatavs");
+  overlay.innerHTML =
+    '<div class="vz-modal-inner vz-challenge-modal"><h3>🏟️ Mačs gatavs</h3><p id="tournament-match-start-text">Tavs turnīra mačs ir gatavs.</p><div class="challenge-actions"><button id="tournament-match-start-open" type="button" class="mission-claim-btn">Atvērt maču</button></div></div>';
+  document.body.appendChild(overlay);
+  const openBtn = document.getElementById("tournament-match-start-open");
+  if (openBtn) {
+    openBtn.addEventListener("click", () => {
+      overlay.classList.add("hidden");
+      try {
+        tournamentCardEl?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      } catch {}
+      const target =
+        (tournamentReportBtnEl && !tournamentReportBtnEl.disabled
+          ? tournamentReportBtnEl
+          : null) ||
+        tournamentMyMatchEl ||
+        tournamentCardEl;
+      try {
+        target?.focus?.({ preventScroll: true });
+      } catch {}
+    });
+  }
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) overlay.classList.add("hidden");
+  });
+  return overlay;
+}
+
+function showTournamentMatchStartModal(message) {
+  const overlay = ensureTournamentMatchStartModal();
+  const textEl = document.getElementById("tournament-match-start-text");
+  if (textEl) {
+    textEl.textContent = String(
+      message || "Tavs turnīra mačs ir gatavs. Atver un iesniedz rezultātu."
+    );
+  }
+  overlay.classList.remove("hidden");
+}
+
 function clearTournamentCardUi() {
   if (tournamentMetaEl) {
     tournamentMetaEl.textContent = "";
@@ -5201,6 +5430,10 @@ function clearTournamentCardUi() {
     tournamentScore1FieldEl.classList.remove("hidden");
   if (tournamentScore2FieldEl)
     tournamentScore2FieldEl.classList.remove("hidden");
+  if (tournamentDisputeBtnEl) tournamentDisputeBtnEl.classList.add("hidden");
+  setTournamentDisputeStatus("");
+  state.tournamentDisputeCtx = null;
+  state.tournamentDisputes = [];
   if (tournamentReportBtnEl)
     tournamentReportBtnEl.textContent = "Iesniegt rezultātu";
   setTournamentReportStatus("");
@@ -5241,6 +5474,11 @@ function isTournamentMatchPlayable(match) {
   return status === 1 || status === 2 || status === 3;
 }
 
+function isTournamentMatchReadyForPlay(status) {
+  const code = Number(status);
+  return code === 2 || code === 3;
+}
+
 function findMyTournamentMatch(matches, participantId) {
   const mine = (Array.isArray(matches) ? matches : []).filter((m) =>
     matchContainsParticipant(m, participantId)
@@ -5269,7 +5507,16 @@ function startTournamentCountdownTimer() {
   }, 1000);
 }
 
-function scheduleTournamentSocketRefresh() {
+function scheduleTournamentSocketRefresh(options = null) {
+  if (options && typeof options === "object") {
+    const hintId = Number(options.tournamentId);
+    if (Number.isFinite(hintId) && hintId > 0) {
+      state.tournamentHintTournamentId = hintId;
+    }
+    if (options.matchStartHint) {
+      state.tournamentSocketMatchHint = true;
+    }
+  }
   if (tournamentSocketRefreshTimer) return;
   tournamentSocketRefreshTimer = setTimeout(async () => {
     tournamentSocketRefreshTimer = null;
@@ -5381,6 +5628,31 @@ function renderTournamentCard(meta, details) {
   tournamentMyMatchTextEl.textContent = `${p1Name} vs ${p2Name} · ${tournamentMatchStatusLabel(
     myMatch?.status
   )}`;
+  state.tournamentDisputes = Array.isArray(details?.disputes)
+    ? details.disputes
+    : [];
+  const openDispute = state.tournamentDisputes.find(
+    (d) =>
+      Number(d?.matchId) === Number(myMatch?.id) &&
+      String(d?.status || "").toLowerCase() === "open"
+  );
+  state.tournamentDisputeCtx = {
+    tournamentId: Number(meta?.id),
+    matchId: Number(myMatch?.id),
+    hasOpenDispute: !!openDispute,
+  };
+  if (openDispute) {
+    setTournamentDisputeStatus("Šim mačam jau ir atvērts strīds.", "ok");
+  } else {
+    setTournamentDisputeStatus("");
+  }
+  if (tournamentDisputeBtnEl) {
+    const canOpenDispute =
+      Number.isFinite(Number(meta?.id)) &&
+      Number.isFinite(Number(myMatch?.id)) &&
+      !openDispute;
+    tournamentDisputeBtnEl.classList.toggle("hidden", !canOpenDispute);
+  }
 
   const canReportFromUi =
     isTournamentMatchPlayable(myMatch) &&
@@ -5427,6 +5699,7 @@ function renderTournamentCard(meta, details) {
     matchId: Number(myMatch.id),
     p1Name,
     p2Name,
+    matchStatus: Number(myMatch?.status),
     autoReportOnly,
     playMode: playModeLabel,
   };
@@ -5453,7 +5726,11 @@ async function refreshTournamentCard(force = false) {
     }
 
     let selected = null;
-    if (!force && state.tournamentActiveId != null) {
+    const hintedId = Number(state.tournamentHintTournamentId);
+    if (Number.isFinite(hintedId) && hintedId > 0) {
+      selected = list.find((t) => Number(t?.id) === hintedId) || null;
+    }
+    if (!selected && !force && state.tournamentActiveId != null) {
       selected =
         list.find((t) => Number(t?.id) === Number(state.tournamentActiveId)) ||
         null;
@@ -5473,12 +5750,61 @@ async function refreshTournamentCard(force = false) {
     state.tournamentActiveId = Number(selected.id);
     const details = await apiGet(`/tournaments/${selected.id}`);
     renderTournamentCard(selected, details);
+    const currentMatchKey =
+      state.tournamentReportCtx &&
+      Number.isFinite(Number(state.tournamentReportCtx?.tournamentId)) &&
+      Number.isFinite(Number(state.tournamentReportCtx?.matchId))
+        ? `${Number(state.tournamentReportCtx.tournamentId)}:${Number(
+            state.tournamentReportCtx.matchId
+          )}`
+        : "";
+    const currentMatchStatus = Number.isFinite(
+      Number(state.tournamentReportCtx?.matchStatus)
+    )
+      ? Number(state.tournamentReportCtx?.matchStatus)
+      : null;
+    const previousMatchStatus = Number.isFinite(
+      Number(state.tournamentLiveMatchStatus)
+    )
+      ? Number(state.tournamentLiveMatchStatus)
+      : null;
+    const currentMatchIsReady =
+      isTournamentMatchReadyForPlay(currentMatchStatus);
+    const previousMatchWasReady =
+      isTournamentMatchReadyForPlay(previousMatchStatus);
+    const hasNewActiveMatch =
+      !!currentMatchKey &&
+      state.tournamentUiPrimed &&
+      currentMatchIsReady &&
+      (currentMatchKey !== state.tournamentLiveMatchKey ||
+        (currentMatchKey === state.tournamentLiveMatchKey &&
+          !previousMatchWasReady));
+    if (hasNewActiveMatch) {
+      try {
+        tournamentMyMatchEl?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      } catch {}
+      showTournamentMatchStartModal(
+        `${state.tournamentReportCtx?.p1Name || "Spēlētājs 1"} vs ${
+          state.tournamentReportCtx?.p2Name || "Spēlētājs 2"
+        } ir gatavs.`
+      );
+    }
+    state.tournamentLiveMatchKey = currentMatchKey;
+    state.tournamentLiveMatchStatus = currentMatchStatus;
+    state.tournamentUiPrimed = true;
+    state.tournamentSocketMatchHint = false;
+    state.tournamentHintTournamentId = null;
     renderTournamentSchedule();
   } catch (err) {
     console.error("Turnīru ielādes kļūda:", err);
     renderTournamentCardEmpty(err.message || "Neizdevās ielādēt turnīrus.");
   } finally {
     renderEngagementLoopCard();
+    state.tournamentSocketMatchHint = false;
+    state.tournamentHintTournamentId = null;
     if (tournamentRefreshBtnEl) tournamentRefreshBtnEl.disabled = false;
   }
 }
@@ -5553,6 +5879,53 @@ async function handleTournamentReportSubmit() {
     );
   } finally {
     if (tournamentReportBtnEl) tournamentReportBtnEl.disabled = false;
+  }
+}
+
+async function handleTournamentDisputeSubmit() {
+  if (!state.token) return;
+  const ctx = state.tournamentDisputeCtx;
+  if (
+    !ctx ||
+    !Number.isFinite(Number(ctx.tournamentId)) ||
+    !Number.isFinite(Number(ctx.matchId))
+  ) {
+    setTournamentDisputeStatus(
+      "Nav pieejams mačs strīda pieteikšanai.",
+      "error"
+    );
+    return;
+  }
+  if (ctx.hasOpenDispute) {
+    setTournamentDisputeStatus("Šim mačam jau ir atvērts strīds.", "ok");
+    return;
+  }
+  const reason = String(
+    window.prompt("Īsi apraksti strīda iemeslu:", "Rezultāts nav korekts.")
+  ).trim();
+  if (!reason || reason.length < 6) {
+    setTournamentDisputeStatus("Iemeslam jābūt vismaz 6 simboliem.", "error");
+    return;
+  }
+  if (tournamentDisputeBtnEl) tournamentDisputeBtnEl.disabled = true;
+  try {
+    await apiPost(
+      `/tournaments/${ctx.tournamentId}/matches/${ctx.matchId}/dispute`,
+      { reason }
+    );
+    setTournamentDisputeStatus(
+      "Strīds pieteikts. Komanda pārskatīs pieteikumu.",
+      "ok"
+    );
+    appendSystemMessage("🛡️ Turnīra strīds ir pieteikts.");
+    await refreshTournamentCard(true);
+  } catch (err) {
+    setTournamentDisputeStatus(
+      err.message || "Neizdevās pieteikt strīdu.",
+      "error"
+    );
+  } finally {
+    if (tournamentDisputeBtnEl) tournamentDisputeBtnEl.disabled = false;
   }
 }
 
@@ -7442,7 +7815,18 @@ function stopDuelTimer() {
   duelServerOffsetMs = 0; // NEW
 }
 let duelInviteTimer = null;
-let pendingDuelInvite = null; // { duelId, from, len }
+let pendingDuelInvite = null; // { duelId, from, len, ranked, offline }
+
+async function consumeOfflineDuelInvite(fromUsername) {
+  const from = String(fromUsername || "").trim();
+  if (!from) return;
+  try {
+    await apiPost(
+      `/duel/offline-invites/${encodeURIComponent(from)}/consume`,
+      {}
+    );
+  } catch {}
+}
 
 function ensureDuelInviteUI() {
   if (document.getElementById("vz-duel-invite")) return;
@@ -7482,6 +7866,7 @@ function ensureDuelInviteUI() {
 
   const btnNo = document.createElement("button");
   btnNo.type = "button";
+  btnNo.id = "vz-duel-invite-no";
   btnNo.textContent = "Noraidīt";
   btnNo.style.flex = "1";
   btnNo.style.padding = "10px";
@@ -7493,6 +7878,7 @@ function ensureDuelInviteUI() {
 
   const btnYes = document.createElement("button");
   btnYes.type = "button";
+  btnYes.id = "vz-duel-invite-yes";
   btnYes.textContent = "Pieņemt";
   btnYes.style.flex = "1";
   btnYes.style.padding = "10px";
@@ -7510,24 +7896,33 @@ function ensureDuelInviteUI() {
 }
 
 function showDuelInvite(payload) {
+  const isOffline = payload?.offline === true;
   const duelId = payload?.duelId;
-  if (!duelId) return;
+  if (!isOffline && !duelId) return;
 
   pendingDuelInvite = {
-    duelId,
+    duelId: duelId || "",
     from: payload?.from || "kāds spēlētājs",
     len: payload?.len || 5,
+    ranked: payload?.ranked !== false,
+    offline: isOffline,
   };
 
   const box = document.getElementById("vz-duel-invite");
   const text = document.getElementById("vz-duel-invite-text");
+  const yesBtn = document.getElementById("vz-duel-invite-yes");
   if (!box || !text) return;
-
-  text.textContent = `${pendingDuelInvite.from} tevi izaicina (${pendingDuelInvite.len} burti).`;
+  text.textContent = isOffline
+    ? `${pendingDuelInvite.from} tevi izaicināja, kamēr biji offline (${pendingDuelInvite.len} burti).`
+    : `${pendingDuelInvite.from} tevi izaicina (${pendingDuelInvite.len} burti).`;
+  if (yesBtn) {
+    yesBtn.textContent = isOffline ? "Izaicināt atpakaļ" : "Pieņemt";
+  }
   box.style.display = "block";
 
   if (duelInviteTimer) clearTimeout(duelInviteTimer);
-  duelInviteTimer = setTimeout(() => declineDuelInvite(true), 12000);
+  const timeoutMs = isOffline ? 16000 : 12000;
+  duelInviteTimer = setTimeout(() => declineDuelInvite(true), timeoutMs);
 }
 
 function hideDuelInviteUI() {
@@ -7539,13 +7934,31 @@ function hideDuelInviteUI() {
 }
 
 function declineDuelInvite(isAuto) {
+  if (pendingDuelInvite?.offline) {
+    consumeOfflineDuelInvite(pendingDuelInvite?.from);
+  }
   const duelId = pendingDuelInvite?.duelId;
-  if (duelId && state.socket) state.socket.emit("duel.decline", { duelId });
+  if (duelId && state.socket && !pendingDuelInvite?.offline) {
+    state.socket.emit("duel.decline", { duelId });
+  }
   if (!isAuto) appendSystemMessage("⚔️ Duelis noraidīts.");
   hideDuelInviteUI();
 }
 
 function acceptDuelInvite() {
+  if (pendingDuelInvite?.offline) {
+    const from = String(pendingDuelInvite?.from || "").trim();
+    if (from && state.socket) {
+      state.socket.emit("duel.challenge", {
+        target: from,
+        ranked: pendingDuelInvite?.ranked !== false,
+        len: pendingDuelInvite?.len || 5,
+      });
+    }
+    consumeOfflineDuelInvite(from);
+    hideDuelInviteUI();
+    return;
+  }
   const duelId = pendingDuelInvite?.duelId;
   if (duelId && state.socket) state.socket.emit("duel.accept", { duelId });
   hideDuelInviteUI();
@@ -7854,8 +8267,16 @@ function initSocket() {
     renderHofEntry(entry);
   });
 
-  socket.on("tournament:update", () => {
-    scheduleTournamentSocketRefresh();
+  socket.on("tournament:update", (payload) => {
+    const eventName = String(payload?.event || "").toLowerCase();
+    const isMatchStartHint =
+      eventName === "match_reported" ||
+      eventName === "created" ||
+      eventName === "vip_room_started";
+    scheduleTournamentSocketRefresh({
+      tournamentId: payload?.tournamentId,
+      matchStartHint: isMatchStartHint,
+    });
   });
 
   socket.on("vip:updated", async (payload) => {
@@ -7883,6 +8304,12 @@ function initSocket() {
 
   socket.on("duel.waiting", (payload) => {
     const opp = payload?.opponent || "pretinieks";
+    if (payload?.offline) {
+      appendSystemMessage(
+        `📨 ${opp} nav online. Ielūgums saglabāts un nosūtīts kā push.`
+      );
+      return;
+    }
     appendSystemMessage(`⏳ Izaicinājums nosūtīts ${opp}. Gaidām atbildi...`);
   });
 
@@ -8903,6 +9330,9 @@ function restoreLogoutButtonHome() {
 async function initGame() {
   const token = getStoredFirst(AUTH_KEYS.token);
   const username = getStoredFirst(AUTH_KEYS.username);
+  const refreshToken = getStoredFirst(AUTH_KEYS.refreshToken);
+  const accessExp = Number(getStoredFirst(AUTH_KEYS.accessExpiresAt) || 0);
+  const refreshExp = Number(getStoredFirst(AUTH_KEYS.refreshExpiresAt) || 0);
 
   if (!token || !username) {
     window.location.href = "index.html";
@@ -8910,13 +9340,22 @@ async function initGame() {
   }
 
   state.token = token;
+  state.refreshToken = refreshToken || null;
+  state.accessTokenExpiresAt =
+    Number.isFinite(accessExp) && accessExp > 0 ? Math.floor(accessExp) : 0;
+  state.refreshTokenExpiresAt =
+    Number.isFinite(refreshExp) && refreshExp > 0 ? Math.floor(refreshExp) : 0;
   state.username = username;
   try {
     state.dmNotifyOn = localStorage.getItem("vz_dm_notify") !== "off";
   } catch {}
 
   // kanonizējam
-  setStoredAuth(token, username);
+  setStoredAuth(token, username, {
+    refreshToken: state.refreshToken,
+    accessTokenExpiresAt: state.accessTokenExpiresAt,
+    refreshTokenExpiresAt: state.refreshTokenExpiresAt,
+  });
 
   // Migrācija: ja ir vecais “vz_avatar” un nav per-user, pārliekam
   try {
@@ -9097,6 +9536,12 @@ async function initGame() {
       handleTournamentReportSubmit
     );
   }
+  if (tournamentDisputeBtnEl) {
+    tournamentDisputeBtnEl.addEventListener(
+      "click",
+      handleTournamentDisputeSubmit
+    );
+  }
   if (tournamentWeeklyJoinBtnEl) {
     tournamentWeeklyJoinBtnEl.addEventListener(
       "click",
@@ -9241,6 +9686,22 @@ async function initGame() {
 
   if (logoutBtn) {
     logoutBtn.addEventListener("click", () => {
+      const refreshToken = String(state.refreshToken || "").trim();
+      const accessToken = String(state.token || "").trim();
+      try {
+        fetch(API_BASE + "/logout", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: "Bearer " + accessToken } : {}),
+          },
+          body: JSON.stringify({
+            refreshToken,
+            allDevices: false,
+          }),
+          keepalive: true,
+        });
+      } catch {}
       clearOneSignalIdentity();
       if (state.socket) {
         state.socket.disconnect();
@@ -9258,6 +9719,9 @@ async function initGame() {
         clearInterval(engagementLoopTimer);
         engagementLoopTimer = null;
       }
+      state.refreshToken = null;
+      state.accessTokenExpiresAt = 0;
+      state.refreshTokenExpiresAt = 0;
       clearStoredAuth();
       window.location.href = "index.html";
     });
