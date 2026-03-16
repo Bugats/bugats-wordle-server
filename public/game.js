@@ -782,6 +782,7 @@ const offlineOverlayEl = document.getElementById("vz-offline-overlay");
 const offlineRetryBtn = document.getElementById("vz-offline-retry-btn");
 const rateOverlayEl = document.getElementById("vz-rate-overlay");
 const rateLaterBtn = document.getElementById("vz-rate-later-btn");
+const rateFeedbackBtn = document.getElementById("vz-rate-feedback-btn");
 const rateOpenBtn = document.getElementById("vz-rate-open-btn");
 
 const challengeFriendBtn = document.getElementById("challenge-friend-btn");
@@ -1399,24 +1400,161 @@ function isTwa() {
   }
 }
 
-const RATE_PROMPT_WINS = 3;
+const RATE_PROMPT_INITIAL_WINS = 5;
+const RATE_PROMPT_REMIND_WINS = 5;
+const RATE_PROMPT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+const RATE_PROMPT_MIN_SESSION_MS = 8 * 60 * 1000;
+const RATE_STORAGE_KEY_PREFIX = "vz_rate_prompt_state_v2";
+const PAGE_SESSION_STARTED_AT = Date.now();
+
+// Legacy keys (migrācijai no vecās "parādi 1x un viss" loģikas).
 const RATE_STORAGE_KEY = "vz_rate_prompt_shown";
 const WINS_STORAGE_KEY = "vz_total_wins";
 
+function getRateStateStorageKey() {
+  const who = String(state.username || "")
+    .trim()
+    .toLowerCase();
+  return `${RATE_STORAGE_KEY_PREFIX}:${who || "anon"}`;
+}
+
+function getDefaultRateState() {
+  return {
+    totalWins: 0,
+    nextPromptWins: RATE_PROMPT_INITIAL_WINS,
+    accepted: false,
+    snoozedUntil: 0,
+    lastShownAt: 0,
+    lastAction: "",
+  };
+}
+
+function normalizeRateState(input) {
+  const base = getDefaultRateState();
+  if (!input || typeof input !== "object") return base;
+
+  const totalWins = Number(input.totalWins);
+  const nextPromptWins = Number(input.nextPromptWins);
+  const snoozedUntil = Number(input.snoozedUntil);
+  const lastShownAt = Number(input.lastShownAt);
+
+  base.totalWins = Number.isFinite(totalWins) && totalWins > 0 ? totalWins : 0;
+  base.nextPromptWins =
+    Number.isFinite(nextPromptWins) && nextPromptWins >= RATE_PROMPT_INITIAL_WINS
+      ? nextPromptWins
+      : RATE_PROMPT_INITIAL_WINS;
+  base.accepted = input.accepted === true;
+  base.snoozedUntil =
+    Number.isFinite(snoozedUntil) && snoozedUntil > 0 ? snoozedUntil : 0;
+  base.lastShownAt =
+    Number.isFinite(lastShownAt) && lastShownAt > 0 ? lastShownAt : 0;
+  base.lastAction =
+    typeof input.lastAction === "string" ? input.lastAction.slice(0, 32) : "";
+
+  return base;
+}
+
+function loadRateState() {
+  try {
+    const raw = localStorage.getItem(getRateStateStorageKey());
+    if (raw) return normalizeRateState(JSON.parse(raw));
+  } catch {}
+
+  // Legacy fallback: pārnesam veco progresu uz jauno formātu.
+  const migrated = getDefaultRateState();
+  try {
+    const wins = parseInt(localStorage.getItem(WINS_STORAGE_KEY) || "0", 10);
+    migrated.totalWins = Number.isFinite(wins) && wins > 0 ? wins : 0;
+    migrated.accepted = localStorage.getItem(RATE_STORAGE_KEY) === "1";
+    if (migrated.accepted) migrated.nextPromptWins = migrated.totalWins + 9999;
+  } catch {}
+  return migrated;
+}
+
+function saveRateState(input) {
+  try {
+    localStorage.setItem(
+      getRateStateStorageKey(),
+      JSON.stringify(normalizeRateState(input))
+    );
+  } catch {}
+}
+
+function shouldShowRatePrompt(rateState, now) {
+  if (!isTwa() || !rateOverlayEl) return false;
+  if (!rateState || rateState.accepted) return false;
+  if ((rateState.totalWins || 0) < (rateState.nextPromptWins || 0)) return false;
+  if ((rateState.snoozedUntil || 0) > now) return false;
+  if (now - PAGE_SESSION_STARTED_AT < RATE_PROMPT_MIN_SESSION_MS) return false;
+  return true;
+}
+
 function recordWinAndMaybeShowRatePrompt() {
   try {
-    const n = parseInt(localStorage.getItem(WINS_STORAGE_KEY) || "0", 10);
-    localStorage.setItem(WINS_STORAGE_KEY, String(n + 1));
-    if (n + 1 < RATE_PROMPT_WINS) return;
-    if (localStorage.getItem(RATE_STORAGE_KEY) === "1") return;
-    if (!isTwa() || !rateOverlayEl) return;
+    const now = Date.now();
+    const rateState = loadRateState();
+
+    rateState.totalWins = Math.max(0, Number(rateState.totalWins || 0)) + 1;
+    if (
+      !Number.isFinite(rateState.nextPromptWins) ||
+      rateState.nextPromptWins < RATE_PROMPT_INITIAL_WINS
+    ) {
+      rateState.nextPromptWins = RATE_PROMPT_INITIAL_WINS;
+    }
+
+    if (!shouldShowRatePrompt(rateState, now)) {
+      saveRateState(rateState);
+      return;
+    }
+
+    rateState.lastShownAt = now;
+    // Aizsardzība pret atkārtotu popup vienā sesijā.
+    rateState.snoozedUntil = now + 5 * 60 * 1000;
+    saveRateState(rateState);
     rateOverlayEl.classList.remove("hidden");
-    localStorage.setItem(RATE_STORAGE_KEY, "1");
   } catch {}
 }
 
 function hideRateOverlay() {
   if (rateOverlayEl) rateOverlayEl.classList.add("hidden");
+}
+
+function handleRatePromptLater() {
+  const now = Date.now();
+  const rateState = loadRateState();
+  rateState.nextPromptWins = Math.max(
+    Number(rateState.nextPromptWins || RATE_PROMPT_INITIAL_WINS),
+    Number(rateState.totalWins || 0) + RATE_PROMPT_REMIND_WINS
+  );
+  rateState.snoozedUntil = now + RATE_PROMPT_COOLDOWN_MS;
+  rateState.lastAction = "later";
+  saveRateState(rateState);
+  hideRateOverlay();
+}
+
+function handleRatePromptAccepted() {
+  const now = Date.now();
+  const rateState = loadRateState();
+  rateState.accepted = true;
+  rateState.lastAction = "rated";
+  rateState.lastShownAt = now;
+  rateState.snoozedUntil = now + 365 * 24 * 60 * 60 * 1000;
+  rateState.nextPromptWins = Number(rateState.totalWins || 0) + 9999;
+  saveRateState(rateState);
+  hideRateOverlay();
+}
+
+function handleRatePromptFeedback() {
+  const now = Date.now();
+  const rateState = loadRateState();
+  rateState.nextPromptWins = Math.max(
+    Number(rateState.nextPromptWins || RATE_PROMPT_INITIAL_WINS),
+    Number(rateState.totalWins || 0) + RATE_PROMPT_REMIND_WINS + 3
+  );
+  rateState.snoozedUntil = now + 3 * RATE_PROMPT_COOLDOWN_MS;
+  rateState.lastAction = "feedback";
+  saveRateState(rateState);
+  hideRateOverlay();
 }
 
 // ==================== PWA INSTALL ====================
@@ -9413,8 +9551,22 @@ async function initGame() {
       window.location.reload();
     });
   }
-  if (rateLaterBtn) rateLaterBtn.addEventListener("click", hideRateOverlay);
-  if (rateOpenBtn) rateOpenBtn.addEventListener("click", hideRateOverlay);
+  if (rateLaterBtn) {
+    rateLaterBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      handleRatePromptLater();
+    });
+  }
+  if (rateFeedbackBtn) {
+    rateFeedbackBtn.addEventListener("click", () => {
+      handleRatePromptFeedback();
+    });
+  }
+  if (rateOpenBtn) {
+    rateOpenBtn.addEventListener("click", () => {
+      handleRatePromptAccepted();
+    });
+  }
 
   if (challengeFriendBtn) {
     challengeFriendBtn.addEventListener("click", async () => {
