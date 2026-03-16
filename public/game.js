@@ -11,18 +11,49 @@
   - Buy-token: pēc pirkuma mēģina refresh /me + missions, lai UI sync
 */
 
-// ================== KONFIGS ==================
-const API_BASE = (() => {
-  try {
-    const forced = String(localStorage.getItem("vz_api_base") || "").trim();
-    if (forced) return forced.replace(/\/+$/, "");
-  } catch {}
-  const host = String(window.location.hostname || "").toLowerCase();
-  if (host === "localhost" || host === "127.0.0.1") {
-    return String(window.location.origin || "").replace(/\/+$/, "");
-  }
-  return "https://bugats-wordle-server.onrender.com";
-})();
+// ================== MODUĻI / KONFIGS ==================
+const VZGameCore = window.VZGameCore || {};
+const VZServices = window.VZServices || {};
+const VZUI = window.VZUI || {};
+const VZChat = window.VZChat || {};
+const VZDuel = window.VZDuel || {};
+const VZTournaments = window.VZTournaments || {};
+
+const {
+  ADMIN_SET,
+  AUTH_KEYS,
+  DISALLOWED_KEYS,
+  REGION_META,
+  REGION_TOTAL_CAP,
+  createInitialState,
+  getAuraRankFromLevel,
+  getCosmeticTierFromLevel,
+  isAdminUsername,
+  rankMinXpByLevel,
+} = VZGameCore;
+
+const { createApiBase, fetchWithTimeout, readJsonOrThrow } = VZServices;
+const { $, createEl, safeText, applyRankColor } = VZUI;
+const {
+  dmNormalizeMessageForStore,
+  dmObjectToThreads,
+  dmSanitizeMeta,
+  dmStorageKey,
+  dmThreadsToObject,
+} = VZChat;
+const { buildDuelExtraText, isDuelDrawReason } = VZDuel;
+const {
+  normalizeTournamentList,
+  normalizeTournamentSchedule,
+  tournamentMatchStatusLabel,
+  tournamentPlayModeText,
+  tournamentTypeLabel,
+} = VZTournaments;
+
+const API_BASE =
+  typeof createApiBase === "function"
+    ? createApiBase()
+    : "https://bugats-wordle-server.onrender.com";
 const ONESIGNAL_SDK_SRC =
   "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js";
 const ONESIGNAL_PROMPT_LS_KEY = "vz_onesignal_prompt_v1";
@@ -225,33 +256,7 @@ async function clearOneSignalIdentity() {
   } catch {}
 }
 
-// Admin lietotāji (tāpat kā serverī / UI)
-const ADMIN_USERNAMES = ["Bugats", "BugatsLV"];
-const ADMIN_SET = new Set(
-  ADMIN_USERNAMES.map((u) => String(u).trim().toLowerCase())
-);
-
-function isAdminUsername(u) {
-  return ADMIN_SET.has(
-    String(u || "")
-      .trim()
-      .toLowerCase()
-  );
-}
-
-const REGION_META = {
-  Zemgale: { code: "Z", cls: "vz-region-zemgale", label: "Zemgale" },
-  Latgale: { code: "L", cls: "vz-region-latgale", label: "Latgale" },
-  Vidzeme: { code: "V", cls: "vz-region-vidzeme", label: "Vidzeme" },
-  Kurzeme: { code: "K", cls: "vz-region-kurzeme", label: "Kurzeme" },
-};
-const REGION_TOTAL_CAP = 500000;
-
-// Nedrīkst rādīt uz ekrāna klaviatūras + ignorējam arī no fiziskās
-const DISALLOWED_KEYS = new Set(["Q", "W", "X", "Y"]);
-
 // Fetch timeout (lai UI neiestrēgst pie “karājošiem” requestiem)
-const FETCH_TIMEOUT_MS = 12_000;
 const FLIP_DELAY_MS = 160;
 const FLIP_DURATION_MS = 800;
 const PREFERS_REDUCED_MOTION =
@@ -260,14 +265,6 @@ const PREFERS_REDUCED_MOTION =
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // ================== AUTH STORAGE (kompatibilitāte) ==================
-const AUTH_KEYS = {
-  token: ["vz_token", "vzToken", "token"],
-  username: ["vz_username", "vzUsername", "username", "nick"],
-  refreshToken: ["vz_refresh_token", "vzRefreshToken", "refreshToken"],
-  accessExpiresAt: ["vz_access_expires_at"],
-  refreshExpiresAt: ["vz_refresh_expires_at"],
-};
-
 function getStoredFirst(keys) {
   for (const k of keys) {
     try {
@@ -479,213 +476,8 @@ function setLocalAvatar(username, dataUrl, expiresAt) {
   } catch {}
 }
 
-// ===== Helperi =====
-function getAuraRankFromLevel(level) {
-  const lvl = Number(level) || 1;
-  if (lvl >= 40) return 10;
-  if (lvl >= 36) return 9;
-  if (lvl >= 32) return 8;
-  if (lvl >= 28) return 7;
-  if (lvl >= 24) return 6;
-  if (lvl >= 20) return 5;
-  if (lvl >= 16) return 4;
-  if (lvl >= 12) return 3;
-  if (lvl >= 8) return 2;
-  if (lvl >= 4) return 1;
-  return 0;
-}
-function getCosmeticTierFromLevel(level) {
-  const lvl = Number(level) || 1;
-  if (lvl >= 20) return 5;
-  if (lvl >= 15) return 4;
-  if (lvl >= 10) return 3;
-  if (lvl >= 5) return 2;
-  return 1;
-}
-const RANK_MIN_XP = [
-  0, 40, 90, 160, 250, 360, 490, 640, 810, 1000, 1200, 1450, 1750, 2100, 2500,
-  2950, 3450, 4000, 4600, 5250, 5950, 6700, 7500, 8350, 9250, 10200, 11200,
-  12300, 13500, 14800, 16200, 17700, 19300, 21000, 22800, 24700, 26700, 28800,
-  31000, 33300,
-];
-
-function rankMinXpByLevel(level) {
-  const lvl = Math.max(1, Math.min(40, Number(level) || 1));
-  return RANK_MIN_XP[lvl - 1] ?? 0;
-}
-function $(sel) {
-  return document.querySelector(sel);
-}
-function createEl(tag, cls) {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  return el;
-}
-function safeText(el, txt) {
-  if (!el) return;
-  el.textContent = String(txt ?? "");
-}
-function applyRankColor(el, color) {
-  if (!el) return;
-  const c = typeof color === "string" ? color.trim() : "";
-  el.style.color = c || ""; // ja nav krāsas -> noņem inline krāsu
-}
-// ==================== FETCH HELPERS (timeout + JSON drošība) ====================
-async function fetchWithTimeout(
-  url,
-  options = {},
-  timeoutMs = FETCH_TIMEOUT_MS
-) {
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
-    return res;
-  } catch (e) {
-    if (e && e.name === "AbortError") {
-      throw new Error("Tīkls neatbildēja laikā. Pamēģini vēlreiz.");
-    }
-    throw new Error(
-      "Neizdevās pieslēgties serverim. Pārbaudi internetu un mēģini vēlreiz."
-    );
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-async function readJsonOrThrow(res) {
-  const txt = await res.text();
-
-  // ja serveris atgriež tukšu body, bet status ok — atgriežam {}
-  if (!txt) {
-    if (!res.ok) throw new Error("Servera kļūda (" + res.status + ").");
-    return {};
-  }
-
-  let data = null;
-  try {
-    data = JSON.parse(txt);
-  } catch (e) {
-    console.error("Non-JSON response:", txt);
-    throw new Error("Servera kļūda (nav korekts JSON).");
-  }
-  if (!res.ok) {
-    const err = new Error(
-      (data && data.message) || "Servera kļūda (" + res.status + ")."
-    );
-    err.status = res.status;
-    err.payload = data;
-    throw err;
-  }
-  return data;
-}
-
 // ===== Klienta stāvoklis =====
-const state = {
-  token: null,
-  refreshToken: null,
-  accessTokenExpiresAt: 0,
-  refreshTokenExpiresAt: 0,
-  username: null,
-  email: "",
-  region: "",
-  regionPoints: 0,
-  regionAttackTarget: "",
-  regionAttackRegion: "",
-  regionAttackLimit: null,
-  regionBonusStatus: null,
-  regionRules: [],
-  // DM (privāts čats)
-  dmOpenWith: null,
-  dmThreads: new Map(), // username -> [{id,from,to,text,ts}]
-  dmUnreadTotal: 0,
-  dmUnreadByUser: {}, // username -> count
-  dmNotifyOn: true,
-  dmStorageMode: "client", // "client" | "server"
-  dmLastFrom: null,
-  dmInboxPreview: [], // servera inbox preview (no dm.unread)
-  dmReply: null, // { id, from, text }
-  dmEdit: null, // { id, text }
-  dmPeerRead: {}, // username -> ts (peer last read)
-  dmTypingByUser: {}, // username -> bool
-  dmBlockedUsers: [],
-  dmBlockedSet: new Set(),
-  friends: [],
-  friendInvitesIn: [],
-  friendInvitesOut: [],
-  onlineUsers: new Set(),
-  lastShareResult: null,
-  rows: 6,
-  cols: 5,
-  currentRow: 0,
-  currentCol: 0,
-  wordLength: 5,
-  isLocked: false,
-  roundFinished: false,
-
-  // Ability: atvērt 1 burtu (1x raundā, par coins)
-  revealUsed: false,
-  revealHint: null, // { pos, letter, cost }
-  revealCostCoins: 25,
-
-  gridTiles: [], // [row][col] -> tile element
-  keyboardButtons: new Map(), // key -> button
-  shiftOn: false,
-
-  socket: null,
-
-  // coins animācijas helperis
-  lastCoins: null,
-  lastXp: null,
-
-  // 1v1 duelis
-  duelMode: false,
-  duelId: null,
-  duelOpponent: null,
-
-  // Sezona
-  season: null,
-
-  // Turniri
-  tournaments: [],
-  tournamentActiveId: null,
-  tournamentReportCtx: null,
-  tournamentDisputeCtx: null,
-  tournamentDisputes: [],
-  tournamentLiveMatchKey: "",
-  tournamentLiveMatchStatus: null,
-  tournamentUiPrimed: false,
-  tournamentSocketMatchHint: false,
-  tournamentHintTournamentId: null,
-  tournamentSchedule: null,
-  vipRooms: [],
-  vipRoomDraftInvites: [],
-  vipActive: false,
-  vipUntil: 0,
-  vipTier: "none",
-  canCreateTournament: false,
-  isAdmin: false,
-  pendingDuelInvites: [],
-  seenOfflineDuelInviteKeys: new Set(),
-
-  // Globālā skaņa
-  soundOn: true,
-
-  // Tēma: dark | light | contrast
-  theme: "dark",
-
-  // Izaicinājums draugam (viens vārds, mazāk mēģinājumu = uzvara)
-  challengeId: null,
-  challengeOpponent: null,
-  challengeLen: null,
-  challengeFinished: false,
-
-  // UI loop cache (lai spēlētājs nepaliek strupceļā)
-  missions: [],
-  missionBonus: null,
-  loopPrimaryAction: null,
-  loopPrimaryActionKey: "",
-};
+const state = createInitialState();
 
 const DM_THREAD_MAX_LOCAL = 200;
 const DM_LOCAL_STORAGE_VERSION = 2;
@@ -4357,19 +4149,12 @@ function showDuelResultOverlay(details) {
   }
 
   if (duelExtraMsgEl) {
-    let extra = "";
-    if (youWin) extra = `Tu uzvarēji dueli pret ${opponent || "pretinieku"}!`;
-    else if (winner) extra = `${winner} uzvarēja dueli.`;
-    else if (reason === "declined") extra = "Duēlis tika atteikts.";
-    else if (
-      !winner &&
-      (reason === "timeout" ||
-        reason === "no_attempts" ||
-        reason === "no_winner")
-    )
-      extra = "Neizšķirts!";
-    else extra = "Duēlis beidzies.";
-    duelExtraMsgEl.textContent = extra;
+    duelExtraMsgEl.textContent = buildDuelExtraText({
+      youWin,
+      winner,
+      reason,
+      opponent,
+    });
   }
   // winner avatar
   const winName = winnerText === "TU" ? state.username : winner || "";
@@ -4776,86 +4561,6 @@ async function refreshWeekly() {
   } catch (err) {
     console.error("Weekly kļūda:", err);
   }
-}
-
-function tournamentTypeLabel(type) {
-  const key = String(type || "")
-    .trim()
-    .toLowerCase();
-  if (key === "single_elimination") return "Izslēgšanas turnīrs";
-  if (key === "double_elimination") return "Dubultā izslēgšana";
-  if (key === "round_robin") return "Apļa turnīrs";
-  return "Turnīrs";
-}
-
-function tournamentPlayModeText(mode) {
-  const key = String(mode || "")
-    .trim()
-    .toLowerCase();
-  if (key === "classic") return "Classic";
-  if (key === "speed") return "Speed";
-  if (key === "accuracy") return "Accuracy";
-  if (key === "survival") return "Survival";
-  return "";
-}
-
-function tournamentMatchStatusLabel(status) {
-  const code = Number(status);
-  if (code === 0) return "Vēl nav pieejams";
-  if (code === 1) return "Gaida pretinieku";
-  if (code === 2) return "Var spēlēt";
-  if (code === 3) return "Notiek";
-  if (code === 4) return "Pabeigts";
-  if (code === 5) return "Arhivēts";
-  return "Nezināms";
-}
-
-function normalizeTournamentList(payload) {
-  const list = Array.isArray(payload)
-    ? payload
-    : Array.isArray(payload?.tournaments)
-      ? payload.tournaments
-      : [];
-  return list.filter((t) => t && Number.isFinite(Number(t.id)));
-}
-
-function normalizeTournamentSchedule(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  const startAt = Math.max(0, Number(raw.startAt) || 0);
-  const slots = Math.max(2, Math.floor(Number(raw.slots) || 0));
-  const joinedCount = Math.max(0, Math.floor(Number(raw.joinedCount) || 0));
-  const participants = Array.isArray(raw.participants)
-    ? raw.participants
-        .map((u) => String(u || "").trim())
-        .filter(Boolean)
-        .slice(0, slots || 32)
-    : [];
-  const rules = Array.isArray(raw.rules)
-    ? raw.rules
-        .map((r) => String(r || "").trim())
-        .filter(Boolean)
-        .slice(0, 8)
-    : [];
-  return {
-    enabled: !!raw.enabled,
-    title: String(raw.title || "Nedēļas turnīrs"),
-    mode: String(raw.mode || "").trim(),
-    modeLabel: String(raw.modeLabel || "").trim(),
-    playMode: String(raw.playMode || "").trim(),
-    playModeLabel: String(raw.playModeLabel || "").trim(),
-    startAt,
-    slots,
-    joinedCount,
-    participants,
-    isJoined: !!raw.isJoined,
-    canJoin: !!raw.canJoin,
-    startsOnlyWhenFull: !!raw.startsOnlyWhenFull,
-    waitForAllSlots: !!raw.waitForAllSlots,
-    joinBlockedReason: String(raw.joinBlockedReason || ""),
-    rules,
-    lastCycle:
-      raw.lastCycle && typeof raw.lastCycle === "object" ? raw.lastCycle : null,
-  };
 }
 
 function normalizeVipRoomList(raw) {
@@ -6807,69 +6512,13 @@ function dmClose() {
   dmClearContext();
 }
 
-function dmStorageKey(username) {
-  const u = String(username || "").trim() || "unknown";
-  return "vz_dm_store_" + u;
-}
-function dmSanitizeMeta(meta) {
-  if (!meta || typeof meta !== "object") return null;
-  const out = { ...meta };
-  if (out.avatarUrl && String(out.avatarUrl).startsWith("data:image/")) {
-    if (String(out.avatarUrl).length > 120000) delete out.avatarUrl;
-  }
-  return out;
-}
-function dmNormalizeMessageForStore(msg) {
-  if (!msg || typeof msg !== "object") return null;
-  const out = {
-    id: msg.id,
-    from: msg.from,
-    to: msg.to,
-    text: msg.text || "",
-    ts: Number(msg.ts) || 0,
-  };
-  if (msg.reply && typeof msg.reply === "object") {
-    const r = {
-      id: msg.reply.id,
-      from: msg.reply.from,
-      text: msg.reply.text,
-    };
-    if (r.id && r.from && r.text) out.reply = r;
-  }
-  if (msg.edited) out.edited = true;
-  if (msg.editedAt) out.editedAt = Number(msg.editedAt) || 0;
-  if (msg.deleted) out.deleted = true;
-  if (msg.deletedAt) out.deletedAt = Number(msg.deletedAt) || 0;
-  const meta = dmSanitizeMeta(msg.meta);
-  if (meta) out.meta = meta;
-  return out;
-}
-function dmThreadsToObject() {
-  const out = {};
-  for (const [k, arr] of state.dmThreads.entries()) {
-    const key = String(k || "").trim();
-    if (!key) continue;
-    const list = Array.isArray(arr) ? arr.slice(-DM_THREAD_MAX_LOCAL) : [];
-    const stored = list.map(dmNormalizeMessageForStore).filter(Boolean);
-    out[key] = stored;
-  }
-  return out;
-}
-function dmObjectToThreads(obj) {
-  const map = new Map();
-  for (const [k, arr] of Object.entries(obj || {})) {
-    if (!Array.isArray(arr)) continue;
-    map.set(k, arr.map(dmNormalizeMessageForStore).filter(Boolean));
-  }
-  return map;
-}
 let _dmPersistTimer = null;
 function dmPersistNow() {
   if (!state.username || state.dmStorageMode !== "client") return;
   try {
     const payload = {
       v: DM_LOCAL_STORAGE_VERSION,
-      threads: dmThreadsToObject(),
+      threads: dmThreadsToObject(state.dmThreads, DM_THREAD_MAX_LOCAL),
       unread: state.dmUnreadByUser || {},
       peerRead: state.dmPeerRead || {},
       lastFrom: state.dmLastFrom || null,
@@ -8589,11 +8238,7 @@ function initSocket() {
     hideDuelStartCountdown();
     stopDuelTimer();
     const { duelId, winner, youWin, reason } = payload || {};
-    const isDraw =
-      !winner &&
-      (reason === "timeout" ||
-        reason === "no_attempts" ||
-        reason === "no_winner");
+    const isDraw = !winner && isDuelDrawReason(reason);
     const opponentName = payload?.opponent || state.duelOpponent || null;
     const ranked = payload?.ranked !== false; // default = ranked
     if (duelId && state.duelId && duelId !== state.duelId) return;
