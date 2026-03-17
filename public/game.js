@@ -8637,8 +8637,9 @@ function loadImageFromDataUrl(dataUrl) {
   });
 }
 
-// Servera limits: AVATAR_MAX_CHARS ~6MB. Saspiemam līdz ~5MB, lai būtu rezerve.
-const AVATAR_COMPRESS_MAX_CHARS = 5 * 1024 * 1024;
+// Bez Supabase avatāri glabājas inline; serveris izgriež > AVATAR_INLINE_MAX_CHARS (120000).
+// Ar Supabase augšupielādē uz storage. Saspiemam līdz 115KB, lai vienmēr saglabātos.
+const AVATAR_COMPRESS_MAX_CHARS = 115 * 1024;
 
 async function compressAvatarDataUrl(dataUrl, maxDim = 512) {
   if (!dataUrl || typeof dataUrl !== "string") return dataUrl;
@@ -8653,15 +8654,15 @@ async function compressAvatarDataUrl(dataUrl, maxDim = 512) {
   if (!ctx) return dataUrl;
 
   const formats = [
-    { type: "image/webp", quality: 0.9 },
-    { type: "image/webp", quality: 0.8 },
-    { type: "image/webp", quality: 0.7 },
-    { type: "image/jpeg", quality: 0.9 },
-    { type: "image/jpeg", quality: 0.8 },
-    { type: "image/jpeg", quality: 0.7 },
+    { type: "image/webp", quality: 0.85 },
+    { type: "image/webp", quality: 0.75 },
+    { type: "image/webp", quality: 0.65 },
+    { type: "image/jpeg", quality: 0.85 },
+    { type: "image/jpeg", quality: 0.75 },
+    { type: "image/jpeg", quality: 0.6 },
   ];
 
-  const dims = [maxDim, 512, 384, 320, 256, 192, 128];
+  const dims = [maxDim, 384, 320, 256, 192, 128, 96];
   for (const dim of dims) {
     const maxSide = Math.max(w, h);
     const scale = Math.min(1, dim / maxSide);
@@ -8682,7 +8683,7 @@ async function compressAvatarDataUrl(dataUrl, maxDim = 512) {
   }
 
   const last = canvas.toDataURL("image/jpeg", 0.5);
-  return last.length <= AVATAR_COMPRESS_MAX_CHARS ? last : canvas.toDataURL("image/jpeg", 0.3);
+  return last.length <= AVATAR_COMPRESS_MAX_CHARS ? last : canvas.toDataURL("image/jpeg", 0.35);
 }
 
 function clearAvatarFileInput() {
