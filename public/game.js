@@ -8637,7 +8637,10 @@ function loadImageFromDataUrl(dataUrl) {
   });
 }
 
-async function compressAvatarDataUrl(dataUrl, maxDim = 320) {
+// Servera limits: AVATAR_MAX_CHARS ~6MB. Saspiemam līdz ~5MB, lai būtu rezerve.
+const AVATAR_COMPRESS_MAX_CHARS = 5 * 1024 * 1024;
+
+async function compressAvatarDataUrl(dataUrl, maxDim = 512) {
   if (!dataUrl || typeof dataUrl !== "string") return dataUrl;
 
   const img = await loadImageFromDataUrl(dataUrl);
@@ -8645,32 +8648,41 @@ async function compressAvatarDataUrl(dataUrl, maxDim = 320) {
   const h = img.naturalHeight || img.height || 0;
   if (!w || !h) return dataUrl;
 
-  const maxSide = Math.max(w, h);
-  if (maxSide <= maxDim && dataUrl.length < 900_000) return dataUrl;
-
-  const scale = Math.min(1, maxDim / maxSide);
-  const tw = Math.max(1, Math.round(w * scale));
-  const th = Math.max(1, Math.round(h * scale));
-
   const canvas = document.createElement("canvas");
-  canvas.width = tw;
-  canvas.height = th;
-
   const ctx = canvas.getContext("2d");
   if (!ctx) return dataUrl;
 
-  ctx.drawImage(img, 0, 0, tw, th);
+  const formats = [
+    { type: "image/webp", quality: 0.9 },
+    { type: "image/webp", quality: 0.8 },
+    { type: "image/webp", quality: 0.7 },
+    { type: "image/jpeg", quality: 0.9 },
+    { type: "image/jpeg", quality: 0.8 },
+    { type: "image/jpeg", quality: 0.7 },
+  ];
 
-  try {
-    const out = canvas.toDataURL("image/webp", 0.85);
-    if (out && out.startsWith("data:image/")) return out;
-  } catch {}
-  try {
-    const out = canvas.toDataURL("image/jpeg", 0.88);
-    if (out && out.startsWith("data:image/")) return out;
-  } catch {}
+  const dims = [maxDim, 512, 384, 320, 256, 192, 128];
+  for (const dim of dims) {
+    const maxSide = Math.max(w, h);
+    const scale = Math.min(1, dim / maxSide);
+    const tw = Math.max(1, Math.round(w * scale));
+    const th = Math.max(1, Math.round(h * scale));
+    canvas.width = tw;
+    canvas.height = th;
+    ctx.drawImage(img, 0, 0, tw, th);
 
-  return dataUrl;
+    for (const fmt of formats) {
+      try {
+        const out = canvas.toDataURL(fmt.type, fmt.quality);
+        if (out && out.startsWith("data:image/") && out.length <= AVATAR_COMPRESS_MAX_CHARS) {
+          return out;
+        }
+      } catch {}
+    }
+  }
+
+  const last = canvas.toDataURL("image/jpeg", 0.5);
+  return last.length <= AVATAR_COMPRESS_MAX_CHARS ? last : canvas.toDataURL("image/jpeg", 0.3);
 }
 
 function clearAvatarFileInput() {
@@ -8689,19 +8701,12 @@ async function handleAvatarUpload(e) {
     return;
   }
 
-  const maxSize = 10 * 1024 * 1024; // 10MB
-  if (file.size > maxSize) {
-    appendSystemMessage("Bilde ir par lielu (max ~10MB).");
-    clearAvatarFileInput();
-    return;
-  }
-
   const reader = new FileReader();
   reader.onload = async () => {
     let dataUrl = reader.result;
 
     try {
-      dataUrl = await compressAvatarDataUrl(String(dataUrl), 320);
+      dataUrl = await compressAvatarDataUrl(String(dataUrl), 512);
     } catch (err) {
       console.warn("Avatar compress kļūda:", err);
     }
