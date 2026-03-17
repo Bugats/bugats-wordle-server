@@ -272,9 +272,10 @@ const AVATAR_MAX_CHARS = (() => {
   return 6 * 1024 * 1024; // ~6.29M chars
 })();
 // Inline avatārs (base64) broadcastiem / meta — sargājam RAM
+// 150000 ~146KB — klienta saspiež līdz 100KB, lai saglabātos pēc refresh
 const AVATAR_INLINE_MAX_CHARS = (() => {
-  const v = parseInt(process.env.AVATAR_INLINE_MAX_CHARS || "120000", 10);
-  return Number.isFinite(v) && v >= 0 ? v : 120000;
+  const v = parseInt(process.env.AVATAR_INLINE_MAX_CHARS || "150000", 10);
+  return Number.isFinite(v) && v >= 0 ? v : 150000;
 })();
 const DM_META_AVATAR_MAX_CHARS = (() => {
   const v = parseInt(process.env.DM_META_AVATAR_MAX_CHARS || "0", 10);

@@ -1511,19 +1511,25 @@ function setAvatar(imgEl, initialsEl, dataUrl, username) {
     (initialsEl && initialsEl.textContent.trim()) ||
     "B";
 
-  if (dataUrl && imgEl) {
-    imgEl.src = dataUrl;
-    imgEl.style.display = "block";
-    if (initialsEl) initialsEl.style.display = "none";
-  } else {
+  function showInitials() {
     if (imgEl) {
       imgEl.src = "";
       imgEl.style.display = "none";
+      imgEl.onerror = null;
     }
     if (initialsEl) {
       initialsEl.textContent = initial;
       initialsEl.style.display = "flex";
     }
+  }
+
+  if (dataUrl && imgEl) {
+    imgEl.onerror = () => showInitials();
+    imgEl.src = dataUrl;
+    imgEl.style.display = "block";
+    if (initialsEl) initialsEl.style.display = "none";
+  } else {
+    showInitials();
   }
 }
 
@@ -8638,8 +8644,8 @@ function loadImageFromDataUrl(dataUrl) {
 }
 
 // Bez Supabase avatāri glabājas inline; serveris izgriež > AVATAR_INLINE_MAX_CHARS (120000).
-// Ar Supabase augšupielādē uz storage. Saspiemam līdz 115KB, lai vienmēr saglabātos.
-const AVATAR_COMPRESS_MAX_CHARS = 115 * 1024;
+// Ar Supabase augšupielādē uz storage. Saspiemam līdz 100KB, lai vienmēr saglabātos.
+const AVATAR_COMPRESS_MAX_CHARS = 100 * 1024;
 
 async function compressAvatarDataUrl(dataUrl, maxDim = 512) {
   if (!dataUrl || typeof dataUrl !== "string") return dataUrl;
