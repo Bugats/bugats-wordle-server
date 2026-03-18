@@ -2493,6 +2493,69 @@ summary:focus-visible {
   100% { transform: scale(1); color: #ffffff; }
 }
 
+/* Streak milestone */
+.vz-streak-milestone { animation: vzStreakMilestone 0.6s ease-out; }
+@keyframes vzStreakMilestone {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.4); color: #ff9800; }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+/* Līmeņa pacēluma overlay */
+.vz-level-up-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  animation: vzLevelUpFadeIn 0.4s ease-out forwards;
+}
+.vz-level-up-overlay.hidden { display: none; }
+.vz-level-up-inner {
+  text-align: center;
+  padding: 28px 40px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #1a1b2e 0%, #0f1117 100%);
+  border: 2px solid rgba(255, 215, 0, 0.6);
+  box-shadow: 0 0 32px rgba(255, 215, 0, 0.3), 0 0 64px rgba(0, 0, 0, 0.5);
+  animation: vzLevelUpPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s both;
+}
+.vz-level-up-badge {
+  font-size: 48px;
+  margin-bottom: 8px;
+  animation: vzLevelUpBadgeBounce 0.6s ease-out 0.3s both;
+}
+.vz-level-up-title {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffd700;
+  text-shadow: 0 0 12px rgba(255, 215, 0, 0.5);
+}
+.vz-level-up-subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: #b0b0b0;
+}
+@keyframes vzLevelUpFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes vzLevelUpPop {
+  from { transform: scale(0.5); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes vzLevelUpBadgeBounce {
+  0% { transform: scale(0); }
+  60% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
 /* ===========================
    Ekrāna flash uzvarā
    =========================== */
@@ -3705,6 +3768,11 @@ summary:focus-visible {
   .kb-key.present,
   .vz-hot-banner,
   .vz-xp-bar-fill.vz-xp-bump,
+  .vz-coin-bump,
+  .vz-streak-milestone,
+  .vz-level-up-overlay,
+  .vz-level-up-overlay .vz-level-up-inner,
+  .vz-level-up-overlay .vz-level-up-badge,
   #win-ticker.vz-win-active,
   .vz-win-ticker.vz-win-active,
   .vz-region-total-fill,

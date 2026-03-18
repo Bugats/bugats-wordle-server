@@ -122,9 +122,11 @@
 
       socket: null,
 
-      // coins animācijas helperis
+      // coins / XP / level / streak animāciju helperi
       lastCoins: null,
       lastXp: null,
+      lastRankLevel: null,
+      lastStreak: null,
 
       // 1v1 duelis
       duelMode: false,

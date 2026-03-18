@@ -56,6 +56,15 @@
     <!-- Ekrāna flash overlay (baseline saderība) -->
     <div id="screen-flash" class="vz-screen-flash" aria-hidden="true"></div>
 
+    <!-- Līmeņa pacēluma animācija -->
+    <div id="vz-level-up-overlay" class="vz-level-up-overlay hidden" role="alert" aria-live="polite">
+      <div class="vz-level-up-inner">
+        <div class="vz-level-up-badge">⬆️</div>
+        <p class="vz-level-up-title">Līmenis pacēlts!</p>
+        <p class="vz-level-up-subtitle" id="vz-level-up-subtitle">L<span id="vz-level-up-num">1</span> — <span id="vz-level-up-title"></span></p>
+      </div>
+    </div>
+
     <!-- Bez interneta -->
     <div id="vz-offline-overlay" class="vz-offline-overlay hidden" role="alert" aria-live="assertive">
       <div class="vz-offline-inner">

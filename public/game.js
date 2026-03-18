@@ -2087,6 +2087,30 @@ function updatePlayerCard(me) {
   if (playerStreakEl) playerStreakEl.textContent = me.streak;
   if (playerBestStreakEl) playerBestStreakEl.textContent = me.bestStreak;
 
+  // Līmeņa pacēluma animācija
+  const level = Math.max(1, me.rankLevel || 1);
+  if (state.lastRankLevel !== null && level > state.lastRankLevel) {
+    showLevelUpAnimation(level, me.rankTitle || "");
+  }
+  state.lastRankLevel = level;
+
+  // Streak milestone animācija (3, 5, 10, 15, 20...)
+  const streak = Number(me.streak) || 0;
+  const streakMilestones = [3, 5, 10, 15, 20, 25, 30];
+  const hitMilestone =
+    state.lastStreak !== null &&
+    streak > state.lastStreak &&
+    streakMilestones.includes(streak);
+  if (hitMilestone && playerStreakEl) {
+    playerStreakEl.classList.add("vz-streak-milestone");
+    setTimeout(
+      () => playerStreakEl.classList.remove("vz-streak-milestone"),
+      600
+    );
+    appendSystemMessage(`🔥 Streak ${streak}! Turpini tā!`);
+  }
+  state.lastStreak = streak;
+
   let avatarUrl = me.avatarUrl || null;
   const avatarExp = Number(me.avatarUrlExpiresAt) || 0;
   const storedEntry = getLocalAvatarEntry(me.username);
@@ -2125,8 +2149,6 @@ function updatePlayerCard(me) {
     renderPlayerMedals(me.medals, playerMedalsStripEl, false);
 
   if (playerXpBarEl && playerXpLabelEl) {
-    const level = Math.max(1, me.rankLevel || 1);
-
     let minXp = Number.isFinite(me.rankMinXp) ? me.rankMinXp : null;
     let nextMinXp = Number.isFinite(me.rankNextMinXp) ? me.rankNextMinXp : null;
 
@@ -9828,6 +9850,24 @@ async function initGame() {
 }
 
 document.addEventListener("DOMContentLoaded", initGame);
+
+// Līmeņa pacēluma animācija
+function showLevelUpAnimation(level, rankTitle) {
+  if (typeof document === "undefined" || PREFERS_REDUCED_MOTION) return;
+  const overlay = document.getElementById("vz-level-up-overlay");
+  const subtitle = document.getElementById("vz-level-up-num");
+  const titleEl = document.getElementById("vz-level-up-title");
+  if (!overlay || !subtitle || !titleEl) return;
+  subtitle.textContent = String(level);
+  titleEl.textContent = rankTitle || "";
+  overlay.classList.remove("hidden");
+  if (typeof confetti === "function") {
+    confetti({ particleCount: 100, spread: 100, origin: { y: 0.5 }, colors: ["#ffd700", "#ff8c00", "#00c853"] });
+  }
+  setTimeout(() => {
+    overlay.classList.add("hidden");
+  }, 2200);
+}
 
 // Rezerves flash (ja kaut kur gribi izsaukt manuāli)
 function triggerWinFlash() {
