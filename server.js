@@ -2449,21 +2449,14 @@ async function saveUsersToSupabase(list) {
         .map((u) => ({ username: u.username, data: u }))
     : [];
   if (!rows.length) return;
-  try {
-    for (let i = 0; i < rows.length; i += USERS_STORE_BATCH) {
-      const chunk = rows.slice(i, i + USERS_STORE_BATCH);
-      const { error } = await supabase
-        .from(USERS_STORE_TABLE)
-        .upsert(chunk, { onConflict: "username" });
-      if (error && !usersStoreErrorLogged) {
-        console.error("Supabase users save error:", error);
-        usersStoreErrorLogged = true;
-      }
-    }
-  } catch (err) {
-    if (!usersStoreErrorLogged) {
-      console.error("Supabase users save error:", err);
-      usersStoreErrorLogged = true;
+  for (let i = 0; i < rows.length; i += USERS_STORE_BATCH) {
+    const chunk = rows.slice(i, i + USERS_STORE_BATCH);
+    const { error } = await supabase
+      .from(USERS_STORE_TABLE)
+      .upsert(chunk, { onConflict: "username" });
+    if (error) {
+      console.error("Supabase users save error:", error);
+      throw new Error(`Supabase save failed: ${error.message || "unknown"}`);
     }
   }
 }
@@ -2507,6 +2500,17 @@ async function saveUsersImmediate(users) {
     return;
   }
   saveJsonAtomic(USERS_FILE, arr);
+}
+
+async function saveSingleUserToSupabase(user) {
+  if (!USERS_STORE_ON_SUPABASE || !supabase || !user?.username) return;
+  const out = sanitizeUserForStorage(user);
+  if (!out) return;
+  const row = { username: out.username, data: out };
+  const { error } = await supabase
+    .from(USERS_STORE_TABLE)
+    .upsert([row], { onConflict: "username" });
+  if (error) throw new Error(`Supabase user save failed: ${error.message}`);
 }
 
 let USERS = {};
@@ -6754,7 +6758,7 @@ app.post("/avatar", authMiddleware, async (req, res) => {
       user.avatarUpdatedAt = Date.now();
     }
 
-    await saveUsersImmediate(USERS);
+    await saveSingleUserToSupabase(user);
     broadcastOnlineList(true);
     broadcastLeaderboard(false);
 
