@@ -2500,6 +2500,15 @@ function saveUsers(users) {
   saveJsonAtomic(USERS_FILE, arr);
 }
 
+async function saveUsersImmediate(users) {
+  const arr = buildUsersStorageList(users);
+  if (USERS_STORE_ON_SUPABASE && supabase) {
+    await saveUsersToSupabase(arr);
+    return;
+  }
+  saveJsonAtomic(USERS_FILE, arr);
+}
+
 let USERS = {};
 
 function pruneReports(list) {
@@ -6745,7 +6754,7 @@ app.post("/avatar", authMiddleware, async (req, res) => {
       user.avatarUpdatedAt = Date.now();
     }
 
-    saveUsers(USERS);
+    await saveUsersImmediate(USERS);
     broadcastOnlineList(true);
     broadcastLeaderboard(false);
 
