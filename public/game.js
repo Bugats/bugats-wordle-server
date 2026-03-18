@@ -1524,7 +1524,24 @@ function setAvatar(imgEl, initialsEl, dataUrl, username) {
   }
 
   if (dataUrl && imgEl) {
-    imgEl.onerror = () => showInitials();
+    const triedUrl = dataUrl;
+    imgEl.onerror = () => {
+      // Fallback: ja Supabase URL neielādējas, mēģini base64 no localStorage
+      if (
+        username &&
+        triedUrl.startsWith("http") &&
+        state.username &&
+        username === state.username
+      ) {
+        const local = getLocalAvatarEntry(username);
+        if (local?.url?.startsWith?.("data:image/") && local.url !== triedUrl) {
+          imgEl.onerror = () => showInitials();
+          imgEl.src = local.url;
+          return;
+        }
+      }
+      showInitials();
+    };
     imgEl.src = dataUrl;
     imgEl.style.display = "block";
     if (initialsEl) initialsEl.style.display = "none";
@@ -2075,11 +2092,16 @@ function updatePlayerCard(me) {
   const storedEntry = getLocalAvatarEntry(me.username);
 
   if (avatarUrl) {
-    if (
+    const isSupabaseUrl =
+      avatarUrl.startsWith("http") &&
+      (avatarUrl.includes("supabase") || avatarUrl.includes("/storage/"));
+    const hasBase64Fallback = storedEntry?.url?.startsWith?.("data:image/");
+    // Nerakstām pār base64 ar Supabase URL – saglabājam base64 kā fallback, ja Supabase neielādējas
+    const shouldStore =
       !storedEntry ||
       storedEntry.url !== avatarUrl ||
-      (avatarExp && storedEntry.exp !== avatarExp)
-    ) {
+      (avatarExp && storedEntry.exp !== avatarExp);
+    if (shouldStore && !(isSupabaseUrl && hasBase64Fallback)) {
       setLocalAvatar(me.username, avatarUrl, avatarExp);
     }
   } else if (storedEntry?.url) {
