@@ -120,6 +120,10 @@ if (signupForm) {
       showAuthError("Aizpildi lietotājvārdu un paroli.");
       return;
     }
+    if (!email) {
+      showAuthError("E-pasts ir obligāts reģistrācijai.");
+      return;
+    }
     if (!region) {
       showAuthError("Izvēlies novadu.");
       return;

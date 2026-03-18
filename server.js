@@ -6274,14 +6274,14 @@ async function signupHandler(req, res) {
   }
 
   const cleanedEmail = normalizeEmail(email);
-  if (email && !cleanedEmail) {
-    return res.status(400).json({ message: "Nekorekts e-pasts." });
+  if (!cleanedEmail) {
+    return res.status(400).json({
+      message: "E-pasts ir obligāts reģistrācijai.",
+    });
   }
-  if (cleanedEmail) {
-    const existingEmailKey = findUserKeyByEmail(cleanedEmail);
-    if (existingEmailKey) {
-      return res.status(400).json({ message: "Šis e-pasts jau izmantots." });
-    }
+  const existingEmailKey = findUserKeyByEmail(cleanedEmail);
+  if (existingEmailKey) {
+    return res.status(400).json({ message: "Šis e-pasts jau izmantots." });
   }
 
   const hash = await bcrypt.hash(password, 10);
