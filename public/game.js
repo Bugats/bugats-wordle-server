@@ -1551,11 +1551,22 @@ function getCachedAvatarEntry(username) {
 function applyMiniAvatar(username, imgEl, initialsEl) {
   if (!username || !initialsEl) return;
 
-  initialsEl.textContent = username.charAt(0).toUpperCase();
+  const initial = username.charAt(0).toUpperCase();
+  initialsEl.textContent = initial;
+
+  function showInitials() {
+    if (imgEl) {
+      imgEl.src = "";
+      imgEl.style.display = "none";
+      imgEl.onerror = null;
+    }
+    initialsEl.style.display = "flex";
+  }
 
   if (username === state.username) {
     const localEntry = getLocalAvatarEntry(state.username);
     if (localEntry?.url && imgEl) {
+      imgEl.onerror = showInitials;
       imgEl.src = localEntry.url;
       imgEl.style.display = "block";
       initialsEl.style.display = "none";
@@ -1575,6 +1586,7 @@ function applyMiniAvatar(username, imgEl, initialsEl) {
   }
 
   if (cachedEntry && cachedEntry.url) {
+    imgEl.onerror = showInitials;
     imgEl.src = cachedEntry.url;
     imgEl.style.display = "block";
     initialsEl.style.display = "none";
@@ -1612,6 +1624,14 @@ function fetchAvatarForUser(username, imgEl, initialsEl) {
       }
 
       if (url && imgEl && document.body.contains(imgEl)) {
+        imgEl.onerror = () => {
+          imgEl.src = "";
+          imgEl.style.display = "none";
+          imgEl.onerror = null;
+          if (initialsEl && document.body.contains(initialsEl)) {
+            initialsEl.style.display = "flex";
+          }
+        };
         imgEl.src = url;
         imgEl.style.display = "block";
         if (initialsEl) initialsEl.style.display = "none";
