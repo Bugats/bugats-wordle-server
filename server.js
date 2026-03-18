@@ -6759,6 +6759,7 @@ app.post("/avatar", authMiddleware, async (req, res) => {
     }
 
     await saveSingleUserToSupabase(user);
+    saveUsers(USERS);
     broadcastOnlineList(true);
     broadcastLeaderboard(false);
 
