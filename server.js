@@ -4850,6 +4850,12 @@ app.get("/", (_req, res) => {
   return res.send("VĀRDU ZONA OK");
 });
 app.get("/health", (_req, res) => res.json({ ok: true }));
+app.get("/meta/storage", (_req, res) =>
+  res.json({
+    avatarStorage: SUPABASE_ENABLED ? "supabase" : "inline",
+    usersStore: USERS_STORE_ON_SUPABASE ? "supabase" : "file",
+  })
+);
 app.post("/logout", (_req, res) => res.json({ ok: true }));
 app.get("/runtime-config.js", (_req, res) => {
   const payload = {

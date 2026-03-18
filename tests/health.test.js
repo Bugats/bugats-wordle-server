@@ -10,6 +10,17 @@ describe("GET /health", () => {
   });
 });
 
+describe("GET /meta/storage", () => {
+  it("returns avatar and users storage type", async () => {
+    const res = await request(app).get("/meta/storage");
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("avatarStorage");
+    expect(res.body).toHaveProperty("usersStore");
+    expect(["supabase", "inline"]).toContain(res.body.avatarStorage);
+    expect(["supabase", "file"]).toContain(res.body.usersStore);
+  });
+});
+
 describe("CSP headers", () => {
   it("allows required external connect and media sources", async () => {
     const res = await request(app).get("/game.html");
