@@ -629,6 +629,7 @@ const DUEL_MAX_DURATION_MS = 2 * 60 * 1000; // 2 min
 // Duel start countdown (frontā rāda 5..1 AIZIET, bet spēles laiks paliek pilnas 2 min)
 const DUEL_COUNTDOWN_MS = 5 * 1000;
 const DUEL_INVITE_TIMEOUT_MS = 30 * 1000; // 30s, lai "pending" dueli neiestrēgst
+const DUEL_OFFLINE_INVITE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24h offline aicinājumam
 
 const duels = new Map(); // duelId -> duel objekts
 const userToDuel = new Map(); // username -> duelId
@@ -2046,6 +2047,38 @@ async function maybeSendWeeklyQueueReminders(nowTs = Date.now()) {
   }
 }
 
+const DAILY_CHEST_REMINDER_HOUR = 18; // 18:00 Rīga
+let lastDailyChestReminderDate = "";
+async function maybeSendDailyChestReminders(nowTs = Date.now()) {
+  if (!ONESIGNAL_APP_ID || !ONESIGNAL_REST_API_KEY) return;
+  const now = new Date(nowTs);
+  const today = todayKey(now);
+  if (lastDailyChestReminderDate === today) return;
+  const mins = minutesInTz(now, TZ);
+  const hour = Math.floor(mins / 60);
+  if (hour !== DAILY_CHEST_REMINDER_HOUR) return;
+  lastDailyChestReminderDate = today;
+  const yesterdayKey = todayKey(new Date(nowTs - 24 * 3600 * 1000));
+  const recipients = [];
+  for (const u of Object.values(USERS || {})) {
+    if (!u || u.isBanned) continue;
+    ensureDailyChest(u);
+    if (
+      (u.dailyChest?.streak || 0) > 0 &&
+      u.dailyChest?.lastDate === yesterdayKey &&
+      u.dailyChest?.lastDate !== today
+    ) {
+      recipients.push(u.username);
+    }
+  }
+  if (recipients.length)
+    await sendOneSignalNotificationToUsers(
+      recipients,
+      "VĀRDU ZONA – streak atgādinājums",
+      "Tavs Daily Chest streak drīz beigsies – nāc spēlēt šodien!"
+    );
+}
+
 async function createTournamentFromWeeklyQueue(queue, nowTs = Date.now()) {
   const participants = Array.isArray(queue?.participants)
     ? queue.participants.map((u) => String(u || "").trim()).filter(Boolean)
@@ -2082,8 +2115,8 @@ async function createTournamentFromWeeklyQueue(queue, nowTs = Date.now()) {
   );
   await sendOneSignalNotificationToUsers(
     seeding,
-    "Turnīrs ir sācies",
-    `${name} starts tagad. Veiksmi!`
+    "VĀRDU ZONA – jauns turnīrs",
+    `${name} sācies tagad. Veiksmi!`
   );
   return meta;
 }
@@ -2249,6 +2282,9 @@ function loadUsers(listOverride) {
       if (typeof u.dailyChest.streak !== "number") u.dailyChest.streak = 0;
       if (typeof u.dailyChest.totalOpens !== "number")
         u.dailyChest.totalOpens = 0;
+
+      // Offline duel aicinājumi (push)
+      if (!Array.isArray(u.pendingDuelInvites)) u.pendingDuelInvites = [];
 
       // Pastāvīgās medaļas
       if (!Array.isArray(u.specialMedals)) u.specialMedals = [];
@@ -4740,7 +4776,23 @@ async function buildMePayload(u) {
     blockedUsers: listBlocks(u),
     referralLink: `${String(process.env.BASE_URL || "https://bugats-wordle-server.onrender.com").replace(/\/$/, "")}/index.html?ref=${encodeURIComponent(u.username || "")}`,
     referredCount: Math.max(0, Number(u.referredCount) || 0),
+    pendingDuelInvites: buildPendingDuelInvitesPayload(u),
   };
+}
+
+function buildPendingDuelInvitesPayload(user) {
+  ensurePendingDuelInvites(user);
+  const now = Date.now();
+  return (user.pendingDuelInvites || [])
+    .filter((inv) => inv && Number(inv.expiresAt || 0) > now)
+    .map((inv) => ({
+      from: String(inv.from || "").trim(),
+      len: Math.max(4, Math.min(8, Math.floor(Number(inv.len) || 5))),
+      ranked: inv.ranked !== false,
+      createdAt: Number(inv.createdAt || 0),
+      expiresAt: Number(inv.expiresAt || 0),
+    }))
+    .filter((inv) => inv.from);
 }
 
 function authMiddleware(req, res, next) {
@@ -5123,11 +5175,15 @@ function broadcastOnlineList(force = false) {
 }
 setInterval(() => broadcastOnlineList(false), 30 * 1000);
 setInterval(() => {
-  processWeeklyTournamentQueue(Date.now()).catch((err) => {
+  const nowTs = Date.now();
+  processWeeklyTournamentQueue(nowTs).catch((err) => {
     console.warn("Weekly queue scheduler error:", err);
   });
+  maybeSendDailyChestReminders(nowTs).catch((err) => {
+    console.warn("Daily chest reminder error:", err);
+  });
   try {
-    const changed = syncVipRoomsLifecycle(Date.now());
+    const changed = syncVipRoomsLifecycle(nowTs);
     if (changed) {
       io.emit("tournament:update", { event: "vip_room_lifecycle_sync" });
     }
@@ -5598,6 +5654,15 @@ function listBlocks(user) {
   const blocks = ensureBlocks(user);
   if (!blocks) return [];
   return Object.values(blocks).filter(Boolean);
+}
+
+function ensurePendingDuelInvites(user) {
+  if (!user || typeof user !== "object") return;
+  if (!Array.isArray(user.pendingDuelInvites)) user.pendingDuelInvites = [];
+  const now = Date.now();
+  user.pendingDuelInvites = user.pendingDuelInvites.filter(
+    (inv) => inv && Number(inv.expiresAt || 0) > now
+  );
 }
 
 function ensureFriends(user) {
@@ -6651,6 +6716,7 @@ app.get("/me", authMiddleware, async (req, res) => {
   resetWinsTodayIfNeeded(u);
   resetDailyCountersIfNeeded(u);
   ensureDailyChest(u);
+  ensurePendingDuelInvites(u);
   ensureSpecialMedals(u);
   ensureRankFields(u);
   if (typeof u.supporter !== "boolean") u.supporter = false;
@@ -6658,6 +6724,24 @@ app.get("/me", authMiddleware, async (req, res) => {
   saveUsers(USERS);
   res.json(await buildMePayload(u));
 });
+
+app.post(
+  "/duel/offline-invites/:from/consume",
+  authMiddleware,
+  (req, res) => {
+    const user = req.user;
+    const fromRaw = String(req.params.from || "").trim();
+    if (!fromRaw) return res.status(400).json({ message: "Nav norādīts sūtītājs." });
+    ensurePendingDuelInvites(user);
+    const key = fromRaw.toLowerCase();
+    const before = (user.pendingDuelInvites || []).length;
+    user.pendingDuelInvites = (user.pendingDuelInvites || []).filter(
+      (inv) => String(inv?.from || "").toLowerCase() !== key
+    );
+    if (user.pendingDuelInvites.length !== before) saveUsers(USERS);
+    return res.json({ ok: true });
+  }
+);
 
 app.get("/vip/status", authMiddleware, (req, res) => {
   const user = req.user;
@@ -10093,7 +10177,7 @@ io.on("connection", (socket) => {
   });
 
   // ========== DUEĻI ==========
-  socket.on("duel.challenge", (targetNameRaw) => {
+  socket.on("duel.challenge", async (targetNameRaw) => {
     const challenger = socket.data.user;
     const challengerName = challenger.username;
     const isObj = targetNameRaw && typeof targetNameRaw === "object";
@@ -10126,10 +10210,33 @@ io.on("connection", (socket) => {
       });
 
     const targetSocket = getSocketByUsername(targetUser.username);
-    if (!targetSocket)
-      return socket.emit("duel.error", {
-        message: "Pretinieks nav tiešsaistē.",
+    if (!targetSocket) {
+      // Pretinieks offline – saglabājam aicinājumu un sūtām push
+      ensurePendingDuelInvites(targetUser);
+      const { word, len } = pickRandomWord();
+      const invite = {
+        from: challengerName,
+        len,
+        ranked,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + DUEL_OFFLINE_INVITE_EXPIRY_MS,
+      };
+      if (!Array.isArray(targetUser.pendingDuelInvites))
+        targetUser.pendingDuelInvites = [];
+      targetUser.pendingDuelInvites.push(invite);
+      saveUsers(USERS);
+      await sendOneSignalNotificationToUsers(
+        [targetUser.username],
+        "VĀRDU ZONA – duelis",
+        `${challengerName} tevi izaicināja uz dueli! Nāc spēlēt.`
+      );
+      return socket.emit("duel.waiting", {
+        opponent: targetUser.username,
+        len,
+        ranked,
+        offline: true,
       });
+    }
 
     const { word, len } = pickRandomWord();
     const duelId = crypto.randomBytes(8).toString("hex");
