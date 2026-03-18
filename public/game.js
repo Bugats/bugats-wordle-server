@@ -8643,9 +8643,9 @@ function loadImageFromDataUrl(dataUrl) {
   });
 }
 
-// Bez Supabase avatāri glabājas inline; serveris izgriež > AVATAR_INLINE_MAX_CHARS (120000).
-// Ar Supabase augšupielādē uz storage. Saspiemam līdz 100KB, lai vienmēr saglabātos.
-const AVATAR_COMPRESS_MAX_CHARS = 100 * 1024;
+// Bez Supabase avatāri glabājas inline; serveris izgriež > AVATAR_INLINE_MAX_CHARS.
+// Saspiemam līdz 95KB, lai vienmēr saglabātos (arī sarežģītas bildes).
+const AVATAR_COMPRESS_MAX_CHARS = 95 * 1024;
 
 async function compressAvatarDataUrl(dataUrl, maxDim = 512) {
   if (!dataUrl || typeof dataUrl !== "string") return dataUrl;
@@ -8660,15 +8660,17 @@ async function compressAvatarDataUrl(dataUrl, maxDim = 512) {
   if (!ctx) return dataUrl;
 
   const formats = [
-    { type: "image/webp", quality: 0.85 },
-    { type: "image/webp", quality: 0.75 },
+    { type: "image/webp", quality: 0.8 },
     { type: "image/webp", quality: 0.65 },
-    { type: "image/jpeg", quality: 0.85 },
-    { type: "image/jpeg", quality: 0.75 },
-    { type: "image/jpeg", quality: 0.6 },
+    { type: "image/webp", quality: 0.5 },
+    { type: "image/jpeg", quality: 0.8 },
+    { type: "image/jpeg", quality: 0.65 },
+    { type: "image/jpeg", quality: 0.5 },
+    { type: "image/jpeg", quality: 0.4 },
+    { type: "image/jpeg", quality: 0.3 },
   ];
 
-  const dims = [maxDim, 384, 320, 256, 192, 128, 96];
+  const dims = [maxDim, 384, 320, 256, 192, 128, 96, 80, 64, 48];
   for (const dim of dims) {
     const maxSide = Math.max(w, h);
     const scale = Math.min(1, dim / maxSide);
@@ -8688,8 +8690,23 @@ async function compressAvatarDataUrl(dataUrl, maxDim = 512) {
     }
   }
 
-  const last = canvas.toDataURL("image/jpeg", 0.5);
-  return last.length <= AVATAR_COMPRESS_MAX_CHARS ? last : canvas.toDataURL("image/jpeg", 0.35);
+  for (let q = 0.35; q >= 0.15; q -= 0.05) {
+    try {
+      const out = canvas.toDataURL("image/jpeg", q);
+      if (out && out.length <= AVATAR_COMPRESS_MAX_CHARS) return out;
+    } catch {}
+  }
+
+  canvas.width = 48;
+  canvas.height = 48;
+  ctx.drawImage(img, 0, 0, 48, 48);
+  for (let q = 0.5; q >= 0.2; q -= 0.1) {
+    try {
+      const out = canvas.toDataURL("image/jpeg", q);
+      if (out && out.length <= AVATAR_COMPRESS_MAX_CHARS) return out;
+    } catch {}
+  }
+  return canvas.toDataURL("image/jpeg", 0.2);
 }
 
 function clearAvatarFileInput() {
