@@ -4869,6 +4869,32 @@ app.get("/meta/storage", (_req, res) =>
     usersStore: USERS_STORE_ON_SUPABASE ? "supabase" : "file",
   })
 );
+app.get("/meta/supabase-check", async (_req, res) => {
+  const out = {
+    hasUrl: !!SUPABASE_URL,
+    hasKey: !!SUPABASE_SERVICE_ROLE_KEY,
+    enabled: SUPABASE_ENABLED,
+    urlPrefix: SUPABASE_URL ? SUPABASE_URL.slice(0, 35) + "..." : null,
+    storage: "unknown",
+    users: "unknown",
+  };
+  if (!SUPABASE_ENABLED || !supabase) {
+    return res.json({ ...out, error: "SUPABASE_URL vai SUPABASE_SERVICE_ROLE_KEY nav iestatīts" });
+  }
+  try {
+    const { data: buckets, error: bucketErr } = await supabase.storage.listBuckets();
+    out.storage = bucketErr ? `error: ${bucketErr.message}` : `ok (${(buckets || []).length} buckets)`;
+  } catch (e) {
+    out.storage = `error: ${String(e?.message || e)}`;
+  }
+  try {
+    const { error: usersErr } = await supabase.from(USERS_STORE_TABLE).select("username").limit(1);
+    out.users = usersErr ? `error: ${usersErr.message}` : "ok";
+  } catch (e) {
+    out.users = `error: ${String(e?.message || e)}`;
+  }
+  res.json(out);
+});
 app.post("/logout", (_req, res) => res.json({ ok: true }));
 app.get("/runtime-config.js", (_req, res) => {
   const payload = {
