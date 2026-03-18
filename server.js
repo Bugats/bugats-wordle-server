@@ -6796,7 +6796,17 @@ app.post("/avatar", authMiddleware, async (req, res) => {
     }
 
     await saveSingleUserToSupabase(user);
-    saveUsers(USERS);
+    // Tūlītēja flush, lai neviens vecs batch save neaizstātu avatarPath
+    if (USERS_STORE_ON_SUPABASE && supabase) {
+      if (usersSaveTimer) {
+        clearTimeout(usersSaveTimer);
+        usersSaveTimer = null;
+      }
+      usersSavePending = null;
+      await saveUsersImmediate(USERS);
+    } else {
+      saveUsers(USERS);
+    }
     broadcastOnlineList(true);
     broadcastLeaderboard(false);
 
