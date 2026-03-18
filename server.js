@@ -4807,6 +4807,8 @@ app.use(
         ],
         // Allow the in-game radio stream host while keeping strict defaults.
         "media-src": ["'self'", "https://stream.nightride.fm"],
+        // Avatāri no Supabase Storage
+        "img-src": ["'self'", "data:", "https://*.supabase.co"],
       },
     },
   })
@@ -6777,6 +6779,32 @@ app.post("/avatar", authMiddleware, async (req, res) => {
         return res
           .status(500)
           .json({ message: "Neizdevās augšupielādēt avatāru." });
+      }
+      // Verificē, ka fails ir pieejams, pirms saglabājam avatarPath (izvairās no 404 pēc refresh)
+      if (SUPABASE_STORAGE_PUBLIC) {
+        const verifyUrl = getSupabasePublicUrl(filePath);
+        let verified = false;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, 300 * attempt));
+          try {
+            const check = await fetch(verifyUrl, { method: "HEAD" });
+            if (check.ok) {
+              verified = true;
+              break;
+            }
+          } catch {}
+        }
+        if (!verified) {
+          console.error("Avatar upload verification failed:", filePath);
+          supabase.storage
+            .from(SUPABASE_STORAGE_BUCKET)
+            .remove([filePath])
+            .catch(() => {});
+          return res.status(500).json({
+            message:
+              "Avatārs augšupielādēts, bet nav pieejams. Mēģini vēlreiz pēc brīža.",
+          });
+        }
       }
       if (prevPath && prevPath !== filePath) {
         supabase.storage
