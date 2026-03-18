@@ -44,6 +44,33 @@ if (tabSignupBtn) {
   tabSignupBtn.addEventListener("click", () => setAuthTab("signup"));
 }
 setAuthTab(window.location.hash === "#signup" ? "signup" : "login");
+
+// Referrāla kods no URL (?ref=Username)
+function getReferralFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref")?.trim();
+    return ref && ref.length >= 3 ? ref : "";
+  } catch {
+    return "";
+  }
+}
+
+// Referrāla ziņojums, ja ?ref= ir URL
+function updateReferralNote() {
+  const ref = getReferralFromUrl();
+  const el = document.getElementById("signup-referral-note");
+  if (!el) return;
+  if (ref) {
+    el.textContent = `🎁 Tevi uzaicinājis ${ref}! Reģistrējoties, abi saņemsit bonusu (+50 un +25 coins).`;
+    el.classList.remove("hidden");
+  } else {
+    el.textContent = "";
+    el.classList.add("hidden");
+  }
+}
+updateReferralNote();
+
 function getOrCreateDeviceId() {
   try {
     let id = localStorage.getItem("vz_device_id");
@@ -115,6 +142,7 @@ if (signupForm) {
     const password = document.getElementById("signup-password").value.trim();
     const region =
       document.getElementById("signup-region")?.value?.trim() || "";
+    const referredBy = getReferralFromUrl();
 
     if (!username || !password) {
       showAuthError("Aizpildi lietotājvārdu un paroli.");
@@ -129,14 +157,17 @@ if (signupForm) {
       return;
     }
 
+    const payload = {
+      username,
+      email,
+      password,
+      region,
+      deviceId: getOrCreateDeviceId(),
+    };
+    if (referredBy) payload.referredBy = referredBy;
+
     try {
-      const data = await apiPost("/signup", {
-        username,
-        email,
-        password,
-        region,
-        deviceId: getOrCreateDeviceId(),
-      });
+      const data = await apiPost("/signup", payload);
       // uzreiz ielogojam un metam uz spēli
       handleAuthSuccess(data);
     } catch (err) {

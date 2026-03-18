@@ -103,6 +103,14 @@ const REVEAL_LETTER_COST_COINS = Number(
   process.env.REVEAL_LETTER_COST_COINS || 25
 );
 
+// ====== Referrāla bonusi ======
+const REFERRAL_COINS_REFERRER = Number(
+  process.env.REFERRAL_COINS_REFERRER || 50
+);
+const REFERRAL_COINS_REFEREE = Number(
+  process.env.REFERRAL_COINS_REFEREE || 25
+);
+
 const BASE_TOKEN_PRICE = 150;
 const VIP_DURATION_DAYS = (() => {
   const v = parseInt(process.env.VIP_DURATION_DAYS || "30", 10);
@@ -4730,6 +4738,8 @@ async function buildMePayload(u) {
     isAdmin: isAdminUser(u),
     revealLetterCostCoins: REVEAL_LETTER_COST_COINS,
     blockedUsers: listBlocks(u),
+    referralLink: `${String(process.env.BASE_URL || "https://bugats-wordle-server.onrender.com").replace(/\/$/, "")}/index.html?ref=${encodeURIComponent(u.username || "")}`,
+    referredCount: Math.max(0, Number(u.referredCount) || 0),
   };
 }
 
@@ -6229,7 +6239,7 @@ function applyDuelEloWinLoss(winner, loser) {
 }
 
 async function signupHandler(req, res) {
-  const { username, password, region, email } = req.body || {};
+  const { username, password, region, email, referredBy } = req.body || {};
   if (!username || !password) {
     return res
       .status(400)
@@ -6282,6 +6292,16 @@ async function signupHandler(req, res) {
   const existingEmailKey = findUserKeyByEmail(cleanedEmail);
   if (existingEmailKey) {
     return res.status(400).json({ message: "Šis e-pasts jau izmantots." });
+  }
+
+  // Referrāls: validē referentu
+  let referrerUser = null;
+  const refName = String(referredBy || "").trim();
+  if (refName) {
+    const refKey = findUserKeyCaseInsensitive(refName);
+    if (refKey && refKey.toLowerCase() !== name.toLowerCase()) {
+      referrerUser = USERS[refKey];
+    }
   }
 
   const hash = await bcrypt.hash(password, 10);
@@ -6356,6 +6376,7 @@ async function signupHandler(req, res) {
     badLenCount: 0,
     badLenWindowStart: 0,
     guessBlockedUntil: 0,
+    referredBy: referrerUser ? referrerUser.username : "",
   };
 
   ensureRankFields(user);
@@ -6363,6 +6384,13 @@ async function signupHandler(req, res) {
   ensureDailyChest(user);
   ensureSpecialMedals(user);
   resetDailyCountersIfNeeded(user);
+
+  // Referrāla bonusi
+  if (referrerUser) {
+    referrerUser.coins = (referrerUser.coins || 0) + REFERRAL_COINS_REFERRER;
+    referrerUser.referredCount = (referrerUser.referredCount || 0) + 1;
+    user.coins = (user.coins || 0) + REFERRAL_COINS_REFEREE;
+  }
 
   USERS[name] = user;
   saveUsers(USERS);
@@ -6912,6 +6940,8 @@ async function buildPublicProfilePayload(targetUser, requester) {
 
   if (requester && requester.username === targetUser.username) {
     payload.email = targetUser.email || "";
+    payload.referralLink = `${String(process.env.BASE_URL || "https://bugats-wordle-server.onrender.com").replace(/\/$/, "")}/index.html?ref=${encodeURIComponent(targetUser.username || "")}`;
+    payload.referredCount = Math.max(0, Number(targetUser.referredCount) || 0);
   }
 
   if (isAdmin) {

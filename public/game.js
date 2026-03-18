@@ -2646,6 +2646,42 @@ function showPlayerProfile(data) {
     inner.appendChild(friendBtn);
   }
 
+  // Referrāla sadaļa (tikai savam profilam)
+  let referralBox = document.getElementById("vz-profile-referral");
+  const isOwnProfile = state.username && data.username === state.username;
+  if (isOwnProfile && data.referralLink && inner) {
+    if (!referralBox) {
+      referralBox = document.createElement("div");
+      referralBox.id = "vz-profile-referral";
+      referralBox.className = "vz-profile-referral-box";
+      inner.appendChild(referralBox);
+    }
+    const count = Math.max(0, Number(data.referredCount) || 0);
+    referralBox.innerHTML = `
+      <div class="vz-referral-label">🎁 Uzaicini draugus</div>
+      <p class="vz-referral-desc">Kopīgo savu linku. Kad kāds reģistrējas, abi saņemat bonusu (+50 un +25 coins).</p>
+      <div class="vz-referral-stats">${count} uzaicināti</div>
+      <div class="vz-referral-row">
+        <input type="text" id="vz-referral-link-input" readonly />
+        <button type="button" class="mission-claim-btn vz-referral-copy">Kopēt</button>
+      </div>
+    `;
+    referralBox.style.display = "block";
+    const copyBtn = referralBox.querySelector(".vz-referral-copy");
+    const linkInput = document.getElementById("vz-referral-link-input");
+    if (linkInput) linkInput.value = data.referralLink || "";
+    if (copyBtn && linkInput) {
+      copyBtn.addEventListener("click", () => {
+        linkInput.select();
+        navigator.clipboard?.writeText?.(data.referralLink).then(() => {
+          appendSystemMessage("Links nokopēts!");
+        }).catch(() => {});
+      });
+    }
+  } else if (referralBox) {
+    referralBox.style.display = "none";
+  }
+
   updateProfileBlockButtons();
   updateProfileFriendButton();
 

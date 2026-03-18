@@ -2814,6 +2814,39 @@ summary:focus-visible {
 }
 .vz-profile-popup-close:hover { color: #fff; }
 
+/* Referrāla sadaļa profilā */
+.vz-profile-referral-box {
+  margin-top: 16px;
+  padding: 12px;
+  background: rgba(255, 215, 0, 0.08);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 215, 0, 0.3);
+}
+.vz-referral-label { font-weight: 600; margin-bottom: 4px; color: #ffd700; }
+.vz-referral-desc { font-size: 12px; color: #b0b0b0; margin: 0 0 8px; }
+.vz-referral-stats { font-size: 12px; margin-bottom: 8px; color: #80d8ff; }
+.vz-referral-row { display: flex; gap: 8px; align-items: center; }
+.vz-referral-row input {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(0,0,0,0.3);
+  color: #fff;
+}
+.vz-referral-copy { flex-shrink: 0; }
+
+.signup-referral-note {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: rgba(255, 215, 0, 0.12);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #ffd700;
+}
+.signup-referral-note.hidden { display: none; }
+
 .vz-profile-popup-close {
   position: absolute;
   right: 8px;
