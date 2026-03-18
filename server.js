@@ -2426,7 +2426,18 @@ async function loadUsersFromSupabase() {
     }
     const list = Array.isArray(data)
       ? data.map((row) => {
-          const obj = row?.data && typeof row.data === "object" ? row.data : {};
+          let obj = null;
+          if (row?.data) {
+            if (typeof row.data === "object") obj = row.data;
+            else if (typeof row.data === "string") {
+              try {
+                obj = JSON.parse(row.data);
+              } catch {
+                obj = {};
+              }
+            }
+          }
+          obj = obj || {};
           if (!obj.username && row?.username) obj.username = row.username;
           return obj;
         })
