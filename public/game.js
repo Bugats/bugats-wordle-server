@@ -9447,6 +9447,29 @@ async function initGame() {
     shareResultWhatsappBtn.addEventListener("click", handleShareResultWhatsapp);
   if (shareResultDiscordBtn)
     shareResultDiscordBtn.addEventListener("click", handleShareResultDiscord);
+
+  const bottomNav = document.getElementById("vz-bottom-nav");
+  if (bottomNav) {
+    bottomNav.querySelectorAll(".vz-bottom-nav-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.scroll;
+        if (!id) return;
+        const el = document.getElementById(id);
+        if (el) {
+          const details = el.closest("details");
+          if (details && !details.open) details.open = true;
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+          bottomNav.querySelectorAll(".vz-bottom-nav-btn").forEach((b) => {
+            b.classList.remove("vz-bottom-nav-active");
+            b.removeAttribute("aria-current");
+          });
+          btn.classList.add("vz-bottom-nav-active");
+          btn.setAttribute("aria-current", "page");
+        }
+      });
+    });
+  }
+
   if (engagementLoopPrimaryBtnEl) {
     engagementLoopPrimaryBtnEl.addEventListener("click", () =>
       runEngagementLoopAction(state.loopPrimaryAction)

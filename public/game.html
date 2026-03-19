@@ -30,7 +30,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
     <link
-      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Cinzel:wght@600;700&display=swap"
       rel="stylesheet"
     />
 
@@ -167,7 +167,7 @@
 
       <div class="vz-main-layout">
         <!-- KREISĀ PUSE -->
-        <div class="vz-left-area">
+        <div class="vz-left-area" id="vz-section-game">
           <div class="vz-mobile-toggle">
             <button id="mobile-fullscreen-btn" type="button">📱 Pilnekrāna spēle</button>
           </div>
@@ -235,7 +235,7 @@
               <div class="vz-side-group-title">Galvenais</div>
               <div class="vz-top-panels">
                 <!-- PROFILS -->
-                <div class="vz-player-card">
+                <div class="vz-player-card" id="vz-section-profile">
                   <div class="vz-card-header">Tavs profils</div>
 
                   <div class="vz-card-avatar-row">
@@ -476,7 +476,7 @@
                   </div>
 
                   <!-- TOP 10 -->
-                  <div class="vz-leaderboard-card">
+                  <div class="vz-leaderboard-card" id="vz-section-leaderboard">
                     <div class="vz-card-header">TOP 10 spēlētāji</div>
                     <ol id="lb-list" class="vz-lb-list"></ol>
                     <div id="lb-target-line" class="vz-lb-target-line u-hidden-initial"></div>
@@ -566,6 +566,7 @@
           </div>
 
           <!-- ČATS -->
+          <div id="vz-section-chat">
           <div class="vz-chat" id="chat-card">
             <div class="vz-card-header">
               Čats
@@ -598,8 +599,17 @@
   <button id="chat-send-btn" type="button">Sūtīt</button>
 </div>
           </div>
+          </div>
         </div>
       </div>
+
+      <!-- Mobilā apakšējā navigācija -->
+      <nav class="vz-bottom-nav" id="vz-bottom-nav" aria-label="Galvenā navigācija">
+        <button type="button" class="vz-bottom-nav-btn vz-bottom-nav-active" data-scroll="vz-section-game" aria-current="page">🎮 Spēle</button>
+        <button type="button" class="vz-bottom-nav-btn" data-scroll="vz-section-leaderboard">🏆 TOP</button>
+        <button type="button" class="vz-bottom-nav-btn" data-scroll="vz-section-profile">👤 Profils</button>
+        <button type="button" class="vz-bottom-nav-btn" data-scroll="vz-section-chat">💬 Čats</button>
+      </nav>
 
       <!-- TikTok + kā rakstīt Bugats + kontakts -->
       <div class="vz-footer-link">

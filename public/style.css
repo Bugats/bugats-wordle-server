@@ -21,12 +21,17 @@
   box-sizing: border-box;
 }
 
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
 html,
 body {
   margin: 0;
   padding: 0;
-  font-family: Arial, sans-serif;
-  line-height: 1.35;
+  font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.45;
   background-color: #f5f5f7;
   color: #222;
 }
@@ -255,62 +260,69 @@ summary:focus-visible {
    =========================== */
 
 :root {
-  --vz-glow-main: 0 0 18px rgba(255, 0, 85, 0.85);
+  /* Spacing – vizuālā hierarhija */
+  --vz-space-xs: 4px;
+  --vz-space-sm: 8px;
+  --vz-space-md: 16px;
+  --vz-space-lg: 24px;
+  --vz-space-xl: 32px;
+  --vz-space-2xl: 48px;
+  --vz-glow-main: 0 0 18px rgba(255, 0, 85, 0.75);
   --vz-glow-soft: 0 0 10px rgba(255, 255, 255, 0.18);
   --vz-glow-green: 0 0 14px rgba(106, 170, 100, 0.95);
   --vz-glow-yellow: 0 0 14px rgba(201, 180, 88, 0.9);
   --vz-glow-gray: 0 0 10px rgba(58, 58, 60, 0.8);
-  /* Tēmas (tumšs = noklusējums) */
-  --vz-body-bg: #1a3d1a;
-  --vz-body-text: #ffffff;
-  --vz-topbar-bg: linear-gradient(90deg, rgba(255, 0, 85, 0.32), rgba(0, 180, 255, 0.28));
+  /* Tēmas (tumšs = noklusējums) – vienotāka palete */
+  --vz-body-bg: #0f1f14;
+  --vz-body-text: #f0f4f2;
+  --vz-topbar-bg: linear-gradient(90deg, rgba(180, 60, 100, 0.25), rgba(60, 140, 180, 0.22));
   --vz-topbar-text: #f5f5f5;
   --vz-topbar-link-bg: rgba(255, 255, 255, 0.06);
   --vz-topbar-link-text: #e5e7eb;
-  --vz-topbar-nameday: #ffe082;
-  --vz-container-shadow: 0 0 24px rgba(0, 0, 0, 0.9);
-  --vz-tile-bg: #07091f;
-  --vz-tile-border: #3949ff;
+  --vz-topbar-nameday: #e8c86a;
+  --vz-container-shadow: 0 0 24px rgba(0, 0, 0, 0.85);
+  --vz-tile-bg: #0a0e18;
+  --vz-tile-border: #2a3a5a;
   --vz-tile-text: #f9fbff;
-  --vz-tile-correct-bg: linear-gradient(135deg, #00ff7f, #00c853);
-  --vz-tile-correct-border: #00ff7f;
+  --vz-tile-correct-bg: linear-gradient(135deg, #22c55e, #16a34a);
+  --vz-tile-correct-border: #22c55e;
   --vz-tile-correct-text: #02140a;
-  --vz-tile-present-bg: linear-gradient(135deg, #ffd54f, #ff9100);
-  --vz-tile-present-border: #ffb300;
-  --vz-tile-present-text: #201000;
-  --vz-tile-absent-bg: #111320;
-  --vz-tile-absent-border: #30324a;
-  --vz-tile-absent-text: #757aa2;
-  --vz-kb-key-bg: #1a1b2e;
-  --vz-kb-key-border: #333652;
-  --vz-kb-key-text: #6f7398;
+  --vz-tile-present-bg: linear-gradient(135deg, #eab308, #ca8a04);
+  --vz-tile-present-border: #eab308;
+  --vz-tile-present-text: #1a1200;
+  --vz-tile-absent-bg: #1a1d2e;
+  --vz-tile-absent-border: #2d3250;
+  --vz-tile-absent-text: #6b7280;
+  --vz-kb-key-bg: #161a2e;
+  --vz-kb-key-border: #2d3250;
+  --vz-kb-key-text: #8b92b0;
 }
 
-/* Gaišs režīms */
+/* Gaišs režīms – vienotāka palete */
 .vz-body-game.vz-theme-light {
   --vz-body-bg: #e8eef2;
   --vz-body-text: #1a1a1a;
-  --vz-topbar-bg: linear-gradient(90deg, rgba(255, 0, 85, 0.22), rgba(0, 180, 255, 0.2));
+  --vz-topbar-bg: linear-gradient(90deg, rgba(180, 60, 100, 0.18), rgba(60, 140, 180, 0.15));
   --vz-topbar-text: #1a1a1a;
   --vz-topbar-link-bg: rgba(0, 0, 0, 0.06);
   --vz-topbar-link-text: #2d2d2d;
   --vz-topbar-nameday: #b8860b;
-  --vz-container-shadow: 0 0 24px rgba(0, 0, 0, 0.15);
+  --vz-container-shadow: 0 0 24px rgba(0, 0, 0, 0.12);
   --vz-tile-bg: #ffffff;
-  --vz-tile-border: #3949ff;
+  --vz-tile-border: #4b5563;
   --vz-tile-text: #1a1a1a;
-  --vz-tile-correct-bg: linear-gradient(135deg, #00c853, #009624);
-  --vz-tile-correct-border: #009624;
+  --vz-tile-correct-bg: linear-gradient(135deg, #22c55e, #16a34a);
+  --vz-tile-correct-border: #16a34a;
   --vz-tile-correct-text: #ffffff;
-  --vz-tile-present-bg: linear-gradient(135deg, #ffb300, #ff8f00);
-  --vz-tile-present-border: #f57c00;
-  --vz-tile-present-text: #ffffff;
-  --vz-tile-absent-bg: #e0e0e0;
-  --vz-tile-absent-border: #9e9e9e;
-  --vz-tile-absent-text: #616161;
-  --vz-kb-key-bg: #e0e0e0;
-  --vz-kb-key-border: #9e9e9e;
-  --vz-kb-key-text: #424242;
+  --vz-tile-present-bg: linear-gradient(135deg, #eab308, #ca8a04);
+  --vz-tile-present-border: #ca8a04;
+  --vz-tile-present-text: #1a1200;
+  --vz-tile-absent-bg: #e5e7eb;
+  --vz-tile-absent-border: #9ca3af;
+  --vz-tile-absent-text: #4b5563;
+  --vz-kb-key-bg: #f3f4f6;
+  --vz-kb-key-border: #d1d5db;
+  --vz-kb-key-text: #374151;
   color-scheme: light;
 }
 
@@ -614,7 +626,7 @@ summary:focus-visible {
 .vz-main-layout {
   display: flex;
   flex: 1 1 auto;
-  gap: 16px;
+  gap: var(--vz-space-lg);
   min-height: 0;
 }
 
@@ -624,6 +636,7 @@ summary:focus-visible {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  gap: var(--vz-space-md);
 }
 
 .vz-right-area {
@@ -671,21 +684,21 @@ summary:focus-visible {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-start;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: var(--vz-space-md);
+  margin-bottom: var(--vz-space-md);
 }
 
 .vz-side-groups {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--vz-space-md);
 }
 
 .vz-side-group {
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(10, 12, 22, 0.45);
-  padding: 8px;
+  padding: var(--vz-space-md);
 }
 
 .vz-side-group-title,
@@ -1965,7 +1978,7 @@ summary:focus-visible {
   to { transform: rotate(360deg); }
 }
 .vz-grid {
-  margin: 12px auto 8px;
+  margin: var(--vz-space-lg) auto var(--vz-space-md);
   position: relative;
   --glow-x: 50%;
   --glow-y: 40%;
@@ -2039,10 +2052,10 @@ summary:focus-visible {
 }
 
 .vz-tile-pop,
-.tile.vz-tile-pop { animation: vzTilePop 0.09s ease-out; }
+.tile.vz-tile-pop { animation: vzTilePop 0.12s ease-out; }
 
 @keyframes vzTilePop {
-  0% { transform: scale(0.9); }
+  0% { transform: scale(0.92); }
   100% { transform: scale(1); }
 }
 
@@ -3748,6 +3761,70 @@ summary:focus-visible {
   padding: 2px 4px;
 }
 
+/* ===== MOBILĀ APAKŠĒJĀ NAVIGĀCIJA ===== */
+
+.vz-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 9000;
+  background: rgba(12, 16, 24, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: var(--vz-space-sm) var(--vz-space-xs);
+  padding-bottom: max(var(--vz-space-sm), env(safe-area-inset-bottom));
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.vz-bottom-nav-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.65);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.vz-bottom-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.vz-bottom-nav-btn.vz-bottom-nav-active {
+  background: rgba(255, 0, 85, 0.25);
+  color: #ff6b9d;
+}
+
+@media (max-width: 768px) {
+  .vz-bottom-nav {
+    display: flex;
+    justify-content: space-around;
+    align-items: stretch;
+  }
+  .vz-body-game { padding-bottom: 70px; }
+  .vz-body-game.vz-mobile-game-only .vz-bottom-nav { display: none; }
+  .vz-body-game.vz-mobile-game-only { padding-bottom: 0; }
+  #vz-section-game,
+  #vz-section-profile,
+  #vz-section-leaderboard,
+  #vz-section-chat {
+    scroll-margin-top: 12px;
+  }
+}
+
 /* ===========================
    Responsīvais
    =========================== */
@@ -3786,6 +3863,7 @@ summary:focus-visible {
 
 /* Reduced motion: disable high-motion UI animations */
 @media (prefers-reduced-motion: reduce) {
+  .vz-bottom-nav-btn { transition: none; }
   .vz-tile-pop,
   .tile.vz-tile-pop,
   .tile.shake,
