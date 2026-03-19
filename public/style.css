@@ -2537,6 +2537,7 @@ summary:focus-visible {
   background: rgba(0, 0, 0, 0.5);
   opacity: 0;
   animation: vzLevelUpFadeIn 0.4s ease-out forwards;
+  cursor: pointer;
 }
 .vz-level-up-overlay.hidden { display: none; }
 .vz-level-up-inner {

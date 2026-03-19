@@ -6754,7 +6754,7 @@ function dmToast(text, fromUser) {
   if (_dmToastTimer) clearTimeout(_dmToastTimer);
   _dmToastTimer = setTimeout(() => {
     toast.style.display = "none";
-  }, 3200);
+  }, 5000);
 }
 
 function dmUpdateContextBar() {
@@ -7489,7 +7489,7 @@ function updateWinTicker(info) {
   clearTimeout(updateWinTicker._t);
   updateWinTicker._t = setTimeout(() => {
     winTickerEl.classList.remove("vz-win-active");
-  }, 2600);
+  }, 4500);
 }
 
 // ==================== SEZONA ====================
@@ -9941,21 +9941,30 @@ async function initGame() {
 document.addEventListener("DOMContentLoaded", initGame);
 
 // Līmeņa pacēluma animācija
+let _levelUpDismissTimer = null;
 function showLevelUpAnimation(level, rankTitle) {
   if (typeof document === "undefined" || PREFERS_REDUCED_MOTION) return;
   const overlay = document.getElementById("vz-level-up-overlay");
   const subtitle = document.getElementById("vz-level-up-num");
   const titleEl = document.getElementById("vz-level-up-title");
   if (!overlay || !subtitle || !titleEl) return;
+  if (_levelUpDismissTimer) clearTimeout(_levelUpDismissTimer);
   subtitle.textContent = String(level);
   titleEl.textContent = rankTitle || "";
   overlay.classList.remove("hidden");
+  overlay.style.pointerEvents = "auto";
+  const dismiss = () => {
+    overlay.classList.add("hidden");
+    overlay.style.pointerEvents = "none";
+    overlay.onclick = null;
+    if (_levelUpDismissTimer) clearTimeout(_levelUpDismissTimer);
+    _levelUpDismissTimer = null;
+  };
+  overlay.onclick = dismiss;
   if (typeof confetti === "function") {
     confetti({ particleCount: 100, spread: 100, origin: { y: 0.5 }, colors: ["#ffd700", "#ff8c00", "#00c853"] });
   }
-  setTimeout(() => {
-    overlay.classList.add("hidden");
-  }, 2200);
+  _levelUpDismissTimer = setTimeout(dismiss, 4000);
 }
 
 // Rezerves flash (ja kaut kur gribi izsaukt manuāli)
