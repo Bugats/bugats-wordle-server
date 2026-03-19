@@ -115,15 +115,6 @@
             <summary class="vz-topbar-more-trigger">⋯ Vairāk</summary>
             <div class="vz-topbar-more-menu">
               <button
-                id="hard-mode-toggle-btn"
-                class="vz-topbar-link"
-                type="button"
-                title="Hard mode: dzeltenie burti jāizmanto nākamajos minējumos"
-                aria-label="Hard mode"
-                aria-pressed="false">
-                🎯 Hard mode: OFF
-              </button>
-              <button
                 id="theme-toggle-btn"
                 class="vz-topbar-link"
                 type="button"
@@ -183,6 +174,18 @@
 
           <div id="win-ticker" class="vz-win-ticker" aria-live="polite" aria-atomic="true"></div>
           <p id="game-message" class="vz-game-message" role="status" aria-live="polite" aria-atomic="true"></p>
+
+          <div class="vz-hard-mode-row">
+            <button
+              id="hard-mode-toggle-btn"
+              class="vz-hard-mode-btn"
+              type="button"
+              title="Dzeltenie burti jāizmanto nākamajos minējumos"
+              aria-label="Hard mode"
+              aria-pressed="false">
+              🎯 Hard mode: OFF
+            </button>
+          </div>
 
           <div id="grid" class="vz-grid">
   <div id="vz-phaser-fx" aria-hidden="true"></div>

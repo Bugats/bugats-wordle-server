@@ -2405,6 +2405,36 @@ summary:focus-visible {
   color: #d7dadc;
 }
 
+.vz-hard-mode-row {
+  margin-top: 8px;
+  margin-bottom: 4px;
+  display: flex;
+  justify-content: center;
+}
+
+.vz-hard-mode-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #d7dadc;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.vz-hard-mode-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.vz-hard-mode-btn[aria-pressed="true"] {
+  background: rgba(181, 159, 59, 0.35);
+  border-color: rgba(181, 159, 59, 0.6);
+  color: #e8c86a;
+}
+
 /* ===========================
    Footer links
    =========================== */
