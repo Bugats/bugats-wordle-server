@@ -3674,7 +3674,7 @@ async function startNewRound() {
     // atjauno solo raundu pēc refresh/disconnect (ja serveris atdod history)
     if (Array.isArray(data.history) && data.history.length) {
       data.history.forEach((h, r) => {
-        const guess = String(h?.guess || "");
+        const guess = String(h?.guess || "").split("");
         for (let c = 0; c < guess.length; c++) {
           const tile = state.gridTiles?.[r]?.[c];
           if (!tile) continue;
@@ -3682,6 +3682,7 @@ async function startNewRound() {
           tile.textContent = guess[c];
         }
         revealRow(r, h?.pattern || [], { animate: false });
+        applyCorrectLocksFromPattern(r - 1, guess, h?.pattern || []);
       });
 
       state.currentRow = data.history.length;
@@ -3795,7 +3796,8 @@ function applyRevealHintFromRow(pos, letter, fromRow = state.currentRow) {
     }
 
     tile.dataset.locked = "1";
-    tile.classList.add("hint-locked");
+    tile.classList.remove("present", "absent");
+    tile.classList.add("hint-locked", "correct");
   }
 
   skipHintLockedForward();
@@ -3818,8 +3820,8 @@ function applyCorrectLocksFromPattern(fromRowExclusive, guessLetters, pattern) {
       tile.dataset.letter = letter;
       tile.textContent = letter;
       tile.dataset.locked = "1";
-      tile.classList.add("hint-locked");
-      tile.classList.remove("correct", "present", "absent", "flip", "shake");
+      tile.classList.remove("present", "absent", "flip", "shake");
+      tile.classList.add("hint-locked", "correct");
     }
   }
 }
