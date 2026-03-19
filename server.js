@@ -8511,26 +8511,32 @@ app.post("/challenge/:id/guess", authMiddleware, (req, res) => {
       .json({ message: "Tu jau esi pabeidzis šo izaicinājumu." });
 
   if (history.length > 0) {
-    const yellowByLetter = new Map();
+    const wrongPositionsByLetter = new Map();
+    const yellowCountPerRow = new Map();
     const greenByLetter = new Map();
     for (const h of history) {
       const p = h.pattern || [];
       const g = String(h.guess || "");
+      const rowYellowCount = new Map();
       for (let cIdx = 0; cIdx < p.length && cIdx < g.length; cIdx++) {
         const letter = g[cIdx].toUpperCase();
         if (!letter) continue;
         if (p[cIdx] === "present") {
-          if (!yellowByLetter.has(letter)) yellowByLetter.set(letter, new Set());
-          yellowByLetter.get(letter).add(cIdx);
+          if (!wrongPositionsByLetter.has(letter)) wrongPositionsByLetter.set(letter, new Set());
+          wrongPositionsByLetter.get(letter).add(cIdx);
+          rowYellowCount.set(letter, (rowYellowCount.get(letter) || 0) + 1);
         } else if (p[cIdx] === "correct") {
           greenByLetter.set(letter, (greenByLetter.get(letter) || 0) + 1);
         }
       }
+      for (const [letter, count] of rowYellowCount) {
+        yellowCountPerRow.set(letter, Math.max(yellowCountPerRow.get(letter) || 0, count));
+      }
     }
     const gArr = guessRaw.split("");
     const missing = [];
-    for (const [letter, wrongPositions] of yellowByLetter) {
-      const yellowCount = wrongPositions.size;
+    for (const [letter, wrongPositions] of wrongPositionsByLetter) {
+      const yellowCount = yellowCountPerRow.get(letter) || 0;
       const greenCount = greenByLetter.get(letter) || 0;
       const requiredCount = Math.max(0, yellowCount - greenCount);
       if (requiredCount <= 0) continue;
@@ -8813,26 +8819,32 @@ app.post("/guess", guessRateLimiter, authMiddleware, (req, res) => {
   }
 
   if (round.history.length > 0) {
-    const yellowByLetter = new Map();
+    const wrongPositionsByLetter = new Map();
+    const yellowCountPerRow = new Map();
     const greenByLetter = new Map();
     for (const h of round.history) {
       const p = h.pattern || [];
       const g = String(h.guess || "");
+      const rowYellowCount = new Map();
       for (let c = 0; c < p.length && c < g.length; c++) {
         const letter = g[c].toUpperCase();
         if (!letter) continue;
         if (p[c] === "present") {
-          if (!yellowByLetter.has(letter)) yellowByLetter.set(letter, new Set());
-          yellowByLetter.get(letter).add(c);
+          if (!wrongPositionsByLetter.has(letter)) wrongPositionsByLetter.set(letter, new Set());
+          wrongPositionsByLetter.get(letter).add(c);
+          rowYellowCount.set(letter, (rowYellowCount.get(letter) || 0) + 1);
         } else if (p[c] === "correct") {
           greenByLetter.set(letter, (greenByLetter.get(letter) || 0) + 1);
         }
       }
+      for (const [letter, count] of rowYellowCount) {
+        yellowCountPerRow.set(letter, Math.max(yellowCountPerRow.get(letter) || 0, count));
+      }
     }
     const gArr = guessRaw.split("");
     const missing = [];
-    for (const [letter, wrongPositions] of yellowByLetter) {
-      const yellowCount = wrongPositions.size;
+    for (const [letter, wrongPositions] of wrongPositionsByLetter) {
+      const yellowCount = yellowCountPerRow.get(letter) || 0;
       const greenCount = greenByLetter.get(letter) || 0;
       const requiredCount = Math.max(0, yellowCount - greenCount);
       if (requiredCount <= 0) continue;
@@ -10442,26 +10454,32 @@ io.on("connection", (socket) => {
 
     const hist = duel.history?.[u.username] || [];
     if (hist.length > 0) {
-      const yellowByLetter = new Map();
+      const wrongPositionsByLetter = new Map();
+      const yellowCountPerRow = new Map();
       const greenByLetter = new Map();
       for (const h of hist) {
         const p = h.pattern || [];
         const g = String(h.guess || "");
+        const rowYellowCount = new Map();
         for (let cIdx = 0; cIdx < p.length && cIdx < g.length; cIdx++) {
           const letter = g[cIdx].toUpperCase();
           if (!letter) continue;
           if (p[cIdx] === "present") {
-            if (!yellowByLetter.has(letter)) yellowByLetter.set(letter, new Set());
-            yellowByLetter.get(letter).add(cIdx);
+            if (!wrongPositionsByLetter.has(letter)) wrongPositionsByLetter.set(letter, new Set());
+            wrongPositionsByLetter.get(letter).add(cIdx);
+            rowYellowCount.set(letter, (rowYellowCount.get(letter) || 0) + 1);
           } else if (p[cIdx] === "correct") {
             greenByLetter.set(letter, (greenByLetter.get(letter) || 0) + 1);
           }
         }
+        for (const [letter, count] of rowYellowCount) {
+          yellowCountPerRow.set(letter, Math.max(yellowCountPerRow.get(letter) || 0, count));
+        }
       }
       const gArr = guess.split("");
       const missing = [];
-      for (const [letter, wrongPositions] of yellowByLetter) {
-        const yellowCount = wrongPositions.size;
+      for (const [letter, wrongPositions] of wrongPositionsByLetter) {
+        const yellowCount = yellowCountPerRow.get(letter) || 0;
         const greenCount = greenByLetter.get(letter) || 0;
         const requiredCount = Math.max(0, yellowCount - greenCount);
         if (requiredCount <= 0) continue;
