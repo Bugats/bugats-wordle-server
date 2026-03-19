@@ -4079,7 +4079,8 @@ async function submitChallengeGuess() {
 }
 
 function getHardModeConstraints() {
-  const required = new Map();
+  const yellowByLetter = new Map();
+  const greenByLetter = new Map();
   for (let r = 0; r < state.currentRow; r++) {
     for (let c = 0; c < state.cols; c++) {
       const tile = state.gridTiles?.[r]?.[c];
@@ -4089,10 +4090,19 @@ function getHardModeConstraints() {
       const letter = raw.toUpperCase();
       if (!letter) continue;
       if (tile.classList.contains("present")) {
-        if (!required.has(letter)) required.set(letter, new Set());
-        required.get(letter).add(c);
+        if (!yellowByLetter.has(letter)) yellowByLetter.set(letter, new Set());
+        yellowByLetter.get(letter).add(c);
+      } else if (tile.classList.contains("correct")) {
+        greenByLetter.set(letter, (greenByLetter.get(letter) || 0) + 1);
       }
     }
+  }
+  const required = new Map();
+  for (const [letter, wrongPositions] of yellowByLetter) {
+    const yellowCount = wrongPositions.size;
+    const greenCount = greenByLetter.get(letter) || 0;
+    const needCount = Math.max(0, yellowCount - greenCount);
+    if (needCount > 0) required.set(letter, { wrongPositions, requiredCount: needCount });
   }
   return required;
 }
@@ -4101,8 +4111,7 @@ function validateHardModeGuess(guess) {
   const constraints = getHardModeConstraints();
   const gArr = guess.split("");
   const missing = [];
-  for (const [letter, wrongPositions] of constraints) {
-    const requiredCount = wrongPositions.size;
+  for (const [letter, { wrongPositions, requiredCount }] of constraints) {
     let validCount = 0;
     for (let i = 0; i < gArr.length; i++) {
       const g = String(gArr[i] || "").toUpperCase();

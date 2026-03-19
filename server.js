@@ -8511,22 +8511,29 @@ app.post("/challenge/:id/guess", authMiddleware, (req, res) => {
       .json({ message: "Tu jau esi pabeidzis šo izaicinājumu." });
 
   if (history.length > 0) {
-    const required = new Map();
+    const yellowByLetter = new Map();
+    const greenByLetter = new Map();
     for (const h of history) {
       const p = h.pattern || [];
       const g = String(h.guess || "");
       for (let cIdx = 0; cIdx < p.length && cIdx < g.length; cIdx++) {
-        if (p[cIdx] !== "present") continue;
         const letter = g[cIdx].toUpperCase();
         if (!letter) continue;
-        if (!required.has(letter)) required.set(letter, new Set());
-        required.get(letter).add(cIdx);
+        if (p[cIdx] === "present") {
+          if (!yellowByLetter.has(letter)) yellowByLetter.set(letter, new Set());
+          yellowByLetter.get(letter).add(cIdx);
+        } else if (p[cIdx] === "correct") {
+          greenByLetter.set(letter, (greenByLetter.get(letter) || 0) + 1);
+        }
       }
     }
     const gArr = guessRaw.split("");
     const missing = [];
-    for (const [letter, wrongPositions] of required) {
-      const requiredCount = wrongPositions.size;
+    for (const [letter, wrongPositions] of yellowByLetter) {
+      const yellowCount = wrongPositions.size;
+      const greenCount = greenByLetter.get(letter) || 0;
+      const requiredCount = Math.max(0, yellowCount - greenCount);
+      if (requiredCount <= 0) continue;
       let validCount = 0;
       for (let i = 0; i < gArr.length; i++) {
         if (gArr[i].toUpperCase() === letter && !wrongPositions.has(i))
@@ -8806,22 +8813,29 @@ app.post("/guess", guessRateLimiter, authMiddleware, (req, res) => {
   }
 
   if (round.history.length > 0) {
-    const required = new Map();
+    const yellowByLetter = new Map();
+    const greenByLetter = new Map();
     for (const h of round.history) {
       const p = h.pattern || [];
       const g = String(h.guess || "");
       for (let c = 0; c < p.length && c < g.length; c++) {
-        if (p[c] !== "present") continue;
         const letter = g[c].toUpperCase();
         if (!letter) continue;
-        if (!required.has(letter)) required.set(letter, new Set());
-        required.get(letter).add(c);
+        if (p[c] === "present") {
+          if (!yellowByLetter.has(letter)) yellowByLetter.set(letter, new Set());
+          yellowByLetter.get(letter).add(c);
+        } else if (p[c] === "correct") {
+          greenByLetter.set(letter, (greenByLetter.get(letter) || 0) + 1);
+        }
       }
     }
     const gArr = guessRaw.split("");
     const missing = [];
-    for (const [letter, wrongPositions] of required) {
-      const requiredCount = wrongPositions.size;
+    for (const [letter, wrongPositions] of yellowByLetter) {
+      const yellowCount = wrongPositions.size;
+      const greenCount = greenByLetter.get(letter) || 0;
+      const requiredCount = Math.max(0, yellowCount - greenCount);
+      if (requiredCount <= 0) continue;
       let validCount = 0;
       for (let i = 0; i < gArr.length; i++) {
         if (gArr[i].toUpperCase() === letter && !wrongPositions.has(i))
@@ -10428,22 +10442,29 @@ io.on("connection", (socket) => {
 
     const hist = duel.history?.[u.username] || [];
     if (hist.length > 0) {
-      const required = new Map();
+      const yellowByLetter = new Map();
+      const greenByLetter = new Map();
       for (const h of hist) {
         const p = h.pattern || [];
         const g = String(h.guess || "");
         for (let cIdx = 0; cIdx < p.length && cIdx < g.length; cIdx++) {
-          if (p[cIdx] !== "present") continue;
           const letter = g[cIdx].toUpperCase();
           if (!letter) continue;
-          if (!required.has(letter)) required.set(letter, new Set());
-          required.get(letter).add(cIdx);
+          if (p[cIdx] === "present") {
+            if (!yellowByLetter.has(letter)) yellowByLetter.set(letter, new Set());
+            yellowByLetter.get(letter).add(cIdx);
+          } else if (p[cIdx] === "correct") {
+            greenByLetter.set(letter, (greenByLetter.get(letter) || 0) + 1);
+          }
         }
       }
       const gArr = guess.split("");
       const missing = [];
-      for (const [letter, wrongPositions] of required) {
-        const requiredCount = wrongPositions.size;
+      for (const [letter, wrongPositions] of yellowByLetter) {
+        const yellowCount = wrongPositions.size;
+        const greenCount = greenByLetter.get(letter) || 0;
+        const requiredCount = Math.max(0, yellowCount - greenCount);
+        if (requiredCount <= 0) continue;
         let validCount = 0;
         for (let i = 0; i < gArr.length; i++) {
           if (gArr[i].toUpperCase() === letter && !wrongPositions.has(i))
