@@ -8510,6 +8510,39 @@ app.post("/challenge/:id/guess", authMiddleware, (req, res) => {
       .status(400)
       .json({ message: "Tu jau esi pabeidzis šo izaicinājumu." });
 
+  if (history.length > 0) {
+    const required = new Map();
+    for (const h of history) {
+      const p = h.pattern || [];
+      const g = String(h.guess || "");
+      for (let cIdx = 0; cIdx < p.length && cIdx < g.length; cIdx++) {
+        if (p[cIdx] !== "present") continue;
+        const letter = g[cIdx].toUpperCase();
+        if (!letter) continue;
+        if (!required.has(letter)) required.set(letter, new Set());
+        required.get(letter).add(cIdx);
+      }
+    }
+    const gArr = guessRaw.split("");
+    const missing = [];
+    for (const [letter, wrongPositions] of required) {
+      const requiredCount = wrongPositions.size;
+      let validCount = 0;
+      for (let i = 0; i < gArr.length; i++) {
+        if (gArr[i].toUpperCase() === letter && !wrongPositions.has(i))
+          validCount++;
+      }
+      if (validCount < requiredCount) {
+        for (let k = 0; k < requiredCount - validCount; k++) missing.push(letter);
+      }
+    }
+    if (missing.length > 0) {
+      return res.status(400).json({
+        message: `Izmanto dzeltenos burtus (${[...new Set(missing)].join(", ")}) citā pozīcijā.`,
+      });
+    }
+  }
+
   const pattern = buildPattern(c.word, guessRaw);
   const isWin = guessRaw === c.word;
   const attemptsUsed = currentAttempts + 1;
@@ -8770,6 +8803,40 @@ app.post("/guess", guessRateLimiter, authMiddleware, (req, res) => {
     return res.status(400).json({
       message: "Minējumā drīkst būt tikai burti (A-Z + latviešu burti).",
     });
+  }
+
+  if (round.history.length > 0) {
+    const required = new Map();
+    for (const h of round.history) {
+      const p = h.pattern || [];
+      const g = String(h.guess || "");
+      for (let c = 0; c < p.length && c < g.length; c++) {
+        if (p[c] !== "present") continue;
+        const letter = g[c].toUpperCase();
+        if (!letter) continue;
+        if (!required.has(letter)) required.set(letter, new Set());
+        required.get(letter).add(c);
+      }
+    }
+    const gArr = guessRaw.split("");
+    const missing = [];
+    for (const [letter, wrongPositions] of required) {
+      const requiredCount = wrongPositions.size;
+      let validCount = 0;
+      for (let i = 0; i < gArr.length; i++) {
+        if (gArr[i].toUpperCase() === letter && !wrongPositions.has(i))
+          validCount++;
+      }
+      if (validCount < requiredCount) {
+        for (let k = 0; k < requiredCount - validCount; k++) missing.push(letter);
+      }
+    }
+    if (missing.length > 0) {
+      saveUsers(USERS);
+      return res.status(400).json({
+        message: `Izmanto dzeltenos burtus (${[...new Set(missing)].join(", ")}) citā pozīcijā.`,
+      });
+    }
   }
 
   if (round.attemptsLeft <= 0) {
@@ -10357,6 +10424,40 @@ io.on("connection", (socket) => {
       return socket.emit("duel.error", {
         message: "Minējumā drīkst būt tikai burti (A-Z + LV).",
       });
+    }
+
+    const hist = duel.history?.[u.username] || [];
+    if (hist.length > 0) {
+      const required = new Map();
+      for (const h of hist) {
+        const p = h.pattern || [];
+        const g = String(h.guess || "");
+        for (let cIdx = 0; cIdx < p.length && cIdx < g.length; cIdx++) {
+          if (p[cIdx] !== "present") continue;
+          const letter = g[cIdx].toUpperCase();
+          if (!letter) continue;
+          if (!required.has(letter)) required.set(letter, new Set());
+          required.get(letter).add(cIdx);
+        }
+      }
+      const gArr = guess.split("");
+      const missing = [];
+      for (const [letter, wrongPositions] of required) {
+        const requiredCount = wrongPositions.size;
+        let validCount = 0;
+        for (let i = 0; i < gArr.length; i++) {
+          if (gArr[i].toUpperCase() === letter && !wrongPositions.has(i))
+            validCount++;
+        }
+        if (validCount < requiredCount) {
+          for (let k = 0; k < requiredCount - validCount; k++) missing.push(letter);
+        }
+      }
+      if (missing.length > 0) {
+        return socket.emit("duel.error", {
+          message: `Izmanto dzeltenos burtus (${[...new Set(missing)].join(", ")}) citā pozīcijā.`,
+        });
+      }
     }
 
     const left = duel.attemptsLeft[u.username] ?? 0;

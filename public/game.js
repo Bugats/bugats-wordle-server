@@ -4084,7 +4084,9 @@ function getHardModeConstraints() {
     for (let c = 0; c < state.cols; c++) {
       const tile = state.gridTiles?.[r]?.[c];
       if (!tile) continue;
-      const letter = String(tile.dataset.letter || "").toUpperCase();
+      const raw = String(tile.dataset.letter || "").trim();
+      if (!raw) continue;
+      const letter = raw.toUpperCase();
       if (!letter) continue;
       if (tile.classList.contains("present")) {
         if (!required.has(letter)) required.set(letter, new Set());
@@ -4103,7 +4105,8 @@ function validateHardModeGuess(guess) {
     const requiredCount = wrongPositions.size;
     let validCount = 0;
     for (let i = 0; i < gArr.length; i++) {
-      if (gArr[i] === letter && !wrongPositions.has(i)) validCount++;
+      const g = String(gArr[i] || "").toUpperCase();
+      if (g === letter && !wrongPositions.has(i)) validCount++;
     }
     if (validCount < requiredCount) {
       for (let k = 0; k < requiredCount - validCount; k++) missing.push(letter);
@@ -8293,6 +8296,7 @@ function initSocket() {
   socket.on("duel.error", (payload) => {
     const msg = payload?.message || "Nezināma duēļa kļūda.";
     appendSystemMessage("❌ Duēlis: " + msg);
+    if (gameMessageEl) gameMessageEl.textContent = msg;
     if (!duelCountdownId) state.isLocked = false;
   });
 
