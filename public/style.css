@@ -2295,6 +2295,16 @@ summary:focus-visible {
   filter: brightness(1.1);
 }
 
+.kb-key.kb-key-press {
+  animation: vzKbKeyPress 0.12s ease-out;
+}
+
+@keyframes vzKbKeyPress {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+
 .vz-key-wide { min-width: 64px; }
 
 .vz-key-shift,
@@ -2680,8 +2690,13 @@ summary:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
+  animation: vzModalOverlayIn 0.25s ease-out;
 }
 .vz-modal-overlay.hidden { display: none; }
+@keyframes vzModalOverlayIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
 .vz-modal-inner {
   background: linear-gradient(135deg, #1a1b2e 0%, #0f1117 100%);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -2689,6 +2704,11 @@ summary:focus-visible {
   padding: 20px 24px;
   max-width: 420px;
   width: 90%;
+  animation: vzModalSlideIn 0.3s ease-out;
+}
+@keyframes vzModalSlideIn {
+  0% { opacity: 0; transform: translateY(-20px) scale(0.96); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 .vz-challenge-modal h3 { margin: 0 0 12px; font-size: 18px; color: #fff; }
 .vz-challenge-create-note, .vz-challenge-join-text { margin: 0 0 14px; font-size: 14px; color: #b0b0b0; }
@@ -2724,6 +2744,7 @@ summary:focus-visible {
   align-items: center;
   justify-content: center;
   z-index: 9999;
+  animation: vzModalOverlayIn 0.25s ease-out;
 }
 
 .vz-profile-popup-inner {
@@ -2736,6 +2757,7 @@ summary:focus-visible {
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
   border: 1px solid #ff0055;
   font-size: 14px;
+  animation: vzModalSlideIn 0.3s ease-out;
 }
 
 .vz-profile-popup-inner h3 {
@@ -3864,6 +3886,11 @@ summary:focus-visible {
 /* Reduced motion: disable high-motion UI animations */
 @media (prefers-reduced-motion: reduce) {
   .vz-bottom-nav-btn { transition: none; }
+  .kb-key.kb-key-press { animation: none; }
+  .vz-modal-overlay,
+  .vz-profile-popup,
+  .vz-modal-inner,
+  .vz-profile-popup-inner { animation: none; }
   .vz-tile-pop,
   .tile.vz-tile-pop,
   .tile.shake,

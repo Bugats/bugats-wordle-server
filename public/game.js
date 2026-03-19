@@ -3888,6 +3888,10 @@ function addLetter(ch) {
   tile.textContent = ch;
   tile.dataset.letter = ch;
   tile.classList.remove("correct", "present", "absent", "shake", "flip");
+  if (!PREFERS_REDUCED_MOTION) {
+    tile.classList.add("vz-tile-pop");
+    setTimeout(() => tile.classList.remove("vz-tile-pop"), 140);
+  }
 
   state.currentCol++;
   skipHintLockedForward();
@@ -3983,10 +3987,25 @@ function revealDurationMs() {
   return Math.max(260, (cols - 1) * FLIP_DELAY_MS + FLIP_DURATION_MS);
 }
 
-function showWinEffects() {
+function showWinEffects(winRowIndex) {
   if (gridEl) {
     gridEl.classList.add("win-glow");
     setTimeout(() => gridEl.classList.remove("win-glow"), 1200);
+  }
+  if (
+    !PREFERS_REDUCED_MOTION &&
+    Number.isInteger(winRowIndex) &&
+    state.gridTiles?.[winRowIndex]
+  ) {
+    const row = state.gridTiles[winRowIndex];
+    row.forEach((tile, i) => {
+      if (tile?.classList?.contains?.("correct")) {
+        setTimeout(() => {
+          tile.classList.add("vz-tile-win-bounce");
+          setTimeout(() => tile.classList.remove("vz-tile-win-bounce"), 400);
+        }, 100 + i * 50);
+      }
+    });
   }
   if (screenFlashEl) {
     screenFlashEl.classList.add("vz-screen-flash-active");
@@ -4090,7 +4109,7 @@ async function submitGuess() {
       if (gameMessageEl)
         gameMessageEl.textContent = "Precīzi! Tu atminēji vārdu!";
       playSound(sWin);
-      setTimeout(() => showWinEffects(), Math.min(120, unlockAfter));
+      setTimeout(() => showWinEffects(rowIndex), Math.min(120, unlockAfter));
       state.roundFinished = true;
       renderEngagementLoopCard();
       setTimeout(
@@ -4349,6 +4368,10 @@ function buildKeyboard() {
       if (key.length === 1 && /[A-Z]/.test(key)) btn.dataset.baseKey = key;
 
       btn.addEventListener("click", () => {
+        if (!PREFERS_REDUCED_MOTION) {
+          btn.classList.add("kb-key-press");
+          setTimeout(() => btn.classList.remove("kb-key-press"), 120);
+        }
         // SHIFT drīkst spiest arī lock laikā
         if (state.isLocked && key !== "SHIFT") return;
 
@@ -4429,6 +4452,12 @@ window.addEventListener("keydown", (e) => {
   const ch = normalizeLetter(e.key);
   if (!ch) return;
   e.preventDefault();
+  const layoutKey = Object.entries(LATVIAN_MAP).find(([, v]) => v === ch)?.[0] || ch;
+  const kbBtn = state.keyboardButtons.get(layoutKey);
+  if (kbBtn && !PREFERS_REDUCED_MOTION) {
+    kbBtn.classList.add("kb-key-press");
+    setTimeout(() => kbBtn.classList.remove("kb-key-press"), 120);
+  }
   addLetter(ch);
 });
 
@@ -8304,7 +8333,8 @@ function initSocket() {
     if (win) {
       if (gameMessageEl) gameMessageEl.textContent = "Tu uzminēji dueli!";
       playSound(sWin);
-      setTimeout(() => showWinEffects(), Math.min(120, unlockAfter));
+      const winRow = state.currentRow;
+      setTimeout(() => showWinEffects(winRow), Math.min(120, unlockAfter));
       state.roundFinished = true;
       state.isLocked = true;
       renderEngagementLoopCard();
