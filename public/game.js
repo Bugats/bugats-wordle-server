@@ -4066,6 +4066,40 @@ async function submitChallengeGuess() {
   }
 }
 
+function getHardModeConstraints() {
+  const required = new Map();
+  for (let r = 0; r < state.currentRow; r++) {
+    for (let c = 0; c < state.cols; c++) {
+      const tile = state.gridTiles?.[r]?.[c];
+      if (!tile) continue;
+      const letter = String(tile.dataset.letter || "").toUpperCase();
+      if (!letter) continue;
+      if (tile.classList.contains("present")) {
+        if (!required.has(letter)) required.set(letter, new Set());
+        required.get(letter).add(c);
+      }
+    }
+  }
+  return required;
+}
+
+function validateHardModeGuess(guess) {
+  const constraints = getHardModeConstraints();
+  const gArr = guess.split("");
+  const missing = [];
+  for (const [letter, wrongPositions] of constraints) {
+    const requiredCount = wrongPositions.size;
+    let validCount = 0;
+    for (let i = 0; i < gArr.length; i++) {
+      if (gArr[i] === letter && !wrongPositions.has(i)) validCount++;
+    }
+    if (validCount < requiredCount) {
+      for (let k = 0; k < requiredCount - validCount; k++) missing.push(letter);
+    }
+  }
+  return { valid: missing.length === 0, missing };
+}
+
 async function submitGuess() {
   if (state.duelMode) {
     submitDuelGuess();
@@ -4090,6 +4124,19 @@ async function submitGuess() {
   }
   const guess = letters.join("");
   if (!guess || guess.length !== state.cols) return;
+
+  if (state.hardMode && state.currentRow > 0) {
+    const check = validateHardModeGuess(guess);
+    if (!check.valid) {
+      flashRow(state.currentRow);
+      if (gameMessageEl)
+        gameMessageEl.textContent =
+          check.missing.length > 0
+            ? `Hard mode: izmanto dzeltenos burtus (${check.missing.join(", ")})`
+            : "Hard mode: dzeltenie burti jāizmanto citā pozīcijā.";
+      return;
+    }
+  }
 
   state.isLocked = true;
 
@@ -9336,6 +9383,27 @@ async function initGame() {
     if (saved && THEME_ORDER.includes(saved)) state.theme = saved;
   } catch {}
   applyTheme();
+  try {
+    const hm = localStorage.getItem("vz_hard_mode");
+    state.hardMode = hm === "1";
+  } catch {}
+  const hardModeToggleBtn = document.getElementById("hard-mode-toggle-btn");
+  if (hardModeToggleBtn) {
+    const updateHardModeUi = () => {
+      hardModeToggleBtn.textContent = state.hardMode
+        ? "🎯 Hard mode: ON"
+        : "🎯 Hard mode: OFF";
+      hardModeToggleBtn.setAttribute("aria-pressed", state.hardMode ? "true" : "false");
+    };
+    updateHardModeUi();
+    hardModeToggleBtn.addEventListener("click", () => {
+      state.hardMode = !state.hardMode;
+      try {
+        localStorage.setItem("vz_hard_mode", state.hardMode ? "1" : "0");
+      } catch {}
+      updateHardModeUi();
+    });
+  }
   if (themeToggleBtn) {
     themeToggleBtn.addEventListener("click", () => {
       const idx = THEME_ORDER.indexOf(state.theme);
