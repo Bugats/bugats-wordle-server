@@ -4028,6 +4028,18 @@ async function submitChallengeGuess() {
   }
   const guess = letters.join("");
   if (!guess || guess.length !== state.cols) return;
+  if (state.currentRow > 0) {
+    const check = validateHardModeGuess(guess);
+    if (!check.valid) {
+      flashRow(state.currentRow);
+      if (gameMessageEl)
+        gameMessageEl.textContent =
+          check.missing.length > 0
+            ? `Izmanto dzeltenos burtus (${check.missing.join(", ")})`
+            : "Dzeltenie burti jāizmanto citā pozīcijā.";
+      return;
+    }
+  }
   state.isLocked = true;
   try {
     const data = await apiPost("/challenge/" + state.challengeId + "/guess", {
@@ -4125,15 +4137,15 @@ async function submitGuess() {
   const guess = letters.join("");
   if (!guess || guess.length !== state.cols) return;
 
-  if (state.hardMode && state.currentRow > 0) {
+  if (state.currentRow > 0) {
     const check = validateHardModeGuess(guess);
     if (!check.valid) {
       flashRow(state.currentRow);
       if (gameMessageEl)
         gameMessageEl.textContent =
           check.missing.length > 0
-            ? `Hard mode: izmanto dzeltenos burtus (${check.missing.join(", ")})`
-            : "Hard mode: dzeltenie burti jāizmanto citā pozīcijā.";
+            ? `Izmanto dzeltenos burtus (${check.missing.join(", ")})`
+            : "Dzeltenie burti jāizmanto citā pozīcijā.";
       return;
     }
   }
@@ -4269,6 +4281,19 @@ function submitDuelGuess() {
   }
   const guess = letters.join("");
   if (!guess || guess.length !== state.cols) return;
+
+  if (state.currentRow > 0) {
+    const check = validateHardModeGuess(guess);
+    if (!check.valid) {
+      flashRow(state.currentRow);
+      if (gameMessageEl)
+        gameMessageEl.textContent =
+          check.missing.length > 0
+            ? `Izmanto dzeltenos burtus (${check.missing.join(", ")})`
+            : "Dzeltenie burti jāizmanto citā pozīcijā.";
+      return;
+    }
+  }
 
   state.isLocked = true;
   playControlNote("enter");
@@ -9383,27 +9408,6 @@ async function initGame() {
     if (saved && THEME_ORDER.includes(saved)) state.theme = saved;
   } catch {}
   applyTheme();
-  try {
-    const hm = localStorage.getItem("vz_hard_mode");
-    state.hardMode = hm === "1";
-  } catch {}
-  const hardModeToggleBtn = document.getElementById("hard-mode-toggle-btn");
-  if (hardModeToggleBtn) {
-    const updateHardModeUi = () => {
-      hardModeToggleBtn.textContent = state.hardMode
-        ? "🎯 Hard mode: ON"
-        : "🎯 Hard mode: OFF";
-      hardModeToggleBtn.setAttribute("aria-pressed", state.hardMode ? "true" : "false");
-    };
-    updateHardModeUi();
-    hardModeToggleBtn.addEventListener("click", () => {
-      state.hardMode = !state.hardMode;
-      try {
-        localStorage.setItem("vz_hard_mode", state.hardMode ? "1" : "0");
-      } catch {}
-      updateHardModeUi();
-    });
-  }
   if (themeToggleBtn) {
     themeToggleBtn.addEventListener("click", () => {
       const idx = THEME_ORDER.indexOf(state.theme);

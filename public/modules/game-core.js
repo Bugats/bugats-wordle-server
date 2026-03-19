@@ -164,9 +164,6 @@
       // Tēma: dark | light | contrast
       theme: "dark",
 
-      // Hard mode: dzeltenie burti jāizmanto visos nākamajos minējumos
-      hardMode: false,
-
       // Izaicinājums draugam (viens vārds, mazāk mēģinājumu = uzvara)
       challengeId: null,
       challengeOpponent: null,
