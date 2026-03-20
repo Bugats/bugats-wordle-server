@@ -133,6 +133,7 @@
             title="Dambrete un šahs"
             aria-label="Galda spēles">
             ♟️ Galda
+            <span id="board-games-badge" class="vz-duel-badge hidden" aria-label="Tava kārta">!</span>
           </button>
 
           <button id="sound-toggle-btn" class="vz-sound-btn" type="button">🔊 Skaņa: ON</button>
@@ -845,6 +846,16 @@
               <p><strong>Šahs:</strong> Standarta šaha noteikumi. Uzvar tas, kas izveido matu pretinieka karalim.</p>
             </div>
           </details>
+          <div class="vz-board-leaderboards">
+            <details class="vz-board-lb">
+              <summary>🏆 Dambretes TOP</summary>
+              <div id="board-lb-dambrete" class="vz-board-lb-list"></div>
+            </details>
+            <details class="vz-board-lb">
+              <summary>🏆 Šaha TOP</summary>
+              <div id="board-lb-chess" class="vz-board-lb-list"></div>
+            </details>
+          </div>
         </div>
         <div id="board-games-invite" class="vz-board-invite hidden">
           <p class="vz-board-invite-text"><span id="board-invite-from"></span> aicina uz <span id="board-invite-type"></span></p>

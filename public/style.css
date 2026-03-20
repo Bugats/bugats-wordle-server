@@ -4990,6 +4990,13 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 .vz-board-rules-content p { margin: 0 0 6px; }
 .vz-board-rules-content p:last-child { margin-bottom: 0; }
+.vz-board-leaderboards { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
+.vz-board-lb summary { font-size: 13px; cursor: pointer; opacity: 0.9; }
+.vz-board-lb-list { margin-top: 8px; font-size: 12px; max-height: 120px; overflow-y: auto; }
+.vz-board-lb-list .vz-board-lb-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.vz-board-lb-list .vz-board-lb-row:last-child { border-bottom: none; }
+.vz-board-lb-place { font-weight: 700; min-width: 20px; }
+.vz-board-lb-elo { opacity: 0.85; margin-left: auto; }
 .vz-board-invite-form input {
   width: 100%;
   padding: 10px 12px;

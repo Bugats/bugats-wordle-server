@@ -712,6 +712,35 @@ function createChessGame(challenger, opponent) {
   return game;
 }
 
+const BOARD_ELO_DEFAULT = 1000;
+const BOARD_ELO_K = 32;
+
+function ensureBoardEloFields(u, type) {
+  const key = type === "chess" ? "chessElo" : "dambreteElo";
+  const gamesKey = type === "chess" ? "chessEloGames" : "dambreteEloGames";
+  if (!u) return;
+  if (!Number.isFinite(u[key])) u[key] = BOARD_ELO_DEFAULT;
+  if (!Number.isFinite(u[gamesKey])) {
+    const w = type === "chess" ? (u.chessWins || 0) : (u.dambreteWins || 0);
+    u[gamesKey] = Math.max(0, w * 2); // rough estimate
+  }
+}
+
+function applyBoardElo(winner, loser, type) {
+  const wKey = type === "chess" ? "chessElo" : "dambreteElo";
+  const gKey = type === "chess" ? "chessEloGames" : "dambreteEloGames";
+  ensureBoardEloFields(winner, type);
+  ensureBoardEloFields(loser, type);
+  const ra = Number(winner[wKey]) || BOARD_ELO_DEFAULT;
+  const rb = Number(loser[wKey]) || BOARD_ELO_DEFAULT;
+  const ea = 1 / (1 + Math.pow(10, (rb - ra) / 400));
+  const eb = 1 - ea;
+  winner[wKey] = Math.round(ra + BOARD_ELO_K * (1 - ea));
+  loser[wKey] = Math.round(rb + BOARD_ELO_K * (0 - eb));
+  winner[gKey] = (Number(winner[gKey]) || 0) + 1;
+  loser[gKey] = (Number(loser[gKey]) || 0) + 1;
+}
+
 function finishBoardGame(game, winnerUsername, reason) {
   if (!game || game.status === "finished") return;
   game.status = "finished";
@@ -722,22 +751,30 @@ function finishBoardGame(game, winnerUsername, reason) {
   userToBoardGame.delete(p1);
   userToBoardGame.delete(p2);
 
-  if (winnerUsername && REGION_POINTS_PER_WIN > 0) {
-    const winner = USERS[findUserKeyCaseInsensitive(winnerUsername)];
-    if (winner) {
-      winner.xp = (winner.xp || 0) + BOARD_GAME_REWARD_XP;
+  const winnerKey = winnerUsername ? findUserKeyCaseInsensitive(winnerUsername) : null;
+  const winner = winnerKey ? USERS[winnerKey] : null;
+  const loserKey = winnerUsername ? (p1 === winnerUsername ? p2 : p1) : null;
+  const loser = loserKey ? USERS[findUserKeyCaseInsensitive(loserKey)] : null;
+
+  if (winner) {
+    winner.xp = (winner.xp || 0) + BOARD_GAME_REWARD_XP;
+    if (REGION_POINTS_PER_WIN > 0) {
       let rp = BOARD_GAME_REGION_POINTS;
       if (isRegionBonusActive()) rp *= REGION_BONUS_MULTIPLIER;
       winner.regionPoints = Math.max(0, Math.floor(winner.regionPoints || 0)) + rp;
-      ensureRankFields(winner);
-      if (winner.dambreteWins == null) winner.dambreteWins = 0;
-      if (winner.chessWins == null) winner.chessWins = 0;
-      if (game.type === "dambrete") winner.dambreteWins++;
-      else if (game.type === "chess") winner.chessWins++;
     }
+    ensureRankFields(winner);
+    if (winner.dambreteWins == null) winner.dambreteWins = 0;
+    if (winner.chessWins == null) winner.chessWins = 0;
+    if (game.type === "dambrete") winner.dambreteWins++;
+    else if (game.type === "chess") winner.chessWins++;
+  }
+  if (winner && loser && winnerUsername) {
+    applyBoardElo(winner, loser, game.type);
   }
   saveUsers(USERS);
   broadcastLeaderboard(false);
+  io.emit("board:leaderboard", { type: game.type });
 }
 
 // ======== ČATS (mini anti-spam) ========
@@ -4953,6 +4990,8 @@ async function buildMePayload(u) {
     duelEloGames: u.duelEloGames || 0,
     dambreteWins: u.dambreteWins || 0,
     chessWins: u.chessWins || 0,
+    dambreteElo: u.dambreteElo || BOARD_ELO_DEFAULT,
+    chessElo: u.chessElo || BOARD_ELO_DEFAULT,
     rankTitle: u.rankTitle || rankInfo.title,
     rankLevel: u.rankLevel || rankInfo.level,
     rankColor: u.rankColor || rankInfo.color,
@@ -6943,6 +6982,23 @@ app.get("/board/:gameId/moves", authMiddleware, (req, res) => {
     return res.json({ moves });
   }
   return res.json({ jumps: [], moves: [] });
+});
+
+app.get("/board/leaderboard/:type", authMiddleware, (req, res) => {
+  const type = String(req.params?.type || "dambrete").toLowerCase();
+  const key = type === "chess" ? "chessElo" : "dambreteElo";
+  const arr = Object.values(USERS || {})
+    .filter((u) => u && u.username && !u.isBanned && Number(u[key] || 0) > 0)
+    .sort((a, b) => (Number(b[key]) || 0) - (Number(a[key]) || 0))
+    .slice(0, 20)
+    .map((u, i) => ({
+      place: i + 1,
+      username: u.username,
+      elo: Number(u[key]) || BOARD_ELO_DEFAULT,
+      wins: type === "chess" ? (u.chessWins || 0) : (u.dambreteWins || 0),
+      avatarUrl: avatarForBroadcast(u),
+    }));
+  return res.json({ type, list: arr });
 });
 
 // ======== /me ========

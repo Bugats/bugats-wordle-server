@@ -8914,9 +8914,15 @@ function initSocket() {
   socket.on("board.start", (payload) => {
     hideBoardModal();
     startBoardGame(payload);
+    const myIdx = (payload?.players || []).indexOf(state.username);
+    const isMyTurn = myIdx === (payload?.turn ?? 0);
+    updateBoardGameBadge(isMyTurn);
   });
   socket.on("board.resume", (payload) => {
     startBoardGame(payload);
+    const myIdx = (payload?.players || []).indexOf(state.username);
+    const isMyTurn = myIdx === (payload?.turn ?? 0);
+    updateBoardGameBadge(isMyTurn);
   });
   socket.on("board.move", (payload) => {
     if (payload?.gameId !== boardState.gameId) return;
@@ -8925,6 +8931,22 @@ function initSocket() {
     boardState.turn = payload?.turn ?? boardState.turn;
     boardState.selectedCell = null;
     renderBoardGame();
+    const myIdx = boardState.players.indexOf(state.username);
+    const isMyTurn = myIdx === boardState.turn;
+    if (isMyTurn) {
+      appendSystemMessage("♟️ Tava kārta galda spēlē!");
+      const modal = document.getElementById("board-games-modal");
+      if (modal && modal.classList.contains("hidden")) {
+        const gameArea = document.getElementById("board-game-area");
+        const lobby = document.getElementById("board-games-lobby");
+        if (modal) modal.classList.remove("hidden");
+        if (gameArea) gameArea.classList.remove("hidden");
+        if (lobby) lobby.classList.add("hidden");
+      }
+      updateBoardGameBadge(true);
+    } else {
+      updateBoardGameBadge(false);
+    }
   });
   socket.on("board.end", (payload) => {
     if (payload?.gameId !== boardState.gameId) return;
@@ -8937,7 +8959,14 @@ function initSocket() {
     else msg = "♟️ Spēle beidzās (neizšķirts).";
     appendSystemMessage(msg);
     hideBoardGameArea();
+    updateBoardGameBadge(false);
     apiGet("/me").then(updatePlayerCard).catch(() => {});
+  });
+  socket.on("board:leaderboard", () => {
+    const modal = document.getElementById("board-games-modal");
+    if (modal && !modal.classList.contains("hidden") && !boardState.gameId) {
+      loadBoardLeaderboards();
+    }
   });
 }
 
@@ -8947,9 +8976,44 @@ function showBoardModal() {
   const invite = document.getElementById("board-games-invite");
   const gameArea = document.getElementById("board-game-area");
   if (modal) modal.classList.remove("hidden");
-  if (lobby) lobby.classList.remove("hidden");
-  if (invite) invite.classList.add("hidden");
-  if (gameArea) gameArea.classList.add("hidden");
+  if (boardState.gameId) {
+    if (lobby) lobby.classList.add("hidden");
+    if (invite) invite.classList.add("hidden");
+    if (gameArea) gameArea.classList.remove("hidden");
+    renderBoardGame();
+  } else {
+    if (lobby) lobby.classList.remove("hidden");
+    if (invite) invite.classList.add("hidden");
+    if (gameArea) gameArea.classList.add("hidden");
+    loadBoardLeaderboards();
+  }
+}
+
+async function loadBoardLeaderboards() {
+  try {
+    const [d, c] = await Promise.all([
+      apiGet("/board/leaderboard/dambrete"),
+      apiGet("/board/leaderboard/chess"),
+    ]);
+    const dEl = document.getElementById("board-lb-dambrete");
+    const cEl = document.getElementById("board-lb-chess");
+    if (dEl && d?.list) {
+      dEl.innerHTML = d.list
+        .map(
+          (r) =>
+            `<div class="vz-board-lb-row"><span class="vz-board-lb-place">${r.place}.</span><span>${escapeHtml(r.username)}</span><span class="vz-board-lb-elo">${r.elo} ELO</span></div>`
+        )
+        .join("") || "<p>Vēl nav spēlētāju</p>";
+    }
+    if (cEl && c?.list) {
+      cEl.innerHTML = c.list
+        .map(
+          (r) =>
+            `<div class="vz-board-lb-row"><span class="vz-board-lb-place">${r.place}.</span><span>${escapeHtml(r.username)}</span><span class="vz-board-lb-elo">${r.elo} ELO</span></div>`
+        )
+        .join("") || "<p>Vēl nav spēlētāju</p>";
+    }
+  } catch {}
 }
 
 function hideBoardModal() {
@@ -9005,6 +9069,19 @@ function hideBoardGameArea() {
   const modal = document.getElementById("board-games-modal");
   if (gameArea) gameArea.classList.add("hidden");
   if (modal) modal.classList.add("hidden");
+  updateBoardGameBadge(false);
+}
+
+function updateBoardGameBadge(show) {
+  const badge = document.getElementById("board-games-badge");
+  if (!badge) return;
+  if (show && boardState.gameId) {
+    badge.textContent = "!";
+    badge.classList.remove("hidden");
+    badge.title = "Tava kārta – nospied, lai atvērtu";
+  } else {
+    badge.classList.add("hidden");
+  }
 }
 
 function renderBoardGame() {
