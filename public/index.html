@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="lv">
+  <head>
+    <meta charset="UTF-8" />
+    <title>VĀRDU ZONA — Bugats edition</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta name="theme-color" content="#0b0f2a" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="style.css?v=2026-03-21" />
+
+    <!-- ĻOTI agrs redirect, ja jau esi ielogojies -->
+    <script>
+      (function () {
+        try {
+          const token = localStorage.getItem("vz_token");
+          const username = localStorage.getItem("vz_username");
+          if (token && username) {
+            // aizvieto lapu vēsturē, lai nav “atpakaļ” cilpa
+            window.location.replace("game.html");
+          }
+        } catch (e) {
+          console.error("Auto redirect kļūda:", e);
+        }
+      })();
+    </script>
+  </head>
+  <body class="auth-page-body">
+    <!-- ================= AUTH EKRĀNS ================= -->
+    <div id="auth-screen">
+      <div class="container auth-card">
+        <img src="img/file_00000000ce6c720a99f237b5c35b4241.png" alt="VĀRDU ZONA" class="auth-logo" />
+        <p class="subtitle">
+          Viena vieta ielogošanās un reģistrācijai.
+        </p>
+
+        <div class="auth-switch" role="tablist" aria-label="Autentifikācijas režīms">
+          <button
+            id="auth-tab-login"
+            class="auth-switch-btn is-active"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="auth-panel-login">
+            Pierakstīšanās
+          </button>
+          <button
+            id="auth-tab-signup"
+            class="auth-switch-btn"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="auth-panel-signup">
+            Reģistrācija
+          </button>
+        </div>
+
+        <div id="auth-error" class="error-message" aria-live="polite"></div>
+
+        <section
+          id="auth-panel-login"
+          class="auth-panel is-active"
+          role="tabpanel"
+          aria-labelledby="auth-tab-login">
+          <form id="login-form">
+            <label for="login-username">Lietotājvārds vai e-pasts</label>
+            <input
+              type="text"
+              id="login-username"
+              autocomplete="username"
+              required
+            />
+            <label for="login-password">Parole</label>
+            <input
+              type="password"
+              id="login-password"
+              autocomplete="current-password"
+              required
+            />
+            <button type="submit" class="btn-primary">Ienākt</button>
+          </form>
+        </section>
+
+        <section
+          id="auth-panel-signup"
+          class="auth-panel"
+          role="tabpanel"
+          aria-labelledby="auth-tab-signup"
+          hidden>
+          <form id="signup-form">
+            <div id="signup-referral-note" class="signup-referral-note hidden" role="status"></div>
+            <label for="signup-username">Lietotājvārds</label>
+            <input
+              type="text"
+              id="signup-username"
+              autocomplete="username"
+              required
+            />
+            <label for="signup-email">E-pasts</label>
+            <input
+              type="email"
+              id="signup-email"
+              autocomplete="email"
+              required
+            />
+            <p class="signup-email-note">
+              Obligāts reģistrācijai. Vajadzīgs paroles atjaunošanai un jaunumiem (reti, bez spama).
+            </p>
+            <label for="signup-password">Parole</label>
+            <input
+              type="password"
+              id="signup-password"
+              autocomplete="new-password"
+              required
+            />
+            <label for="signup-region">Novads</label>
+            <select id="signup-region" required>
+              <option value="">Izvēlies novadu</option>
+              <option value="Zemgale">Zemgale</option>
+              <option value="Latgale">Latgale</option>
+              <option value="Vidzeme">Vidzeme</option>
+              <option value="Kurzeme">Kurzeme</option>
+            </select>
+            <button type="submit" class="btn-primary">Reģistrēties</button>
+          </form>
+        </section>
+
+        <div class="auth-help-row">
+          <a href="forgot.html">Aizmirsi paroli?</a>
+          <a href="privacy.html" target="_blank" rel="noopener">Privātuma politika</a>
+          <a href="terms.html" target="_blank" rel="noopener">Lietošanas noteikumi</a>
+          <a href="copyright-trademark.html" target="_blank" rel="noopener">Autortiesības</a>
+          <a href="dmca.html" target="_blank" rel="noopener">DMCA</a>
+        </div>
+        <p class="auth-mini-note">
+          Reģistrācijā e-pasts ir obligāts. Vari noņemt profilā vēlāk.
+        </p>
+      </div>
+    </div>
+
+    <!-- ================= SCRIPTS ================= -->
+    <script src="runtime-config.js" defer></script>
+    <script src="auth.js?v=2026-03-21"></script>
+    <script src="pwa.js?v=2026-03-26" defer></script>
+  </body>
+</html>

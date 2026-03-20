@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 200" role="img" aria-label="VĀRDU ZONA">
+  <defs>
+    <linearGradient id="metal" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f5f7fa"/>
+      <stop offset="30%" style="stop-color:#c8d1e0"/>
+      <stop offset="60%" style="stop-color:#9aa5b8"/>
+      <stop offset="100%" style="stop-color:#6b7689"/>
+    </linearGradient>
+    <linearGradient id="graffiti" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffeb3b"/>
+      <stop offset="40%" style="stop-color:#ff9800"/>
+      <stop offset="75%" style="stop-color:#e65100"/>
+      <stop offset="100%" style="stop-color:#bf360c"/>
+    </linearGradient>
+    <filter id="outline">
+      <feMorphology in="SourceAlpha" operator="dilate" radius="1.5"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.1  0 0 0 0 0.1  0 0 0 0 0.15  0 0 0 1 0"/>
+      <feOffset dx="0" dy="1"/>
+      <feComposite in="SourceGraphic" operator="over"/>
+    </filter>
+  </defs>
+  <g filter="url(#outline)">
+    <text x="30" y="55" font-family="Arial Black, Impact, sans-serif" font-size="48" font-weight="900" fill="url(#metal)" stroke="#0d1117" stroke-width="2.5" paint-order="stroke fill">VĀRDU</text>
+  </g>
+  <g filter="url(#outline)">
+    <text x="25" y="130" font-family="Arial Black, Impact, sans-serif" font-size="78" font-weight="900" fill="url(#graffiti)" stroke="#0d1117" stroke-width="3" paint-order="stroke fill">ZONA</text>
+  </g>
+  <g fill="#ff6b35" opacity="0.5">
+    <ellipse cx="430" cy="45" rx="6" ry="4"/>
+    <ellipse cx="465" cy="85" rx="5" ry="6"/>
+    <ellipse cx="395" cy="115" rx="7" ry="5"/>
+  </g>
+</svg>
