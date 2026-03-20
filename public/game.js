@@ -573,6 +573,12 @@ const themeToggleBtn = document.getElementById("theme-toggle-btn");
 const offlineOverlayEl = document.getElementById("vz-offline-overlay");
 const offlineRetryBtn = document.getElementById("vz-offline-retry-btn");
 const rateOverlayEl = document.getElementById("vz-rate-overlay");
+const tutorialOverlayEl = document.getElementById("vz-tutorial-overlay");
+const tutorialContentEl = document.getElementById("vz-tutorial-content");
+const tutorialDotsEl = document.getElementById("vz-tutorial-dots");
+const tutorialSkipBtn = document.getElementById("vz-tutorial-skip");
+const tutorialNextBtn = document.getElementById("vz-tutorial-next");
+const tutorialReopenBtn = document.getElementById("vz-tutorial-reopen-btn");
 const rateLaterBtn = document.getElementById("vz-rate-later-btn");
 const rateFeedbackBtn = document.getElementById("vz-rate-feedback-btn");
 const rateOpenBtn = document.getElementById("vz-rate-open-btn");
@@ -1347,6 +1353,106 @@ function handleRatePromptFeedback() {
   rateState.lastAction = "feedback";
   saveRateState(rateState);
   hideRateOverlay();
+}
+
+// ==================== TUTORIAL ====================
+const TUTORIAL_STORAGE_KEY = "vz_tutorial_seen";
+const TUTORIAL_STEPS = [
+  {
+    title: "Laipni lūdzam VĀRDU ZONĀ!",
+    body: "Uzminē vārdu 6 mēģinājumos. Izmanto klaviatūru vai pieskāršanos.",
+  },
+  {
+    title: "Kā minēt",
+    body: "Raksti burtus un nospied Enter. Vārds ir 6 burti.",
+  },
+  {
+    title: "Zaļš = pareizā vieta",
+    body: "Burts ir vārdā un pareizajā vietā.",
+    example: ["A", "B", "C", "D", "E", "F"],
+    exampleStatus: ["correct", "absent", "absent", "absent", "absent", "absent"],
+  },
+  {
+    title: "Dzeltenš = pareizs burts, nepareiza vieta",
+    body: "Burts ir vārdā, bet citā ailē. Izmanto to nākamajā minējumā.",
+    example: ["A", "B", "C", "D", "E", "F"],
+    exampleStatus: ["absent", "present", "absent", "absent", "absent", "absent"],
+  },
+  {
+    title: "Pelēks = burta nav vārdā",
+    body: "Šo burtu vairs neizmanto.",
+    example: ["A", "B", "C", "D", "E", "F"],
+    exampleStatus: ["absent", "absent", "absent", "absent", "absent", "absent"],
+  },
+];
+
+function showTutorialIfNeeded() {
+  try {
+    if (localStorage.getItem(TUTORIAL_STORAGE_KEY) === "1") return;
+    showTutorial();
+  } catch {}
+}
+
+function showTutorial() {
+  if (!tutorialOverlayEl || !tutorialContentEl || !tutorialDotsEl) return;
+  let step = 0;
+
+  function render() {
+    const s = TUTORIAL_STEPS[step];
+    if (!s) return;
+    tutorialContentEl.innerHTML = "";
+    const h3 = document.createElement("h3");
+    h3.id = "vz-tutorial-title";
+    h3.textContent = s.title;
+    tutorialContentEl.appendChild(h3);
+    const p = document.createElement("p");
+    p.textContent = s.body;
+    tutorialContentEl.appendChild(p);
+    if (s.example && s.exampleStatus) {
+      const div = document.createElement("div");
+      div.className = "vz-tutorial-example";
+      s.example.forEach((letter, i) => {
+        const span = document.createElement("span");
+        span.className = "tile-ex " + (s.exampleStatus[i] || "absent");
+        span.textContent = letter;
+        div.appendChild(span);
+      });
+      tutorialContentEl.appendChild(div);
+    }
+    tutorialDotsEl.innerHTML = "";
+    TUTORIAL_STEPS.forEach((_, i) => {
+      const dot = document.createElement("span");
+      if (i === step) dot.classList.add("active");
+      dot.setAttribute("aria-hidden", "true");
+      tutorialDotsEl.appendChild(dot);
+    });
+    if (tutorialNextBtn) {
+      tutorialNextBtn.textContent = step === TUTORIAL_STEPS.length - 1 ? "Sākt!" : "Tālāk";
+    }
+  }
+
+  function close() {
+    try {
+      localStorage.setItem(TUTORIAL_STORAGE_KEY, "1");
+    } catch {}
+    tutorialOverlayEl.classList.add("hidden");
+  }
+
+  if (tutorialSkipBtn) {
+    tutorialSkipBtn.onclick = close;
+  }
+  if (tutorialNextBtn) {
+    tutorialNextBtn.onclick = () => {
+      if (step < TUTORIAL_STEPS.length - 1) {
+        step++;
+        render();
+      } else {
+        close();
+      }
+    };
+  }
+  render();
+  tutorialOverlayEl.classList.remove("hidden");
 }
 
 // ==================== PWA INSTALL ====================
@@ -2510,6 +2616,7 @@ async function runPostLoginInit() {
   startEngagementLoopTimer();
   renderEngagementLoopCard();
   initSocket();
+  setTimeout(showTutorialIfNeeded, 600);
 }
 
 // ==================== PROFILA POPUP + DM ====================
@@ -9562,6 +9669,13 @@ async function initGame() {
   if (rateOpenBtn) {
     rateOpenBtn.addEventListener("click", () => {
       handleRatePromptAccepted();
+    });
+  }
+  if (tutorialReopenBtn) {
+    tutorialReopenBtn.addEventListener("click", () => {
+      showTutorial();
+      const details = tutorialReopenBtn.closest("details");
+      if (details) details.open = false;
     });
   }
 

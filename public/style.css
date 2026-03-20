@@ -2689,6 +2689,76 @@ summary:focus-visible {
 .vz-rate-open { background: linear-gradient(135deg, #00c853, #00a843); }
 .vz-rate-open:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0, 200, 83, 0.4); }
 
+/* Tutorial (pirmā spēle) */
+.vz-tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+.vz-tutorial-overlay.hidden { display: none; }
+.vz-tutorial-inner {
+  text-align: center;
+  padding: 24px 28px;
+  max-width: 360px;
+  width: 92%;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #1a1b2e 0%, #0f1117 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 0 32px rgba(0, 0, 0, 0.6);
+}
+.vz-tutorial-content { margin-bottom: 20px; min-height: 80px; }
+.vz-tutorial-content h3 { margin: 0 0 10px; font-size: 18px; font-weight: 700; color: #fff; }
+.vz-tutorial-content p { margin: 0; font-size: 15px; line-height: 1.5; color: #b8b8c0; }
+.vz-tutorial-content .vz-tutorial-example {
+  display: inline-flex;
+  gap: 4px;
+  margin: 12px 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+.vz-tutorial-content .vz-tutorial-example .tile-ex {
+  width: 40px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 2px solid;
+}
+.vz-tutorial-content .tile-ex.correct { background: linear-gradient(135deg, #22c55e, #16a34a); border-color: #22c55e; color: #02140a; }
+.vz-tutorial-content .tile-ex.present { background: linear-gradient(135deg, #eab308, #ca8a04); border-color: #eab308; color: #1a1200; }
+.vz-tutorial-content .tile-ex.absent { background: #1a1d2e; border-color: #2d3250; color: #6b7280; }
+.vz-tutorial-footer { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.vz-tutorial-dots { display: flex; gap: 8px; justify-content: center; }
+.vz-tutorial-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  transition: background 0.2s;
+}
+.vz-tutorial-dots span.active { background: #00c853; }
+.vz-tutorial-btns { display: flex; gap: 12px; justify-content: center; }
+.vz-tutorial-btn {
+  padding: 10px 22px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  border: none;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.vz-tutorial-skip { background: rgba(255, 255, 255, 0.1); color: #a0a0a8; }
+.vz-tutorial-skip:hover { background: rgba(255, 255, 255, 0.15); transform: translateY(-1px); }
+.vz-tutorial-next { background: linear-gradient(135deg, #00c853, #00a843); color: #fff; }
+.vz-tutorial-next:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0, 200, 83, 0.4); }
+
 /* Izaicinājums draugam – modāļi */
 .vz-modal-overlay {
   position: fixed;
