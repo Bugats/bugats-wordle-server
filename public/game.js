@@ -2334,7 +2334,7 @@ function renderKaujinieksCard(k) {
         : 100;
     const iconHtml = a.lottieUrl && typeof customElements !== "undefined" && customElements.get("lottie-player")
       ? `<lottie-player class="vz-kaujinieks-lottie" src="${escapeHtml(a.lottieUrl)}" autoplay loop mode="normal" background="transparent"></lottie-player>`
-      : `<span class="vz-kaujinieks-icon">${escapeHtml(a.icon || "⚔️")}</span>`;
+      : `<span class="vz-kaujinieks-placeholder" aria-hidden="true"></span>`;
     activeEl.innerHTML = `
       <div class="vz-kaujinieks-current">
         <div class="vz-kaujinieks-icon-wrap">${iconHtml}</div>
@@ -2350,11 +2350,11 @@ function renderKaujinieksCard(k) {
     `;
   }
 
-  function renderCharIcon(p, fallback = true) {
+  function renderCharIcon(p) {
     if (p.lottieUrl && typeof customElements !== "undefined" && customElements.get("lottie-player")) {
       return `<lottie-player class="vz-kaujinieks-lottie vz-kaujinieks-lottie-btn" src="${escapeHtml(p.lottieUrl)}" autoplay loop mode="normal" background="transparent"></lottie-player>`;
     }
-    return fallback ? escapeHtml(p.icon || "⚔️") : "";
+    return `<span class="vz-kaujinieks-placeholder vz-kaujinieks-placeholder-btn" aria-hidden="true"></span>`;
   }
 
   if (listEl) {
@@ -2373,7 +2373,7 @@ function renderKaujinieksCard(k) {
         .filter((p) => !unlocked.has(p.id))
         .forEach(
           (p) =>
-            (html += `<button type="button" class="vz-kaujinieks-lock-btn" data-id="${escapeHtml(p.id)}" title="Atvērt par ${p.cost || 0} coins">${renderCharIcon(p)} 🔒</button>`)
+            (html += `<button type="button" class="vz-kaujinieks-lock-btn" data-id="${escapeHtml(p.id)}" title="Atvērt par ${p.cost || 0} coins">${renderCharIcon(p)}<svg class="vz-kaujinieks-lock-ico" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-label="Aizslēgts"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg></button>`)
         );
     }
     listEl.innerHTML = html;

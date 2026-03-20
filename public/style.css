@@ -3510,6 +3510,25 @@ summary:focus-visible {
   line-height: 1;
 }
 
+.vz-kaujinieks-placeholder {
+  display: inline-block;
+  width: 48px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+.vz-kaujinieks-placeholder-btn {
+  width: 36px;
+  height: 36px;
+}
+
+.vz-kaujinieks-lock-ico {
+  flex-shrink: 0;
+  margin-left: 2px;
+  opacity: 0.8;
+}
+
 .vz-kaujinieks-lottie {
   width: 48px;
   height: 48px;
