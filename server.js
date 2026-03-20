@@ -57,6 +57,8 @@ const TOURNAMENTS_FILE =
 const TOURNAMENTS_DB_FILE =
   process.env.TOURNAMENTS_DB_FILE ||
   path.join(__dirname, "tournaments.brackets.json");
+const CLANS_FILE =
+  process.env.CLANS_FILE || path.join(__dirname, "clans.json");
 
 const { BracketsManager } = bracketsManagerPkg;
 const { JsonDatabase } = bracketsJsonDbPkg;
@@ -1673,6 +1675,7 @@ async function createTournamentRecord({
   autoReportOnly,
   roomId = "",
   roomOwner = "",
+  clanId = "",
   createdAt = Date.now(),
 }) {
   const tournamentId = Number(tournamentStore.nextTournamentId || 1);
@@ -1700,6 +1703,7 @@ async function createTournamentRecord({
     autoReportOnly: !!autoReportOnly,
     roomId: String(roomId || "").trim(),
     roomOwner: String(roomOwner || "").trim(),
+    clanId: String(clanId || "").trim() || null,
   };
   tournamentStore.tournaments.push(meta);
   return { tournamentId, stage, meta };
@@ -1862,6 +1866,105 @@ let tournamentStore = normalizeTournamentStore(
 syncVipRoomsLifecycle(Date.now());
 saveTournamentStore();
 const tournamentDb = new JsonDatabase(TOURNAMENTS_DB_FILE);
+
+// ======== KLANI ========
+const CLAN_NAME_MIN = 2;
+const CLAN_NAME_MAX = 24;
+const CLAN_TAG_MIN = 2;
+const CLAN_TAG_MAX = 6;
+const CLAN_MAX_MEMBERS = 50;
+const CLAN_CHAT_MAX_LEN = 500;
+const CLAN_CHAT_HISTORY = 100;
+
+function normalizeClanStore(raw) {
+  const store = raw && typeof raw === "object" ? raw : {};
+  if (!Array.isArray(store.clans)) store.clans = [];
+  if (!Number.isFinite(store.nextClanId)) store.nextClanId = 1;
+  store.clans = store.clans.filter((c) => c && c.id && c.name && c.owner);
+  return store;
+}
+
+let clanStore = normalizeClanStore(loadJsonSafe(CLANS_FILE, null));
+
+function saveClanStore() {
+  try {
+    saveJsonAtomic(CLANS_FILE, clanStore);
+  } catch (err) {
+    console.error("Clan store save error:", err);
+  }
+}
+
+function createClanId() {
+  const id = String(clanStore.nextClanId || 1);
+  clanStore.nextClanId = Math.max(1, (clanStore.nextClanId || 1) + 1);
+  return id;
+}
+
+function getClanById(id) {
+  return (clanStore.clans || []).find((c) => String(c.id) === String(id)) || null;
+}
+
+function getClanByTag(tag) {
+  const t = String(tag || "").trim().toUpperCase();
+  if (!t) return null;
+  return (clanStore.clans || []).find(
+    (c) => String(c.tag || "").toUpperCase() === t
+  ) || null;
+}
+
+function isClanMember(clan, username) {
+  if (!clan || !username) return false;
+  const members = clan.members || [];
+  return members.some(
+    (m) => String(m.username || "").toLowerCase() === String(username).toLowerCase()
+  );
+}
+
+function getClanMemberRole(clan, username) {
+  const m = (clan?.members || []).find(
+    (x) => String(x.username || "").toLowerCase() === String(username).toLowerCase()
+  );
+  return m?.role || null;
+}
+
+function canClanManage(clan, username) {
+  const role = getClanMemberRole(clan, username);
+  return role === "leader" || role === "admin";
+}
+
+function buildClanPayload(clan, forUser = null) {
+  if (!clan) return null;
+  const members = (clan.members || []).map((m) => ({
+    username: m.username,
+    role: m.role || "member",
+    joinedAt: m.joinedAt || 0,
+  }));
+  const totalXp = members.reduce((sum, m) => {
+    const key = findUserKeyCaseInsensitive(m.username);
+    const u = key ? USERS[key] : null;
+    return sum + Math.max(0, Number(u?.xp || u?.totalXp || 0) || 0);
+  }, 0);
+  const totalWins = members.reduce((sum, m) => {
+    const key = findUserKeyCaseInsensitive(m.username);
+    const u = key ? USERS[key] : null;
+    return sum + Math.max(0, Number(u?.totalWins || 0) || 0);
+  }, 0);
+  return {
+    id: clan.id,
+    name: clan.name,
+    tag: clan.tag || "",
+    owner: clan.owner,
+    members,
+    memberCount: members.length,
+    totalXp,
+    totalWins,
+    inviteCode: clan.inviteCode || null,
+    createdAt: clan.createdAt || 0,
+    myRole: forUser ? getClanMemberRole(clan, forUser.username) : null,
+    canManage: forUser ? canClanManage(clan, forUser.username) : false,
+    chat: (clan.chat || []).slice(-CLAN_CHAT_HISTORY),
+  };
+}
 const tournamentManager = new BracketsManager(tournamentDb);
 
 function getUserByUsernameLoose(username) {
@@ -2432,6 +2535,10 @@ function loadUsers(listOverride) {
         u.friendInvitesIn = {};
       if (!u.friendInvitesOut || typeof u.friendInvitesOut !== "object")
         u.friendInvitesOut = {};
+
+      // Klani
+      if (typeof u.clanId !== "string") u.clanId = "";
+      if (!Array.isArray(u.clanInvitesIn)) u.clanInvitesIn = [];
 
       // Guess anti-spam
       if (typeof u.lastGuessAt !== "number") u.lastGuessAt = 0;
@@ -4866,6 +4973,15 @@ async function buildMePayload(u) {
     referredCount: Math.max(0, Number(u.referredCount) || 0),
     pendingDuelInvites: buildPendingDuelInvitesPayload(u),
     kaujinieki: buildKaujiniekiPayload(u),
+    clanId: u.clanId || null,
+    clan: u.clanId ? buildClanPayload(getClanById(u.clanId), u) : null,
+    clanInvitesIn: (u.clanInvitesIn || []).map((inv) => ({
+      clanId: inv.clanId,
+      clanName: inv.clanName,
+      clanTag: inv.clanTag,
+      from: inv.from,
+      at: inv.at,
+    })),
   };
 }
 
@@ -6854,6 +6970,218 @@ app.post("/kaujinieks/unlock/:id", authMiddleware, async (req, res) => {
   return res.json({ ok: true, me: await buildMePayload(user) });
 });
 
+// ======== Klani ========
+app.post("/clan/create", authMiddleware, async (req, res) => {
+  const user = req.user;
+  if (user.clanId) {
+    return res.status(400).json({ message: "Tu jau esi klanā. Vispirms izies." });
+  }
+  const name = String(req.body?.name || "").trim();
+  const tag = String(req.body?.tag || "").trim().toUpperCase();
+  if (name.length < CLAN_NAME_MIN || name.length > CLAN_NAME_MAX) {
+    return res.status(400).json({ message: `Klana nosaukumam jābūt ${CLAN_NAME_MIN}-${CLAN_NAME_MAX} burtiem.` });
+  }
+  if (tag.length < CLAN_TAG_MIN || tag.length > CLAN_TAG_MAX) {
+    return res.status(400).json({ message: `Klana tagam jābūt ${CLAN_TAG_MIN}-${CLAN_TAG_MAX} burtiem.` });
+  }
+  if (getClanByTag(tag)) {
+    return res.status(400).json({ message: `Tags [${tag}] jau aizņemts.` });
+  }
+  const id = createClanId();
+  const inviteCode = crypto.randomBytes(4).toString("hex").toUpperCase();
+  const clan = {
+    id,
+    name,
+    tag,
+    owner: user.username,
+    members: [{ username: user.username, role: "leader", joinedAt: Date.now() }],
+    inviteCode,
+    createdAt: Date.now(),
+    chat: [],
+  };
+  clanStore.clans.push(clan);
+  user.clanId = id;
+  saveClanStore();
+  saveUsers(USERS);
+  return res.json({ ok: true, clan: buildClanPayload(clan, user), me: await buildMePayload(user) });
+});
+
+app.post("/clan/leave", authMiddleware, async (req, res) => {
+  const user = req.user;
+  if (!user.clanId) return res.status(400).json({ message: "Tu neesi nevienā klanā." });
+  const clan = getClanById(user.clanId);
+  if (!clan) {
+    user.clanId = "";
+    saveUsers(USERS);
+    return res.json({ ok: true, clan: null, me: await buildMePayload(user) });
+  }
+  if (String(clan.owner || "").toLowerCase() === String(user.username).toLowerCase()) {
+    return res.status(400).json({ message: "Vadītājs nevar iziet. Pārnes vadību vai izdzēs klanu." });
+  }
+  clan.members = (clan.members || []).filter(
+    (m) => String(m.username || "").toLowerCase() !== String(user.username).toLowerCase()
+  );
+  user.clanId = "";
+  saveClanStore();
+  saveUsers(USERS);
+  return res.json({ ok: true, clan: null, me: await buildMePayload(user) });
+});
+
+app.post("/clan/join", authMiddleware, async (req, res) => {
+  const user = req.user;
+  if (user.clanId) return res.status(400).json({ message: "Tu jau esi klanā." });
+  const code = String(req.body?.inviteCode || req.body?.code || "").trim().toUpperCase();
+  const tag = String(req.body?.tag || "").trim().toUpperCase();
+  let clan = null;
+  if (code) {
+    clan = (clanStore.clans || []).find((c) => (c.inviteCode || "").toUpperCase() === code) || null;
+  } else if (tag) {
+    clan = getClanByTag(tag);
+  }
+  if (!clan) return res.status(404).json({ message: "Klans nav atrasts." });
+  if ((clan.members || []).length >= CLAN_MAX_MEMBERS) {
+    return res.status(400).json({ message: "Klans ir pilns." });
+  }
+  if (isClanMember(clan, user.username)) {
+    user.clanId = clan.id;
+    saveUsers(USERS);
+    return res.json({ ok: true, clan: buildClanPayload(clan, user), me: await buildMePayload(user) });
+  }
+  clan.members = clan.members || [];
+  clan.members.push({ username: user.username, role: "member", joinedAt: Date.now() });
+  user.clanId = clan.id;
+  user.clanInvitesIn = (user.clanInvitesIn || []).filter((inv) => String(inv?.clanId || "") !== String(clan.id));
+  saveClanStore();
+  saveUsers(USERS);
+  io.emit("clan:update", { clanId: clan.id });
+  return res.json({ ok: true, clan: buildClanPayload(clan, user), me: await buildMePayload(user) });
+});
+
+app.post("/clan/invite", authMiddleware, (req, res) => {
+  const user = req.user;
+  const targetName = String(req.body?.username || "").trim();
+  if (!targetName) return res.status(400).json({ message: "Norādi lietotājvārdu." });
+  const clan = user.clanId ? getClanById(user.clanId) : null;
+  if (!clan || !canClanManage(clan, user.username)) {
+    return res.status(403).json({ message: "Nav tiesību aicināt." });
+  }
+  if ((clan.members || []).length >= CLAN_MAX_MEMBERS) {
+    return res.status(400).json({ message: "Klans ir pilns." });
+  }
+  const targetKey = findUserKeyCaseInsensitive(targetName);
+  const target = targetKey ? USERS[targetKey] : null;
+  if (!target) return res.status(404).json({ message: "Lietotājs nav atrasts." });
+  if (target.clanId) return res.status(400).json({ message: "Lietotājs jau ir klanā." });
+  const inv = { clanId: clan.id, clanName: clan.name, clanTag: clan.tag, from: user.username, at: Date.now() };
+  if (!Array.isArray(target.clanInvitesIn)) target.clanInvitesIn = [];
+  if (target.clanInvitesIn.some((i) => String(i?.clanId) === String(clan.id))) {
+    return res.json({ ok: true, message: "Ielūgums jau nosūtīts." });
+  }
+  target.clanInvitesIn.push(inv);
+  saveUsers(USERS);
+  return res.json({ ok: true, message: `Ielūgums nosūtīts ${targetName}.` });
+});
+
+app.post("/clan/invite/accept", authMiddleware, async (req, res) => {
+  const user = req.user;
+  const clanId = String(req.body?.clanId || "").trim();
+  const inv = (user.clanInvitesIn || []).find((i) => String(i?.clanId) === clanId);
+  if (!inv) return res.status(404).json({ message: "Ielūgums nav atrasts." });
+  const clan = getClanById(clanId);
+  if (!clan) {
+    user.clanInvitesIn = (user.clanInvitesIn || []).filter((i) => String(i?.clanId) !== clanId);
+    saveUsers(USERS);
+    return res.status(404).json({ message: "Klans vairs neeksistē." });
+  }
+  if (user.clanId) return res.status(400).json({ message: "Tu jau esi klanā." });
+  if ((clan.members || []).length >= CLAN_MAX_MEMBERS) {
+    user.clanInvitesIn = (user.clanInvitesIn || []).filter((i) => String(i?.clanId) !== clanId);
+    saveUsers(USERS);
+    return res.status(400).json({ message: "Klans ir pilns." });
+  }
+  clan.members = clan.members || [];
+  clan.members.push({ username: user.username, role: "member", joinedAt: Date.now() });
+  user.clanId = clan.id;
+  user.clanInvitesIn = (user.clanInvitesIn || []).filter((i) => String(i?.clanId) !== clanId);
+  saveClanStore();
+  saveUsers(USERS);
+  io.emit("clan:update", { clanId: clan.id });
+  return res.json({ ok: true, clan: buildClanPayload(clan, user), me: await buildMePayload(user) });
+});
+
+app.post("/clan/invite/decline", authMiddleware, (req, res) => {
+  const user = req.user;
+  const clanId = String(req.body?.clanId || "").trim();
+  user.clanInvitesIn = (user.clanInvitesIn || []).filter((i) => String(i?.clanId) !== clanId);
+  saveUsers(USERS);
+  return res.json({ ok: true });
+});
+
+app.post("/clan/kick", authMiddleware, (req, res) => {
+  const user = req.user;
+  const targetName = String(req.body?.username || "").trim();
+  if (!targetName) return res.status(400).json({ message: "Norādi lietotājvārdu." });
+  const clan = user.clanId ? getClanById(user.clanId) : null;
+  if (!clan || !canClanManage(clan, user.username)) {
+    return res.status(403).json({ message: "Nav tiesību izmest." });
+  }
+  const targetRole = getClanMemberRole(clan, targetName);
+  if (targetRole === "leader") return res.status(400).json({ message: "Nevar izmest vadītāju." });
+  const isAdmin = canClanManage(clan, user.username);
+  if (targetRole === "admin" && !(String(clan.owner || "").toLowerCase() === String(user.username).toLowerCase())) {
+    return res.status(403).json({ message: "Tikai vadītājs var izmest administratoru." });
+  }
+  clan.members = (clan.members || []).filter(
+    (m) => String(m.username || "").toLowerCase() !== String(targetName).toLowerCase()
+  );
+  const targetKey = findUserKeyCaseInsensitive(targetName);
+  const target = targetKey ? USERS[targetKey] : null;
+  if (target) {
+    target.clanId = "";
+    saveUsers(USERS);
+  }
+  saveClanStore();
+  io.emit("clan:update", { clanId: clan.id });
+  return res.json({ ok: true, clan: buildClanPayload(clan, user) });
+});
+
+app.post("/clan/role", authMiddleware, (req, res) => {
+  const user = req.user;
+  const targetName = String(req.body?.username || "").trim();
+  const role = String(req.body?.role || "").toLowerCase();
+  if (!targetName) return res.status(400).json({ message: "Norādi lietotājvārdu." });
+  if (!["admin", "member"].includes(role)) return res.status(400).json({ message: "Nederīga loma." });
+  const clan = user.clanId ? getClanById(user.clanId) : null;
+  if (!clan || String(clan.owner || "").toLowerCase() !== String(user.username).toLowerCase()) {
+    return res.status(403).json({ message: "Tikai vadītājs var mainīt lomas." });
+  }
+  const m = (clan.members || []).find(
+    (x) => String(x.username || "").toLowerCase() === String(targetName).toLowerCase()
+  );
+  if (!m) return res.status(404).json({ message: "Dalībnieks nav atrasts." });
+  m.role = role;
+  saveClanStore();
+  return res.json({ ok: true, clan: buildClanPayload(clan, user) });
+});
+
+app.get("/clan/leaderboard", (_req, res) => {
+  const list = (clanStore.clans || [])
+    .map((c) => {
+      const payload = buildClanPayload(c);
+      return payload;
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b.totalXp || 0) - (a.totalXp || 0))
+    .slice(0, 50);
+  res.json({ clans: list });
+});
+
+app.get("/clan/:id", authMiddleware, (req, res) => {
+  const clan = getClanById(req.params.id);
+  if (!clan) return res.status(404).json({ message: "Klans nav atrasts." });
+  res.json({ clan: buildClanPayload(clan, req.user) });
+});
+
 app.post(
   "/duel/offline-invites/:from/consume",
   authMiddleware,
@@ -7715,6 +8043,7 @@ app.post("/tournaments/vip-rooms", authMiddleware, async (req, res) => {
       inviteLimit
     );
     const createdAt = Date.now();
+    const clanOnly = req.body?.clanOnly === true;
     const room = {
       id: createVipRoomId(),
       name: roomName,
@@ -7731,6 +8060,8 @@ app.post("/tournaments/vip-rooms", authMiddleware, async (req, res) => {
       tournamentId: null,
       closedAt: 0,
       closeReason: "",
+      clanId: clanOnly && requester.clanId ? requester.clanId : "",
+      clanOnly: !!clanOnly,
     };
     if (!Array.isArray(tournamentStore.vipRooms)) tournamentStore.vipRooms = [];
     tournamentStore.vipRooms.push(room);
@@ -7867,6 +8198,12 @@ app.post(
         (name) => String(name || "").toLowerCase() === requesterKey
       );
 
+      if (room.clanId && String(requester.clanId || "") !== String(room.clanId)) {
+        return res.status(403).json({
+          message: "Šai klana turnīra istabai var pievienoties tikai klana dalībnieki.",
+        });
+      }
+
       if (!isParticipant && !isOwner && !isInvited && !isAdminUser(requester)) {
         return res.status(403).json({
           message: "Šai VIP istabai vari pievienoties tikai ar ielūgumu.",
@@ -7966,6 +8303,7 @@ app.post(
         autoReportOnly: room.autoReportOnly !== false,
         roomId: room.id,
         roomOwner: room.owner,
+        clanId: room.clanId || "",
         createdAt: now,
       });
 
@@ -9789,6 +10127,10 @@ io.on("connection", (socket) => {
     socket.emit("friends.update", getFriendsPayload(u));
   } catch {}
 
+  if (user.clanId) {
+    socket.join(`clan:${user.clanId}`);
+  }
+
   if (CHAT_STORE_ON_SUPABASE && CHAT_HISTORY_LIMIT > 0) {
     loadChatHistory(CHAT_HISTORY_LIMIT)
       .then((messages) => {
@@ -9885,6 +10227,39 @@ io.on("connection", (socket) => {
     if (CHAT_STORE_ON_SUPABASE) {
       chatStoreMessage(chatPayload).catch(() => {});
     }
+  });
+
+  // ========== KLANA ČATS ==========
+  socket.on("clan.chat", (text) => {
+    if (socketRateLimited(socket, "clanChat", CHAT_RATE_MS)) return;
+    if (typeof text !== "string") return;
+    let msg = text.trim();
+    if (!msg) return;
+    if (msg.length > CLAN_CHAT_MAX_LEN) msg = msg.slice(0, CLAN_CHAT_MAX_LEN);
+    const u = USERS[user.username] || user;
+    if (!u.clanId) {
+      socket.emit("clan.chat.error", { message: "Tu neesi klanā." });
+      return;
+    }
+    const clan = getClanById(u.clanId);
+    if (!clan || !isClanMember(clan, u.username)) {
+      socket.emit("clan.chat.error", { message: "Klans nav atrasts." });
+      return;
+    }
+    const payload = {
+      username: u.username,
+      text: msg,
+      ts: Date.now(),
+      avatarUrl: avatarForBroadcast(u),
+      rankTitle: u.rankTitle || "—",
+      rankLevel: u.rankLevel || 1,
+      rankColor: u.rankColor || "#9CA3AF",
+    };
+    if (!Array.isArray(clan.chat)) clan.chat = [];
+    clan.chat.push(payload);
+    if (clan.chat.length > CLAN_CHAT_HISTORY) clan.chat = clan.chat.slice(-CLAN_CHAT_HISTORY);
+    saveClanStore();
+    io.to(`clan:${clan.id}`).emit("clan.chat", payload);
   });
 
   // ========== PRIVĀTAIS ČATS (DM) ==========

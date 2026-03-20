@@ -2311,6 +2311,216 @@ function updatePlayerCard(me) {
   }
 
   renderKaujinieksCard(me.kaujinieki);
+  renderClanCard(me);
+}
+
+function renderClanCard(me) {
+  const cardEl = document.getElementById("vz-clan-card");
+  const contentEl = document.getElementById("vz-clan-content");
+  const invitesEl = document.getElementById("vz-clan-invites");
+  const chatEl = document.getElementById("vz-clan-chat");
+  if (!cardEl || !contentEl) return;
+
+  const clan = me.clan || null;
+  const invites = me.clanInvitesIn || [];
+
+  if (invites.length > 0 && invitesEl) {
+    invitesEl.classList.remove("hidden");
+    invitesEl.innerHTML = invites
+      .map(
+        (inv) =>
+          `<div class="vz-clan-invite-row">
+            <span>[${escapeHtml(inv.clanTag || "")}] ${escapeHtml(inv.clanName || "")}</span>
+            <span class="vz-clan-invite-from">no ${escapeHtml(inv.from || "")}</span>
+            <button type="button" class="vz-clan-invite-accept" data-clan-id="${escapeHtml(inv.clanId || "")}">Pieņemt</button>
+            <button type="button" class="vz-clan-invite-decline" data-clan-id="${escapeHtml(inv.clanId || "")}">Noraidīt</button>
+          </div>`
+      )
+      .join("");
+    invitesEl.querySelectorAll(".vz-clan-invite-accept").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          const data = await apiPost("/clan/invite/accept", { clanId: btn.dataset.clanId });
+          if (data?.me) updatePlayerCard(data.me);
+        } catch (err) {
+          appendSystemMessage(err?.message || "Kļūda");
+        }
+      });
+    });
+    invitesEl.querySelectorAll(".vz-clan-invite-decline").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          await apiPost("/clan/invite/decline", { clanId: btn.dataset.clanId });
+          const me2 = await apiGet("/me");
+          updatePlayerCard(me2);
+        } catch (_) {}
+      });
+    });
+  } else if (invitesEl) {
+    invitesEl.classList.add("hidden");
+  }
+
+  if (clan) {
+    contentEl.innerHTML = `
+      <div class="vz-clan-info">
+        <strong>[${escapeHtml(clan.tag || "")}] ${escapeHtml(clan.name || "")}</strong>
+        <span>${clan.memberCount || 0} dalībnieki · ${clan.totalXp || 0} XP</span>
+      </div>
+      <div class="vz-clan-members">
+        ${(clan.members || [])
+          .map(
+            (m) =>
+              `<div class="vz-clan-member">
+                <span class="vz-clan-member-name">${escapeHtml(m.username || "")}</span>
+                <span class="vz-clan-member-role">${m.role === "leader" ? "Vadītājs" : m.role === "admin" ? "Admin" : "Dalībnieks"}</span>
+                ${clan.canManage ? `<button type="button" class="vz-clan-kick-btn" data-username="${escapeHtml(m.username || "")}" ${m.role === "leader" ? "disabled" : ""}>Izmest</button>` : ""}
+              </div>`
+          )
+          .join("")}
+      </div>
+      ${clan.canManage ? `
+        <div class="vz-clan-invite-form">
+          <input id="vz-clan-invite-input" type="text" placeholder="Lietotājvārds" />
+          <button id="vz-clan-invite-btn" type="button">Uzaicināt</button>
+        </div>
+      ` : ""}
+      <div class="vz-clan-actions">
+        <span class="vz-clan-invite-code">Kods: ${escapeHtml(clan.inviteCode || "—")}</span>
+        <button id="vz-clan-leave-btn" type="button" class="vz-clan-leave">Iziet no klana</button>
+      </div>
+      <div class="vz-clan-chat-wrap">
+        <div id="vz-clan-chat-messages" class="vz-clan-chat-msgs"></div>
+        <div class="vz-clan-chat-input-wrap">
+          <input id="vz-clan-chat-input" type="text" placeholder="Raksti klana čatā…" maxlength="500" />
+          <button id="vz-clan-chat-send" type="button">Sūtīt</button>
+        </div>
+      </div>
+    `;
+    if (chatEl) {
+      chatEl.classList.remove("hidden");
+      const msgsEl = contentEl.querySelector("#vz-clan-chat-messages");
+      if (msgsEl && Array.isArray(clan.chat)) {
+        msgsEl.innerHTML = clan.chat
+          .map(
+            (m) =>
+              `<div class="vz-clan-msg"><span class="vz-clan-msg-user">${escapeHtml(m.username || "")}</span>: ${escapeHtml(m.text || "")}</div>`
+          )
+          .join("");
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+      }
+    }
+    bindClanActions(contentEl, clan);
+  } else {
+    contentEl.innerHTML = `
+      <p class="vz-clan-no-clan">Pievienojies klanam vai izveido savu.</p>
+      <details class="vz-clan-create-details">
+        <summary>Izveidot klanu</summary>
+        <div class="vz-clan-create-form">
+          <label>Nosaukums <input id="vz-clan-create-name" type="text" placeholder="Mans klans" maxlength="24" /></label>
+          <label>Tags (2–6 burti) <input id="vz-clan-create-tag" type="text" placeholder="MK" maxlength="6" /></label>
+          <button id="vz-clan-create-btn" type="button">Izveidot</button>
+        </div>
+      </details>
+      <details class="vz-clan-join-details">
+        <summary>Pievienoties ar kodu</summary>
+        <div class="vz-clan-join-form">
+          <input id="vz-clan-join-code" type="text" placeholder="Ielūguma kods" />
+          <button id="vz-clan-join-btn" type="button">Pievienoties</button>
+        </div>
+      </details>
+    `;
+    const createBtn = contentEl.querySelector("#vz-clan-create-btn");
+    const joinBtn = contentEl.querySelector("#vz-clan-join-btn");
+    if (createBtn) {
+      createBtn.addEventListener("click", async () => {
+        const name = document.getElementById("vz-clan-create-name")?.value?.trim();
+        const tag = document.getElementById("vz-clan-create-tag")?.value?.trim();
+        if (!name || !tag) {
+          appendSystemMessage("Aizpildi nosaukumu un tagu.");
+          return;
+        }
+        try {
+          const data = await apiPost("/clan/create", { name, tag });
+          if (data?.me) updatePlayerCard(data.me);
+        } catch (err) {
+          appendSystemMessage(err?.message || "Neizdevās izveidot klanu.");
+        }
+      });
+    }
+    if (joinBtn) {
+      joinBtn.addEventListener("click", async () => {
+        const code = document.getElementById("vz-clan-join-code")?.value?.trim();
+        if (!code) {
+          appendSystemMessage("Ievadi ielūguma kodu.");
+          return;
+        }
+        try {
+          const data = await apiPost("/clan/join", { inviteCode: code });
+          if (data?.me) updatePlayerCard(data.me);
+        } catch (err) {
+          appendSystemMessage(err?.message || "Neizdevās pievienoties.");
+        }
+      });
+    }
+  }
+}
+
+function bindClanActions(container, clan) {
+  if (!container) return;
+  const inviteBtn = container.querySelector("#vz-clan-invite-btn");
+  const inviteInput = container.querySelector("#vz-clan-invite-input");
+  const leaveBtn = container.querySelector("#vz-clan-leave-btn");
+  const chatInput = container.querySelector("#vz-clan-chat-input");
+  const chatSend = container.querySelector("#vz-clan-chat-send");
+
+  if (inviteBtn && inviteInput) {
+    inviteBtn.addEventListener("click", async () => {
+      const name = inviteInput.value.trim();
+      if (!name) return;
+      try {
+        await apiPost("/clan/invite", { username: name });
+        appendSystemMessage(`Ielūgums nosūtīts ${name}.`);
+      } catch (err) {
+        appendSystemMessage(err?.message || "Kļūda");
+      }
+    });
+  }
+  if (leaveBtn) {
+    leaveBtn.addEventListener("click", async () => {
+      if (!confirm("Vai tiešām iziet no klana?")) return;
+      try {
+        const data = await apiPost("/clan/leave", {});
+        if (data?.me) updatePlayerCard(data.me);
+      } catch (err) {
+        appendSystemMessage(err?.message || "Kļūda");
+      }
+    });
+  }
+  container.querySelectorAll(".vz-clan-kick-btn").forEach((btn) => {
+    if (btn.disabled) return;
+    btn.addEventListener("click", async () => {
+      const username = btn.dataset.username;
+      if (!username || !confirm(`Izmest ${username}?`)) return;
+      try {
+        const data = await apiPost("/clan/kick", { username });
+        if (data?.me) updatePlayerCard(data.me);
+      } catch (err) {
+        appendSystemMessage(err?.message || "Kļūda");
+      }
+    });
+  });
+  if (chatSend && chatInput && state.socket) {
+    const send = () => {
+      const text = chatInput.value.trim();
+      if (!text) return;
+      state.socket.emit("clan.chat", text);
+      chatInput.value = "";
+    };
+    chatSend.addEventListener("click", send);
+    chatInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") send();
+    });
+  }
 }
 
 function renderKaujinieksCard(k) {
@@ -5578,6 +5788,7 @@ async function handleVipRoomCreate() {
       state.vipRoomDraftInvites,
       slots
     );
+    const clanOnly = !!document.getElementById("vip-room-clan-only")?.checked;
     const payload = {
       name: String(vipRoomNameEl?.value || "").trim(),
       type: String(vipRoomTypeEl?.value || "single_elimination"),
@@ -5585,6 +5796,7 @@ async function handleVipRoomCreate() {
       slots,
       invitedFriends: state.vipRoomDraftInvites,
       autoReportOnly: true,
+      clanOnly,
     };
     const resp = await apiPost("/tournaments/vip-rooms", payload);
     setVipRoomCreateStatus(
@@ -8316,6 +8528,23 @@ function initSocket() {
 
   socket.on("friends.update", (payload) => {
     applyFriendsPayload(payload);
+  });
+
+  socket.on("clan.chat", (payload) => {
+    const msgsEl = document.getElementById("vz-clan-chat-messages");
+    if (!msgsEl || !payload) return;
+    const div = document.createElement("div");
+    div.className = "vz-clan-msg";
+    div.innerHTML = `<span class="vz-clan-msg-user">${escapeHtml(payload.username || "")}</span>: ${escapeHtml(payload.text || "")}`;
+    msgsEl.appendChild(div);
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+  });
+
+  socket.on("clan:update", async () => {
+    try {
+      const me = await apiGet("/me");
+      updatePlayerCard(me);
+    } catch (_) {}
   });
 
   socket.on("dm.history", (payload) => {

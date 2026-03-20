@@ -3608,6 +3608,50 @@ summary:focus-visible {
 }
 
 /* ===========================
+   Klani
+   =========================== */
+.vz-clan-card {
+  margin-top: var(--vz-space-md);
+  padding: var(--vz-space-sm);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.vz-clan-info { margin-bottom: 8px; }
+.vz-clan-info strong { display: block; }
+.vz-clan-members { margin: 8px 0; max-height: 120px; overflow-y: auto; }
+.vz-clan-member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.vz-clan-member-role { font-size: 11px; opacity: 0.8; }
+.vz-clan-invite-form { display: flex; gap: 8px; margin: 8px 0; }
+.vz-clan-invite-form input { flex: 1; padding: 6px 8px; border-radius: 6px; }
+.vz-clan-actions { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.vz-clan-invite-code { font-size: 12px; opacity: 0.9; }
+.vz-clan-leave { padding: 6px 12px; font-size: 12px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.5); border-radius: 6px; color: #fca5a5; cursor: pointer; }
+.vz-clan-leave:hover { background: rgba(239, 68, 68, 0.3); }
+.vz-clan-kick-btn { padding: 2px 8px; font-size: 11px; cursor: pointer; }
+.vz-clan-no-clan { margin: 0 0 10px; font-size: 14px; }
+.vz-clan-create-details, .vz-clan-join-details { margin: 8px 0; }
+.vz-clan-create-form, .vz-clan-join-form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.vz-clan-create-form label, .vz-clan-join-form label { display: flex; flex-direction: column; gap: 4px; }
+.vz-clan-invites { margin-top: 8px; }
+.vz-clan-invite-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.vz-clan-invite-from { font-size: 12px; opacity: 0.8; }
+.vz-clan-invite-accept, .vz-clan-invite-decline { padding: 4px 10px; font-size: 12px; cursor: pointer; }
+.vz-clan-chat-wrap { margin-top: 12px; }
+.vz-clan-chat-msgs { max-height: 150px; overflow-y: auto; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 8px; margin-bottom: 8px; font-size: 13px; }
+.vz-clan-msg { margin: 4px 0; }
+.vz-clan-msg-user { font-weight: 600; margin-right: 4px; }
+.vz-clan-chat-input-wrap { display: flex; gap: 8px; }
+.vz-clan-chat-input-wrap input { flex: 1; padding: 6px 8px; border-radius: 6px; }
+
+/* ===========================
    NIKA GLOW TIERI
    =========================== */
 
