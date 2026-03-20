@@ -8953,12 +8953,13 @@ function initSocket() {
     const winner = payload?.winner;
     const reason = payload?.reason || "finished";
     const coinsGain = payload?.coinsGain || 0;
+    const coinsLoss = payload?.coinsLoss || 0;
     boardState.gameId = null;
     let msg = "";
     if (winner === state.username) {
       msg = coinsGain ? `♟️ Tu uzvarēji! +${coinsGain} coins` : "♟️ Tu uzvarēji!";
     } else if (winner) {
-      msg = `♟️ Uzvarēja ${winner}.`;
+      msg = coinsLoss ? `♟️ Zaudēji. -${coinsLoss} coins` : "♟️ Zaudēji.";
     } else {
       msg = "♟️ Spēle beidzās (neizšķirts).";
     }
