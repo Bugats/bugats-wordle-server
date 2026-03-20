@@ -197,6 +197,92 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const REGION_NAMES = ["Zemgale", "Latgale", "Vidzeme", "Kurzeme"];
 const REGION_MAP = new Map(REGION_NAMES.map((n) => [n.toLowerCase(), n]));
+
+// ====== Kaujinieki (characters) – spēlētājs kačā savu izvēlēto ======
+const KAUJINIEKI_POOL = [
+  { id: "zobenieks", name: "Zobenieks", icon: "⚔️", desc: "Spēcīgs un drošs" },
+  { id: "laceens", name: "Lācēns", icon: "🐻", desc: "Izturīgs un neatlaidīgs" },
+  { id: "vilkins", name: "Vilkiņš", icon: "🐺", desc: "Ātrs un veikls" },
+  { id: "pukis", name: "Pūkis", icon: "🦉", desc: "Gudrs un vērīgs" },
+  { id: "virsaitis", name: "Virsaitis", icon: "🦌", desc: "Cēls un mērķtiecīgs" },
+];
+const KAUJINIEKS_XP_PER_LEVEL = 50;
+const KAUJINIEKS_ATTRIBUTES = ["speks", "izturiba", "veiksme"];
+
+function ensureKaujinieki(user) {
+  if (!Array.isArray(user.kaujinieki)) user.kaujinieki = [];
+  if (user.kaujinieki.length === 0) {
+    const first = KAUJINIEKI_POOL[0];
+    user.kaujinieki.push({
+      id: first.id,
+      xp: 0,
+      level: 1,
+      speks: 1,
+      izturiba: 1,
+      veiksme: 1,
+    });
+    user.activeKaujinieks = first.id;
+  }
+  if (!user.activeKaujinieks && user.kaujinieki[0])
+    user.activeKaujinieks = user.kaujinieki[0].id;
+}
+
+function getKaujinieks(user, id) {
+  return (user.kaujinieki || []).find((k) => k.id === id);
+}
+
+function addKaujinieksXp(user, xpGain) {
+  if (!xpGain || xpGain <= 0) return;
+  ensureKaujinieki(user);
+  const activeId = user.activeKaujinieks;
+  let k = getKaujinieks(user, activeId);
+  if (!k) return;
+  k.xp = (k.xp || 0) + xpGain;
+  while (true) {
+    const xpForNext = KAUJINIEKS_XP_PER_LEVEL * (k.level || 1);
+    if ((k.xp || 0) < xpForNext) break;
+    k.xp = Math.max(0, (k.xp || 0) - xpForNext);
+    k.level = (k.level || 1) + 1;
+    const attr =
+      KAUJINIEKS_ATTRIBUTES[
+        Math.floor(Math.random() * KAUJINIEKS_ATTRIBUTES.length)
+      ];
+    k[attr] = Math.max(1, (k[attr] || 1) + 1);
+  }
+}
+
+function buildKaujiniekiPayload(user) {
+  ensureKaujinieki(user);
+  const pool = KAUJINIEKI_POOL.map((p) => {
+    const k = getKaujinieks(user, p.id);
+    return {
+      id: p.id,
+      name: p.name,
+      icon: p.icon,
+      desc: p.desc,
+      unlocked: !!k,
+      ...(k || {}),
+    };
+  });
+  const active = getKaujinieks(user, user.activeKaujinieks);
+  const activeMeta = KAUJINIEKI_POOL.find((p) => p.id === user.activeKaujinieks);
+  return {
+    pool: pool.filter((p) => p.unlocked),
+    allPool: KAUJINIEKI_POOL.map((p) => ({
+      ...p,
+      unlocked: !!getKaujinieks(user, p.id),
+      cost: 100 * (KAUJINIEKI_POOL.findIndex((x) => x.id === p.id) + 1),
+    })),
+    activeId: user.activeKaujinieks,
+    active: active && activeMeta
+      ? {
+          ...activeMeta,
+          ...active,
+          xpForNext: KAUJINIEKS_XP_PER_LEVEL * (active.level || 1),
+        }
+      : null,
+  };
+}
 const REGION_POINTS_PER_WIN = (() => {
   const v = parseInt(process.env.REGION_POINTS_PER_WIN || "1", 10);
   return Number.isFinite(v) && v >= 0 && v <= 50 ? v : 1;
@@ -4777,6 +4863,7 @@ async function buildMePayload(u) {
     referralLink: `${String(process.env.BASE_URL || "https://bugats-wordle-server.onrender.com").replace(/\/$/, "")}/index.html?ref=${encodeURIComponent(u.username || "")}`,
     referredCount: Math.max(0, Number(u.referredCount) || 0),
     pendingDuelInvites: buildPendingDuelInvitesPayload(u),
+    kaujinieki: buildKaujiniekiPayload(u),
   };
 }
 
@@ -6723,6 +6810,46 @@ app.get("/me", authMiddleware, async (req, res) => {
   ensureVipFields(u);
   saveUsers(USERS);
   res.json(await buildMePayload(u));
+});
+
+// ======== Kaujinieki (characters) ========
+app.post("/kaujinieks/select", authMiddleware, async (req, res) => {
+  const user = req.user;
+  const id = String(req.body?.id || "").trim();
+  ensureKaujinieki(user);
+  const k = getKaujinieks(user, id);
+  if (!k) {
+    return res.status(400).json({ message: "Kaujinieks nav atrasts vai nav atvērts." });
+  }
+  user.activeKaujinieks = id;
+  saveUsers(USERS);
+  return res.json({ ok: true, me: await buildMePayload(user) });
+});
+
+app.post("/kaujinieks/unlock/:id", authMiddleware, async (req, res) => {
+  const user = req.user;
+  const id = String(req.params?.id || "").trim();
+  ensureKaujinieki(user);
+  if (getKaujinieks(user, id)) {
+    return res.json({ ok: true, me: await buildMePayload(user) });
+  }
+  const idx = KAUJINIEKI_POOL.findIndex((p) => p.id === id);
+  if (idx < 0) return res.status(404).json({ message: "Kaujinieks nav atrasts." });
+  const cost = 100 * (idx + 1);
+  if ((user.coins || 0) < cost) {
+    return res.status(400).json({ message: `Nepietiek coins (vajag ${cost}).` });
+  }
+  user.coins = (user.coins || 0) - cost;
+  user.kaujinieki.push({
+    id,
+    xp: 0,
+    level: 1,
+    speks: 1,
+    izturiba: 1,
+    veiksme: 1,
+  });
+  saveUsers(USERS);
+  return res.json({ ok: true, me: await buildMePayload(user) });
 });
 
 app.post(
@@ -8943,6 +9070,7 @@ app.post("/guess", guessRateLimiter, authMiddleware, (req, res) => {
     user.bestStreak = Math.max(user.bestStreak || 0, user.streak || 0);
 
     ensureRankFields(user);
+    addKaujinieksXp(user, xpGain);
 
     io.emit("playerWin", {
       username: user.username,
@@ -9188,6 +9316,7 @@ function finishDuel(duel, winnerName, reason) {
       winner.duelsWon = (winner.duelsWon || 0) + 1;
       winner.xp = (winner.xp || 0) + DUEL_REWARD_XP;
       winner.coins = (winner.coins || 0) + DUEL_REWARD_COINS;
+      addKaujinieksXp(winner, DUEL_REWARD_XP);
       updateMissionsOnDuelWin(winner);
       ensureRankFields(winner);
     }

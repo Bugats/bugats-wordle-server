@@ -2199,6 +2199,86 @@ function updatePlayerCard(me) {
       if (hotStreakBannerEl) hotStreakBannerEl.style.display = "none";
     }
   }
+
+  renderKaujinieksCard(me.kaujinieki);
+}
+
+function renderKaujinieksCard(k) {
+  const activeEl = document.getElementById("vz-kaujinieks-active");
+  const listEl = document.getElementById("vz-kaujinieks-list");
+  const cardEl = document.getElementById("vz-kaujinieks-card");
+  if (!cardEl) return;
+
+  if (!k || !k.active) {
+    cardEl.style.display = "none";
+    return;
+  }
+
+  cardEl.style.display = "";
+  const a = k.active;
+
+  if (activeEl) {
+    const xpPct =
+      a.xpForNext > 0
+        ? Math.round(((a.xp || 0) / a.xpForNext) * 100)
+        : 100;
+    activeEl.innerHTML = `
+      <div class="vz-kaujinieks-current">
+        <span class="vz-kaujinieks-icon">${a.icon || "⚔️"}</span>
+        <div class="vz-kaujinieks-info">
+          <strong>${a.name || "?"}</strong>
+          <span>Lv.${a.level || 1}</span>
+          <div class="vz-kaujinieks-xp-bar">
+            <div class="vz-kaujinieks-xp-fill" style="width:${xpPct}%"></div>
+          </div>
+          <span class="vz-kaujinieks-attrs">Spēks ${a.speks || 1} · Izturība ${a.izturiba || 1} · Veiksme ${a.veiksme || 1}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  if (listEl) {
+    let html = "";
+    if (k.pool) {
+      html += k.pool
+        .map(
+          (p) =>
+            `<button type="button" class="vz-kaujinieks-btn ${p.id === k.activeId ? "vz-kaujinieks-active" : ""}" data-id="${p.id}" title="${p.name} Lv.${p.level || 1}">${p.icon || "⚔️"}</button>`
+        )
+        .join("");
+    }
+    if (k.allPool) {
+      const unlocked = new Set((k.pool || []).map((p) => p.id));
+      k.allPool
+        .filter((p) => !unlocked.has(p.id))
+        .forEach(
+          (p) =>
+            (html += `<button type="button" class="vz-kaujinieks-lock-btn" data-id="${p.id}" title="Atvērt par ${p.cost || 0} coins">${p.icon} 🔒</button>`)
+        );
+    }
+    listEl.innerHTML = html;
+    listEl.querySelectorAll(".vz-kaujinieks-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (btn.dataset.id === k.activeId) return;
+        try {
+          const data = await apiPost("/kaujinieks/select", { id: btn.dataset.id });
+          if (data?.me) updatePlayerCard(data.me);
+        } catch (err) {
+          appendSystemMessage(err.message || "Neizdevās izvēlēties.");
+        }
+      });
+    });
+    listEl.querySelectorAll(".vz-kaujinieks-lock-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          const data = await apiPost(`/kaujinieks/unlock/${btn.dataset.id}`);
+          if (data?.me) updatePlayerCard(data.me);
+        } catch (err) {
+          appendSystemMessage(err.message || "Neizdevās atvērt.");
+        }
+      });
+    });
+  }
 }
 
 // ==================== NOVADI (klani) ====================
