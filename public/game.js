@@ -8952,11 +8952,16 @@ function initSocket() {
     if (payload?.gameId !== boardState.gameId) return;
     const winner = payload?.winner;
     const reason = payload?.reason || "finished";
+    const coinsGain = payload?.coinsGain || 0;
     boardState.gameId = null;
     let msg = "";
-    if (winner === state.username) msg = "♟️ Tu uzvarēji!";
-    else if (winner) msg = `♟️ Uzvarēja ${winner}.`;
-    else msg = "♟️ Spēle beidzās (neizšķirts).";
+    if (winner === state.username) {
+      msg = coinsGain ? `♟️ Tu uzvarēji! +${coinsGain} coins` : "♟️ Tu uzvarēji!";
+    } else if (winner) {
+      msg = `♟️ Uzvarēja ${winner}.`;
+    } else {
+      msg = "♟️ Spēle beidzās (neizšķirts).";
+    }
     appendSystemMessage(msg);
     hideBoardGameArea();
     updateBoardGameBadge(false);

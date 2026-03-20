@@ -659,6 +659,7 @@ function getDuelOpponent(duel, username) {
 const BOARD_GAME_INVITE_TIMEOUT_MS = 60 * 1000; // 60s
 const BOARD_GAME_MOVE_TIMEOUT_MS = 5 * 60 * 1000; // 5 min per move (resign if exceeded)
 const BOARD_GAME_REWARD_XP = 2;
+const BOARD_GAME_REWARD_COINS = 3;
 const BOARD_GAME_REGION_POINTS = 1;
 
 const boardGames = new Map(); // gameId -> { type, players, board, turn, status, ... }
@@ -758,6 +759,7 @@ function finishBoardGame(game, winnerUsername, reason) {
 
   if (winner) {
     winner.xp = (winner.xp || 0) + BOARD_GAME_REWARD_XP;
+    winner.coins = (winner.coins || 0) + BOARD_GAME_REWARD_COINS;
     if (REGION_POINTS_PER_WIN > 0) {
       let rp = BOARD_GAME_REGION_POINTS;
       if (isRegionBonusActive()) rp *= REGION_BONUS_MULTIPLIER;
@@ -11203,7 +11205,7 @@ io.on("connection", (socket) => {
       if (result.over) {
         const winner = result.winner === WHITE ? game.players[0] : game.players[1];
         finishBoardGame(game, winner, "win");
-        io.to(`board:${gameId}`).emit("board.end", { gameId, winner, reason: "win", board: newBoard });
+        io.to(`board:${gameId}`).emit("board.end", { gameId, winner, reason: "win", board: newBoard, coinsGain: BOARD_GAME_REWARD_COINS });
       } else {
         io.to(`board:${gameId}`).emit("board.move", { gameId, board: newBoard, turn: game.turn, move });
       }
@@ -11220,7 +11222,7 @@ io.on("connection", (socket) => {
       if (chess.isCheckmate() || chess.isStalemate() || chess.isDraw()) {
         const winner = chess.isCheckmate() ? user.username : null;
         finishBoardGame(game, winner, chess.isCheckmate() ? "checkmate" : "draw");
-        io.to(`board:${gameId}`).emit("board.end", { gameId, winner, reason: chess.isCheckmate() ? "checkmate" : "draw", fen: game.fen });
+        io.to(`board:${gameId}`).emit("board.end", { gameId, winner, reason: chess.isCheckmate() ? "checkmate" : "draw", fen: game.fen, coinsGain: winner ? BOARD_GAME_REWARD_COINS : 0 });
       } else {
         io.to(`board:${gameId}`).emit("board.move", { gameId, fen: game.fen, turn: game.turn, move: m.san });
       }
@@ -11236,7 +11238,7 @@ io.on("connection", (socket) => {
     if (!game.players.includes(user.username)) return;
     const winner = getBoardGameOpponent(game, user.username);
     finishBoardGame(game, winner, "resign");
-    io.to(`board:${gameId}`).emit("board.end", { gameId, winner, reason: "resign" });
+    io.to(`board:${gameId}`).emit("board.end", { gameId, winner, reason: "resign", coinsGain: winner ? BOARD_GAME_REWARD_COINS : 0 });
   });
 
   socket.on("disconnect", () => {
