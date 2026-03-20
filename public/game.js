@@ -4034,11 +4034,7 @@ async function submitChallengeGuess() {
     const check = validateHardModeGuess(guess);
     if (!check.valid) {
       flashRow(state.currentRow);
-      if (gameMessageEl)
-        gameMessageEl.textContent =
-          check.missing.length > 0
-            ? `Izmanto dzeltenos burtus (${check.missing.join(", ")})`
-            : "Dzeltenie burti jāizmanto citā pozīcijā.";
+      if (gameMessageEl) gameMessageEl.textContent = formatYellowLetterError(check.missing);
       return;
     }
   }
@@ -4133,6 +4129,13 @@ function validateHardModeGuess(guess) {
   return { valid: missing.length === 0, missing };
 }
 
+function formatYellowLetterError(missing) {
+  const uniq = [...new Set(missing)];
+  return uniq.length > 0
+    ? `Izmanto dzeltenos burtus: ${uniq.join(", ")} (citā ailē)`
+    : "Dzeltenie burti jāizmanto citā pozīcijā.";
+}
+
 async function submitGuess() {
   if (state.duelMode) {
     submitDuelGuess();
@@ -4162,11 +4165,7 @@ async function submitGuess() {
     const check = validateHardModeGuess(guess);
     if (!check.valid) {
       flashRow(state.currentRow);
-      if (gameMessageEl)
-        gameMessageEl.textContent =
-          check.missing.length > 0
-            ? `Izmanto dzeltenos burtus (${check.missing.join(", ")})`
-            : "Dzeltenie burti jāizmanto citā pozīcijā.";
+      if (gameMessageEl) gameMessageEl.textContent = formatYellowLetterError(check.missing);
       return;
     }
   }
@@ -4307,11 +4306,7 @@ function submitDuelGuess() {
     const check = validateHardModeGuess(guess);
     if (!check.valid) {
       flashRow(state.currentRow);
-      if (gameMessageEl)
-        gameMessageEl.textContent =
-          check.missing.length > 0
-            ? `Izmanto dzeltenos burtus (${check.missing.join(", ")})`
-            : "Dzeltenie burti jāizmanto citā pozīcijā.";
+      if (gameMessageEl) gameMessageEl.textContent = formatYellowLetterError(check.missing);
       return;
     }
   }
