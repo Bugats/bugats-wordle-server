@@ -5719,13 +5719,14 @@ async function handleVipRoomCreate() {
       slots
     );
     const clanOnly = !!document.getElementById("vip-room-clan-only")?.checked;
+    const playMode = String(vipRoomPlayModeEl?.value || "classic");
     const payload = {
       name: String(vipRoomNameEl?.value || "").trim(),
       type: String(vipRoomTypeEl?.value || "single_elimination"),
-      playMode: String(vipRoomPlayModeEl?.value || "classic"),
+      playMode,
       slots,
       invitedFriends: state.vipRoomDraftInvites,
-      autoReportOnly: true,
+      autoReportOnly: playMode === "dambrete" || playMode === "chess" ? false : true,
       clanOnly,
     };
     const resp = await apiPost("/tournaments/vip-rooms", payload);

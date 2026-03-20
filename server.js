@@ -903,6 +903,8 @@ const TOURNAMENT_PLAY_MODES = new Set([
   "speed",
   "accuracy",
   "survival",
+  "dambrete",
+  "chess",
 ]);
 const TOURNAMENT_GRAND_FINAL_TYPES = new Set(["none", "simple", "double"]);
 
@@ -974,6 +976,8 @@ function tournamentPlayModeLabel(mode) {
   if (key === "speed") return "Speed duel (laiks ir galvenais)";
   if (key === "accuracy") return "Accuracy duel (precīzākie minējumi)";
   if (key === "survival") return "Survival duel (streak izturība)";
+  if (key === "dambrete") return "♟️ Dambrete";
+  if (key === "chess") return "♔ Šahs";
   return "Classic duel";
 }
 
@@ -987,6 +991,10 @@ function tournamentPlayModeRule(mode) {
     return "Accuracy: automātiska uzvara spēlētājam ar labāku win/guess attiecību.";
   if (key === "survival")
     return "Survival: automātiska uzvara spēlētājam ar augstāku best streak.";
+  if (key === "dambrete")
+    return "Dambrete: automātiska uzvara pēc dambreteElo, vai manuāli iesniegt rezultātu.";
+  if (key === "chess")
+    return "Šahs: automātiska uzvara pēc chessElo, vai manuāli iesniegt rezultātu.";
   return "Classic: automātiska uzvara spēlētājam ar augstāku kopējo score.";
 }
 
@@ -1842,6 +1850,12 @@ function tournamentAutoMetricByMode(user, modeRaw) {
   if (mode === "survival") {
     return Math.max(0, Number(user.bestStreak) || 0, Number(user.streak) || 0);
   }
+  if (mode === "dambrete") {
+    return Math.max(0, Number(user.dambreteElo) || 0);
+  }
+  if (mode === "chess") {
+    return Math.max(0, Number(user.chessElo) || 0);
+  }
   return Math.max(0, Number(user.score) || 0);
 }
 
@@ -1857,8 +1871,15 @@ function computeAutoTournamentMatchResult(modeRaw, p1Name, p2Name) {
   if (m1 > m2) winner = String(p1Name || "");
   else if (m2 > m1) winner = String(p2Name || "");
   else {
-    const elo1 = Math.max(0, Number(u1?.duelElo) || 0);
-    const elo2 = Math.max(0, Number(u2?.duelElo) || 0);
+    let elo1 = Math.max(0, Number(u1?.duelElo) || 0);
+    let elo2 = Math.max(0, Number(u2?.duelElo) || 0);
+    if (mode === "dambrete") {
+      elo1 = Math.max(0, Number(u1?.dambreteElo) || 0);
+      elo2 = Math.max(0, Number(u2?.dambreteElo) || 0);
+    } else if (mode === "chess") {
+      elo1 = Math.max(0, Number(u1?.chessElo) || 0);
+      elo2 = Math.max(0, Number(u2?.chessElo) || 0);
+    }
     if (elo1 > elo2) winner = String(p1Name || "");
     else if (elo2 > elo1) winner = String(p2Name || "");
     else {

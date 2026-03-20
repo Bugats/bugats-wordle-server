@@ -19,6 +19,8 @@
     if (key === "speed") return "Speed";
     if (key === "accuracy") return "Accuracy";
     if (key === "survival") return "Survival";
+    if (key === "dambrete") return "♟️ Dambrete";
+    if (key === "chess") return "♔ Šahs";
     return "";
   }
 
