@@ -829,16 +829,26 @@
           <h3 class="vz-board-title">♟️ Dambrete & ♔ Šahs</h3>
           <p class="vz-board-desc">Izaicini draugu uz dambreti vai šahu. Uzvaras dod novada un klana punktus!</p>
           <div class="vz-board-invite-form">
-            <input id="board-invite-username" type="text" placeholder="Spēlētāja lietotājvārds" autocomplete="username" />
+            <label for="board-invite-username" class="vz-board-label">Pretinieka lietotājvārds</label>
+            <input id="board-invite-username" type="text" placeholder="piemēram: spēlētājs123" autocomplete="username" aria-describedby="board-invite-hint" />
+            <span id="board-invite-hint" class="vz-board-hint">Ievadi tieši tā, kā parādās čatā vai TOP sarakstā</span>
             <div class="vz-board-invite-btns">
               <button id="board-invite-dambrete" type="button" class="vz-board-invite-btn">♟️ Dambrete</button>
               <button id="board-invite-chess" type="button" class="vz-board-invite-btn">♔ Šahs</button>
             </div>
           </div>
           <div id="board-invite-pending" class="vz-board-pending hidden">Gaidām atbildi…</div>
+          <details class="vz-board-rules">
+            <summary class="vz-board-rules-summary">📖 Īsi noteikumi</summary>
+            <div class="vz-board-rules-content">
+              <p><strong>Dambrete:</strong> Bārdiņas kustas pa diagonāli. Obligāti jāēd, ja iespējams. Sasniedzot pretinieka malu – kļūst par dāmu.</p>
+              <p><strong>Šahs:</strong> Standarta šaha noteikumi. Uzvar tas, kas izveido matu pretinieka karalim.</p>
+            </div>
+          </details>
         </div>
         <div id="board-games-invite" class="vz-board-invite hidden">
-          <p><span id="board-invite-from"></span> aicina uz <span id="board-invite-type"></span></p>
+          <p class="vz-board-invite-text"><span id="board-invite-from"></span> aicina uz <span id="board-invite-type"></span></p>
+          <p class="vz-board-invite-sub">Uzvaras dod novada un klana punktus</p>
           <div class="vz-board-invite-actions">
             <button id="board-invite-accept" type="button">Pieņemt</button>
             <button id="board-invite-decline" type="button">Noraidīt</button>
@@ -846,10 +856,13 @@
         </div>
         <div id="board-game-area" class="vz-board-game-area hidden">
           <div class="vz-board-game-header">
-            <span id="board-game-type"></span>
-            <span id="board-game-turn"></span>
-            <button id="board-resign-btn" type="button" class="vz-board-resign">Padoties</button>
+            <div class="vz-board-game-meta">
+              <span id="board-game-type" class="vz-board-game-type"></span>
+              <span id="board-game-turn" class="vz-board-game-turn" aria-live="polite"></span>
+            </div>
+            <button id="board-resign-btn" type="button" class="vz-board-resign" title="Beigt spēli un zaudēt">Padoties</button>
           </div>
+          <p id="board-game-hint" class="vz-board-game-hint">Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt</p>
           <div id="board-dambrete-container" class="vz-board-container hidden"></div>
           <div id="board-chess-container" class="vz-board-container hidden"></div>
         </div>

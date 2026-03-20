@@ -9017,6 +9017,8 @@ function renderBoardGame() {
   const isMyTurn = myIdx === boardState.turn;
   const turnName = boardState.players[boardState.turn] || "?";
   if (turnEl) turnEl.textContent = isMyTurn ? "Tava kārta" : `${turnName} gājienā`;
+  const hintEl = document.getElementById("board-game-hint");
+  if (hintEl) hintEl.textContent = isMyTurn ? "Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt" : "Gaidām pretinieka gājienu";
 
   if (boardState.type === "dambrete" && boardState.board) {
     if (chessContainer) chessContainer.classList.add("hidden");
