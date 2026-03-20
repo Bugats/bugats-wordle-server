@@ -27,6 +27,16 @@ import pinoHttp from "pino-http";
 import { createClient } from "@supabase/supabase-js";
 import bracketsManagerPkg from "brackets-manager";
 import bracketsJsonDbPkg from "brackets-json-db";
+import { Chess } from "chess.js";
+import {
+  createInitialBoard,
+  getAllMoves,
+  applyMove,
+  checkGameOver,
+  findLegalMove,
+  WHITE,
+  BLACK,
+} from "./lib/draughts.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -643,6 +653,91 @@ function getDuelOpponent(duel, username) {
   if (username === p1) return p2 || null;
   if (username === p2) return p1 || null;
   return null;
+}
+
+// ======== GALDA SPĒLES (dambrete, šahs) ========
+const BOARD_GAME_INVITE_TIMEOUT_MS = 60 * 1000; // 60s
+const BOARD_GAME_MOVE_TIMEOUT_MS = 5 * 60 * 1000; // 5 min per move (resign if exceeded)
+const BOARD_GAME_REWARD_XP = 2;
+const BOARD_GAME_REGION_POINTS = 1;
+
+const boardGames = new Map(); // gameId -> { type, players, board, turn, status, ... }
+const userToBoardGame = new Map(); // username -> gameId
+
+function getBoardGameOpponent(game, username) {
+  if (!game || !Array.isArray(game.players)) return null;
+  const [p1, p2] = game.players;
+  if (username === p1) return p2 || null;
+  if (username === p2) return p1 || null;
+  return null;
+}
+
+function createDambreteGame(challenger, opponent) {
+  const gameId = crypto.randomBytes(8).toString("hex");
+  const board = createInitialBoard();
+  const game = {
+    id: gameId,
+    type: "dambrete",
+    players: [challenger, opponent],
+    board,
+    turn: 0, // 0 = white (challenger), 1 = black (opponent)
+    status: "active",
+    moves: [],
+    createdAt: Date.now(),
+    lastMoveAt: Date.now(),
+  };
+  boardGames.set(gameId, game);
+  userToBoardGame.set(challenger, gameId);
+  userToBoardGame.set(opponent, gameId);
+  return game;
+}
+
+function createChessGame(challenger, opponent) {
+  const gameId = crypto.randomBytes(8).toString("hex");
+  const chess = new Chess();
+  const game = {
+    id: gameId,
+    type: "chess",
+    players: [challenger, opponent],
+    fen: chess.fen(),
+    turn: 0,
+    status: "active",
+    moves: [],
+    createdAt: Date.now(),
+    lastMoveAt: Date.now(),
+  };
+  boardGames.set(gameId, game);
+  userToBoardGame.set(challenger, gameId);
+  userToBoardGame.set(opponent, gameId);
+  return game;
+}
+
+function finishBoardGame(game, winnerUsername, reason) {
+  if (!game || game.status === "finished") return;
+  game.status = "finished";
+  game.winner = winnerUsername || null;
+  game.finishedReason = reason || "finished";
+  game.finishedAt = Date.now();
+  const [p1, p2] = game.players;
+  userToBoardGame.delete(p1);
+  userToBoardGame.delete(p2);
+
+  if (winnerUsername && REGION_POINTS_PER_WIN > 0) {
+    const winner = USERS[findUserKeyCaseInsensitive(winnerUsername)];
+    if (winner) {
+      winner.xp = (winner.xp || 0) + BOARD_GAME_REWARD_XP;
+      let rp = BOARD_GAME_REGION_POINTS;
+      if (isRegionBonusActive()) rp *= REGION_BONUS_MULTIPLIER;
+      winner.regionPoints = Math.max(0, Math.floor(winner.regionPoints || 0)) + rp;
+      ensureRankFields(winner);
+      if (winner.dambreteWins == null) winner.dambreteWins = 0;
+      if (winner.chessWins == null) winner.chessWins = 0;
+      if (game.type === "dambrete") winner.dambreteWins++;
+      else if (game.type === "chess") winner.chessWins++;
+    }
+  }
+  saveUsers(USERS);
+  broadcastLeaderboard(false);
 }
 
 // ======== ČATS (mini anti-spam) ========
@@ -4856,6 +4951,8 @@ async function buildMePayload(u) {
     bestStreak: u.bestStreak || 0,
     duelElo: u.duelElo,
     duelEloGames: u.duelEloGames || 0,
+    dambreteWins: u.dambreteWins || 0,
+    chessWins: u.chessWins || 0,
     rankTitle: u.rankTitle || rankInfo.title,
     rankLevel: u.rankLevel || rankInfo.level,
     rankColor: u.rankColor || rankInfo.color,
@@ -6824,6 +6921,29 @@ app.post(
     });
   }
 );
+
+// ======== Galda spēles API ========
+app.get("/board/:gameId/moves", authMiddleware, (req, res) => {
+  const user = req.user;
+  const gameId = String(req.params?.gameId || "").trim();
+  const game = gameId ? boardGames.get(gameId) : null;
+  if (!game || game.status !== "active") return res.status(404).json({ message: "Spēle nav atrasta." });
+  if (!game.players.includes(user.username)) return res.status(403).json({ message: "Tu neesi šajā spēlē." });
+  const turnIdx = game.turn;
+  const currentPlayer = game.players[turnIdx];
+  if (currentPlayer !== user.username) return res.json({ jumps: [], moves: [] });
+  if (game.type === "dambrete") {
+    const isWhiteTurn = turnIdx === 0;
+    const allMoves = getAllMoves(game.board, isWhiteTurn);
+    return res.json(allMoves);
+  }
+  if (game.type === "chess") {
+    const chess = new Chess(game.fen);
+    const moves = chess.moves({ verbose: true });
+    return res.json({ moves });
+  }
+  return res.json({ jumps: [], moves: [] });
+});
 
 // ======== /me ========
 app.get("/me", authMiddleware, async (req, res) => {
@@ -9964,6 +10084,22 @@ io.on("connection", (socket) => {
       });
     }
   } catch {}
+  // Galda spēles (dambrete, šahs) – resume
+  try {
+    const boardGameId = userToBoardGame.get(user.username);
+    const boardGame = boardGameId ? boardGames.get(boardGameId) : null;
+    if (boardGame && boardGame.status === "active") {
+      socket.join(`board:${boardGame.id}`);
+      socket.emit("board.resume", {
+        gameId: boardGame.id,
+        type: boardGame.type,
+        players: boardGame.players,
+        turn: boardGame.turn,
+        board: boardGame.board,
+        fen: boardGame.fen,
+      });
+    }
+  } catch {}
   ensureDailyMissions(user);
   ensureDailyChest(user);
   ensureSpecialMedals(user);
@@ -10915,6 +11051,136 @@ io.on("connection", (socket) => {
     const l1 = duel.attemptsLeft[p1] ?? 0;
     const l2 = duel.attemptsLeft[p2] ?? 0;
     if (l1 <= 0 && l2 <= 0) finishDuel(duel, null, "no_attempts");
+  });
+
+  // ========== GALDA SPĒLES (dambrete, šahs) ==========
+  socket.on("board.invite", (payload) => {
+    const fromUser = socket.data.user;
+    if (!fromUser) return;
+    const targetName = String(payload?.target || payload?.username || "").trim();
+    const gameType = String(payload?.type || "dambrete").toLowerCase();
+    if (!targetName) return socket.emit("board.error", { message: "Nav norādīts pretinieks." });
+    if (fromUser.username === targetName) return socket.emit("board.error", { message: "Nevari izaicināt sevi." });
+    const targetKey = findUserKeyCaseInsensitive(targetName);
+    const targetUser = targetKey ? USERS[targetKey] : null;
+    if (!targetUser) return socket.emit("board.error", { message: "Lietotājs nav atrasts." });
+    if (userToBoardGame.has(fromUser.username)) return socket.emit("board.error", { message: "Tu jau esi spēlē." });
+    if (userToBoardGame.has(targetUser.username)) return socket.emit("board.error", { message: "Pretinieks jau spēlē." });
+    const inviteId = crypto.randomBytes(6).toString("hex");
+    const invite = {
+      id: inviteId,
+      from: fromUser.username,
+      target: targetUser.username,
+      type: gameType,
+      expiresAt: Date.now() + BOARD_GAME_INVITE_TIMEOUT_MS,
+    };
+    const targetSocket = getSocketByUsername(targetUser.username);
+    if (targetSocket) {
+      targetSocket.emit("board.invite", {
+        inviteId,
+        from: fromUser.username,
+        type: gameType,
+      });
+    }
+    socket.emit("board.inviteSent", { inviteId, target: targetUser.username, type: gameType });
+  });
+
+  socket.on("board.accept", (payload) => {
+    const user = socket.data.user;
+    if (!user) return;
+    const inviteId = String(payload?.inviteId || "").trim();
+    const gameType = String(payload?.type || "dambrete").toLowerCase();
+    if (!inviteId) return socket.emit("board.error", { message: "Nav aicinājuma." });
+    const targetSocket = getSocketByUsername(payload?.from || "");
+    const challengerName = payload?.from || "";
+    const opponentName = user.username;
+    if (!challengerName || challengerName === opponentName) return socket.emit("board.error", { message: "Nederīgs aicinājums." });
+    if (userToBoardGame.has(challengerName) || userToBoardGame.has(opponentName)) return socket.emit("board.error", { message: "Kāds jau spēlē." });
+    let game;
+    if (gameType === "chess") {
+      game = createChessGame(challengerName, opponentName);
+    } else {
+      game = createDambreteGame(challengerName, opponentName);
+    }
+    const room = `board:${game.id}`;
+    const s1 = getSocketByUsername(challengerName);
+    const s2 = getSocketByUsername(opponentName);
+    if (s1) s1.join(room);
+    if (s2) s2.join(room);
+    const payloadOut = {
+      gameId: game.id,
+      type: game.type,
+      players: game.players,
+      turn: game.turn,
+      status: game.status,
+      board: game.board,
+      fen: game.fen,
+    };
+    io.to(room).emit("board.start", payloadOut);
+  });
+
+  socket.on("board.move", (payload) => {
+    const user = socket.data.user;
+    if (!user) return;
+    const gameId = payload?.gameId;
+    const game = gameId ? boardGames.get(gameId) : null;
+    if (!game || game.status !== "active") return socket.emit("board.error", { message: "Spēle nav aktīva." });
+    if (!game.players.includes(user.username)) return;
+    const turnIdx = game.turn;
+    const currentPlayer = game.players[turnIdx];
+    if (currentPlayer !== user.username) return socket.emit("board.error", { message: "Nav tavas kārtas." });
+
+    if (game.type === "dambrete") {
+      const move = payload?.move;
+      if (!move) return socket.emit("board.error", { message: "Nav gājiena." });
+      const isWhiteTurn = turnIdx === 0;
+      const allMoves = getAllMoves(game.board, isWhiteTurn);
+      const legal = findLegalMove(allMoves, move);
+      if (!legal) return socket.emit("board.error", { message: "Nederīgs gājiens." });
+      const newBoard = applyMove(game.board, move);
+      if (!newBoard) return socket.emit("board.error", { message: "Neizdevās izpildīt gājienu." });
+      game.board = newBoard;
+      game.moves.push({ move, by: user.username, ts: Date.now() });
+      game.turn = 1 - game.turn;
+      game.lastMoveAt = Date.now();
+      const result = checkGameOver(newBoard, game.turn === 0);
+      if (result.over) {
+        const winner = result.winner === WHITE ? game.players[0] : game.players[1];
+        finishBoardGame(game, winner, "win");
+        io.to(`board:${gameId}`).emit("board.end", { gameId, winner, reason: "win", board: newBoard });
+      } else {
+        io.to(`board:${gameId}`).emit("board.move", { gameId, board: newBoard, turn: game.turn, move });
+      }
+    } else if (game.type === "chess") {
+      const san = payload?.san || payload?.move;
+      if (!san) return socket.emit("board.error", { message: "Nav gājiena." });
+      const chess = new Chess(game.fen);
+      const m = chess.move(san);
+      if (!m) return socket.emit("board.error", { message: "Nederīgs gājiens." });
+      game.fen = chess.fen();
+      game.moves.push({ san: m.san, by: user.username, ts: Date.now() });
+      game.turn = 1 - game.turn;
+      game.lastMoveAt = Date.now();
+      if (chess.isCheckmate() || chess.isStalemate() || chess.isDraw()) {
+        const winner = chess.isCheckmate() ? user.username : null;
+        finishBoardGame(game, winner, chess.isCheckmate() ? "checkmate" : "draw");
+        io.to(`board:${gameId}`).emit("board.end", { gameId, winner, reason: chess.isCheckmate() ? "checkmate" : "draw", fen: game.fen });
+      } else {
+        io.to(`board:${gameId}`).emit("board.move", { gameId, fen: game.fen, turn: game.turn, move: m.san });
+      }
+    }
+  });
+
+  socket.on("board.resign", (payload) => {
+    const user = socket.data.user;
+    if (!user) return;
+    const gameId = payload?.gameId;
+    const game = gameId ? boardGames.get(gameId) : null;
+    if (!game || game.status !== "active") return;
+    if (!game.players.includes(user.username)) return;
+    const winner = getBoardGameOpponent(game, user.username);
+    finishBoardGame(game, winner, "resign");
+    io.to(`board:${gameId}`).emit("board.end", { gameId, winner, reason: "resign" });
   });
 
   socket.on("disconnect", () => {

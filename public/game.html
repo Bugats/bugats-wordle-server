@@ -125,6 +125,16 @@
             <span id="duel-inbox-badge" class="vz-duel-badge hidden" aria-label="Aicinājumu skaits">0</span>
           </button>
 
+          <!-- GALDA SPĒLES (dambrete, šahs) -->
+          <button
+            id="board-games-btn"
+            class="vz-duel-inbox-btn"
+            type="button"
+            title="Dambrete un šahs"
+            aria-label="Galda spēles">
+            ♟️ Galda
+          </button>
+
           <button id="sound-toggle-btn" class="vz-sound-btn" type="button">🔊 Skaņa: ON</button>
           <button id="logout-btn" type="button">Izlogoties</button>
           <details class="vz-topbar-more">
@@ -803,6 +813,45 @@
 
         <div class="profile-row profile-row--center-actions">
           <button id="pp-msg-btn" class="vz-profile-msg-btn" type="button">Rakstīt personiski</button>
+          <div class="vz-profile-board-actions">
+            <button id="pp-invite-dambrete" class="vz-profile-invite-board" type="button" title="Izaicināt uz dambreti">♟️ Dambrete</button>
+            <button id="pp-invite-chess" class="vz-profile-invite-board" type="button" title="Izaicināt uz šahu">♔ Šahs</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GALDA SPĒLES (dambrete, šahs) -->
+    <div id="board-games-modal" class="vz-board-modal hidden" role="dialog" aria-label="Galda spēles">
+      <div class="vz-board-modal-inner">
+        <button id="board-modal-close" class="vz-duel-x" type="button" aria-label="Aizvērt">✕</button>
+        <div id="board-games-lobby" class="vz-board-lobby">
+          <h3 class="vz-board-title">♟️ Dambrete & ♔ Šahs</h3>
+          <p class="vz-board-desc">Izaicini draugu uz dambreti vai šahu. Uzvaras dod novada un klana punktus!</p>
+          <div class="vz-board-invite-form">
+            <input id="board-invite-username" type="text" placeholder="Spēlētāja lietotājvārds" autocomplete="username" />
+            <div class="vz-board-invite-btns">
+              <button id="board-invite-dambrete" type="button" class="vz-board-invite-btn">♟️ Dambrete</button>
+              <button id="board-invite-chess" type="button" class="vz-board-invite-btn">♔ Šahs</button>
+            </div>
+          </div>
+          <div id="board-invite-pending" class="vz-board-pending hidden">Gaidām atbildi…</div>
+        </div>
+        <div id="board-games-invite" class="vz-board-invite hidden">
+          <p><span id="board-invite-from"></span> aicina uz <span id="board-invite-type"></span></p>
+          <div class="vz-board-invite-actions">
+            <button id="board-invite-accept" type="button">Pieņemt</button>
+            <button id="board-invite-decline" type="button">Noraidīt</button>
+          </div>
+        </div>
+        <div id="board-game-area" class="vz-board-game-area hidden">
+          <div class="vz-board-game-header">
+            <span id="board-game-type"></span>
+            <span id="board-game-turn"></span>
+            <button id="board-resign-btn" type="button" class="vz-board-resign">Padoties</button>
+          </div>
+          <div id="board-dambrete-container" class="vz-board-container hidden"></div>
+          <div id="board-chess-container" class="vz-board-container hidden"></div>
         </div>
       </div>
     </div>
@@ -934,6 +983,7 @@
     <script defer src="modules/ui.js?v=2026-03-16-modsplit-1"></script>
     <script defer src="modules/chat.js?v=2026-03-16-modsplit-1"></script>
     <script defer src="modules/duel.js?v=2026-03-16-modsplit-1"></script>
+    <script defer src="modules/board-games.js?v=2026-03-17"></script>
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->

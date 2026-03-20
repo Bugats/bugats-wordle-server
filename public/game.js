@@ -619,6 +619,18 @@ const duelScoreLineEl = document.getElementById("duel-result-rewards");
 const duelExtraMsgEl = document.getElementById("duel-result-reason");
 const duelOkBtn = document.getElementById("duel-result-close");
 
+// GALDA SPĒLES (dambrete, šahs)
+let boardState = {
+  gameId: null,
+  type: null,
+  players: [],
+  turn: 0,
+  board: null,
+  fen: null,
+  selectedCell: null,
+  legalMoves: { jumps: [], moves: [] },
+};
+
 // TOP10 + ONLINE
 const lbListEl = $("#lb-list");
 const streakListEl = $("#streak-list");
@@ -2712,6 +2724,7 @@ async function runPostLoginInit() {
         startTournamentCountdownTimer();
         startEngagementLoopTimer();
         renderEngagementLoopCard();
+        bindBoardGames();
         initSocket();
         return;
       } else if (c && c.status === "waiting" && c.player1 !== state.username) {
@@ -2750,6 +2763,7 @@ async function runPostLoginInit() {
   startTournamentCountdownTimer();
   startEngagementLoopTimer();
   renderEngagementLoopCard();
+  bindBoardGames();
   initSocket();
   setTimeout(showTutorialIfNeeded, 600);
 }
@@ -2926,6 +2940,11 @@ function showPlayerProfile(data) {
       state.username && data.username === state.username
         ? "none"
         : "inline-block";
+  }
+  const boardActions = document.querySelector(".vz-profile-board-actions");
+  if (boardActions) {
+    boardActions.style.display =
+      state.username && data.username === state.username ? "none" : "flex";
   }
 
   let blockBtn = document.getElementById("vz-profile-block-btn");
@@ -8878,7 +8897,248 @@ function initSocket() {
       setTimeout(() => startNewRound(), 1200);
     }
   });
+
+  // ========== GALDA SPĒLES (dambrete, šahs) ==========
+  socket.on("board.invite", (payload) => {
+    const from = payload?.from || "?";
+    const type = payload?.type || "dambrete";
+    showBoardInviteModal(from, type, payload);
+  });
+  socket.on("board.inviteSent", () => {
+    const pending = document.getElementById("board-invite-pending");
+    if (pending) pending.classList.remove("hidden");
+  });
+  socket.on("board.error", (payload) => {
+    appendSystemMessage(payload?.message || "Galda spēles kļūda.");
+  });
+  socket.on("board.start", (payload) => {
+    hideBoardModal();
+    startBoardGame(payload);
+  });
+  socket.on("board.resume", (payload) => {
+    startBoardGame(payload);
+  });
+  socket.on("board.move", (payload) => {
+    if (payload?.gameId !== boardState.gameId) return;
+    boardState.board = payload?.board || boardState.board;
+    boardState.fen = payload?.fen || boardState.fen;
+    boardState.turn = payload?.turn ?? boardState.turn;
+    boardState.selectedCell = null;
+    renderBoardGame();
+  });
+  socket.on("board.end", (payload) => {
+    if (payload?.gameId !== boardState.gameId) return;
+    const winner = payload?.winner;
+    const reason = payload?.reason || "finished";
+    boardState.gameId = null;
+    let msg = "";
+    if (winner === state.username) msg = "♟️ Tu uzvarēji!";
+    else if (winner) msg = `♟️ Uzvarēja ${winner}.`;
+    else msg = "♟️ Spēle beidzās (neizšķirts).";
+    appendSystemMessage(msg);
+    hideBoardGameArea();
+    apiGet("/me").then(updatePlayerCard).catch(() => {});
+  });
 }
+
+function showBoardModal() {
+  const modal = document.getElementById("board-games-modal");
+  const lobby = document.getElementById("board-games-lobby");
+  const invite = document.getElementById("board-games-invite");
+  const gameArea = document.getElementById("board-game-area");
+  if (modal) modal.classList.remove("hidden");
+  if (lobby) lobby.classList.remove("hidden");
+  if (invite) invite.classList.add("hidden");
+  if (gameArea) gameArea.classList.add("hidden");
+}
+
+function hideBoardModal() {
+  const modal = document.getElementById("board-games-modal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function showBoardInviteModal(from, type, payload) {
+  const modal = document.getElementById("board-games-modal");
+  const lobby = document.getElementById("board-games-lobby");
+  const invite = document.getElementById("board-games-invite");
+  if (modal) modal.classList.remove("hidden");
+  if (lobby) lobby.classList.add("hidden");
+  if (invite) {
+    invite.classList.remove("hidden");
+    const fromEl = document.getElementById("board-invite-from");
+    const typeEl = document.getElementById("board-invite-type");
+    if (fromEl) fromEl.textContent = from;
+    if (typeEl) typeEl.textContent = type === "chess" ? "šahu" : "dambreti";
+    invite.dataset.from = from;
+    invite.dataset.type = type || "dambrete";
+  }
+}
+
+function hideBoardInviteModal() {
+  const invite = document.getElementById("board-games-invite");
+  if (invite) invite.classList.add("hidden");
+  showBoardModal();
+}
+
+function startBoardGame(payload) {
+  boardState = {
+    gameId: payload?.gameId,
+    type: payload?.type || "dambrete",
+    players: payload?.players || [],
+    turn: payload?.turn ?? 0,
+    board: payload?.board ? payload.board.map((r) => r.slice()) : null,
+    fen: payload?.fen || null,
+    selectedCell: null,
+    legalMoves: { jumps: [], moves: [] },
+  };
+  const gameArea = document.getElementById("board-game-area");
+  const lobby = document.getElementById("board-games-lobby");
+  const modal = document.getElementById("board-games-modal");
+  if (gameArea) gameArea.classList.remove("hidden");
+  if (lobby) lobby.classList.add("hidden");
+  if (modal) modal.classList.remove("hidden");
+  renderBoardGame();
+}
+
+function hideBoardGameArea() {
+  const gameArea = document.getElementById("board-game-area");
+  const modal = document.getElementById("board-games-modal");
+  if (gameArea) gameArea.classList.add("hidden");
+  if (modal) modal.classList.add("hidden");
+}
+
+function renderBoardGame() {
+  const typeEl = document.getElementById("board-game-type");
+  const turnEl = document.getElementById("board-game-turn");
+  const dambreteContainer = document.getElementById("board-dambrete-container");
+  const chessContainer = document.getElementById("board-chess-container");
+  if (typeEl) typeEl.textContent = boardState.type === "chess" ? "♔ Šahs" : "♟️ Dambrete";
+  const myIdx = boardState.players.indexOf(state.username);
+  const isMyTurn = myIdx === boardState.turn;
+  const turnName = boardState.players[boardState.turn] || "?";
+  if (turnEl) turnEl.textContent = isMyTurn ? "Tava kārta" : `${turnName} gājienā`;
+
+  if (boardState.type === "dambrete" && boardState.board) {
+    if (chessContainer) chessContainer.classList.add("hidden");
+    if (window.VZBoardGames && dambreteContainer) {
+      window.VZBoardGames.renderDambreteBoard(
+        boardState.board,
+        boardState.turn,
+        isMyTurn,
+        myIdx,
+        (r, c, isPiece) => handleDambreteCellClick(r, c, isPiece),
+        boardState.selectedCell,
+        boardState.legalMoves
+      );
+    }
+  } else if (boardState.type === "chess" && boardState.fen) {
+    if (dambreteContainer) dambreteContainer.classList.add("hidden");
+    if (chessContainer) {
+      chessContainer.classList.remove("hidden");
+      chessContainer.innerHTML = `<p class="vz-chess-placeholder">Šahs drīzumā (FEN: ${boardState.fen.slice(0, 30)}…)</p>`;
+    }
+  }
+}
+
+async function handleDambreteCellClick(r, c, isPiece) {
+  if (!state.socket || !boardState.gameId) return;
+  const myIdx = boardState.players.indexOf(state.username);
+  if (myIdx !== boardState.turn) return;
+
+  if (isPiece) {
+    boardState.selectedCell = [r, c];
+    try {
+      const data = await apiGet(`/board/${boardState.gameId}/moves`);
+      boardState.legalMoves = data || { jumps: [], moves: [] };
+    } catch {}
+    renderBoardGame();
+    return;
+  }
+
+  if (!boardState.selectedCell) return;
+  const [fr, fc] = boardState.selectedCell;
+  const moves = boardState.legalMoves?.moves || [];
+  const jumps = boardState.legalMoves?.jumps || [];
+  let move = null;
+  if (jumps.length) {
+    move = jumps.find((j) => {
+      const seq = j.jumps || [];
+      const first = seq[0];
+      const last = seq[seq.length - 1];
+      return first && last && first.from[0] === fr && first.from[1] === fc && last.to[0] === r && last.to[1] === c;
+    });
+    if (move) move = { jumps: move.jumps };
+  } else {
+    move = moves.find((m) => m.from[0] === fr && m.from[1] === fc && m.to[0] === r && m.to[1] === c);
+  }
+  if (!move) {
+    boardState.selectedCell = null;
+    renderBoardGame();
+    return;
+  }
+  state.socket.emit("board.move", { gameId: boardState.gameId, move });
+  boardState.selectedCell = null;
+}
+
+function bindBoardGames() {
+  const btn = document.getElementById("board-games-btn");
+  const closeBtn = document.getElementById("board-modal-close");
+  const inviteDambrete = document.getElementById("board-invite-dambrete");
+  const inviteChess = document.getElementById("board-invite-chess");
+  const inviteUsername = document.getElementById("board-invite-username");
+  const acceptBtn = document.getElementById("board-invite-accept");
+  const declineBtn = document.getElementById("board-invite-decline");
+  const resignBtn = document.getElementById("board-resign-btn");
+  const ppInviteDambrete = document.getElementById("pp-invite-dambrete");
+  const ppInviteChess = document.getElementById("pp-invite-chess");
+
+  if (btn) btn.addEventListener("click", showBoardModal);
+  if (closeBtn) closeBtn.addEventListener("click", hideBoardModal);
+  const doInvite = (type) => {
+    const target = inviteUsername?.value?.trim() || currentProfileName?.trim();
+    if (!target) {
+      appendSystemMessage("Ievadi spēlētāja lietotājvārdu.");
+      return;
+    }
+    if (!state.socket) return;
+    state.socket.emit("board.invite", { target, type });
+    document.getElementById("board-invite-pending")?.classList.remove("hidden");
+  };
+  if (inviteDambrete) inviteDambrete.addEventListener("click", () => doInvite("dambrete"));
+  if (inviteChess) inviteChess.addEventListener("click", () => doInvite("chess"));
+  if (acceptBtn)
+    acceptBtn.addEventListener("click", () => {
+      const invite = document.getElementById("board-games-invite");
+      const from = invite?.dataset?.from || "";
+      const type = invite?.dataset?.type || "dambrete";
+      if (state.socket) state.socket.emit("board.accept", { inviteId: "", from, type });
+      hideBoardInviteModal();
+    });
+  if (declineBtn) declineBtn.addEventListener("click", hideBoardInviteModal);
+  if (resignBtn)
+    resignBtn.addEventListener("click", () => {
+      if (boardState.gameId && state.socket) state.socket.emit("board.resign", { gameId: boardState.gameId });
+    });
+  if (ppInviteDambrete)
+    ppInviteDambrete.addEventListener("click", () => {
+      const target = currentProfileName?.trim();
+      if (target && state.socket) {
+        showBoardModal();
+        if (inviteUsername) inviteUsername.value = target;
+        state.socket.emit("board.invite", { target, type: "dambrete" });
+      }
+    });
+  if (ppInviteChess)
+    ppInviteChess.addEventListener("click", () => {
+      const target = currentProfileName?.trim();
+      if (target && state.socket) {
+        showBoardModal();
+        if (inviteUsername) inviteUsername.value = target;
+        state.socket.emit("board.invite", { target, type: "chess" });
+      }
+    });
+}
+
 // ==================== ČATS: SŪTĪŠANA + SEZONAS KOMANDA ====================
 let _lastChatSendAt = 0;
 const CHAT_SEND_COOLDOWN_MS = 900;
