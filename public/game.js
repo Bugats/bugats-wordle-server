@@ -34,6 +34,10 @@ const {
 
 const { createApiBase, fetchWithTimeout, readJsonOrThrow } = VZServices;
 const { $, createEl, safeText, applyRankColor } = VZUI;
+
+function escapeHtml(s) {
+  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 const {
   dmNormalizeMessageForStore,
   dmObjectToThreads,
@@ -2328,9 +2332,12 @@ function renderKaujinieksCard(k) {
       a.xpForNext > 0
         ? Math.round(((a.xp || 0) / a.xpForNext) * 100)
         : 100;
+    const iconHtml = a.lottieUrl && typeof customElements !== "undefined" && customElements.get("lottie-player")
+      ? `<lottie-player class="vz-kaujinieks-lottie" src="${escapeHtml(a.lottieUrl)}" autoplay loop mode="normal" background="transparent"></lottie-player>`
+      : `<span class="vz-kaujinieks-icon">${escapeHtml(a.icon || "⚔️")}</span>`;
     activeEl.innerHTML = `
       <div class="vz-kaujinieks-current">
-        <span class="vz-kaujinieks-icon">${a.icon || "⚔️"}</span>
+        <div class="vz-kaujinieks-icon-wrap">${iconHtml}</div>
         <div class="vz-kaujinieks-info">
           <strong>${a.name || "?"}</strong>
           <span>Lv.${a.level || 1}</span>
@@ -2343,13 +2350,20 @@ function renderKaujinieksCard(k) {
     `;
   }
 
+  function renderCharIcon(p, fallback = true) {
+    if (p.lottieUrl && typeof customElements !== "undefined" && customElements.get("lottie-player")) {
+      return `<lottie-player class="vz-kaujinieks-lottie vz-kaujinieks-lottie-btn" src="${escapeHtml(p.lottieUrl)}" autoplay loop mode="normal" background="transparent"></lottie-player>`;
+    }
+    return fallback ? escapeHtml(p.icon || "⚔️") : "";
+  }
+
   if (listEl) {
     let html = "";
     if (k.pool) {
       html += k.pool
         .map(
           (p) =>
-            `<button type="button" class="vz-kaujinieks-btn ${p.id === k.activeId ? "vz-kaujinieks-active" : ""}" data-id="${p.id}" title="${p.name} Lv.${p.level || 1}">${p.icon || "⚔️"}</button>`
+            `<button type="button" class="vz-kaujinieks-btn ${p.id === k.activeId ? "vz-kaujinieks-active" : ""}" data-id="${escapeHtml(p.id)}" title="${escapeHtml(p.name)} Lv.${p.level || 1}">${renderCharIcon(p)}</button>`
         )
         .join("");
     }
@@ -2359,7 +2373,7 @@ function renderKaujinieksCard(k) {
         .filter((p) => !unlocked.has(p.id))
         .forEach(
           (p) =>
-            (html += `<button type="button" class="vz-kaujinieks-lock-btn" data-id="${p.id}" title="Atvērt par ${p.cost || 0} coins">${p.icon} 🔒</button>`)
+            (html += `<button type="button" class="vz-kaujinieks-lock-btn" data-id="${escapeHtml(p.id)}" title="Atvērt par ${p.cost || 0} coins">${renderCharIcon(p)} 🔒</button>`)
         );
     }
     listEl.innerHTML = html;

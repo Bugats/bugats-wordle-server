@@ -199,12 +199,13 @@ const REGION_NAMES = ["Zemgale", "Latgale", "Vidzeme", "Kurzeme"];
 const REGION_MAP = new Map(REGION_NAMES.map((n) => [n.toLowerCase(), n]));
 
 // ====== Kaujinieki (characters) – spēlētājs kačā savu izvēlēto ======
+const LOTTIE_BASE = "https://assets3.lottiefiles.com/packages";
 const KAUJINIEKI_POOL = [
-  { id: "zobenieks", name: "Zobenieks", icon: "⚔️", desc: "Spēcīgs un drošs" },
-  { id: "laceens", name: "Lācēns", icon: "🐻", desc: "Izturīgs un neatlaidīgs" },
-  { id: "vilkins", name: "Vilkiņš", icon: "🐺", desc: "Ātrs un veikls" },
-  { id: "pukis", name: "Pūkis", icon: "🦉", desc: "Gudrs un vērīgs" },
-  { id: "virsaitis", name: "Virsaitis", icon: "🦌", desc: "Cēls un mērķtiecīgs" },
+  { id: "zobenieks", name: "Zobenieks", icon: "⚔️", desc: "Spēcīgs un drošs", lottieUrl: `${LOTTIE_BASE}/lf20_UJNc2t.json` },
+  { id: "laceens", name: "Lācēns", icon: "🐻", desc: "Izturīgs un neatlaidīgs", lottieUrl: `${LOTTIE_BASE}/lf20_UJNc2t.json` },
+  { id: "vilkins", name: "Vilkiņš", icon: "🐺", desc: "Ātrs un veikls", lottieUrl: `${LOTTIE_BASE}/lf20_UJNc2t.json` },
+  { id: "pukis", name: "Pūkis", icon: "🦉", desc: "Gudrs un vērīgs", lottieUrl: `${LOTTIE_BASE}/lf20_UJNc2t.json` },
+  { id: "virsaitis", name: "Virsaitis", icon: "🦌", desc: "Cēls un mērķtiecīgs", lottieUrl: `${LOTTIE_BASE}/lf20_UJNc2t.json` },
 ];
 const KAUJINIEKS_XP_PER_LEVEL = 50;
 const KAUJINIEKS_ATTRIBUTES = ["speks", "izturiba", "veiksme"];
@@ -260,6 +261,7 @@ function buildKaujiniekiPayload(user) {
       name: p.name,
       icon: p.icon,
       desc: p.desc,
+      lottieUrl: p.lottieUrl || null,
       unlocked: !!k,
       ...(k || {}),
     };
@@ -270,6 +272,7 @@ function buildKaujiniekiPayload(user) {
     pool: pool.filter((p) => p.unlocked),
     allPool: KAUJINIEKI_POOL.map((p) => ({
       ...p,
+      lottieUrl: p.lottieUrl || null,
       unlocked: !!getKaujinieks(user, p.id),
       cost: 100 * (KAUJINIEKI_POOL.findIndex((x) => x.id === p.id) + 1),
     })),
