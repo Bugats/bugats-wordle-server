@@ -88,6 +88,124 @@
     container.appendChild(table);
   }
 
+  // Šahs: FEN parse un galda attēlojums
+  const CHESS_PIECES = {
+    p: { symbol: "♟", color: "black" },
+    n: { symbol: "♞", color: "black" },
+    b: { symbol: "♝", color: "black" },
+    r: { symbol: "♜", color: "black" },
+    q: { symbol: "♛", color: "black" },
+    k: { symbol: "♚", color: "black" },
+    P: { symbol: "♙", color: "white" },
+    N: { symbol: "♘", color: "white" },
+    B: { symbol: "♗", color: "white" },
+    R: { symbol: "♖", color: "white" },
+    Q: { symbol: "♕", color: "white" },
+    K: { symbol: "♔", color: "white" },
+  };
+
+  function parseFenToBoard(fen) {
+    const board = Array(8)
+      .fill(null)
+      .map(() => Array(8).fill(null));
+    const parts = String(fen || "").trim().split(/\s+/);
+    const placement = parts[0] || "";
+    const ranks = placement.split("/");
+    for (let r = 0; r < 8 && r < ranks.length; r++) {
+      let c = 0;
+      for (const ch of ranks[r]) {
+        if (c >= 8) break;
+        const n = parseInt(ch, 10);
+        if (!isNaN(n)) {
+          c += n;
+        } else if (CHESS_PIECES[ch]) {
+          board[r][c] = ch;
+          c++;
+        }
+      }
+    }
+    return board;
+  }
+
+  function squareToRowCol(sq) {
+    if (!sq || sq.length < 2) return null;
+    const file = sq.charCodeAt(0) - 97;
+    const rank = parseInt(sq[1], 10);
+    if (isNaN(rank) || file < 0 || file > 7 || rank < 1 || rank > 8) return null;
+    return [8 - rank, file];
+  }
+
+  function rowColToSquare(r, c) {
+    const file = String.fromCharCode(97 + c);
+    const rank = 8 - r;
+    return file + rank;
+  }
+
+  function isChessValidDest(r, c, selectedCell, legalMoves) {
+    if (!selectedCell || !legalMoves) return false;
+    const [fr, fc] = selectedCell;
+    const fromSq = rowColToSquare(fr, fc);
+    const toSq = rowColToSquare(r, c);
+    const moves = legalMoves.moves || [];
+    return moves.some((m) => m.from === fromSq && m.to === toSq);
+  }
+
+  function findChessMove(selectedCell, toRow, toCol, legalMoves) {
+    if (!selectedCell || !legalMoves) return null;
+    const [fr, fc] = selectedCell;
+    const fromSq = rowColToSquare(fr, fc);
+    const toSq = rowColToSquare(toRow, toCol);
+    const moves = legalMoves.moves || [];
+    return moves.find((m) => m.from === fromSq && m.to === toSq);
+  }
+
+  function renderChessBoard(fen, turnIdx, isMyTurn, myPlayerIdx, onCellClick, selectedCell, legalMoves) {
+    const container = document.getElementById("board-chess-container");
+    if (!container) return;
+    container.innerHTML = "";
+    container.classList.remove("hidden");
+    const board = parseFenToBoard(fen);
+    const table = document.createElement("table");
+    table.className = "vz-chess-board";
+    table.setAttribute("role", "grid");
+    for (let r = 0; r < 8; r++) {
+      const tr = document.createElement("tr");
+      for (let c = 0; c < 8; c++) {
+        const td = document.createElement("td");
+        td.dataset.row = String(r);
+        td.dataset.col = String(c);
+        td.className = (r + c) % 2 === 0 ? "vz-chess-light" : "vz-chess-dark";
+        const piece = board[r][c];
+        if (piece && CHESS_PIECES[piece]) {
+          const span = document.createElement("span");
+          span.className = "vz-chess-piece vz-chess-" + CHESS_PIECES[piece].color;
+          span.textContent = CHESS_PIECES[piece].symbol;
+          td.appendChild(span);
+        }
+        const canMove = isMyTurn && myPlayerIdx === turnIdx;
+        const isSelected = selectedCell && selectedCell[0] === r && selectedCell[1] === c;
+        const isValidDest = isChessValidDest(r, c, selectedCell, legalMoves);
+        const hasPiece = !!piece;
+        const isMyPiece =
+          hasPiece &&
+          ((myPlayerIdx === 0 && /[PNBRQK]/.test(piece)) || (myPlayerIdx === 1 && /[pnbrqk]/.test(piece)));
+        if (isSelected) td.classList.add("vz-chess-selected");
+        if (isValidDest) td.classList.add("vz-chess-valid");
+        if (canMove) {
+          td.tabIndex = 0;
+          if (hasPiece && isMyPiece && !selectedCell) {
+            td.addEventListener("click", () => onCellClick(r, c, true));
+          } else if (isValidDest) {
+            td.addEventListener("click", () => onCellClick(r, c, false));
+          }
+        }
+        tr.appendChild(td);
+      }
+      table.appendChild(tr);
+    }
+    container.appendChild(table);
+  }
+
   global.VZBoardGames = Object.freeze({
     ROWS,
     COLS,
@@ -97,5 +215,10 @@
     BLACK_KING,
     isDark,
     renderDambreteBoard,
+    renderChessBoard,
+    parseFenToBoard,
+    squareToRowCol,
+    rowColToSquare,
+    findChessMove,
   });
 })(window);

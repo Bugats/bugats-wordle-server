@@ -9033,11 +9033,49 @@ function renderBoardGame() {
     }
   } else if (boardState.type === "chess" && boardState.fen) {
     if (dambreteContainer) dambreteContainer.classList.add("hidden");
-    if (chessContainer) {
-      chessContainer.classList.remove("hidden");
-      chessContainer.innerHTML = `<p class="vz-chess-placeholder">Šahs drīzumā (FEN: ${boardState.fen.slice(0, 30)}…)</p>`;
+    if (chessContainer && window.VZBoardGames) {
+      window.VZBoardGames.renderChessBoard(
+        boardState.fen,
+        boardState.turn,
+        isMyTurn,
+        myIdx,
+        (r, c, isPiece) => handleChessCellClick(r, c, isPiece),
+        boardState.selectedCell,
+        boardState.legalMoves
+      );
     }
   }
+}
+
+async function handleChessCellClick(r, c, isPiece) {
+  if (!state.socket || !boardState.gameId) return;
+  const myIdx = boardState.players.indexOf(state.username);
+  if (myIdx !== boardState.turn) return;
+
+  if (isPiece) {
+    boardState.selectedCell = [r, c];
+    try {
+      const data = await apiGet(`/board/${boardState.gameId}/moves`);
+      boardState.legalMoves = data || { moves: [] };
+    } catch {}
+    renderBoardGame();
+    return;
+  }
+
+  if (!boardState.selectedCell) return;
+  const move = window.VZBoardGames?.findChessMove(
+    boardState.selectedCell,
+    r,
+    c,
+    boardState.legalMoves
+  );
+  if (!move) {
+    boardState.selectedCell = null;
+    renderBoardGame();
+    return;
+  }
+  state.socket.emit("board.move", { gameId: boardState.gameId, san: move.san });
+  boardState.selectedCell = null;
 }
 
 async function handleDambreteCellClick(r, c, isPiece) {
