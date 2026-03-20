@@ -9313,28 +9313,51 @@ function ensureFsBottomBar() {
 }
 
 function setFullscreenBottomButtons(on) {
-  if (!newRoundBtn) return;
-
   const bar = ensureFsBottomBar();
+  const fsBtn = document.getElementById("mobile-fullscreen-btn");
+  const revealBtn = document.getElementById("vz-btn-reveal-letter");
+  const wrap = document.getElementById("vz-reveal-letter-wrap");
 
   if (on) {
     if (!_fsBtnHomes) {
-      _fsBtnHomes = [
-        {
+      _fsBtnHomes = [];
+      if (newRoundBtn) {
+        _fsBtnHomes.push({
           btn: newRoundBtn,
           parent: newRoundBtn.parentNode,
           next: newRoundBtn.nextSibling,
-        },
-      ];
+        });
+      }
+      if (fsBtn) {
+        _fsBtnHomes.push({
+          btn: fsBtn,
+          parent: fsBtn.parentNode,
+          next: fsBtn.nextSibling,
+        });
+      }
+      if (revealBtn && wrap) {
+        _fsBtnHomes.push({
+          btn: wrap,
+          parent: wrap.parentNode,
+          next: wrap.nextSibling,
+        });
+      }
     }
 
     bar.style.display = "flex";
-    bar.appendChild(newRoundBtn);
+    bar.style.flexWrap = "wrap";
+    bar.style.gap = "10px";
+    bar.style.justifyContent = "center";
+    bar.style.alignItems = "center";
+    if (fsBtn) bar.appendChild(fsBtn);
+    if (revealBtn && wrap) bar.appendChild(wrap);
+    if (newRoundBtn) bar.appendChild(newRoundBtn);
   } else {
     bar.style.display = "none";
+    bar.innerHTML = "";
     if (_fsBtnHomes) {
       for (const h of _fsBtnHomes) {
-        if (!h.parent) continue;
+        if (!h.parent || !h.btn) continue;
         if (h.next) h.parent.insertBefore(h.btn, h.next);
         else h.parent.appendChild(h.btn);
       }

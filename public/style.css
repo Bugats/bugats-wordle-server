@@ -4311,13 +4311,18 @@ body.vz-mobile-game-only #vz-fs-bottom-bar{
   right: 0;
   bottom: 0;
   margin: 0 !important;
-  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
   display: flex !important;
   gap: 10px;
   justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
   z-index: 1000000;
-  background: rgba(0,0,0,0.25);
-  backdrop-filter: blur(6px);
+  background: rgba(8, 12, 20, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
 }
  
 body.vz-mobile-game-only .vz-bottom-buttons #new-round-btn,
