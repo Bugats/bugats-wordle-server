@@ -170,6 +170,28 @@ body:not(.vz-body-game) {
   color: #666;
   line-height: 1.35;
 }
+.auth-terms-note {
+  margin: 12px 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.auth-terms-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+.auth-terms-label input[type="checkbox"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+.auth-terms-label a {
+  color: #2563eb;
+  text-decoration: none;
+}
+.auth-terms-label a:hover {
+  text-decoration: underline;
+}
 
 label {
   display: block;
@@ -260,6 +282,18 @@ summary:focus-visible {
 
 .privacy-container h2 {
   margin-top: 18px;
+}
+.legal-back-link {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+.legal-back-link a {
+  color: #2563eb;
+  text-decoration: none;
+}
+.legal-back-link a:hover {
+  text-decoration: underline;
 }
 
 /* ===========================
