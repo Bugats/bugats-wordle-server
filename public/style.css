@@ -5177,6 +5177,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   line-height: 28px;
   font-size: 18px;
   font-weight: bold;
+  pointer-events: none;
 }
 .vz-dambrete-white { background: #f5f5f5; color: #333; }
 .vz-dambrete-black { background: #1a1a1a; color: #ccc; }
@@ -5221,6 +5222,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   font-size: 28px;
   line-height: 1;
   user-select: none;
+  pointer-events: none;
 }
 .vz-chess-piece.vz-chess-white { color: #fff; text-shadow: 0 1px 2px #000; }
 .vz-chess-piece.vz-chess-black { color: #1a1a1a; text-shadow: 0 1px 1px #fff; }
