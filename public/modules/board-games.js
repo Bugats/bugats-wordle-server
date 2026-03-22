@@ -109,16 +109,20 @@
       }
       table.appendChild(tr);
     }
-    let lastDown = 0;
+    let lastTap = { key: "", t: 0 };
     function handleCellEvent(e) {
-      if (e.type === "click" && Date.now() - lastDown < 300) return;
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
-      if (e.type === "pointerdown") lastDown = Date.now();
-      e.preventDefault();
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
+      const key = `${r},${c}`;
+      const now = Date.now();
+      if (e.type === "touchstart" || e.type === "pointerdown") {
+        if (key === lastTap.key && now - lastTap.t < 150) return;
+        lastTap = { key, t: now };
+        e.preventDefault();
+      } else if (e.type === "click" && now - lastTap.t < 400) return;
       const piece = board[r]?.[c] ?? 0;
       const isMyPiece =
         piece !== 0 &&
@@ -130,6 +134,7 @@
       else if (piece === 0 && isValidDest) onCellClick(r, c, false);
       else if (selectedCell) onCellClick(r, c, false);
     }
+    table.addEventListener("touchstart", handleCellEvent, { passive: false });
     table.addEventListener("pointerdown", handleCellEvent, { capture: true });
     table.addEventListener("click", handleCellEvent);
     container.appendChild(table);
@@ -263,16 +268,20 @@
       }
       table.appendChild(tr);
     }
-    let lastChessDown = 0;
+    let lastChessTap = { key: "", t: 0 };
     function handleChessCellEvent(e) {
-      if (e.type === "click" && Date.now() - lastChessDown < 300) return;
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
-      if (e.type === "pointerdown") lastChessDown = Date.now();
-      e.preventDefault();
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
+      const key = `${r},${c}`;
+      const now = Date.now();
+      if (e.type === "touchstart" || e.type === "pointerdown") {
+        if (key === lastChessTap.key && now - lastChessTap.t < 150) return;
+        lastChessTap = { key, t: now };
+        e.preventDefault();
+      } else if (e.type === "click" && now - lastChessTap.t < 400) return;
       const piece = board[r]?.[c];
       const isMyPiece =
         piece &&
@@ -283,6 +292,9 @@
       else if (isValidDest) onCellClick(r, c, false);
       else if (selectedCell) onCellClick(r, c, false);
     }
+    table.addEventListener("touchstart", handleChessCellEvent, {
+      passive: false,
+    });
     table.addEventListener("pointerdown", handleChessCellEvent, {
       capture: true,
     });
