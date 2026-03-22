@@ -109,16 +109,22 @@
       }
       table.appendChild(tr);
     }
-    let lastInputAt = 0;
+    let lastTapKey = "";
+    let lastTapTime = 0;
     function handleCellEvent(e) {
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
-      if (e.type === "click" && Date.now() - lastInputAt < 350) return;
-      if (e.type !== "click") lastInputAt = Date.now();
-      e.preventDefault();
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
+      const key = `${r},${c}`;
+      const now = Date.now();
+      if (e.type === "pointerdown" || e.type === "touchend") {
+        if (key === lastTapKey && now - lastTapTime < 400) return;
+        lastTapKey = key;
+        lastTapTime = now;
+      } else if (e.type === "click" && now - lastTapTime < 400) return;
+      e.preventDefault();
       const piece = board[r]?.[c] ?? 0;
       const isMyPiece =
         piece !== 0 &&
@@ -264,16 +270,22 @@
       }
       table.appendChild(tr);
     }
-    let lastChessInputAt = 0;
+    let lastChessTapKey = "";
+    let lastChessTapTime = 0;
     function handleChessCellEvent(e) {
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
-      if (e.type === "click" && Date.now() - lastChessInputAt < 350) return;
-      if (e.type !== "click") lastChessInputAt = Date.now();
-      e.preventDefault();
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
+      const key = `${r},${c}`;
+      const now = Date.now();
+      if (e.type === "pointerdown" || e.type === "touchend") {
+        if (key === lastChessTapKey && now - lastChessTapTime < 400) return;
+        lastChessTapKey = key;
+        lastChessTapTime = now;
+      } else if (e.type === "click" && now - lastChessTapTime < 400) return;
+      e.preventDefault();
       const piece = board[r]?.[c];
       const isMyPiece =
         piece &&
