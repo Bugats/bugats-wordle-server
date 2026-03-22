@@ -104,6 +104,8 @@
             td.addEventListener("click", () => onCellClick(r, c, false));
           } else if (isMyPiece) {
             td.addEventListener("click", () => onCellClick(r, c, true));
+          } else if (selectedCell && !isValidDest && !isMyPiece) {
+            td.addEventListener("click", () => onCellClick(r, c, false));
           }
         }
         tr.appendChild(td);
@@ -232,9 +234,11 @@
         if (isValidDest) td.classList.add("vz-chess-valid");
         if (canMove) {
           td.tabIndex = 0;
-          if (hasPiece && isMyPiece && !selectedCell) {
+          if (hasPiece && isMyPiece) {
             td.addEventListener("click", () => onCellClick(r, c, true));
           } else if (isValidDest) {
+            td.addEventListener("click", () => onCellClick(r, c, false));
+          } else if (selectedCell && !isValidDest) {
             td.addEventListener("click", () => onCellClick(r, c, false));
           }
         }
