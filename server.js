@@ -27,6 +27,18 @@ import pinoHttp from "pino-http";
 import { createClient } from "@supabase/supabase-js";
 import bracketsManagerPkg from "brackets-manager";
 import bracketsJsonDbPkg from "brackets-json-db";
+import { Chess } from "chess.js";
+import {
+  createInitialBoard,
+  getAllMoves,
+  applyMove,
+  checkGameOver,
+  findLegalMove,
+  WHITE,
+  BLACK,
+} from "./lib/draughts.js";
+import { getBestDambreteMove } from "./lib/draughts-bot.js";
+import { getBestChessMove } from "./lib/chess-bot.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -57,6 +69,7 @@ const TOURNAMENTS_FILE =
 const TOURNAMENTS_DB_FILE =
   process.env.TOURNAMENTS_DB_FILE ||
   path.join(__dirname, "tournaments.brackets.json");
+const CLANS_FILE = process.env.CLANS_FILE || path.join(__dirname, "clans.json");
 
 const { BracketsManager } = bracketsManagerPkg;
 const { JsonDatabase } = bracketsJsonDbPkg;
@@ -107,9 +120,7 @@ const REVEAL_LETTER_COST_COINS = Number(
 const REFERRAL_COINS_REFERRER = Number(
   process.env.REFERRAL_COINS_REFERRER || 50
 );
-const REFERRAL_COINS_REFEREE = Number(
-  process.env.REFERRAL_COINS_REFEREE || 25
-);
+const REFERRAL_COINS_REFEREE = Number(process.env.REFERRAL_COINS_REFEREE || 25);
 
 const BASE_TOKEN_PRICE = 150;
 const VIP_DURATION_DAYS = (() => {
@@ -198,91 +209,6 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const REGION_NAMES = ["Zemgale", "Latgale", "Vidzeme", "Kurzeme"];
 const REGION_MAP = new Map(REGION_NAMES.map((n) => [n.toLowerCase(), n]));
 
-// ====== Kaujinieki (characters) – spēlētājs kačā savu izvēlēto ======
-const KAUJINIEKI_POOL = [
-  { id: "zobenieks", name: "Zobenieks", icon: "⚔️", desc: "Spēcīgs un drošs" },
-  { id: "laceens", name: "Lācēns", icon: "🐻", desc: "Izturīgs un neatlaidīgs" },
-  { id: "vilkins", name: "Vilkiņš", icon: "🐺", desc: "Ātrs un veikls" },
-  { id: "pukis", name: "Pūkis", icon: "🦉", desc: "Gudrs un vērīgs" },
-  { id: "virsaitis", name: "Virsaitis", icon: "🦌", desc: "Cēls un mērķtiecīgs" },
-];
-const KAUJINIEKS_XP_PER_LEVEL = 50;
-const KAUJINIEKS_ATTRIBUTES = ["speks", "izturiba", "veiksme"];
-
-function ensureKaujinieki(user) {
-  if (!Array.isArray(user.kaujinieki)) user.kaujinieki = [];
-  if (user.kaujinieki.length === 0) {
-    const first = KAUJINIEKI_POOL[0];
-    user.kaujinieki.push({
-      id: first.id,
-      xp: 0,
-      level: 1,
-      speks: 1,
-      izturiba: 1,
-      veiksme: 1,
-    });
-    user.activeKaujinieks = first.id;
-  }
-  if (!user.activeKaujinieks && user.kaujinieki[0])
-    user.activeKaujinieks = user.kaujinieki[0].id;
-}
-
-function getKaujinieks(user, id) {
-  return (user.kaujinieki || []).find((k) => k.id === id);
-}
-
-function addKaujinieksXp(user, xpGain) {
-  if (!xpGain || xpGain <= 0) return;
-  ensureKaujinieki(user);
-  const activeId = user.activeKaujinieks;
-  let k = getKaujinieks(user, activeId);
-  if (!k) return;
-  k.xp = (k.xp || 0) + xpGain;
-  while (true) {
-    const xpForNext = KAUJINIEKS_XP_PER_LEVEL * (k.level || 1);
-    if ((k.xp || 0) < xpForNext) break;
-    k.xp = Math.max(0, (k.xp || 0) - xpForNext);
-    k.level = (k.level || 1) + 1;
-    const attr =
-      KAUJINIEKS_ATTRIBUTES[
-        Math.floor(Math.random() * KAUJINIEKS_ATTRIBUTES.length)
-      ];
-    k[attr] = Math.max(1, (k[attr] || 1) + 1);
-  }
-}
-
-function buildKaujiniekiPayload(user) {
-  ensureKaujinieki(user);
-  const pool = KAUJINIEKI_POOL.map((p) => {
-    const k = getKaujinieks(user, p.id);
-    return {
-      id: p.id,
-      name: p.name,
-      icon: p.icon,
-      desc: p.desc,
-      unlocked: !!k,
-      ...(k || {}),
-    };
-  });
-  const active = getKaujinieks(user, user.activeKaujinieks);
-  const activeMeta = KAUJINIEKI_POOL.find((p) => p.id === user.activeKaujinieks);
-  return {
-    pool: pool.filter((p) => p.unlocked),
-    allPool: KAUJINIEKI_POOL.map((p) => ({
-      ...p,
-      unlocked: !!getKaujinieks(user, p.id),
-      cost: 100 * (KAUJINIEKI_POOL.findIndex((x) => x.id === p.id) + 1),
-    })),
-    activeId: user.activeKaujinieks,
-    active: active && activeMeta
-      ? {
-          ...activeMeta,
-          ...active,
-          xpForNext: KAUJINIEKS_XP_PER_LEVEL * (active.level || 1),
-        }
-      : null,
-  };
-}
 const REGION_POINTS_PER_WIN = (() => {
   const v = parseInt(process.env.REGION_POINTS_PER_WIN || "1", 10);
   return Number.isFinite(v) && v >= 0 && v <= 50 ? v : 1;
@@ -728,6 +654,265 @@ function getDuelOpponent(duel, username) {
   return null;
 }
 
+// ======== GALDA SPĒLES (dambrete, šahs) ========
+const BOARD_GAME_INVITE_TIMEOUT_MS = 60 * 1000; // 60s
+const BOARD_GAME_MOVE_TIMEOUT_MS = 5 * 60 * 1000; // 5 min per move (resign if exceeded)
+const BOARD_GAME_REWARD_XP = 3;
+const BOARD_GAME_REWARD_COINS = 12;
+const BOARD_GAME_LOSE_COINS = 5;
+const BOARD_GAME_REGION_POINTS = 1;
+
+const boardGames = new Map(); // gameId -> { type, players, board, turn, status, ... }
+const userToBoardGame = new Map(); // username -> gameId
+
+function playBoardBotMove(io, game) {
+  if (!game || game.status !== "active" || !game.vsBot) return;
+  const humanUsername = game.players[0];
+  const humanSocket = getSocketByUsername(humanUsername);
+  if (!humanSocket) return;
+
+  if (game.type === "dambrete") {
+    const isWhiteTurn = game.turn === 0; // bot is black (index 1), so when turn=1 it's bot's (black's) turn
+    const allMoves = getAllMoves(game.board, isWhiteTurn);
+    const jumps = allMoves.jumps || [];
+    const moves = allMoves.moves || [];
+    if (jumps.length === 0 && moves.length === 0) return;
+    const depth = game.botDepth || 5;
+    const move = getBestDambreteMove(game.board, isWhiteTurn, depth);
+    if (!move) return;
+    const newBoard = applyMove(game.board, move);
+    if (!newBoard) return;
+    game.board = newBoard;
+    game.turn = 1 - game.turn;
+    game.moves.push({ move, by: BOARD_BOT_USERNAME, ts: Date.now() });
+    const result = checkGameOver(newBoard, game.turn === 0);
+    if (result.over) {
+      const winner =
+        result.winner === WHITE ? game.players[0] : game.players[1];
+      finishBoardGame(game, winner, "win");
+      humanSocket.emit("board.end", {
+        gameId: game.id,
+        winner,
+        reason: "win",
+        board: newBoard,
+        coinsGain: winner === humanUsername ? BOARD_GAME_REWARD_COINS : 0,
+        coinsLoss: winner !== humanUsername ? BOARD_GAME_LOSE_COINS : 0,
+      });
+      io.emit("board:leaderboard", { type: "dambrete" });
+    } else {
+      humanSocket.emit("board.move", {
+        gameId: game.id,
+        board: newBoard,
+        turn: game.turn,
+        move,
+      });
+    }
+  } else if (game.type === "chess") {
+    const chess = new Chess(game.fen);
+    const depth = game.botDepth || 3;
+    const san = getBestChessMove(game.fen, depth);
+    if (!san) return;
+    const m = chess.move(san);
+    if (!m) return;
+    game.fen = chess.fen();
+    game.turn = 1 - game.turn;
+    game.moves.push({ san: m.san, by: BOARD_BOT_USERNAME, ts: Date.now() });
+    if (chess.isCheckmate() || chess.isStalemate() || chess.isDraw()) {
+      const winner = chess.isCheckmate()
+        ? game.players[chess.turn() === "w" ? 1 : 0]
+        : null;
+      finishBoardGame(game, winner, chess.isCheckmate() ? "checkmate" : "draw");
+      humanSocket.emit("board.end", {
+        gameId: game.id,
+        winner,
+        reason: chess.isCheckmate() ? "checkmate" : "draw",
+        fen: game.fen,
+        coinsGain: winner === humanUsername ? BOARD_GAME_REWARD_COINS : 0,
+        coinsLoss:
+          winner && winner !== humanUsername ? BOARD_GAME_LOSE_COINS : 0,
+      });
+      io.emit("board:leaderboard", { type: "chess" });
+    } else {
+      humanSocket.emit("board.move", {
+        gameId: game.id,
+        fen: game.fen,
+        turn: game.turn,
+        move: m.san,
+      });
+    }
+  }
+}
+
+function getBoardGameOpponent(game, username) {
+  if (!game || !Array.isArray(game.players)) return null;
+  const [p1, p2] = game.players;
+  if (username === p1) return p2 || null;
+  if (username === p2) return p1 || null;
+  return null;
+}
+
+function createDambreteGame(challenger, opponent) {
+  const gameId = crypto.randomBytes(8).toString("hex");
+  const board = createInitialBoard();
+  const game = {
+    id: gameId,
+    type: "dambrete",
+    players: [challenger, opponent],
+    board,
+    turn: 0, // 0 = white (challenger), 1 = black (opponent)
+    status: "active",
+    moves: [],
+    createdAt: Date.now(),
+    lastMoveAt: Date.now(),
+  };
+  boardGames.set(gameId, game);
+  userToBoardGame.set(challenger, gameId);
+  userToBoardGame.set(opponent, gameId);
+  return game;
+}
+
+function createChessGame(challenger, opponent) {
+  const gameId = crypto.randomBytes(8).toString("hex");
+  const chess = new Chess();
+  const game = {
+    id: gameId,
+    type: "chess",
+    players: [challenger, opponent],
+    fen: chess.fen(),
+    turn: 0,
+    status: "active",
+    moves: [],
+    createdAt: Date.now(),
+    lastMoveAt: Date.now(),
+    vsBot: false,
+  };
+  boardGames.set(gameId, game);
+  userToBoardGame.set(challenger, gameId);
+  userToBoardGame.set(opponent, gameId);
+  return game;
+}
+
+const BOARD_BOT_USERNAME = "VZBot";
+
+function createDambreteVsBot(humanUsername, difficulty = "medium") {
+  const depth = difficulty === "easy" ? 3 : difficulty === "hard" ? 7 : 5;
+  const gameId = crypto.randomBytes(8).toString("hex");
+  const board = createInitialBoard();
+  const game = {
+    id: gameId,
+    type: "dambrete",
+    players: [humanUsername, BOARD_BOT_USERNAME],
+    board,
+    turn: 0,
+    status: "active",
+    moves: [],
+    createdAt: Date.now(),
+    lastMoveAt: Date.now(),
+    vsBot: true,
+    botDifficulty: difficulty,
+    botDepth: depth,
+  };
+  boardGames.set(gameId, game);
+  userToBoardGame.set(humanUsername, gameId);
+  return game;
+}
+
+function createChessVsBot(humanUsername, difficulty = "medium") {
+  const depth = difficulty === "easy" ? 2 : difficulty === "hard" ? 4 : 3;
+  const gameId = crypto.randomBytes(8).toString("hex");
+  const chess = new Chess();
+  const game = {
+    id: gameId,
+    type: "chess",
+    players: [humanUsername, BOARD_BOT_USERNAME],
+    fen: chess.fen(),
+    turn: 0,
+    status: "active",
+    moves: [],
+    createdAt: Date.now(),
+    lastMoveAt: Date.now(),
+    vsBot: true,
+    botDifficulty: difficulty,
+    botDepth: depth,
+  };
+  boardGames.set(gameId, game);
+  userToBoardGame.set(humanUsername, gameId);
+  return game;
+}
+
+const BOARD_ELO_DEFAULT = 1000;
+const BOARD_ELO_K = 32;
+
+function ensureBoardEloFields(u, type) {
+  const key = type === "chess" ? "chessElo" : "dambreteElo";
+  const gamesKey = type === "chess" ? "chessEloGames" : "dambreteEloGames";
+  if (!u) return;
+  if (!Number.isFinite(u[key])) u[key] = BOARD_ELO_DEFAULT;
+  if (!Number.isFinite(u[gamesKey])) {
+    const w = type === "chess" ? u.chessWins || 0 : u.dambreteWins || 0;
+    u[gamesKey] = Math.max(0, w * 2); // rough estimate
+  }
+}
+
+function applyBoardElo(winner, loser, type) {
+  const wKey = type === "chess" ? "chessElo" : "dambreteElo";
+  const gKey = type === "chess" ? "chessEloGames" : "dambreteEloGames";
+  ensureBoardEloFields(winner, type);
+  ensureBoardEloFields(loser, type);
+  const ra = Number(winner[wKey]) || BOARD_ELO_DEFAULT;
+  const rb = Number(loser[wKey]) || BOARD_ELO_DEFAULT;
+  const ea = 1 / (1 + Math.pow(10, (rb - ra) / 400));
+  const eb = 1 - ea;
+  winner[wKey] = Math.round(ra + BOARD_ELO_K * (1 - ea));
+  loser[wKey] = Math.round(rb + BOARD_ELO_K * (0 - eb));
+  winner[gKey] = (Number(winner[gKey]) || 0) + 1;
+  loser[gKey] = (Number(loser[gKey]) || 0) + 1;
+}
+
+function finishBoardGame(game, winnerUsername, reason) {
+  if (!game || game.status === "finished") return;
+  game.status = "finished";
+  game.winner = winnerUsername || null;
+  game.finishedReason = reason || "finished";
+  game.finishedAt = Date.now();
+  const [p1, p2] = game.players;
+  userToBoardGame.delete(p1);
+  userToBoardGame.delete(p2);
+
+  const winnerKey = winnerUsername
+    ? findUserKeyCaseInsensitive(winnerUsername)
+    : null;
+  const winner = winnerKey ? USERS[winnerKey] : null;
+  const loserKey = winnerUsername ? (p1 === winnerUsername ? p2 : p1) : null;
+  const loser = loserKey ? USERS[findUserKeyCaseInsensitive(loserKey)] : null;
+
+  if (winner) {
+    winner.xp = (winner.xp || 0) + BOARD_GAME_REWARD_XP;
+    winner.coins = (winner.coins || 0) + BOARD_GAME_REWARD_COINS;
+    if (REGION_POINTS_PER_WIN > 0) {
+      let rp = BOARD_GAME_REGION_POINTS;
+      if (isRegionBonusActive()) rp *= REGION_BONUS_MULTIPLIER;
+      winner.regionPoints =
+        Math.max(0, Math.floor(winner.regionPoints || 0)) + rp;
+    }
+    ensureRankFields(winner);
+    if (winner.dambreteWins == null) winner.dambreteWins = 0;
+    if (winner.chessWins == null) winner.chessWins = 0;
+    if (game.type === "dambrete") winner.dambreteWins++;
+    else if (game.type === "chess") winner.chessWins++;
+  }
+  if (loser) {
+    const currentCoins = Math.max(0, Math.floor(loser.coins || 0));
+    loser.coins = Math.max(0, currentCoins - BOARD_GAME_LOSE_COINS);
+  }
+  if (winner && loser && winnerUsername && !game.vsBot) {
+    applyBoardElo(winner, loser, game.type);
+  }
+  saveUsers(USERS);
+  broadcastLeaderboard(false);
+  io.emit("board:leaderboard", { type: game.type });
+}
+
 // ======== ČATS (mini anti-spam) ========
 const CHAT_MAX_LEN = 200;
 const CHAT_RATE_MS = 900;
@@ -847,6 +1032,8 @@ const TOURNAMENT_PLAY_MODES = new Set([
   "speed",
   "accuracy",
   "survival",
+  "dambrete",
+  "chess",
 ]);
 const TOURNAMENT_GRAND_FINAL_TYPES = new Set(["none", "simple", "double"]);
 
@@ -918,6 +1105,8 @@ function tournamentPlayModeLabel(mode) {
   if (key === "speed") return "Speed duel (laiks ir galvenais)";
   if (key === "accuracy") return "Accuracy duel (precīzākie minējumi)";
   if (key === "survival") return "Survival duel (streak izturība)";
+  if (key === "dambrete") return "♟️ Dambrete";
+  if (key === "chess") return "♔ Šahs";
   return "Classic duel";
 }
 
@@ -931,6 +1120,10 @@ function tournamentPlayModeRule(mode) {
     return "Accuracy: automātiska uzvara spēlētājam ar labāku win/guess attiecību.";
   if (key === "survival")
     return "Survival: automātiska uzvara spēlētājam ar augstāku best streak.";
+  if (key === "dambrete")
+    return "Dambrete: automātiska uzvara pēc dambreteElo, vai manuāli iesniegt rezultātu.";
+  if (key === "chess")
+    return "Šahs: automātiska uzvara pēc chessElo, vai manuāli iesniegt rezultātu.";
   return "Classic: automātiska uzvara spēlētājam ar augstāku kopējo score.";
 }
 
@@ -1671,6 +1864,7 @@ async function createTournamentRecord({
   autoReportOnly,
   roomId = "",
   roomOwner = "",
+  clanId = "",
   createdAt = Date.now(),
 }) {
   const tournamentId = Number(tournamentStore.nextTournamentId || 1);
@@ -1698,6 +1892,7 @@ async function createTournamentRecord({
     autoReportOnly: !!autoReportOnly,
     roomId: String(roomId || "").trim(),
     roomOwner: String(roomOwner || "").trim(),
+    clanId: String(clanId || "").trim() || null,
   };
   tournamentStore.tournaments.push(meta);
   return { tournamentId, stage, meta };
@@ -1784,6 +1979,12 @@ function tournamentAutoMetricByMode(user, modeRaw) {
   if (mode === "survival") {
     return Math.max(0, Number(user.bestStreak) || 0, Number(user.streak) || 0);
   }
+  if (mode === "dambrete") {
+    return Math.max(0, Number(user.dambreteElo) || 0);
+  }
+  if (mode === "chess") {
+    return Math.max(0, Number(user.chessElo) || 0);
+  }
   return Math.max(0, Number(user.score) || 0);
 }
 
@@ -1799,8 +2000,15 @@ function computeAutoTournamentMatchResult(modeRaw, p1Name, p2Name) {
   if (m1 > m2) winner = String(p1Name || "");
   else if (m2 > m1) winner = String(p2Name || "");
   else {
-    const elo1 = Math.max(0, Number(u1?.duelElo) || 0);
-    const elo2 = Math.max(0, Number(u2?.duelElo) || 0);
+    let elo1 = Math.max(0, Number(u1?.duelElo) || 0);
+    let elo2 = Math.max(0, Number(u2?.duelElo) || 0);
+    if (mode === "dambrete") {
+      elo1 = Math.max(0, Number(u1?.dambreteElo) || 0);
+      elo2 = Math.max(0, Number(u2?.dambreteElo) || 0);
+    } else if (mode === "chess") {
+      elo1 = Math.max(0, Number(u1?.chessElo) || 0);
+      elo2 = Math.max(0, Number(u2?.chessElo) || 0);
+    }
     if (elo1 > elo2) winner = String(p1Name || "");
     else if (elo2 > elo1) winner = String(p2Name || "");
     else {
@@ -1860,6 +2068,113 @@ let tournamentStore = normalizeTournamentStore(
 syncVipRoomsLifecycle(Date.now());
 saveTournamentStore();
 const tournamentDb = new JsonDatabase(TOURNAMENTS_DB_FILE);
+
+// ======== KLANI ========
+const CLAN_NAME_MIN = 2;
+const CLAN_NAME_MAX = 24;
+const CLAN_TAG_MIN = 2;
+const CLAN_TAG_MAX = 6;
+const CLAN_MAX_MEMBERS = 50;
+const CLAN_CHAT_MAX_LEN = 500;
+const CLAN_CHAT_HISTORY = 100;
+
+function normalizeClanStore(raw) {
+  const store = raw && typeof raw === "object" ? raw : {};
+  if (!Array.isArray(store.clans)) store.clans = [];
+  if (!Number.isFinite(store.nextClanId)) store.nextClanId = 1;
+  store.clans = store.clans.filter((c) => c && c.id && c.name && c.owner);
+  return store;
+}
+
+let clanStore = normalizeClanStore(loadJsonSafe(CLANS_FILE, null));
+
+function saveClanStore() {
+  try {
+    saveJsonAtomic(CLANS_FILE, clanStore);
+  } catch (err) {
+    console.error("Clan store save error:", err);
+  }
+}
+
+function createClanId() {
+  const id = String(clanStore.nextClanId || 1);
+  clanStore.nextClanId = Math.max(1, (clanStore.nextClanId || 1) + 1);
+  return id;
+}
+
+function getClanById(id) {
+  return (
+    (clanStore.clans || []).find((c) => String(c.id) === String(id)) || null
+  );
+}
+
+function getClanByTag(tag) {
+  const t = String(tag || "")
+    .trim()
+    .toUpperCase();
+  if (!t) return null;
+  return (
+    (clanStore.clans || []).find(
+      (c) => String(c.tag || "").toUpperCase() === t
+    ) || null
+  );
+}
+
+function isClanMember(clan, username) {
+  if (!clan || !username) return false;
+  const members = clan.members || [];
+  return members.some(
+    (m) =>
+      String(m.username || "").toLowerCase() === String(username).toLowerCase()
+  );
+}
+
+function getClanMemberRole(clan, username) {
+  const m = (clan?.members || []).find(
+    (x) =>
+      String(x.username || "").toLowerCase() === String(username).toLowerCase()
+  );
+  return m?.role || null;
+}
+
+function canClanManage(clan, username) {
+  const role = getClanMemberRole(clan, username);
+  return role === "leader" || role === "admin";
+}
+
+function buildClanPayload(clan, forUser = null) {
+  if (!clan) return null;
+  const members = (clan.members || []).map((m) => ({
+    username: m.username,
+    role: m.role || "member",
+    joinedAt: m.joinedAt || 0,
+  }));
+  const totalXp = members.reduce((sum, m) => {
+    const key = findUserKeyCaseInsensitive(m.username);
+    const u = key ? USERS[key] : null;
+    return sum + Math.max(0, Number(u?.xp || u?.totalXp || 0) || 0);
+  }, 0);
+  const totalWins = members.reduce((sum, m) => {
+    const key = findUserKeyCaseInsensitive(m.username);
+    const u = key ? USERS[key] : null;
+    return sum + Math.max(0, Number(u?.totalWins || 0) || 0);
+  }, 0);
+  return {
+    id: clan.id,
+    name: clan.name,
+    tag: clan.tag || "",
+    owner: clan.owner,
+    members,
+    memberCount: members.length,
+    totalXp,
+    totalWins,
+    inviteCode: clan.inviteCode || null,
+    createdAt: clan.createdAt || 0,
+    myRole: forUser ? getClanMemberRole(clan, forUser.username) : null,
+    canManage: forUser ? canClanManage(clan, forUser.username) : false,
+    chat: (clan.chat || []).slice(-CLAN_CHAT_HISTORY),
+  };
+}
 const tournamentManager = new BracketsManager(tournamentDb);
 
 function getUserByUsernameLoose(username) {
@@ -2430,6 +2745,10 @@ function loadUsers(listOverride) {
         u.friendInvitesIn = {};
       if (!u.friendInvitesOut || typeof u.friendInvitesOut !== "object")
         u.friendInvitesOut = {};
+
+      // Klani
+      if (typeof u.clanId !== "string") u.clanId = "";
+      if (!Array.isArray(u.clanInvitesIn)) u.clanInvitesIn = [];
 
       // Guess anti-spam
       if (typeof u.lastGuessAt !== "number") u.lastGuessAt = 0;
@@ -4834,6 +5153,10 @@ async function buildMePayload(u) {
     bestStreak: u.bestStreak || 0,
     duelElo: u.duelElo,
     duelEloGames: u.duelEloGames || 0,
+    dambreteWins: u.dambreteWins || 0,
+    chessWins: u.chessWins || 0,
+    dambreteElo: u.dambreteElo || BOARD_ELO_DEFAULT,
+    chessElo: u.chessElo || BOARD_ELO_DEFAULT,
     rankTitle: u.rankTitle || rankInfo.title,
     rankLevel: u.rankLevel || rankInfo.level,
     rankColor: u.rankColor || rankInfo.color,
@@ -4863,7 +5186,15 @@ async function buildMePayload(u) {
     referralLink: `${String(process.env.BASE_URL || "https://bugats-wordle-server.onrender.com").replace(/\/$/, "")}/index.html?ref=${encodeURIComponent(u.username || "")}`,
     referredCount: Math.max(0, Number(u.referredCount) || 0),
     pendingDuelInvites: buildPendingDuelInvitesPayload(u),
-    kaujinieki: buildKaujiniekiPayload(u),
+    clanId: u.clanId || null,
+    clan: u.clanId ? buildClanPayload(getClanById(u.clanId), u) : null,
+    clanInvitesIn: (u.clanInvitesIn || []).map((inv) => ({
+      clanId: inv.clanId,
+      clanName: inv.clanName,
+      clanTag: inv.clanTag,
+      from: inv.from,
+      at: inv.at,
+    })),
   };
 }
 
@@ -5041,16 +5372,25 @@ app.get("/meta/supabase-check", async (_req, res) => {
     users: "unknown",
   };
   if (!SUPABASE_ENABLED || !supabase) {
-    return res.json({ ...out, error: "SUPABASE_URL vai SUPABASE_SERVICE_ROLE_KEY nav iestatīts" });
+    return res.json({
+      ...out,
+      error: "SUPABASE_URL vai SUPABASE_SERVICE_ROLE_KEY nav iestatīts",
+    });
   }
   try {
-    const { data: buckets, error: bucketErr } = await supabase.storage.listBuckets();
-    out.storage = bucketErr ? `error: ${bucketErr.message}` : `ok (${(buckets || []).length} buckets)`;
+    const { data: buckets, error: bucketErr } =
+      await supabase.storage.listBuckets();
+    out.storage = bucketErr
+      ? `error: ${bucketErr.message}`
+      : `ok (${(buckets || []).length} buckets)`;
   } catch (e) {
     out.storage = `error: ${String(e?.message || e)}`;
   }
   try {
-    const { error: usersErr } = await supabase.from(USERS_STORE_TABLE).select("username").limit(1);
+    const { error: usersErr } = await supabase
+      .from(USERS_STORE_TABLE)
+      .select("username")
+      .limit(1);
     out.users = usersErr ? `error: ${usersErr.message}` : "ok";
   } catch (e) {
     out.users = `error: ${String(e?.message || e)}`;
@@ -5077,9 +5417,7 @@ const LATVIA_WEATHER_URL =
   "https://api.open-meteo.com/v1/forecast?latitude=56.95&longitude=24.11&current_weather=true&timezone=Europe%2FRiga";
 const LATVIA_NAMEDAY_URL =
   "https://nameday.abalin.net/api/V1/today?country=lv&timezone=Europe/Riga";
-const META_FETCH_TIMEOUT_MS = Number(
-  process.env.META_FETCH_TIMEOUT_MS || 8000
-);
+const META_FETCH_TIMEOUT_MS = Number(process.env.META_FETCH_TIMEOUT_MS || 8000);
 const WEATHER_CACHE_TTL_MS = Number(
   process.env.WEATHER_CACHE_TTL_MS || 10 * 60 * 1000
 );
@@ -6795,6 +7133,49 @@ app.post(
   }
 );
 
+// ======== Galda spēles API ========
+app.get("/board/:gameId/moves", authMiddleware, (req, res) => {
+  const user = req.user;
+  const gameId = String(req.params?.gameId || "").trim();
+  const game = gameId ? boardGames.get(gameId) : null;
+  if (!game || game.status !== "active")
+    return res.status(404).json({ message: "Spēle nav atrasta." });
+  if (!game.players.includes(user.username))
+    return res.status(403).json({ message: "Tu neesi šajā spēlē." });
+  const turnIdx = game.turn;
+  const currentPlayer = game.players[turnIdx];
+  if (currentPlayer !== user.username)
+    return res.json({ jumps: [], moves: [] });
+  if (game.type === "dambrete") {
+    const isWhiteTurn = turnIdx === 0;
+    const allMoves = getAllMoves(game.board, isWhiteTurn);
+    return res.json(allMoves);
+  }
+  if (game.type === "chess") {
+    const chess = new Chess(game.fen);
+    const moves = chess.moves({ verbose: true });
+    return res.json({ moves });
+  }
+  return res.json({ jumps: [], moves: [] });
+});
+
+app.get("/board/leaderboard/:type", authMiddleware, (req, res) => {
+  const type = String(req.params?.type || "dambrete").toLowerCase();
+  const key = type === "chess" ? "chessElo" : "dambreteElo";
+  const arr = Object.values(USERS || {})
+    .filter((u) => u && u.username && !u.isBanned && Number(u[key] || 0) > 0)
+    .sort((a, b) => (Number(b[key]) || 0) - (Number(a[key]) || 0))
+    .slice(0, 20)
+    .map((u, i) => ({
+      place: i + 1,
+      username: u.username,
+      elo: Number(u[key]) || BOARD_ELO_DEFAULT,
+      wins: type === "chess" ? u.chessWins || 0 : u.dambreteWins || 0,
+      avatarUrl: avatarForBroadcast(u),
+    }));
+  return res.json({ type, list: arr });
+});
+
 // ======== /me ========
 app.get("/me", authMiddleware, async (req, res) => {
   const u = req.user;
@@ -6812,63 +7193,332 @@ app.get("/me", authMiddleware, async (req, res) => {
   res.json(await buildMePayload(u));
 });
 
-// ======== Kaujinieki (characters) ========
-app.post("/kaujinieks/select", authMiddleware, async (req, res) => {
+// ======== Klani ========
+app.post("/clan/create", authMiddleware, async (req, res) => {
   const user = req.user;
-  const id = String(req.body?.id || "").trim();
-  ensureKaujinieki(user);
-  const k = getKaujinieks(user, id);
-  if (!k) {
-    return res.status(400).json({ message: "Kaujinieks nav atrasts vai nav atvērts." });
+  if (user.clanId) {
+    return res
+      .status(400)
+      .json({ message: "Tu jau esi klanā. Vispirms izies." });
   }
-  user.activeKaujinieks = id;
-  saveUsers(USERS);
-  return res.json({ ok: true, me: await buildMePayload(user) });
-});
-
-app.post("/kaujinieks/unlock/:id", authMiddleware, async (req, res) => {
-  const user = req.user;
-  const id = String(req.params?.id || "").trim();
-  ensureKaujinieki(user);
-  if (getKaujinieks(user, id)) {
-    return res.json({ ok: true, me: await buildMePayload(user) });
+  const name = String(req.body?.name || "").trim();
+  const tag = String(req.body?.tag || "")
+    .trim()
+    .toUpperCase();
+  if (name.length < CLAN_NAME_MIN || name.length > CLAN_NAME_MAX) {
+    return res
+      .status(400)
+      .json({
+        message: `Klana nosaukumam jābūt ${CLAN_NAME_MIN}-${CLAN_NAME_MAX} burtiem.`,
+      });
   }
-  const idx = KAUJINIEKI_POOL.findIndex((p) => p.id === id);
-  if (idx < 0) return res.status(404).json({ message: "Kaujinieks nav atrasts." });
-  const cost = 100 * (idx + 1);
-  if ((user.coins || 0) < cost) {
-    return res.status(400).json({ message: `Nepietiek coins (vajag ${cost}).` });
+  if (tag.length < CLAN_TAG_MIN || tag.length > CLAN_TAG_MAX) {
+    return res
+      .status(400)
+      .json({
+        message: `Klana tagam jābūt ${CLAN_TAG_MIN}-${CLAN_TAG_MAX} burtiem.`,
+      });
   }
-  user.coins = (user.coins || 0) - cost;
-  user.kaujinieki.push({
+  if (getClanByTag(tag)) {
+    return res.status(400).json({ message: `Tags [${tag}] jau aizņemts.` });
+  }
+  const id = createClanId();
+  const inviteCode = crypto.randomBytes(4).toString("hex").toUpperCase();
+  const clan = {
     id,
-    xp: 0,
-    level: 1,
-    speks: 1,
-    izturiba: 1,
-    veiksme: 1,
-  });
+    name,
+    tag,
+    owner: user.username,
+    members: [
+      { username: user.username, role: "leader", joinedAt: Date.now() },
+    ],
+    inviteCode,
+    createdAt: Date.now(),
+    chat: [],
+  };
+  clanStore.clans.push(clan);
+  user.clanId = id;
+  saveClanStore();
   saveUsers(USERS);
-  return res.json({ ok: true, me: await buildMePayload(user) });
+  return res.json({
+    ok: true,
+    clan: buildClanPayload(clan, user),
+    me: await buildMePayload(user),
+  });
 });
 
-app.post(
-  "/duel/offline-invites/:from/consume",
-  authMiddleware,
-  (req, res) => {
-    const user = req.user;
-    const fromRaw = String(req.params.from || "").trim();
-    if (!fromRaw) return res.status(400).json({ message: "Nav norādīts sūtītājs." });
-    ensurePendingDuelInvites(user);
-    const key = fromRaw.toLowerCase();
-    const before = (user.pendingDuelInvites || []).length;
-    user.pendingDuelInvites = (user.pendingDuelInvites || []).filter(
-      (inv) => String(inv?.from || "").toLowerCase() !== key
-    );
-    if (user.pendingDuelInvites.length !== before) saveUsers(USERS);
-    return res.json({ ok: true });
+app.post("/clan/leave", authMiddleware, async (req, res) => {
+  const user = req.user;
+  if (!user.clanId)
+    return res.status(400).json({ message: "Tu neesi nevienā klanā." });
+  const clan = getClanById(user.clanId);
+  if (!clan) {
+    user.clanId = "";
+    saveUsers(USERS);
+    return res.json({ ok: true, clan: null, me: await buildMePayload(user) });
   }
-);
+  if (
+    String(clan.owner || "").toLowerCase() ===
+    String(user.username).toLowerCase()
+  ) {
+    return res
+      .status(400)
+      .json({
+        message: "Vadītājs nevar iziet. Pārnes vadību vai izdzēs klanu.",
+      });
+  }
+  clan.members = (clan.members || []).filter(
+    (m) =>
+      String(m.username || "").toLowerCase() !==
+      String(user.username).toLowerCase()
+  );
+  user.clanId = "";
+  saveClanStore();
+  saveUsers(USERS);
+  return res.json({ ok: true, clan: null, me: await buildMePayload(user) });
+});
+
+app.post("/clan/join", authMiddleware, async (req, res) => {
+  const user = req.user;
+  if (user.clanId)
+    return res.status(400).json({ message: "Tu jau esi klanā." });
+  const code = String(req.body?.inviteCode || req.body?.code || "")
+    .trim()
+    .toUpperCase();
+  const tag = String(req.body?.tag || "")
+    .trim()
+    .toUpperCase();
+  let clan = null;
+  if (code) {
+    clan =
+      (clanStore.clans || []).find(
+        (c) => (c.inviteCode || "").toUpperCase() === code
+      ) || null;
+  } else if (tag) {
+    clan = getClanByTag(tag);
+  }
+  if (!clan) return res.status(404).json({ message: "Klans nav atrasts." });
+  if ((clan.members || []).length >= CLAN_MAX_MEMBERS) {
+    return res.status(400).json({ message: "Klans ir pilns." });
+  }
+  if (isClanMember(clan, user.username)) {
+    user.clanId = clan.id;
+    saveUsers(USERS);
+    return res.json({
+      ok: true,
+      clan: buildClanPayload(clan, user),
+      me: await buildMePayload(user),
+    });
+  }
+  clan.members = clan.members || [];
+  clan.members.push({
+    username: user.username,
+    role: "member",
+    joinedAt: Date.now(),
+  });
+  user.clanId = clan.id;
+  user.clanInvitesIn = (user.clanInvitesIn || []).filter(
+    (inv) => String(inv?.clanId || "") !== String(clan.id)
+  );
+  saveClanStore();
+  saveUsers(USERS);
+  io.emit("clan:update", { clanId: clan.id });
+  return res.json({
+    ok: true,
+    clan: buildClanPayload(clan, user),
+    me: await buildMePayload(user),
+  });
+});
+
+app.post("/clan/invite", authMiddleware, (req, res) => {
+  const user = req.user;
+  const targetName = String(req.body?.username || "").trim();
+  if (!targetName)
+    return res.status(400).json({ message: "Norādi lietotājvārdu." });
+  const clan = user.clanId ? getClanById(user.clanId) : null;
+  if (!clan || !canClanManage(clan, user.username)) {
+    return res.status(403).json({ message: "Nav tiesību aicināt." });
+  }
+  if ((clan.members || []).length >= CLAN_MAX_MEMBERS) {
+    return res.status(400).json({ message: "Klans ir pilns." });
+  }
+  const targetKey = findUserKeyCaseInsensitive(targetName);
+  const target = targetKey ? USERS[targetKey] : null;
+  if (!target)
+    return res.status(404).json({ message: "Lietotājs nav atrasts." });
+  if (target.clanId)
+    return res.status(400).json({ message: "Lietotājs jau ir klanā." });
+  const inv = {
+    clanId: clan.id,
+    clanName: clan.name,
+    clanTag: clan.tag,
+    from: user.username,
+    at: Date.now(),
+  };
+  if (!Array.isArray(target.clanInvitesIn)) target.clanInvitesIn = [];
+  if (target.clanInvitesIn.some((i) => String(i?.clanId) === String(clan.id))) {
+    return res.json({ ok: true, message: "Ielūgums jau nosūtīts." });
+  }
+  target.clanInvitesIn.push(inv);
+  saveUsers(USERS);
+  return res.json({ ok: true, message: `Ielūgums nosūtīts ${targetName}.` });
+});
+
+app.post("/clan/invite/accept", authMiddleware, async (req, res) => {
+  const user = req.user;
+  const clanId = String(req.body?.clanId || "").trim();
+  const inv = (user.clanInvitesIn || []).find(
+    (i) => String(i?.clanId) === clanId
+  );
+  if (!inv) return res.status(404).json({ message: "Ielūgums nav atrasts." });
+  const clan = getClanById(clanId);
+  if (!clan) {
+    user.clanInvitesIn = (user.clanInvitesIn || []).filter(
+      (i) => String(i?.clanId) !== clanId
+    );
+    saveUsers(USERS);
+    return res.status(404).json({ message: "Klans vairs neeksistē." });
+  }
+  if (user.clanId)
+    return res.status(400).json({ message: "Tu jau esi klanā." });
+  if ((clan.members || []).length >= CLAN_MAX_MEMBERS) {
+    user.clanInvitesIn = (user.clanInvitesIn || []).filter(
+      (i) => String(i?.clanId) !== clanId
+    );
+    saveUsers(USERS);
+    return res.status(400).json({ message: "Klans ir pilns." });
+  }
+  clan.members = clan.members || [];
+  clan.members.push({
+    username: user.username,
+    role: "member",
+    joinedAt: Date.now(),
+  });
+  user.clanId = clan.id;
+  user.clanInvitesIn = (user.clanInvitesIn || []).filter(
+    (i) => String(i?.clanId) !== clanId
+  );
+  saveClanStore();
+  saveUsers(USERS);
+  io.emit("clan:update", { clanId: clan.id });
+  return res.json({
+    ok: true,
+    clan: buildClanPayload(clan, user),
+    me: await buildMePayload(user),
+  });
+});
+
+app.post("/clan/invite/decline", authMiddleware, (req, res) => {
+  const user = req.user;
+  const clanId = String(req.body?.clanId || "").trim();
+  user.clanInvitesIn = (user.clanInvitesIn || []).filter(
+    (i) => String(i?.clanId) !== clanId
+  );
+  saveUsers(USERS);
+  return res.json({ ok: true });
+});
+
+app.post("/clan/kick", authMiddleware, (req, res) => {
+  const user = req.user;
+  const targetName = String(req.body?.username || "").trim();
+  if (!targetName)
+    return res.status(400).json({ message: "Norādi lietotājvārdu." });
+  const clan = user.clanId ? getClanById(user.clanId) : null;
+  if (!clan || !canClanManage(clan, user.username)) {
+    return res.status(403).json({ message: "Nav tiesību izmest." });
+  }
+  const targetRole = getClanMemberRole(clan, targetName);
+  if (targetRole === "leader")
+    return res.status(400).json({ message: "Nevar izmest vadītāju." });
+  const isAdmin = canClanManage(clan, user.username);
+  if (
+    targetRole === "admin" &&
+    !(
+      String(clan.owner || "").toLowerCase() ===
+      String(user.username).toLowerCase()
+    )
+  ) {
+    return res
+      .status(403)
+      .json({ message: "Tikai vadītājs var izmest administratoru." });
+  }
+  clan.members = (clan.members || []).filter(
+    (m) =>
+      String(m.username || "").toLowerCase() !==
+      String(targetName).toLowerCase()
+  );
+  const targetKey = findUserKeyCaseInsensitive(targetName);
+  const target = targetKey ? USERS[targetKey] : null;
+  if (target) {
+    target.clanId = "";
+    saveUsers(USERS);
+  }
+  saveClanStore();
+  io.emit("clan:update", { clanId: clan.id });
+  return res.json({ ok: true, clan: buildClanPayload(clan, user) });
+});
+
+app.post("/clan/role", authMiddleware, (req, res) => {
+  const user = req.user;
+  const targetName = String(req.body?.username || "").trim();
+  const role = String(req.body?.role || "").toLowerCase();
+  if (!targetName)
+    return res.status(400).json({ message: "Norādi lietotājvārdu." });
+  if (!["admin", "member"].includes(role))
+    return res.status(400).json({ message: "Nederīga loma." });
+  const clan = user.clanId ? getClanById(user.clanId) : null;
+  if (
+    !clan ||
+    String(clan.owner || "").toLowerCase() !==
+      String(user.username).toLowerCase()
+  ) {
+    return res
+      .status(403)
+      .json({ message: "Tikai vadītājs var mainīt lomas." });
+  }
+  const m = (clan.members || []).find(
+    (x) =>
+      String(x.username || "").toLowerCase() ===
+      String(targetName).toLowerCase()
+  );
+  if (!m) return res.status(404).json({ message: "Dalībnieks nav atrasts." });
+  m.role = role;
+  saveClanStore();
+  return res.json({ ok: true, clan: buildClanPayload(clan, user) });
+});
+
+app.get("/clan/leaderboard", (_req, res) => {
+  const list = (clanStore.clans || [])
+    .map((c) => {
+      const payload = buildClanPayload(c);
+      return payload;
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b.totalXp || 0) - (a.totalXp || 0))
+    .slice(0, 50);
+  res.json({ clans: list });
+});
+
+app.get("/clan/:id", authMiddleware, (req, res) => {
+  const clan = getClanById(req.params.id);
+  if (!clan) return res.status(404).json({ message: "Klans nav atrasts." });
+  res.json({ clan: buildClanPayload(clan, req.user) });
+});
+
+app.post("/duel/offline-invites/:from/consume", authMiddleware, (req, res) => {
+  const user = req.user;
+  const fromRaw = String(req.params.from || "").trim();
+  if (!fromRaw)
+    return res.status(400).json({ message: "Nav norādīts sūtītājs." });
+  ensurePendingDuelInvites(user);
+  const key = fromRaw.toLowerCase();
+  const before = (user.pendingDuelInvites || []).length;
+  user.pendingDuelInvites = (user.pendingDuelInvites || []).filter(
+    (inv) => String(inv?.from || "").toLowerCase() !== key
+  );
+  if (user.pendingDuelInvites.length !== before) saveUsers(USERS);
+  return res.json({ ok: true });
+});
 
 app.get("/vip/status", authMiddleware, (req, res) => {
   const user = req.user;
@@ -7024,7 +7674,8 @@ app.post("/avatar", authMiddleware, async (req, res) => {
         const verifyUrl = getSupabasePublicUrl(filePath);
         let verified = false;
         for (let attempt = 0; attempt < 3; attempt++) {
-          if (attempt > 0) await new Promise((r) => setTimeout(r, 300 * attempt));
+          if (attempt > 0)
+            await new Promise((r) => setTimeout(r, 300 * attempt));
           try {
             const check = await fetch(verifyUrl, { method: "HEAD" });
             if (check.ok) {
@@ -7713,6 +8364,7 @@ app.post("/tournaments/vip-rooms", authMiddleware, async (req, res) => {
       inviteLimit
     );
     const createdAt = Date.now();
+    const clanOnly = req.body?.clanOnly === true;
     const room = {
       id: createVipRoomId(),
       name: roomName,
@@ -7729,6 +8381,8 @@ app.post("/tournaments/vip-rooms", authMiddleware, async (req, res) => {
       tournamentId: null,
       closedAt: 0,
       closeReason: "",
+      clanId: clanOnly && requester.clanId ? requester.clanId : "",
+      clanOnly: !!clanOnly,
     };
     if (!Array.isArray(tournamentStore.vipRooms)) tournamentStore.vipRooms = [];
     tournamentStore.vipRooms.push(room);
@@ -7865,6 +8519,16 @@ app.post(
         (name) => String(name || "").toLowerCase() === requesterKey
       );
 
+      if (
+        room.clanId &&
+        String(requester.clanId || "") !== String(room.clanId)
+      ) {
+        return res.status(403).json({
+          message:
+            "Šai klana turnīra istabai var pievienoties tikai klana dalībnieki.",
+        });
+      }
+
       if (!isParticipant && !isOwner && !isInvited && !isAdminUser(requester)) {
         return res.status(403).json({
           message: "Šai VIP istabai vari pievienoties tikai ar ielūgumu.",
@@ -7964,6 +8628,7 @@ app.post(
         autoReportOnly: room.autoReportOnly !== false,
         roomId: room.id,
         roomOwner: room.owner,
+        clanId: room.clanId || "",
         createdAt: now,
       });
 
@@ -8649,7 +9314,8 @@ app.post("/challenge/:id/guess", authMiddleware, (req, res) => {
         const letter = g[cIdx].toUpperCase();
         if (!letter) continue;
         if (p[cIdx] === "present") {
-          if (!wrongPositionsByLetter.has(letter)) wrongPositionsByLetter.set(letter, new Set());
+          if (!wrongPositionsByLetter.has(letter))
+            wrongPositionsByLetter.set(letter, new Set());
           wrongPositionsByLetter.get(letter).add(cIdx);
           rowYellowCount.set(letter, (rowYellowCount.get(letter) || 0) + 1);
         } else if (p[cIdx] === "correct") {
@@ -8657,7 +9323,10 @@ app.post("/challenge/:id/guess", authMiddleware, (req, res) => {
         }
       }
       for (const [letter, count] of rowYellowCount) {
-        yellowCountPerRow.set(letter, Math.max(yellowCountPerRow.get(letter) || 0, count));
+        yellowCountPerRow.set(
+          letter,
+          Math.max(yellowCountPerRow.get(letter) || 0, count)
+        );
       }
     }
     const gArr = guessRaw.split("");
@@ -8673,7 +9342,8 @@ app.post("/challenge/:id/guess", authMiddleware, (req, res) => {
           validCount++;
       }
       if (validCount < requiredCount) {
-        for (let k = 0; k < requiredCount - validCount; k++) missing.push(letter);
+        for (let k = 0; k < requiredCount - validCount; k++)
+          missing.push(letter);
       }
     }
     if (missing.length > 0) {
@@ -8957,7 +9627,8 @@ app.post("/guess", guessRateLimiter, authMiddleware, (req, res) => {
         const letter = g[c].toUpperCase();
         if (!letter) continue;
         if (p[c] === "present") {
-          if (!wrongPositionsByLetter.has(letter)) wrongPositionsByLetter.set(letter, new Set());
+          if (!wrongPositionsByLetter.has(letter))
+            wrongPositionsByLetter.set(letter, new Set());
           wrongPositionsByLetter.get(letter).add(c);
           rowYellowCount.set(letter, (rowYellowCount.get(letter) || 0) + 1);
         } else if (p[c] === "correct") {
@@ -8965,7 +9636,10 @@ app.post("/guess", guessRateLimiter, authMiddleware, (req, res) => {
         }
       }
       for (const [letter, count] of rowYellowCount) {
-        yellowCountPerRow.set(letter, Math.max(yellowCountPerRow.get(letter) || 0, count));
+        yellowCountPerRow.set(
+          letter,
+          Math.max(yellowCountPerRow.get(letter) || 0, count)
+        );
       }
     }
     const gArr = guessRaw.split("");
@@ -8981,7 +9655,8 @@ app.post("/guess", guessRateLimiter, authMiddleware, (req, res) => {
           validCount++;
       }
       if (validCount < requiredCount) {
-        for (let k = 0; k < requiredCount - validCount; k++) missing.push(letter);
+        for (let k = 0; k < requiredCount - validCount; k++)
+          missing.push(letter);
       }
     }
     if (missing.length > 0) {
@@ -9070,7 +9745,6 @@ app.post("/guess", guessRateLimiter, authMiddleware, (req, res) => {
     user.bestStreak = Math.max(user.bestStreak || 0, user.streak || 0);
 
     ensureRankFields(user);
-    addKaujinieksXp(user, xpGain);
 
     io.emit("playerWin", {
       username: user.username,
@@ -9316,7 +9990,6 @@ function finishDuel(duel, winnerName, reason) {
       winner.duelsWon = (winner.duelsWon || 0) + 1;
       winner.xp = (winner.xp || 0) + DUEL_REWARD_XP;
       winner.coins = (winner.coins || 0) + DUEL_REWARD_COINS;
-      addKaujinieksXp(winner, DUEL_REWARD_XP);
       updateMissionsOnDuelWin(winner);
       ensureRankFields(winner);
     }
@@ -9754,6 +10427,22 @@ io.on("connection", (socket) => {
       });
     }
   } catch {}
+  // Galda spēles (dambrete, šahs) – resume
+  try {
+    const boardGameId = userToBoardGame.get(user.username);
+    const boardGame = boardGameId ? boardGames.get(boardGameId) : null;
+    if (boardGame && boardGame.status === "active") {
+      socket.join(`board:${boardGame.id}`);
+      socket.emit("board.resume", {
+        gameId: boardGame.id,
+        type: boardGame.type,
+        players: boardGame.players,
+        turn: boardGame.turn,
+        board: boardGame.board,
+        fen: boardGame.fen,
+      });
+    }
+  } catch {}
   ensureDailyMissions(user);
   ensureDailyChest(user);
   ensureSpecialMedals(user);
@@ -9786,6 +10475,10 @@ io.on("connection", (socket) => {
     socket.emit("dm.blocked", { list: listBlocks(u) });
     socket.emit("friends.update", getFriendsPayload(u));
   } catch {}
+
+  if (user.clanId) {
+    socket.join(`clan:${user.clanId}`);
+  }
 
   if (CHAT_STORE_ON_SUPABASE && CHAT_HISTORY_LIMIT > 0) {
     loadChatHistory(CHAT_HISTORY_LIMIT)
@@ -9883,6 +10576,40 @@ io.on("connection", (socket) => {
     if (CHAT_STORE_ON_SUPABASE) {
       chatStoreMessage(chatPayload).catch(() => {});
     }
+  });
+
+  // ========== KLANA ČATS ==========
+  socket.on("clan.chat", (text) => {
+    if (socketRateLimited(socket, "clanChat", CHAT_RATE_MS)) return;
+    if (typeof text !== "string") return;
+    let msg = text.trim();
+    if (!msg) return;
+    if (msg.length > CLAN_CHAT_MAX_LEN) msg = msg.slice(0, CLAN_CHAT_MAX_LEN);
+    const u = USERS[user.username] || user;
+    if (!u.clanId) {
+      socket.emit("clan.chat.error", { message: "Tu neesi klanā." });
+      return;
+    }
+    const clan = getClanById(u.clanId);
+    if (!clan || !isClanMember(clan, u.username)) {
+      socket.emit("clan.chat.error", { message: "Klans nav atrasts." });
+      return;
+    }
+    const payload = {
+      username: u.username,
+      text: msg,
+      ts: Date.now(),
+      avatarUrl: avatarForBroadcast(u),
+      rankTitle: u.rankTitle || "—",
+      rankLevel: u.rankLevel || 1,
+      rankColor: u.rankColor || "#9CA3AF",
+    };
+    if (!Array.isArray(clan.chat)) clan.chat = [];
+    clan.chat.push(payload);
+    if (clan.chat.length > CLAN_CHAT_HISTORY)
+      clan.chat = clan.chat.slice(-CLAN_CHAT_HISTORY);
+    saveClanStore();
+    io.to(`clan:${clan.id}`).emit("clan.chat", payload);
   });
 
   // ========== PRIVĀTAIS ČATS (DM) ==========
@@ -10594,7 +11321,8 @@ io.on("connection", (socket) => {
           const letter = g[cIdx].toUpperCase();
           if (!letter) continue;
           if (p[cIdx] === "present") {
-            if (!wrongPositionsByLetter.has(letter)) wrongPositionsByLetter.set(letter, new Set());
+            if (!wrongPositionsByLetter.has(letter))
+              wrongPositionsByLetter.set(letter, new Set());
             wrongPositionsByLetter.get(letter).add(cIdx);
             rowYellowCount.set(letter, (rowYellowCount.get(letter) || 0) + 1);
           } else if (p[cIdx] === "correct") {
@@ -10602,7 +11330,10 @@ io.on("connection", (socket) => {
           }
         }
         for (const [letter, count] of rowYellowCount) {
-          yellowCountPerRow.set(letter, Math.max(yellowCountPerRow.get(letter) || 0, count));
+          yellowCountPerRow.set(
+            letter,
+            Math.max(yellowCountPerRow.get(letter) || 0, count)
+          );
         }
       }
       const gArr = guess.split("");
@@ -10618,7 +11349,8 @@ io.on("connection", (socket) => {
             validCount++;
         }
         if (validCount < requiredCount) {
-          for (let k = 0; k < requiredCount - validCount; k++) missing.push(letter);
+          for (let k = 0; k < requiredCount - validCount; k++)
+            missing.push(letter);
         }
       }
       if (missing.length > 0) {
@@ -10668,6 +11400,267 @@ io.on("connection", (socket) => {
     const l1 = duel.attemptsLeft[p1] ?? 0;
     const l2 = duel.attemptsLeft[p2] ?? 0;
     if (l1 <= 0 && l2 <= 0) finishDuel(duel, null, "no_attempts");
+  });
+
+  // ========== GALDA SPĒLES (dambrete, šahs) ==========
+  socket.on("board.invite", (payload) => {
+    const fromUser = socket.data.user;
+    if (!fromUser) return;
+    const targetName = String(
+      payload?.target || payload?.username || ""
+    ).trim();
+    const gameType = String(payload?.type || "dambrete").toLowerCase();
+    if (!targetName)
+      return socket.emit("board.error", {
+        message: "Nav norādīts pretinieks.",
+      });
+    if (fromUser.username === targetName)
+      return socket.emit("board.error", { message: "Nevari izaicināt sevi." });
+    const targetKey = findUserKeyCaseInsensitive(targetName);
+    const targetUser = targetKey ? USERS[targetKey] : null;
+    if (!targetUser)
+      return socket.emit("board.error", { message: "Lietotājs nav atrasts." });
+    if (userToBoardGame.has(fromUser.username))
+      return socket.emit("board.error", { message: "Tu jau esi spēlē." });
+    if (userToBoardGame.has(targetUser.username))
+      return socket.emit("board.error", { message: "Pretinieks jau spēlē." });
+    const inviteId = crypto.randomBytes(6).toString("hex");
+    const invite = {
+      id: inviteId,
+      from: fromUser.username,
+      target: targetUser.username,
+      type: gameType,
+      expiresAt: Date.now() + BOARD_GAME_INVITE_TIMEOUT_MS,
+    };
+    const targetSocket = getSocketByUsername(targetUser.username);
+    if (targetSocket) {
+      targetSocket.emit("board.invite", {
+        inviteId,
+        from: fromUser.username,
+        type: gameType,
+      });
+    }
+    socket.emit("board.inviteSent", {
+      inviteId,
+      target: targetUser.username,
+      type: gameType,
+    });
+  });
+
+  socket.on("board.accept", (payload) => {
+    const user = socket.data.user;
+    if (!user) return;
+    const inviteId = String(payload?.inviteId || "").trim();
+    const gameType = String(payload?.type || "dambrete").toLowerCase();
+    if (!inviteId)
+      return socket.emit("board.error", { message: "Nav aicinājuma." });
+    const targetSocket = getSocketByUsername(payload?.from || "");
+    const challengerName = payload?.from || "";
+    const opponentName = user.username;
+    if (!challengerName || challengerName === opponentName)
+      return socket.emit("board.error", { message: "Nederīgs aicinājums." });
+    if (
+      userToBoardGame.has(challengerName) ||
+      userToBoardGame.has(opponentName)
+    )
+      return socket.emit("board.error", { message: "Kāds jau spēlē." });
+    let game;
+    if (gameType === "chess") {
+      game = createChessGame(challengerName, opponentName);
+    } else {
+      game = createDambreteGame(challengerName, opponentName);
+    }
+    const room = `board:${game.id}`;
+    const s1 = getSocketByUsername(challengerName);
+    const s2 = getSocketByUsername(opponentName);
+    if (s1) s1.join(room);
+    if (s2) s2.join(room);
+    const payloadOut = {
+      gameId: game.id,
+      type: game.type,
+      players: game.players,
+      turn: game.turn,
+      status: game.status,
+      board: game.board,
+      fen: game.fen,
+    };
+    io.to(room).emit("board.start", payloadOut);
+  });
+
+  socket.on("board.startVsBot", (payload) => {
+    const user = socket.data.user;
+    if (!user) return;
+    const gameType = String(payload?.type || "dambrete").toLowerCase();
+    const difficulty = String(payload?.difficulty || "medium").toLowerCase();
+    const validDifficulty = ["easy", "medium", "hard"].includes(difficulty)
+      ? difficulty
+      : "medium";
+    if (userToBoardGame.has(user.username))
+      return socket.emit("board.error", { message: "Tu jau spēlē." });
+    if (gameType !== "dambrete" && gameType !== "chess")
+      return socket.emit("board.error", { message: "Nederīgs spēles tips." });
+    let game;
+    if (gameType === "chess") {
+      game = createChessVsBot(user.username, validDifficulty);
+    } else {
+      game = createDambreteVsBot(user.username, validDifficulty);
+    }
+    const payloadOut = {
+      gameId: game.id,
+      type: game.type,
+      players: game.players,
+      turn: game.turn,
+      status: game.status,
+      board: game.board,
+      fen: game.fen,
+      vsBot: true,
+    };
+    socket.emit("board.start", payloadOut);
+    if (game.turn === 1) setImmediate(() => playBoardBotMove(io, game));
+  });
+
+  socket.on("board.move", (payload) => {
+    const user = socket.data.user;
+    if (!user) return;
+    const gameId = payload?.gameId;
+    const game = gameId ? boardGames.get(gameId) : null;
+    if (!game || game.status !== "active")
+      return socket.emit("board.error", { message: "Spēle nav aktīva." });
+    if (!game.players.includes(user.username)) return;
+    const turnIdx = game.turn;
+    const currentPlayer = game.players[turnIdx];
+    if (currentPlayer !== user.username)
+      return socket.emit("board.error", { message: "Nav tavas kārtas." });
+
+    if (game.type === "dambrete") {
+      const move = payload?.move;
+      if (!move) return socket.emit("board.error", { message: "Nav gājiena." });
+      const isWhiteTurn = turnIdx === 0;
+      const allMoves = getAllMoves(game.board, isWhiteTurn);
+      const legal = findLegalMove(allMoves, move);
+      if (!legal)
+        return socket.emit("board.error", { message: "Nederīgs gājiens." });
+      const newBoard = applyMove(game.board, move);
+      if (!newBoard)
+        return socket.emit("board.error", {
+          message: "Neizdevās izpildīt gājienu.",
+        });
+      game.board = newBoard;
+      game.moves.push({ move, by: user.username, ts: Date.now() });
+      game.turn = 1 - game.turn;
+      game.lastMoveAt = Date.now();
+      const result = checkGameOver(newBoard, game.turn === 0);
+      const emitTarget = game.vsBot
+        ? getSocketByUsername(game.players[0])
+        : null;
+      const emitCh = emitTarget
+        ? (ev, payload) => emitTarget.emit(ev, payload)
+        : (ev, payload) => io.to(`board:${gameId}`).emit(ev, payload);
+      if (result.over) {
+        const winner =
+          result.winner === WHITE ? game.players[0] : game.players[1];
+        finishBoardGame(game, winner, "win");
+        emitCh("board.end", {
+          gameId,
+          winner,
+          reason: "win",
+          board: newBoard,
+          coinsGain:
+            game.vsBot && winner !== BOARD_BOT_USERNAME
+              ? BOARD_GAME_REWARD_COINS
+              : winner
+                ? BOARD_GAME_REWARD_COINS
+                : 0,
+          coinsLoss:
+            game.vsBot && winner === BOARD_BOT_USERNAME
+              ? BOARD_GAME_LOSE_COINS
+              : winner
+                ? BOARD_GAME_LOSE_COINS
+                : 0,
+        });
+      } else {
+        emitCh("board.move", {
+          gameId,
+          board: newBoard,
+          turn: game.turn,
+          move,
+        });
+        if (game.vsBot && game.turn === 1)
+          setImmediate(() => playBoardBotMove(io, game));
+      }
+    } else if (game.type === "chess") {
+      const san = payload?.san || payload?.move;
+      if (!san) return socket.emit("board.error", { message: "Nav gājiena." });
+      const chess = new Chess(game.fen);
+      const m = chess.move(san);
+      if (!m)
+        return socket.emit("board.error", { message: "Nederīgs gājiens." });
+      game.fen = chess.fen();
+      game.moves.push({ san: m.san, by: user.username, ts: Date.now() });
+      game.turn = 1 - game.turn;
+      game.lastMoveAt = Date.now();
+      const chessEmit = game.vsBot
+        ? (ev, p) => getSocketByUsername(game.players[0])?.emit(ev, p)
+        : (ev, p) => io.to(`board:${gameId}`).emit(ev, p);
+      if (chess.isCheckmate() || chess.isStalemate() || chess.isDraw()) {
+        const winner = chess.isCheckmate()
+          ? game.players[chess.turn() === "w" ? 1 : 0]
+          : null;
+        finishBoardGame(
+          game,
+          winner,
+          chess.isCheckmate() ? "checkmate" : "draw"
+        );
+        chessEmit("board.end", {
+          gameId,
+          winner,
+          reason: chess.isCheckmate() ? "checkmate" : "draw",
+          fen: game.fen,
+          coinsGain:
+            game.vsBot && winner !== BOARD_BOT_USERNAME
+              ? BOARD_GAME_REWARD_COINS
+              : winner
+                ? BOARD_GAME_REWARD_COINS
+                : 0,
+          coinsLoss:
+            game.vsBot && winner === BOARD_BOT_USERNAME
+              ? BOARD_GAME_LOSE_COINS
+              : 0,
+        });
+      } else {
+        chessEmit("board.move", {
+          gameId,
+          fen: game.fen,
+          turn: game.turn,
+          move: m.san,
+        });
+        if (game.vsBot && game.turn === 1)
+          setImmediate(() => playBoardBotMove(io, game));
+      }
+    }
+  });
+
+  socket.on("board.resign", (payload) => {
+    const user = socket.data.user;
+    if (!user) return;
+    const gameId = payload?.gameId;
+    const game = gameId ? boardGames.get(gameId) : null;
+    if (!game || game.status !== "active") return;
+    if (!game.players.includes(user.username)) return;
+    const winner = getBoardGameOpponent(game, user.username);
+    finishBoardGame(game, winner, "resign");
+    const endPayload = {
+      gameId,
+      winner,
+      reason: "resign",
+      coinsGain: 0,
+      coinsLoss: winner ? BOARD_GAME_LOSE_COINS : 0,
+    };
+    if (game.vsBot) {
+      getSocketByUsername(game.players[0])?.emit("board.end", endPayload);
+    } else {
+      io.to(`board:${gameId}`).emit("board.end", endPayload);
+    }
   });
 
   socket.on("disconnect", () => {

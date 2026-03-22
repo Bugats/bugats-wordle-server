@@ -34,6 +34,14 @@ const {
 
 const { createApiBase, fetchWithTimeout, readJsonOrThrow } = VZServices;
 const { $, createEl, safeText, applyRankColor } = VZUI;
+
+function escapeHtml(s) {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 const {
   dmNormalizeMessageForStore,
   dmObjectToThreads,
@@ -573,6 +581,12 @@ const themeToggleBtn = document.getElementById("theme-toggle-btn");
 const offlineOverlayEl = document.getElementById("vz-offline-overlay");
 const offlineRetryBtn = document.getElementById("vz-offline-retry-btn");
 const rateOverlayEl = document.getElementById("vz-rate-overlay");
+const tutorialOverlayEl = document.getElementById("vz-tutorial-overlay");
+const tutorialContentEl = document.getElementById("vz-tutorial-content");
+const tutorialDotsEl = document.getElementById("vz-tutorial-dots");
+const tutorialSkipBtn = document.getElementById("vz-tutorial-skip");
+const tutorialNextBtn = document.getElementById("vz-tutorial-next");
+const tutorialReopenBtn = document.getElementById("vz-tutorial-reopen-btn");
 const rateLaterBtn = document.getElementById("vz-rate-later-btn");
 const rateFeedbackBtn = document.getElementById("vz-rate-feedback-btn");
 const rateOpenBtn = document.getElementById("vz-rate-open-btn");
@@ -608,6 +622,18 @@ const duelWinnerNameEl = document.getElementById("duel-winner-name");
 const duelScoreLineEl = document.getElementById("duel-result-rewards");
 const duelExtraMsgEl = document.getElementById("duel-result-reason");
 const duelOkBtn = document.getElementById("duel-result-close");
+
+// GALDA SPĒLES (dambrete, šahs)
+let boardState = {
+  gameId: null,
+  type: null,
+  players: [],
+  turn: 0,
+  board: null,
+  fen: null,
+  selectedCell: null,
+  legalMoves: { jumps: [], moves: [] },
+};
 
 // TOP10 + ONLINE
 const lbListEl = $("#lb-list");
@@ -1232,7 +1258,8 @@ function normalizeRateState(input) {
 
   base.totalWins = Number.isFinite(totalWins) && totalWins > 0 ? totalWins : 0;
   base.nextPromptWins =
-    Number.isFinite(nextPromptWins) && nextPromptWins >= RATE_PROMPT_INITIAL_WINS
+    Number.isFinite(nextPromptWins) &&
+    nextPromptWins >= RATE_PROMPT_INITIAL_WINS
       ? nextPromptWins
       : RATE_PROMPT_INITIAL_WINS;
   base.accepted = input.accepted === true;
@@ -1275,7 +1302,8 @@ function saveRateState(input) {
 function shouldShowRatePrompt(rateState, now) {
   if (!isTwa() || !rateOverlayEl) return false;
   if (!rateState || rateState.accepted) return false;
-  if ((rateState.totalWins || 0) < (rateState.nextPromptWins || 0)) return false;
+  if ((rateState.totalWins || 0) < (rateState.nextPromptWins || 0))
+    return false;
   if ((rateState.snoozedUntil || 0) > now) return false;
   if (now - PAGE_SESSION_STARTED_AT < RATE_PROMPT_MIN_SESSION_MS) return false;
   return true;
@@ -1347,6 +1375,121 @@ function handleRatePromptFeedback() {
   rateState.lastAction = "feedback";
   saveRateState(rateState);
   hideRateOverlay();
+}
+
+// ==================== TUTORIAL ====================
+const TUTORIAL_STORAGE_KEY = "vz_tutorial_seen";
+const TUTORIAL_STEPS = [
+  {
+    title: "Laipni lūdzam VĀRDU ZONĀ!",
+    body: "Uzminē vārdu 6 mēģinājumos. Izmanto klaviatūru vai pieskāršanos.",
+  },
+  {
+    title: "Kā minēt",
+    body: "Raksti burtus un nospied Enter. Vārds ir 6 burti.",
+  },
+  {
+    title: "Zaļš = pareizā vieta",
+    body: "Burts ir vārdā un pareizajā vietā.",
+    example: ["A", "B", "C", "D", "E", "F"],
+    exampleStatus: [
+      "correct",
+      "absent",
+      "absent",
+      "absent",
+      "absent",
+      "absent",
+    ],
+  },
+  {
+    title: "Dzeltenš = pareizs burts, nepareiza vieta",
+    body: "Burts ir vārdā, bet citā ailē. Izmanto to nākamajā minējumā.",
+    example: ["A", "B", "C", "D", "E", "F"],
+    exampleStatus: [
+      "absent",
+      "present",
+      "absent",
+      "absent",
+      "absent",
+      "absent",
+    ],
+  },
+  {
+    title: "Pelēks = burta nav vārdā",
+    body: "Šo burtu vairs neizmanto.",
+    example: ["A", "B", "C", "D", "E", "F"],
+    exampleStatus: ["absent", "absent", "absent", "absent", "absent", "absent"],
+  },
+];
+
+function showTutorialIfNeeded() {
+  try {
+    if (localStorage.getItem(TUTORIAL_STORAGE_KEY) === "1") return;
+    showTutorial();
+  } catch {}
+}
+
+function showTutorial() {
+  if (!tutorialOverlayEl || !tutorialContentEl || !tutorialDotsEl) return;
+  let step = 0;
+
+  function render() {
+    const s = TUTORIAL_STEPS[step];
+    if (!s) return;
+    tutorialContentEl.innerHTML = "";
+    const h3 = document.createElement("h3");
+    h3.id = "vz-tutorial-title";
+    h3.textContent = s.title;
+    tutorialContentEl.appendChild(h3);
+    const p = document.createElement("p");
+    p.textContent = s.body;
+    tutorialContentEl.appendChild(p);
+    if (s.example && s.exampleStatus) {
+      const div = document.createElement("div");
+      div.className = "vz-tutorial-example";
+      s.example.forEach((letter, i) => {
+        const span = document.createElement("span");
+        span.className = "tile-ex " + (s.exampleStatus[i] || "absent");
+        span.textContent = letter;
+        div.appendChild(span);
+      });
+      tutorialContentEl.appendChild(div);
+    }
+    tutorialDotsEl.innerHTML = "";
+    TUTORIAL_STEPS.forEach((_, i) => {
+      const dot = document.createElement("span");
+      if (i === step) dot.classList.add("active");
+      dot.setAttribute("aria-hidden", "true");
+      tutorialDotsEl.appendChild(dot);
+    });
+    if (tutorialNextBtn) {
+      tutorialNextBtn.textContent =
+        step === TUTORIAL_STEPS.length - 1 ? "Sākt!" : "Tālāk";
+    }
+  }
+
+  function close() {
+    try {
+      localStorage.setItem(TUTORIAL_STORAGE_KEY, "1");
+    } catch {}
+    tutorialOverlayEl.classList.add("hidden");
+  }
+
+  if (tutorialSkipBtn) {
+    tutorialSkipBtn.onclick = close;
+  }
+  if (tutorialNextBtn) {
+    tutorialNextBtn.onclick = () => {
+      if (step < TUTORIAL_STEPS.length - 1) {
+        step++;
+        render();
+      } else {
+        close();
+      }
+    };
+  }
+  render();
+  tutorialOverlayEl.classList.remove("hidden");
 }
 
 // ==================== PWA INSTALL ====================
@@ -2200,83 +2343,226 @@ function updatePlayerCard(me) {
     }
   }
 
-  renderKaujinieksCard(me.kaujinieki);
+  renderClanCard(me);
 }
 
-function renderKaujinieksCard(k) {
-  const activeEl = document.getElementById("vz-kaujinieks-active");
-  const listEl = document.getElementById("vz-kaujinieks-list");
-  const cardEl = document.getElementById("vz-kaujinieks-card");
-  if (!cardEl) return;
+function renderClanCard(me) {
+  const cardEl = document.getElementById("vz-clan-card");
+  const contentEl = document.getElementById("vz-clan-content");
+  const invitesEl = document.getElementById("vz-clan-invites");
+  const chatEl = document.getElementById("vz-clan-chat");
+  if (!cardEl || !contentEl) return;
 
-  if (!k || !k.active) {
-    cardEl.style.display = "none";
-    return;
-  }
+  const clan = me.clan || null;
+  const invites = me.clanInvitesIn || [];
 
-  cardEl.style.display = "";
-  const a = k.active;
-
-  if (activeEl) {
-    const xpPct =
-      a.xpForNext > 0
-        ? Math.round(((a.xp || 0) / a.xpForNext) * 100)
-        : 100;
-    activeEl.innerHTML = `
-      <div class="vz-kaujinieks-current">
-        <span class="vz-kaujinieks-icon">${a.icon || "⚔️"}</span>
-        <div class="vz-kaujinieks-info">
-          <strong>${a.name || "?"}</strong>
-          <span>Lv.${a.level || 1}</span>
-          <div class="vz-kaujinieks-xp-bar">
-            <div class="vz-kaujinieks-xp-fill" style="width:${xpPct}%"></div>
-          </div>
-          <span class="vz-kaujinieks-attrs">Spēks ${a.speks || 1} · Izturība ${a.izturiba || 1} · Veiksme ${a.veiksme || 1}</span>
-        </div>
-      </div>
-    `;
-  }
-
-  if (listEl) {
-    let html = "";
-    if (k.pool) {
-      html += k.pool
-        .map(
-          (p) =>
-            `<button type="button" class="vz-kaujinieks-btn ${p.id === k.activeId ? "vz-kaujinieks-active" : ""}" data-id="${p.id}" title="${p.name} Lv.${p.level || 1}">${p.icon || "⚔️"}</button>`
-        )
-        .join("");
-    }
-    if (k.allPool) {
-      const unlocked = new Set((k.pool || []).map((p) => p.id));
-      k.allPool
-        .filter((p) => !unlocked.has(p.id))
-        .forEach(
-          (p) =>
-            (html += `<button type="button" class="vz-kaujinieks-lock-btn" data-id="${p.id}" title="Atvērt par ${p.cost || 0} coins">${p.icon} 🔒</button>`)
-        );
-    }
-    listEl.innerHTML = html;
-    listEl.querySelectorAll(".vz-kaujinieks-btn").forEach((btn) => {
+  if (invites.length > 0 && invitesEl) {
+    invitesEl.classList.remove("hidden");
+    invitesEl.innerHTML = invites
+      .map(
+        (inv) =>
+          `<div class="vz-clan-invite-row">
+            <span>[${escapeHtml(inv.clanTag || "")}] ${escapeHtml(inv.clanName || "")}</span>
+            <span class="vz-clan-invite-from">no ${escapeHtml(inv.from || "")}</span>
+            <button type="button" class="vz-clan-invite-accept" data-clan-id="${escapeHtml(inv.clanId || "")}">Pieņemt</button>
+            <button type="button" class="vz-clan-invite-decline" data-clan-id="${escapeHtml(inv.clanId || "")}">Noraidīt</button>
+          </div>`
+      )
+      .join("");
+    invitesEl.querySelectorAll(".vz-clan-invite-accept").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        if (btn.dataset.id === k.activeId) return;
         try {
-          const data = await apiPost("/kaujinieks/select", { id: btn.dataset.id });
+          const data = await apiPost("/clan/invite/accept", {
+            clanId: btn.dataset.clanId,
+          });
           if (data?.me) updatePlayerCard(data.me);
         } catch (err) {
-          appendSystemMessage(err.message || "Neizdevās izvēlēties.");
+          appendSystemMessage(err?.message || "Kļūda");
         }
       });
     });
-    listEl.querySelectorAll(".vz-kaujinieks-lock-btn").forEach((btn) => {
+    invitesEl.querySelectorAll(".vz-clan-invite-decline").forEach((btn) => {
       btn.addEventListener("click", async () => {
         try {
-          const data = await apiPost(`/kaujinieks/unlock/${btn.dataset.id}`);
+          await apiPost("/clan/invite/decline", { clanId: btn.dataset.clanId });
+          const me2 = await apiGet("/me");
+          updatePlayerCard(me2);
+        } catch (_) {}
+      });
+    });
+  } else if (invitesEl) {
+    invitesEl.classList.add("hidden");
+  }
+
+  if (clan) {
+    contentEl.innerHTML = `
+      <div class="vz-clan-info">
+        <strong>[${escapeHtml(clan.tag || "")}] ${escapeHtml(clan.name || "")}</strong>
+        <span>${clan.memberCount || 0} dalībnieki · ${clan.totalXp || 0} XP</span>
+      </div>
+      <div class="vz-clan-members">
+        ${(clan.members || [])
+          .map(
+            (m) =>
+              `<div class="vz-clan-member">
+                <span class="vz-clan-member-name">${escapeHtml(m.username || "")}</span>
+                <span class="vz-clan-member-role">${m.role === "leader" ? "Vadītājs" : m.role === "admin" ? "Admin" : "Dalībnieks"}</span>
+                ${clan.canManage ? `<button type="button" class="vz-clan-kick-btn" data-username="${escapeHtml(m.username || "")}" ${m.role === "leader" ? "disabled" : ""}>Izmest</button>` : ""}
+              </div>`
+          )
+          .join("")}
+      </div>
+      ${
+        clan.canManage
+          ? `
+        <div class="vz-clan-invite-form">
+          <input id="vz-clan-invite-input" type="text" placeholder="Lietotājvārds" />
+          <button id="vz-clan-invite-btn" type="button">Uzaicināt</button>
+        </div>
+      `
+          : ""
+      }
+      <div class="vz-clan-actions">
+        <span class="vz-clan-invite-code">Kods: ${escapeHtml(clan.inviteCode || "—")}</span>
+        <button id="vz-clan-leave-btn" type="button" class="vz-clan-leave">Iziet no klana</button>
+      </div>
+      <div class="vz-clan-chat-wrap">
+        <div id="vz-clan-chat-messages" class="vz-clan-chat-msgs"></div>
+        <div class="vz-clan-chat-input-wrap">
+          <input id="vz-clan-chat-input" type="text" placeholder="Raksti klana čatā…" maxlength="500" />
+          <button id="vz-clan-chat-send" type="button">Sūtīt</button>
+        </div>
+      </div>
+    `;
+    if (chatEl) {
+      chatEl.classList.remove("hidden");
+      const msgsEl = contentEl.querySelector("#vz-clan-chat-messages");
+      if (msgsEl && Array.isArray(clan.chat)) {
+        msgsEl.innerHTML = clan.chat
+          .map(
+            (m) =>
+              `<div class="vz-clan-msg"><span class="vz-clan-msg-user">${escapeHtml(m.username || "")}</span>: ${escapeHtml(m.text || "")}</div>`
+          )
+          .join("");
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+      }
+    }
+    bindClanActions(contentEl, clan);
+  } else {
+    contentEl.innerHTML = `
+      <p class="vz-clan-no-clan">Pievienojies klanam vai izveido savu.</p>
+      <details class="vz-clan-create-details">
+        <summary>Izveidot klanu</summary>
+        <div class="vz-clan-create-form">
+          <label>Nosaukums <input id="vz-clan-create-name" type="text" placeholder="Mans klans" maxlength="24" /></label>
+          <label>Tags (2–6 burti) <input id="vz-clan-create-tag" type="text" placeholder="MK" maxlength="6" /></label>
+          <button id="vz-clan-create-btn" type="button">Izveidot</button>
+        </div>
+      </details>
+      <details class="vz-clan-join-details">
+        <summary>Pievienoties ar kodu</summary>
+        <div class="vz-clan-join-form">
+          <input id="vz-clan-join-code" type="text" placeholder="Ielūguma kods" />
+          <button id="vz-clan-join-btn" type="button">Pievienoties</button>
+        </div>
+      </details>
+    `;
+    const createBtn = contentEl.querySelector("#vz-clan-create-btn");
+    const joinBtn = contentEl.querySelector("#vz-clan-join-btn");
+    if (createBtn) {
+      createBtn.addEventListener("click", async () => {
+        const name = document
+          .getElementById("vz-clan-create-name")
+          ?.value?.trim();
+        const tag = document
+          .getElementById("vz-clan-create-tag")
+          ?.value?.trim();
+        if (!name || !tag) {
+          appendSystemMessage("Aizpildi nosaukumu un tagu.");
+          return;
+        }
+        try {
+          const data = await apiPost("/clan/create", { name, tag });
           if (data?.me) updatePlayerCard(data.me);
         } catch (err) {
-          appendSystemMessage(err.message || "Neizdevās atvērt.");
+          appendSystemMessage(err?.message || "Neizdevās izveidot klanu.");
         }
       });
+    }
+    if (joinBtn) {
+      joinBtn.addEventListener("click", async () => {
+        const code = document
+          .getElementById("vz-clan-join-code")
+          ?.value?.trim();
+        if (!code) {
+          appendSystemMessage("Ievadi ielūguma kodu.");
+          return;
+        }
+        try {
+          const data = await apiPost("/clan/join", { inviteCode: code });
+          if (data?.me) updatePlayerCard(data.me);
+        } catch (err) {
+          appendSystemMessage(err?.message || "Neizdevās pievienoties.");
+        }
+      });
+    }
+  }
+}
+
+function bindClanActions(container, clan) {
+  if (!container) return;
+  const inviteBtn = container.querySelector("#vz-clan-invite-btn");
+  const inviteInput = container.querySelector("#vz-clan-invite-input");
+  const leaveBtn = container.querySelector("#vz-clan-leave-btn");
+  const chatInput = container.querySelector("#vz-clan-chat-input");
+  const chatSend = container.querySelector("#vz-clan-chat-send");
+
+  if (inviteBtn && inviteInput) {
+    inviteBtn.addEventListener("click", async () => {
+      const name = inviteInput.value.trim();
+      if (!name) return;
+      try {
+        await apiPost("/clan/invite", { username: name });
+        appendSystemMessage(`Ielūgums nosūtīts ${name}.`);
+      } catch (err) {
+        appendSystemMessage(err?.message || "Kļūda");
+      }
+    });
+  }
+  if (leaveBtn) {
+    leaveBtn.addEventListener("click", async () => {
+      if (!confirm("Vai tiešām iziet no klana?")) return;
+      try {
+        const data = await apiPost("/clan/leave", {});
+        if (data?.me) updatePlayerCard(data.me);
+      } catch (err) {
+        appendSystemMessage(err?.message || "Kļūda");
+      }
+    });
+  }
+  container.querySelectorAll(".vz-clan-kick-btn").forEach((btn) => {
+    if (btn.disabled) return;
+    btn.addEventListener("click", async () => {
+      const username = btn.dataset.username;
+      if (!username || !confirm(`Izmest ${username}?`)) return;
+      try {
+        const data = await apiPost("/clan/kick", { username });
+        if (data?.me) updatePlayerCard(data.me);
+      } catch (err) {
+        appendSystemMessage(err?.message || "Kļūda");
+      }
+    });
+  });
+  if (chatSend && chatInput && state.socket) {
+    const send = () => {
+      const text = chatInput.value.trim();
+      if (!text) return;
+      state.socket.emit("clan.chat", text);
+      chatInput.value = "";
+    };
+    chatSend.addEventListener("click", send);
+    chatInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") send();
     });
   }
 }
@@ -2471,6 +2757,7 @@ async function runPostLoginInit() {
         startTournamentCountdownTimer();
         startEngagementLoopTimer();
         renderEngagementLoopCard();
+        bindBoardGames();
         initSocket();
         return;
       } else if (c && c.status === "waiting" && c.player1 !== state.username) {
@@ -2509,7 +2796,9 @@ async function runPostLoginInit() {
   startTournamentCountdownTimer();
   startEngagementLoopTimer();
   renderEngagementLoopCard();
+  bindBoardGames();
   initSocket();
+  setTimeout(showTutorialIfNeeded, 600);
 }
 
 // ==================== PROFILA POPUP + DM ====================
@@ -2685,6 +2974,11 @@ function showPlayerProfile(data) {
         ? "none"
         : "inline-block";
   }
+  const boardActions = document.querySelector(".vz-profile-board-actions");
+  if (boardActions) {
+    boardActions.style.display =
+      state.username && data.username === state.username ? "none" : "flex";
+  }
 
   let blockBtn = document.getElementById("vz-profile-block-btn");
   let reportBtn = document.getElementById("vz-profile-report-btn");
@@ -2753,9 +3047,12 @@ function showPlayerProfile(data) {
     if (copyBtn && linkInput) {
       copyBtn.addEventListener("click", () => {
         linkInput.select();
-        navigator.clipboard?.writeText?.(data.referralLink).then(() => {
-          appendSystemMessage("Links nokopēts!");
-        }).catch(() => {});
+        navigator.clipboard
+          ?.writeText?.(data.referralLink)
+          .then(() => {
+            appendSystemMessage("Links nokopēts!");
+          })
+          .catch(() => {});
       });
     }
   } else if (referralBox) {
@@ -4082,10 +4379,13 @@ function showWinEffects(winRowIndex) {
     const row = state.gridTiles[winRowIndex];
     row.forEach((tile, i) => {
       if (tile?.classList?.contains?.("correct")) {
-        setTimeout(() => {
-          tile.classList.add("vz-tile-win-bounce");
-          setTimeout(() => tile.classList.remove("vz-tile-win-bounce"), 400);
-        }, 100 + i * 50);
+        setTimeout(
+          () => {
+            tile.classList.add("vz-tile-win-bounce");
+            setTimeout(() => tile.classList.remove("vz-tile-win-bounce"), 400);
+          },
+          100 + i * 50
+        );
       }
     });
   }
@@ -4114,7 +4414,8 @@ async function submitChallengeGuess() {
     const check = validateHardModeGuess(guess);
     if (!check.valid) {
       flashRow(state.currentRow);
-      if (gameMessageEl) gameMessageEl.textContent = formatYellowLetterError(check.missing);
+      if (gameMessageEl)
+        gameMessageEl.textContent = formatYellowLetterError(check.missing);
       return;
     }
   }
@@ -4170,7 +4471,8 @@ function getHardModeConstraints() {
       const letter = raw.toUpperCase();
       if (!letter) continue;
       if (tile.classList.contains("present")) {
-        if (!wrongPositionsByLetter.has(letter)) wrongPositionsByLetter.set(letter, new Set());
+        if (!wrongPositionsByLetter.has(letter))
+          wrongPositionsByLetter.set(letter, new Set());
         wrongPositionsByLetter.get(letter).add(c);
         rowYellowCount.set(letter, (rowYellowCount.get(letter) || 0) + 1);
       } else if (tile.classList.contains("correct")) {
@@ -4187,7 +4489,8 @@ function getHardModeConstraints() {
     const yellowCount = yellowCountPerRow.get(letter) || 0;
     const greenCount = greenByLetter.get(letter) || 0;
     const needCount = Math.max(0, yellowCount - greenCount);
-    if (needCount > 0) required.set(letter, { wrongPositions, requiredCount: needCount });
+    if (needCount > 0)
+      required.set(letter, { wrongPositions, requiredCount: needCount });
   }
   return required;
 }
@@ -4245,7 +4548,8 @@ async function submitGuess() {
     const check = validateHardModeGuess(guess);
     if (!check.valid) {
       flashRow(state.currentRow);
-      if (gameMessageEl) gameMessageEl.textContent = formatYellowLetterError(check.missing);
+      if (gameMessageEl)
+        gameMessageEl.textContent = formatYellowLetterError(check.missing);
       return;
     }
   }
@@ -4386,7 +4690,8 @@ function submitDuelGuess() {
     const check = validateHardModeGuess(guess);
     if (!check.valid) {
       flashRow(state.currentRow);
-      if (gameMessageEl) gameMessageEl.textContent = formatYellowLetterError(check.missing);
+      if (gameMessageEl)
+        gameMessageEl.textContent = formatYellowLetterError(check.missing);
       return;
     }
   }
@@ -4620,7 +4925,8 @@ window.addEventListener("keydown", (e) => {
   const ch = normalizeLetter(e.key);
   if (!ch) return;
   e.preventDefault();
-  const layoutKey = Object.entries(LATVIAN_MAP).find(([, v]) => v === ch)?.[0] || ch;
+  const layoutKey =
+    Object.entries(LATVIAN_MAP).find(([, v]) => v === ch)?.[0] || ch;
   const kbBtn = state.keyboardButtons.get(layoutKey);
   if (kbBtn && !PREFERS_REDUCED_MOTION) {
     kbBtn.classList.add("kb-key-press");
@@ -5457,13 +5763,17 @@ async function handleVipRoomCreate() {
       state.vipRoomDraftInvites,
       slots
     );
+    const clanOnly = !!document.getElementById("vip-room-clan-only")?.checked;
+    const playMode = String(vipRoomPlayModeEl?.value || "classic");
     const payload = {
       name: String(vipRoomNameEl?.value || "").trim(),
       type: String(vipRoomTypeEl?.value || "single_elimination"),
-      playMode: String(vipRoomPlayModeEl?.value || "classic"),
+      playMode,
       slots,
       invitedFriends: state.vipRoomDraftInvites,
-      autoReportOnly: true,
+      autoReportOnly:
+        playMode === "dambrete" || playMode === "chess" ? false : true,
+      clanOnly,
     };
     const resp = await apiPost("/tournaments/vip-rooms", payload);
     setVipRoomCreateStatus(
@@ -8197,6 +8507,23 @@ function initSocket() {
     applyFriendsPayload(payload);
   });
 
+  socket.on("clan.chat", (payload) => {
+    const msgsEl = document.getElementById("vz-clan-chat-messages");
+    if (!msgsEl || !payload) return;
+    const div = document.createElement("div");
+    div.className = "vz-clan-msg";
+    div.innerHTML = `<span class="vz-clan-msg-user">${escapeHtml(payload.username || "")}</span>: ${escapeHtml(payload.text || "")}`;
+    msgsEl.appendChild(div);
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+  });
+
+  socket.on("clan:update", async () => {
+    try {
+      const me = await apiGet("/me");
+      updatePlayerCard(me);
+    } catch (_) {}
+  });
+
   socket.on("dm.history", (payload) => {
     const withUser = String(payload?.with || "").trim();
     const messages = Array.isArray(payload?.messages) ? payload.messages : [];
@@ -8617,7 +8944,450 @@ function initSocket() {
       setTimeout(() => startNewRound(), 1200);
     }
   });
+
+  // ========== GALDA SPĒLES (dambrete, šahs) ==========
+  socket.on("board.invite", (payload) => {
+    const from = payload?.from || "?";
+    const type = payload?.type || "dambrete";
+    showBoardInviteModal(from, type, payload);
+  });
+  socket.on("board.inviteSent", () => {
+    const pending = document.getElementById("board-invite-pending");
+    if (pending) pending.classList.remove("hidden");
+  });
+  socket.on("board.error", (payload) => {
+    appendSystemMessage(payload?.message || "Galda spēles kļūda.");
+  });
+  socket.on("board.start", (payload) => {
+    hideBoardModal();
+    startBoardGame(payload);
+    const myIdx = (payload?.players || []).indexOf(state.username);
+    const isMyTurn = myIdx === (payload?.turn ?? 0);
+    updateBoardGameBadge(isMyTurn);
+  });
+  socket.on("board.resume", (payload) => {
+    startBoardGame(payload);
+    const myIdx = (payload?.players || []).indexOf(state.username);
+    const isMyTurn = myIdx === (payload?.turn ?? 0);
+    updateBoardGameBadge(isMyTurn);
+  });
+  socket.on("board.move", (payload) => {
+    if (payload?.gameId !== boardState.gameId) return;
+    boardState.board = payload?.board || boardState.board;
+    boardState.fen = payload?.fen || boardState.fen;
+    boardState.turn = payload?.turn ?? boardState.turn;
+    boardState.selectedCell = null;
+    renderBoardGame();
+    const myIdx = boardState.players.indexOf(state.username);
+    const isMyTurn = myIdx === boardState.turn;
+    if (isMyTurn) {
+      appendSystemMessage("♟️ Tava kārta galda spēlē!");
+      const modal = document.getElementById("board-games-modal");
+      if (modal && modal.classList.contains("hidden")) {
+        const gameArea = document.getElementById("board-game-area");
+        const lobby = document.getElementById("board-games-lobby");
+        if (modal) modal.classList.remove("hidden");
+        if (gameArea) gameArea.classList.remove("hidden");
+        if (lobby) lobby.classList.add("hidden");
+      }
+      updateBoardGameBadge(true);
+    } else {
+      updateBoardGameBadge(false);
+    }
+  });
+  socket.on("board.end", (payload) => {
+    if (payload?.gameId !== boardState.gameId) return;
+    const winner = payload?.winner;
+    const reason = payload?.reason || "finished";
+    const coinsGain = payload?.coinsGain || 0;
+    const coinsLoss = payload?.coinsLoss || 0;
+    boardState.gameId = null;
+    let msg = "";
+    if (winner === state.username) {
+      msg = coinsGain
+        ? `♟️ Tu uzvarēji! +${coinsGain} coins`
+        : "♟️ Tu uzvarēji!";
+    } else if (winner) {
+      msg = coinsLoss ? `♟️ Zaudēji. -${coinsLoss} coins` : "♟️ Zaudēji.";
+    } else {
+      msg = "♟️ Spēle beidzās (neizšķirts).";
+    }
+    appendSystemMessage(msg);
+    hideBoardGameArea();
+    updateBoardGameBadge(false);
+    apiGet("/me")
+      .then(updatePlayerCard)
+      .catch(() => {});
+  });
+  socket.on("board:leaderboard", () => {
+    const modal = document.getElementById("board-games-modal");
+    if (modal && !modal.classList.contains("hidden") && !boardState.gameId) {
+      loadBoardLeaderboards();
+    }
+  });
 }
+
+function showBoardModal() {
+  const modal = document.getElementById("board-games-modal");
+  const lobby = document.getElementById("board-games-lobby");
+  const invite = document.getElementById("board-games-invite");
+  const gameArea = document.getElementById("board-game-area");
+  if (modal) modal.classList.remove("hidden");
+  if (boardState.gameId) {
+    if (lobby) lobby.classList.add("hidden");
+    if (invite) invite.classList.add("hidden");
+    if (gameArea) gameArea.classList.remove("hidden");
+    renderBoardGame();
+  } else {
+    if (lobby) lobby.classList.remove("hidden");
+    if (invite) invite.classList.add("hidden");
+    if (gameArea) gameArea.classList.add("hidden");
+    loadBoardLeaderboards();
+  }
+}
+
+async function loadBoardLeaderboards() {
+  try {
+    const [d, c] = await Promise.all([
+      apiGet("/board/leaderboard/dambrete"),
+      apiGet("/board/leaderboard/chess"),
+    ]);
+    const dEl = document.getElementById("board-lb-dambrete");
+    const cEl = document.getElementById("board-lb-chess");
+    if (dEl && d?.list) {
+      dEl.innerHTML =
+        d.list
+          .map(
+            (r) =>
+              `<div class="vz-board-lb-row"><span class="vz-board-lb-place">${r.place}.</span><span>${escapeHtml(r.username)}</span><span class="vz-board-lb-elo">${r.elo} ELO</span></div>`
+          )
+          .join("") || "<p>Vēl nav spēlētāju</p>";
+    }
+    if (cEl && c?.list) {
+      cEl.innerHTML =
+        c.list
+          .map(
+            (r) =>
+              `<div class="vz-board-lb-row"><span class="vz-board-lb-place">${r.place}.</span><span>${escapeHtml(r.username)}</span><span class="vz-board-lb-elo">${r.elo} ELO</span></div>`
+          )
+          .join("") || "<p>Vēl nav spēlētāju</p>";
+    }
+  } catch {}
+}
+
+function hideBoardModal() {
+  const modal = document.getElementById("board-games-modal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function showBoardInviteModal(from, type, payload) {
+  const modal = document.getElementById("board-games-modal");
+  const lobby = document.getElementById("board-games-lobby");
+  const invite = document.getElementById("board-games-invite");
+  if (modal) modal.classList.remove("hidden");
+  if (lobby) lobby.classList.add("hidden");
+  if (invite) {
+    invite.classList.remove("hidden");
+    const fromEl = document.getElementById("board-invite-from");
+    const typeEl = document.getElementById("board-invite-type");
+    if (fromEl) fromEl.textContent = from;
+    if (typeEl) typeEl.textContent = type === "chess" ? "šahu" : "dambreti";
+    invite.dataset.from = from;
+    invite.dataset.type = type || "dambrete";
+  }
+}
+
+function hideBoardInviteModal() {
+  const invite = document.getElementById("board-games-invite");
+  if (invite) invite.classList.add("hidden");
+  showBoardModal();
+}
+
+function startBoardGame(payload) {
+  boardState = {
+    gameId: payload?.gameId,
+    type: payload?.type || "dambrete",
+    players: payload?.players || [],
+    turn: payload?.turn ?? 0,
+    board: payload?.board ? payload.board.map((r) => r.slice()) : null,
+    fen: payload?.fen || null,
+    selectedCell: null,
+    legalMoves: { jumps: [], moves: [] },
+  };
+  const gameArea = document.getElementById("board-game-area");
+  const lobby = document.getElementById("board-games-lobby");
+  const modal = document.getElementById("board-games-modal");
+  if (gameArea) gameArea.classList.remove("hidden");
+  if (lobby) lobby.classList.add("hidden");
+  if (modal) modal.classList.remove("hidden");
+  renderBoardGame();
+}
+
+function hideBoardGameArea() {
+  if (window.VZBoardGames?.resetDambreteTable) {
+    window.VZBoardGames.resetDambreteTable();
+  }
+  const gameArea = document.getElementById("board-game-area");
+  const modal = document.getElementById("board-games-modal");
+  if (gameArea) gameArea.classList.add("hidden");
+  if (modal) modal.classList.add("hidden");
+  updateBoardGameBadge(false);
+}
+
+function updateBoardGameBadge(show) {
+  const badge = document.getElementById("board-games-badge");
+  if (!badge) return;
+  if (show && boardState.gameId) {
+    badge.textContent = "!";
+    badge.classList.remove("hidden");
+    badge.title = "Tava kārta – nospied, lai atvērtu";
+  } else {
+    badge.classList.add("hidden");
+  }
+}
+
+function renderBoardGame() {
+  const typeEl = document.getElementById("board-game-type");
+  const turnEl = document.getElementById("board-game-turn");
+  const dambreteContainer = document.getElementById("board-dambrete-container");
+  const chessContainer = document.getElementById("board-chess-container");
+  if (typeEl)
+    typeEl.textContent = boardState.type === "chess" ? "♔ Šahs" : "♟️ Dambrete";
+  const myIdx = boardState.players.indexOf(state.username);
+  const isMyTurn = myIdx === boardState.turn;
+  const turnName = boardState.players[boardState.turn] || "?";
+  if (turnEl)
+    turnEl.textContent = isMyTurn ? "Tava kārta" : `${turnName} gājienā`;
+  const hintEl = document.getElementById("board-game-hint");
+  if (hintEl)
+    hintEl.textContent = isMyTurn
+      ? "Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt"
+      : "Gaidām pretinieka gājienu";
+
+  if (boardState.type === "dambrete" && boardState.board) {
+    if (chessContainer) chessContainer.classList.add("hidden");
+    if (window.VZBoardGames && dambreteContainer) {
+      window.VZBoardGames.renderDambreteBoard(
+        boardState.board,
+        boardState.turn,
+        isMyTurn,
+        myIdx,
+        (r, c, isPiece) => handleDambreteCellClick(r, c, isPiece),
+        boardState.selectedCell,
+        boardState.legalMoves
+      );
+    }
+  } else if (boardState.type === "chess" && boardState.fen) {
+    if (window.VZBoardGames?.resetDambreteTable) {
+      window.VZBoardGames.resetDambreteTable();
+    }
+    if (dambreteContainer) dambreteContainer.classList.add("hidden");
+    if (chessContainer && window.VZBoardGames) {
+      window.VZBoardGames.renderChessBoard(
+        boardState.fen,
+        boardState.turn,
+        isMyTurn,
+        myIdx,
+        (r, c, isPiece) => handleChessCellClick(r, c, isPiece),
+        boardState.selectedCell,
+        boardState.legalMoves
+      );
+    }
+  }
+}
+
+async function handleChessCellClick(r, c, isPiece) {
+  if (!state.socket || !boardState.gameId) return;
+  const myIdx = boardState.players.indexOf(state.username);
+  if (myIdx !== boardState.turn) return;
+
+  if (isPiece) {
+    if (
+      boardState.selectedCell &&
+      boardState.selectedCell[0] === r &&
+      boardState.selectedCell[1] === c
+    ) {
+      boardState.selectedCell = null;
+      renderBoardGame();
+      return;
+    }
+    const clickedCell = [r, c];
+    boardState.selectedCell = clickedCell;
+    renderBoardGame();
+    try {
+      const data = await apiGet(`/board/${boardState.gameId}/moves`);
+      if (
+        boardState.selectedCell &&
+        boardState.selectedCell[0] === clickedCell[0] &&
+        boardState.selectedCell[1] === clickedCell[1]
+      ) {
+        boardState.legalMoves = data || { moves: [] };
+        renderBoardGame();
+      }
+    } catch {}
+    return;
+  }
+
+  if (!boardState.selectedCell) return;
+  const move = window.VZBoardGames?.findChessMove(
+    boardState.selectedCell,
+    r,
+    c,
+    boardState.legalMoves
+  );
+  if (!move) {
+    boardState.selectedCell = null;
+    renderBoardGame();
+    return;
+  }
+  state.socket.emit("board.move", { gameId: boardState.gameId, san: move.san });
+  boardState.selectedCell = null;
+}
+
+async function handleDambreteCellClick(r, c, isPiece) {
+  if (!state.socket || !boardState.gameId) return;
+  const myIdx = boardState.players.indexOf(state.username);
+  if (myIdx !== boardState.turn) return;
+
+  if (isPiece) {
+    if (
+      boardState.selectedCell &&
+      boardState.selectedCell[0] === r &&
+      boardState.selectedCell[1] === c
+    ) {
+      boardState.selectedCell = null;
+      renderBoardGame();
+      return;
+    }
+    const clickedCell = [r, c];
+    boardState.selectedCell = clickedCell;
+    renderBoardGame();
+    try {
+      const data = await apiGet(`/board/${boardState.gameId}/moves`);
+      if (
+        boardState.selectedCell &&
+        boardState.selectedCell[0] === clickedCell[0] &&
+        boardState.selectedCell[1] === clickedCell[1]
+      ) {
+        boardState.legalMoves = data || { jumps: [], moves: [] };
+        renderBoardGame();
+      }
+    } catch {}
+    return;
+  }
+
+  if (!boardState.selectedCell) return;
+  const [fr, fc] = boardState.selectedCell;
+  const moves = boardState.legalMoves?.moves || [];
+  const jumps = boardState.legalMoves?.jumps || [];
+  let move = null;
+  if (jumps.length) {
+    move = jumps.find((j) => {
+      const seq = j.jumps || [];
+      const first = seq[0];
+      const last = seq[seq.length - 1];
+      return (
+        first &&
+        last &&
+        first.from[0] === fr &&
+        first.from[1] === fc &&
+        last.to[0] === r &&
+        last.to[1] === c
+      );
+    });
+    if (move) move = { jumps: move.jumps };
+  } else {
+    move = moves.find(
+      (m) =>
+        m.from[0] === fr && m.from[1] === fc && m.to[0] === r && m.to[1] === c
+    );
+  }
+  if (!move) {
+    boardState.selectedCell = null;
+    renderBoardGame();
+    return;
+  }
+  state.socket.emit("board.move", { gameId: boardState.gameId, move });
+  boardState.selectedCell = null;
+}
+
+function bindBoardGames() {
+  const btn = document.getElementById("board-games-btn");
+  const closeBtn = document.getElementById("board-modal-close");
+  const inviteDambrete = document.getElementById("board-invite-dambrete");
+  const inviteChess = document.getElementById("board-invite-chess");
+  const inviteUsername = document.getElementById("board-invite-username");
+  const acceptBtn = document.getElementById("board-invite-accept");
+  const declineBtn = document.getElementById("board-invite-decline");
+  const resignBtn = document.getElementById("board-resign-btn");
+  const ppInviteDambrete = document.getElementById("pp-invite-dambrete");
+  const ppInviteChess = document.getElementById("pp-invite-chess");
+
+  if (btn) btn.addEventListener("click", showBoardModal);
+  if (closeBtn) closeBtn.addEventListener("click", hideBoardModal);
+  const doInvite = (type) => {
+    const target = inviteUsername?.value?.trim() || currentProfileName?.trim();
+    if (!target) {
+      appendSystemMessage("Ievadi spēlētāja lietotājvārdu.");
+      return;
+    }
+    if (!state.socket) return;
+    state.socket.emit("board.invite", { target, type });
+    document.getElementById("board-invite-pending")?.classList.remove("hidden");
+  };
+  if (inviteDambrete)
+    inviteDambrete.addEventListener("click", () => doInvite("dambrete"));
+  if (inviteChess)
+    inviteChess.addEventListener("click", () => doInvite("chess"));
+  const vsBotDambrete = document.getElementById("board-vsbot-dambrete");
+  const vsBotChess = document.getElementById("board-vsbot-chess");
+  const doVsBot = (type) => {
+    if (!state.socket) return;
+    const diffEl = document.querySelector(
+      'input[name="board-bot-diff"]:checked'
+    );
+    const difficulty = diffEl?.value || "medium";
+    state.socket.emit("board.startVsBot", { type, difficulty });
+    document.getElementById("board-invite-pending")?.classList.add("hidden");
+  };
+  if (vsBotDambrete)
+    vsBotDambrete.addEventListener("click", () => doVsBot("dambrete"));
+  if (vsBotChess) vsBotChess.addEventListener("click", () => doVsBot("chess"));
+  if (acceptBtn)
+    acceptBtn.addEventListener("click", () => {
+      const invite = document.getElementById("board-games-invite");
+      const from = invite?.dataset?.from || "";
+      const type = invite?.dataset?.type || "dambrete";
+      if (state.socket)
+        state.socket.emit("board.accept", { inviteId: "", from, type });
+      hideBoardInviteModal();
+    });
+  if (declineBtn) declineBtn.addEventListener("click", hideBoardInviteModal);
+  if (resignBtn)
+    resignBtn.addEventListener("click", () => {
+      if (boardState.gameId && state.socket)
+        state.socket.emit("board.resign", { gameId: boardState.gameId });
+    });
+  if (ppInviteDambrete)
+    ppInviteDambrete.addEventListener("click", () => {
+      const target = currentProfileName?.trim();
+      if (target && state.socket) {
+        showBoardModal();
+        if (inviteUsername) inviteUsername.value = target;
+        state.socket.emit("board.invite", { target, type: "dambrete" });
+      }
+    });
+  if (ppInviteChess)
+    ppInviteChess.addEventListener("click", () => {
+      const target = currentProfileName?.trim();
+      if (target && state.socket) {
+        showBoardModal();
+        if (inviteUsername) inviteUsername.value = target;
+        state.socket.emit("board.invite", { target, type: "chess" });
+      }
+    });
+}
+
 // ==================== ČATS: SŪTĪŠANA + SEZONAS KOMANDA ====================
 let _lastChatSendAt = 0;
 const CHAT_SEND_COOLDOWN_MS = 900;
@@ -8982,7 +9752,11 @@ async function compressAvatarDataUrl(dataUrl, maxDim = 512) {
     for (const fmt of formats) {
       try {
         const out = canvas.toDataURL(fmt.type, fmt.quality);
-        if (out && out.startsWith("data:image/") && out.length <= AVATAR_COMPRESS_MAX_CHARS) {
+        if (
+          out &&
+          out.startsWith("data:image/") &&
+          out.length <= AVATAR_COMPRESS_MAX_CHARS
+        ) {
           return out;
         }
       } catch {}
@@ -9562,6 +10336,13 @@ async function initGame() {
   if (rateOpenBtn) {
     rateOpenBtn.addEventListener("click", () => {
       handleRatePromptAccepted();
+    });
+  }
+  if (tutorialReopenBtn) {
+    tutorialReopenBtn.addEventListener("click", () => {
+      showTutorial();
+      const details = tutorialReopenBtn.closest("details");
+      if (details) details.open = false;
     });
   }
 
@@ -10154,7 +10935,12 @@ function showLevelUpAnimation(level, rankTitle) {
   };
   overlay.onclick = dismiss;
   if (typeof confetti === "function") {
-    confetti({ particleCount: 100, spread: 100, origin: { y: 0.5 }, colors: ["#ffd700", "#ff8c00", "#00c853"] });
+    confetti({
+      particleCount: 100,
+      spread: 100,
+      origin: { y: 0.5 },
+      colors: ["#ffd700", "#ff8c00", "#00c853"],
+    });
   }
   _levelUpDismissTimer = setTimeout(dismiss, 4000);
 }

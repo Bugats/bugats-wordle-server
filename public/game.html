@@ -34,8 +34,10 @@
       rel="stylesheet"
     />
 
-    <link rel="dns-prefetch" href="//pagead2.googlesyndication.com" />
+    <link rel="dns-prefetch" href="//pagead2.googlesyndication.com" crossorigin />
     <link rel="preconnect" href="https://pagead2.googlesyndication.com" crossorigin />
+    <link rel="dns-prefetch" href="//unpkg.com" />
+    <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
   <link rel="stylesheet" href="style.css?v=2026-03-16-modeguide" />
 
@@ -74,6 +76,20 @@
       </div>
     </div>
 
+    <!-- Tutorial (pirmā spēle) -->
+    <div id="vz-tutorial-overlay" class="vz-tutorial-overlay hidden" role="dialog" aria-labelledby="vz-tutorial-title" aria-modal="true">
+      <div class="vz-tutorial-inner">
+        <div id="vz-tutorial-content" class="vz-tutorial-content"></div>
+        <div class="vz-tutorial-footer">
+          <span id="vz-tutorial-dots" class="vz-tutorial-dots"></span>
+          <div class="vz-tutorial-btns">
+            <button id="vz-tutorial-skip" type="button" class="vz-tutorial-btn vz-tutorial-skip">Izlaist</button>
+            <button id="vz-tutorial-next" type="button" class="vz-tutorial-btn vz-tutorial-next">Tālāk</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Play Store vērtējuma uzvednis (TWA) -->
     <div id="vz-rate-overlay" class="vz-rate-overlay hidden" role="dialog" aria-labelledby="vz-rate-title" aria-modal="true">
       <div class="vz-rate-inner">
@@ -109,6 +125,17 @@
             <span id="duel-inbox-badge" class="vz-duel-badge hidden" aria-label="Aicinājumu skaits">0</span>
           </button>
 
+          <!-- GALDA SPĒLES (dambrete, šahs) -->
+          <button
+            id="board-games-btn"
+            class="vz-duel-inbox-btn"
+            type="button"
+            title="Dambrete un šahs"
+            aria-label="Galda spēles">
+            ♟️ Galda
+            <span id="board-games-badge" class="vz-duel-badge hidden" aria-label="Tava kārta">!</span>
+          </button>
+
           <button id="sound-toggle-btn" class="vz-sound-btn" type="button">🔊 Skaņa: ON</button>
           <button id="logout-btn" type="button">Izlogoties</button>
           <details class="vz-topbar-more">
@@ -137,6 +164,7 @@
                 >Autortiesības</a
               >
               <a class="vz-topbar-link" href="dmca.html" target="_blank" rel="noopener">DMCA</a>
+              <button id="vz-tutorial-reopen-btn" class="vz-topbar-link" type="button" title="Skatīt ievadu">📖 Tutorial</button>
             </div>
           </details>
         </div>
@@ -278,12 +306,6 @@
                     <div id="player-medals" class="vz-medals-strip"></div>
                   </div>
 
-                  <div id="vz-kaujinieks-card" class="vz-kaujinieks-card">
-                    <div class="vz-card-header">Mans kaujinieks</div>
-                    <div id="vz-kaujinieks-active" class="vz-kaujinieks-active"></div>
-                    <div id="vz-kaujinieks-list" class="vz-kaujinieks-list"></div>
-                  </div>
-
                   <hr class="vz-divider" />
 
                   <button id="challenge-friend-btn" class="vz-share-btn" type="button" title="Izaicini draugu uz vienu vārdu">⚔️ Izaicināt draugu</button>
@@ -351,6 +373,14 @@
                   </div>
                   <div id="friends-invites" class="vz-friends-invites"></div>
                   <ul id="friends-list" class="vz-friends-list"></ul>
+                </div>
+
+                <!-- KLANI -->
+                <div class="vz-clan-card" id="vz-clan-card">
+                  <div class="vz-card-header">⚔️ Klans</div>
+                  <div id="vz-clan-content"></div>
+                  <div id="vz-clan-invites" class="vz-clan-invites hidden"></div>
+                  <div id="vz-clan-chat" class="vz-clan-chat hidden"></div>
                 </div>
               </div>
             </section>
@@ -457,6 +487,8 @@
                             <option value="speed">Speed</option>
                             <option value="accuracy">Accuracy</option>
                             <option value="survival">Survival</option>
+                            <option value="dambrete">♟️ Dambrete</option>
+                            <option value="chess">♔ Šahs</option>
                           </select>
                         </label>
                         <label class="vz-tournament-score-field">
@@ -473,6 +505,10 @@
                         </label>
                       </div>
                       <div id="vip-room-friends" class="vz-vip-room-friends"></div>
+                      <label class="vz-vip-room-clan-only">
+                        <input id="vip-room-clan-only" type="checkbox" />
+                        Tikai klana dalībniekiem
+                      </label>
                       <button id="vip-room-create-btn" class="mission-claim-btn" type="button">
                         Izveidot VIP istabu
                       </button>
@@ -780,6 +816,81 @@
 
         <div class="profile-row profile-row--center-actions">
           <button id="pp-msg-btn" class="vz-profile-msg-btn" type="button">Rakstīt personiski</button>
+          <div class="vz-profile-board-actions">
+            <button id="pp-invite-dambrete" class="vz-profile-invite-board" type="button" title="Izaicināt uz dambreti">♟️ Dambrete</button>
+            <button id="pp-invite-chess" class="vz-profile-invite-board" type="button" title="Izaicināt uz šahu">♔ Šahs</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GALDA SPĒLES (dambrete, šahs) -->
+    <div id="board-games-modal" class="vz-board-modal hidden" role="dialog" aria-label="Galda spēles">
+      <div class="vz-board-modal-inner">
+        <button id="board-modal-close" class="vz-duel-x" type="button" aria-label="Aizvērt">✕</button>
+        <div id="board-games-lobby" class="vz-board-lobby">
+          <h3 class="vz-board-title">♟️ Dambrete & ♔ Šahs</h3>
+          <p class="vz-board-desc">Izaicini draugu uz dambreti vai šahu. Uzvaras dod novada un klana punktus!</p>
+          <div class="vz-board-bot-section">
+            <p class="vz-board-bot-label">🤖 Spēlēt vs botu</p>
+            <div class="vz-board-bot-diff">
+              <label><input type="radio" name="board-bot-diff" value="easy" /> Vājš</label>
+              <label><input type="radio" name="board-bot-diff" value="medium" checked /> Vidējs</label>
+              <label><input type="radio" name="board-bot-diff" value="hard" /> Spēcīgs</label>
+            </div>
+            <div class="vz-board-bot-btns">
+              <button id="board-vsbot-dambrete" type="button" class="vz-board-invite-btn">♟️ Dambrete vs bot</button>
+              <button id="board-vsbot-chess" type="button" class="vz-board-invite-btn">♔ Šahs vs bot</button>
+            </div>
+          </div>
+          <p class="vz-board-divider">— vai izacini draugu —</p>
+          <div class="vz-board-invite-form">
+            <label for="board-invite-username" class="vz-board-label">Pretinieka lietotājvārds</label>
+            <input id="board-invite-username" type="text" placeholder="piemēram: spēlētājs123" autocomplete="username" aria-describedby="board-invite-hint" />
+            <span id="board-invite-hint" class="vz-board-hint">Ievadi tieši tā, kā parādās čatā vai TOP sarakstā</span>
+            <div class="vz-board-invite-btns">
+              <button id="board-invite-dambrete" type="button" class="vz-board-invite-btn">♟️ Dambrete</button>
+              <button id="board-invite-chess" type="button" class="vz-board-invite-btn">♔ Šahs</button>
+            </div>
+          </div>
+          <div id="board-invite-pending" class="vz-board-pending hidden">Gaidām atbildi…</div>
+          <details class="vz-board-rules">
+            <summary class="vz-board-rules-summary">📖 Īsi noteikumi</summary>
+            <div class="vz-board-rules-content">
+              <p><strong>Dambrete:</strong> Bārdiņas kustas pa diagonāli. Obligāti jāēd, ja iespējams. Sasniedzot pretinieka malu – kļūst par dāmu.</p>
+              <p><strong>Šahs:</strong> Standarta šaha noteikumi. Uzvar tas, kas izveido matu pretinieka karalim.</p>
+            </div>
+          </details>
+          <div class="vz-board-leaderboards">
+            <details class="vz-board-lb">
+              <summary>🏆 Dambretes TOP</summary>
+              <div id="board-lb-dambrete" class="vz-board-lb-list"></div>
+            </details>
+            <details class="vz-board-lb">
+              <summary>🏆 Šaha TOP</summary>
+              <div id="board-lb-chess" class="vz-board-lb-list"></div>
+            </details>
+          </div>
+        </div>
+        <div id="board-games-invite" class="vz-board-invite hidden">
+          <p class="vz-board-invite-text"><span id="board-invite-from"></span> aicina uz <span id="board-invite-type"></span></p>
+          <p class="vz-board-invite-sub">Uzvaras dod novada un klana punktus</p>
+          <div class="vz-board-invite-actions">
+            <button id="board-invite-accept" type="button">Pieņemt</button>
+            <button id="board-invite-decline" type="button">Noraidīt</button>
+          </div>
+        </div>
+        <div id="board-game-area" class="vz-board-game-area hidden">
+          <div class="vz-board-game-header">
+            <div class="vz-board-game-meta">
+              <span id="board-game-type" class="vz-board-game-type"></span>
+              <span id="board-game-turn" class="vz-board-game-turn" aria-live="polite"></span>
+            </div>
+            <button id="board-resign-btn" type="button" class="vz-board-resign" title="Beigt spēli un zaudēt">Padoties</button>
+          </div>
+          <p id="board-game-hint" class="vz-board-game-hint">Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt</p>
+          <div id="board-dambrete-container" class="vz-board-container hidden"></div>
+          <div id="board-chess-container" class="vz-board-container hidden"></div>
         </div>
       </div>
     </div>
@@ -911,6 +1022,7 @@
     <script defer src="modules/ui.js?v=2026-03-16-modsplit-1"></script>
     <script defer src="modules/chat.js?v=2026-03-16-modsplit-1"></script>
     <script defer src="modules/duel.js?v=2026-03-16-modsplit-1"></script>
+    <script defer src="modules/board-games.js?v=2026-03-17"></script>
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
