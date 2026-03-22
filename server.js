@@ -37,6 +37,8 @@ import {
   WHITE,
   BLACK,
 } from "./lib/draughts.js";
+import { getBestDambreteMove } from "./lib/draughts-bot.js";
+import { getBestChessMove } from "./lib/chess-bot.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -67,8 +69,7 @@ const TOURNAMENTS_FILE =
 const TOURNAMENTS_DB_FILE =
   process.env.TOURNAMENTS_DB_FILE ||
   path.join(__dirname, "tournaments.brackets.json");
-const CLANS_FILE =
-  process.env.CLANS_FILE || path.join(__dirname, "clans.json");
+const CLANS_FILE = process.env.CLANS_FILE || path.join(__dirname, "clans.json");
 
 const { BracketsManager } = bracketsManagerPkg;
 const { JsonDatabase } = bracketsJsonDbPkg;
@@ -119,9 +120,7 @@ const REVEAL_LETTER_COST_COINS = Number(
 const REFERRAL_COINS_REFERRER = Number(
   process.env.REFERRAL_COINS_REFERRER || 50
 );
-const REFERRAL_COINS_REFEREE = Number(
-  process.env.REFERRAL_COINS_REFEREE || 25
-);
+const REFERRAL_COINS_REFEREE = Number(process.env.REFERRAL_COINS_REFEREE || 25);
 
 const BASE_TOKEN_PRICE = 150;
 const VIP_DURATION_DAYS = (() => {
@@ -666,6 +665,84 @@ const BOARD_GAME_REGION_POINTS = 1;
 const boardGames = new Map(); // gameId -> { type, players, board, turn, status, ... }
 const userToBoardGame = new Map(); // username -> gameId
 
+function playBoardBotMove(io, game) {
+  if (!game || game.status !== "active" || !game.vsBot) return;
+  const humanUsername = game.players[0];
+  const humanSocket = getSocketByUsername(humanUsername);
+  if (!humanSocket) return;
+
+  if (game.type === "dambrete") {
+    const isWhiteTurn = game.turn === 0; // bot is black (index 1), so when turn=1 it's bot's (black's) turn
+    const allMoves = getAllMoves(game.board, isWhiteTurn);
+    const jumps = allMoves.jumps || [];
+    const moves = allMoves.moves || [];
+    if (jumps.length === 0 && moves.length === 0) return;
+    const depth = game.botDepth || 5;
+    const move = getBestDambreteMove(game.board, isWhiteTurn, depth);
+    if (!move) return;
+    const newBoard = applyMove(game.board, move);
+    if (!newBoard) return;
+    game.board = newBoard;
+    game.turn = 1 - game.turn;
+    game.moves.push({ move, by: BOARD_BOT_USERNAME, ts: Date.now() });
+    const result = checkGameOver(newBoard, game.turn === 0);
+    if (result.over) {
+      const winner =
+        result.winner === WHITE ? game.players[0] : game.players[1];
+      finishBoardGame(game, winner, "win");
+      humanSocket.emit("board.end", {
+        gameId: game.id,
+        winner,
+        reason: "win",
+        board: newBoard,
+        coinsGain: winner === humanUsername ? BOARD_GAME_REWARD_COINS : 0,
+        coinsLoss: winner !== humanUsername ? BOARD_GAME_LOSE_COINS : 0,
+      });
+      io.emit("board:leaderboard", { type: "dambrete" });
+    } else {
+      humanSocket.emit("board.move", {
+        gameId: game.id,
+        board: newBoard,
+        turn: game.turn,
+        move,
+      });
+    }
+  } else if (game.type === "chess") {
+    const chess = new Chess(game.fen);
+    const depth = game.botDepth || 3;
+    const san = getBestChessMove(game.fen, depth);
+    if (!san) return;
+    const m = chess.move(san);
+    if (!m) return;
+    game.fen = chess.fen();
+    game.turn = 1 - game.turn;
+    game.moves.push({ san: m.san, by: BOARD_BOT_USERNAME, ts: Date.now() });
+    if (chess.isCheckmate() || chess.isStalemate() || chess.isDraw()) {
+      const winner = chess.isCheckmate()
+        ? game.players[chess.turn() === "w" ? 1 : 0]
+        : null;
+      finishBoardGame(game, winner, chess.isCheckmate() ? "checkmate" : "draw");
+      humanSocket.emit("board.end", {
+        gameId: game.id,
+        winner,
+        reason: chess.isCheckmate() ? "checkmate" : "draw",
+        fen: game.fen,
+        coinsGain: winner === humanUsername ? BOARD_GAME_REWARD_COINS : 0,
+        coinsLoss:
+          winner && winner !== humanUsername ? BOARD_GAME_LOSE_COINS : 0,
+      });
+      io.emit("board:leaderboard", { type: "chess" });
+    } else {
+      humanSocket.emit("board.move", {
+        gameId: game.id,
+        fen: game.fen,
+        turn: game.turn,
+        move: m.san,
+      });
+    }
+  }
+}
+
 function getBoardGameOpponent(game, username) {
   if (!game || !Array.isArray(game.players)) return null;
   const [p1, p2] = game.players;
@@ -707,10 +784,59 @@ function createChessGame(challenger, opponent) {
     moves: [],
     createdAt: Date.now(),
     lastMoveAt: Date.now(),
+    vsBot: false,
   };
   boardGames.set(gameId, game);
   userToBoardGame.set(challenger, gameId);
   userToBoardGame.set(opponent, gameId);
+  return game;
+}
+
+const BOARD_BOT_USERNAME = "VZBot";
+
+function createDambreteVsBot(humanUsername, difficulty = "medium") {
+  const depth = difficulty === "easy" ? 3 : difficulty === "hard" ? 7 : 5;
+  const gameId = crypto.randomBytes(8).toString("hex");
+  const board = createInitialBoard();
+  const game = {
+    id: gameId,
+    type: "dambrete",
+    players: [humanUsername, BOARD_BOT_USERNAME],
+    board,
+    turn: 0,
+    status: "active",
+    moves: [],
+    createdAt: Date.now(),
+    lastMoveAt: Date.now(),
+    vsBot: true,
+    botDifficulty: difficulty,
+    botDepth: depth,
+  };
+  boardGames.set(gameId, game);
+  userToBoardGame.set(humanUsername, gameId);
+  return game;
+}
+
+function createChessVsBot(humanUsername, difficulty = "medium") {
+  const depth = difficulty === "easy" ? 2 : difficulty === "hard" ? 4 : 3;
+  const gameId = crypto.randomBytes(8).toString("hex");
+  const chess = new Chess();
+  const game = {
+    id: gameId,
+    type: "chess",
+    players: [humanUsername, BOARD_BOT_USERNAME],
+    fen: chess.fen(),
+    turn: 0,
+    status: "active",
+    moves: [],
+    createdAt: Date.now(),
+    lastMoveAt: Date.now(),
+    vsBot: true,
+    botDifficulty: difficulty,
+    botDepth: depth,
+  };
+  boardGames.set(gameId, game);
+  userToBoardGame.set(humanUsername, gameId);
   return game;
 }
 
@@ -723,7 +849,7 @@ function ensureBoardEloFields(u, type) {
   if (!u) return;
   if (!Number.isFinite(u[key])) u[key] = BOARD_ELO_DEFAULT;
   if (!Number.isFinite(u[gamesKey])) {
-    const w = type === "chess" ? (u.chessWins || 0) : (u.dambreteWins || 0);
+    const w = type === "chess" ? u.chessWins || 0 : u.dambreteWins || 0;
     u[gamesKey] = Math.max(0, w * 2); // rough estimate
   }
 }
@@ -753,7 +879,9 @@ function finishBoardGame(game, winnerUsername, reason) {
   userToBoardGame.delete(p1);
   userToBoardGame.delete(p2);
 
-  const winnerKey = winnerUsername ? findUserKeyCaseInsensitive(winnerUsername) : null;
+  const winnerKey = winnerUsername
+    ? findUserKeyCaseInsensitive(winnerUsername)
+    : null;
   const winner = winnerKey ? USERS[winnerKey] : null;
   const loserKey = winnerUsername ? (p1 === winnerUsername ? p2 : p1) : null;
   const loser = loserKey ? USERS[findUserKeyCaseInsensitive(loserKey)] : null;
@@ -764,7 +892,8 @@ function finishBoardGame(game, winnerUsername, reason) {
     if (REGION_POINTS_PER_WIN > 0) {
       let rp = BOARD_GAME_REGION_POINTS;
       if (isRegionBonusActive()) rp *= REGION_BONUS_MULTIPLIER;
-      winner.regionPoints = Math.max(0, Math.floor(winner.regionPoints || 0)) + rp;
+      winner.regionPoints =
+        Math.max(0, Math.floor(winner.regionPoints || 0)) + rp;
     }
     ensureRankFields(winner);
     if (winner.dambreteWins == null) winner.dambreteWins = 0;
@@ -776,7 +905,7 @@ function finishBoardGame(game, winnerUsername, reason) {
     const currentCoins = Math.max(0, Math.floor(loser.coins || 0));
     loser.coins = Math.max(0, currentCoins - BOARD_GAME_LOSE_COINS);
   }
-  if (winner && loser && winnerUsername) {
+  if (winner && loser && winnerUsername && !game.vsBot) {
     applyBoardElo(winner, loser, game.type);
   }
   saveUsers(USERS);
@@ -1974,28 +2103,36 @@ function createClanId() {
 }
 
 function getClanById(id) {
-  return (clanStore.clans || []).find((c) => String(c.id) === String(id)) || null;
+  return (
+    (clanStore.clans || []).find((c) => String(c.id) === String(id)) || null
+  );
 }
 
 function getClanByTag(tag) {
-  const t = String(tag || "").trim().toUpperCase();
+  const t = String(tag || "")
+    .trim()
+    .toUpperCase();
   if (!t) return null;
-  return (clanStore.clans || []).find(
-    (c) => String(c.tag || "").toUpperCase() === t
-  ) || null;
+  return (
+    (clanStore.clans || []).find(
+      (c) => String(c.tag || "").toUpperCase() === t
+    ) || null
+  );
 }
 
 function isClanMember(clan, username) {
   if (!clan || !username) return false;
   const members = clan.members || [];
   return members.some(
-    (m) => String(m.username || "").toLowerCase() === String(username).toLowerCase()
+    (m) =>
+      String(m.username || "").toLowerCase() === String(username).toLowerCase()
   );
 }
 
 function getClanMemberRole(clan, username) {
   const m = (clan?.members || []).find(
-    (x) => String(x.username || "").toLowerCase() === String(username).toLowerCase()
+    (x) =>
+      String(x.username || "").toLowerCase() === String(username).toLowerCase()
   );
   return m?.role || null;
 }
@@ -5235,16 +5372,25 @@ app.get("/meta/supabase-check", async (_req, res) => {
     users: "unknown",
   };
   if (!SUPABASE_ENABLED || !supabase) {
-    return res.json({ ...out, error: "SUPABASE_URL vai SUPABASE_SERVICE_ROLE_KEY nav iestatīts" });
+    return res.json({
+      ...out,
+      error: "SUPABASE_URL vai SUPABASE_SERVICE_ROLE_KEY nav iestatīts",
+    });
   }
   try {
-    const { data: buckets, error: bucketErr } = await supabase.storage.listBuckets();
-    out.storage = bucketErr ? `error: ${bucketErr.message}` : `ok (${(buckets || []).length} buckets)`;
+    const { data: buckets, error: bucketErr } =
+      await supabase.storage.listBuckets();
+    out.storage = bucketErr
+      ? `error: ${bucketErr.message}`
+      : `ok (${(buckets || []).length} buckets)`;
   } catch (e) {
     out.storage = `error: ${String(e?.message || e)}`;
   }
   try {
-    const { error: usersErr } = await supabase.from(USERS_STORE_TABLE).select("username").limit(1);
+    const { error: usersErr } = await supabase
+      .from(USERS_STORE_TABLE)
+      .select("username")
+      .limit(1);
     out.users = usersErr ? `error: ${usersErr.message}` : "ok";
   } catch (e) {
     out.users = `error: ${String(e?.message || e)}`;
@@ -5271,9 +5417,7 @@ const LATVIA_WEATHER_URL =
   "https://api.open-meteo.com/v1/forecast?latitude=56.95&longitude=24.11&current_weather=true&timezone=Europe%2FRiga";
 const LATVIA_NAMEDAY_URL =
   "https://nameday.abalin.net/api/V1/today?country=lv&timezone=Europe/Riga";
-const META_FETCH_TIMEOUT_MS = Number(
-  process.env.META_FETCH_TIMEOUT_MS || 8000
-);
+const META_FETCH_TIMEOUT_MS = Number(process.env.META_FETCH_TIMEOUT_MS || 8000);
 const WEATHER_CACHE_TTL_MS = Number(
   process.env.WEATHER_CACHE_TTL_MS || 10 * 60 * 1000
 );
@@ -6994,11 +7138,14 @@ app.get("/board/:gameId/moves", authMiddleware, (req, res) => {
   const user = req.user;
   const gameId = String(req.params?.gameId || "").trim();
   const game = gameId ? boardGames.get(gameId) : null;
-  if (!game || game.status !== "active") return res.status(404).json({ message: "Spēle nav atrasta." });
-  if (!game.players.includes(user.username)) return res.status(403).json({ message: "Tu neesi šajā spēlē." });
+  if (!game || game.status !== "active")
+    return res.status(404).json({ message: "Spēle nav atrasta." });
+  if (!game.players.includes(user.username))
+    return res.status(403).json({ message: "Tu neesi šajā spēlē." });
   const turnIdx = game.turn;
   const currentPlayer = game.players[turnIdx];
-  if (currentPlayer !== user.username) return res.json({ jumps: [], moves: [] });
+  if (currentPlayer !== user.username)
+    return res.json({ jumps: [], moves: [] });
   if (game.type === "dambrete") {
     const isWhiteTurn = turnIdx === 0;
     const allMoves = getAllMoves(game.board, isWhiteTurn);
@@ -7023,7 +7170,7 @@ app.get("/board/leaderboard/:type", authMiddleware, (req, res) => {
       place: i + 1,
       username: u.username,
       elo: Number(u[key]) || BOARD_ELO_DEFAULT,
-      wins: type === "chess" ? (u.chessWins || 0) : (u.dambreteWins || 0),
+      wins: type === "chess" ? u.chessWins || 0 : u.dambreteWins || 0,
       avatarUrl: avatarForBroadcast(u),
     }));
   return res.json({ type, list: arr });
@@ -7050,15 +7197,27 @@ app.get("/me", authMiddleware, async (req, res) => {
 app.post("/clan/create", authMiddleware, async (req, res) => {
   const user = req.user;
   if (user.clanId) {
-    return res.status(400).json({ message: "Tu jau esi klanā. Vispirms izies." });
+    return res
+      .status(400)
+      .json({ message: "Tu jau esi klanā. Vispirms izies." });
   }
   const name = String(req.body?.name || "").trim();
-  const tag = String(req.body?.tag || "").trim().toUpperCase();
+  const tag = String(req.body?.tag || "")
+    .trim()
+    .toUpperCase();
   if (name.length < CLAN_NAME_MIN || name.length > CLAN_NAME_MAX) {
-    return res.status(400).json({ message: `Klana nosaukumam jābūt ${CLAN_NAME_MIN}-${CLAN_NAME_MAX} burtiem.` });
+    return res
+      .status(400)
+      .json({
+        message: `Klana nosaukumam jābūt ${CLAN_NAME_MIN}-${CLAN_NAME_MAX} burtiem.`,
+      });
   }
   if (tag.length < CLAN_TAG_MIN || tag.length > CLAN_TAG_MAX) {
-    return res.status(400).json({ message: `Klana tagam jābūt ${CLAN_TAG_MIN}-${CLAN_TAG_MAX} burtiem.` });
+    return res
+      .status(400)
+      .json({
+        message: `Klana tagam jābūt ${CLAN_TAG_MIN}-${CLAN_TAG_MAX} burtiem.`,
+      });
   }
   if (getClanByTag(tag)) {
     return res.status(400).json({ message: `Tags [${tag}] jau aizņemts.` });
@@ -7070,7 +7229,9 @@ app.post("/clan/create", authMiddleware, async (req, res) => {
     name,
     tag,
     owner: user.username,
-    members: [{ username: user.username, role: "leader", joinedAt: Date.now() }],
+    members: [
+      { username: user.username, role: "leader", joinedAt: Date.now() },
+    ],
     inviteCode,
     createdAt: Date.now(),
     chat: [],
@@ -7079,23 +7240,37 @@ app.post("/clan/create", authMiddleware, async (req, res) => {
   user.clanId = id;
   saveClanStore();
   saveUsers(USERS);
-  return res.json({ ok: true, clan: buildClanPayload(clan, user), me: await buildMePayload(user) });
+  return res.json({
+    ok: true,
+    clan: buildClanPayload(clan, user),
+    me: await buildMePayload(user),
+  });
 });
 
 app.post("/clan/leave", authMiddleware, async (req, res) => {
   const user = req.user;
-  if (!user.clanId) return res.status(400).json({ message: "Tu neesi nevienā klanā." });
+  if (!user.clanId)
+    return res.status(400).json({ message: "Tu neesi nevienā klanā." });
   const clan = getClanById(user.clanId);
   if (!clan) {
     user.clanId = "";
     saveUsers(USERS);
     return res.json({ ok: true, clan: null, me: await buildMePayload(user) });
   }
-  if (String(clan.owner || "").toLowerCase() === String(user.username).toLowerCase()) {
-    return res.status(400).json({ message: "Vadītājs nevar iziet. Pārnes vadību vai izdzēs klanu." });
+  if (
+    String(clan.owner || "").toLowerCase() ===
+    String(user.username).toLowerCase()
+  ) {
+    return res
+      .status(400)
+      .json({
+        message: "Vadītājs nevar iziet. Pārnes vadību vai izdzēs klanu.",
+      });
   }
   clan.members = (clan.members || []).filter(
-    (m) => String(m.username || "").toLowerCase() !== String(user.username).toLowerCase()
+    (m) =>
+      String(m.username || "").toLowerCase() !==
+      String(user.username).toLowerCase()
   );
   user.clanId = "";
   saveClanStore();
@@ -7105,12 +7280,20 @@ app.post("/clan/leave", authMiddleware, async (req, res) => {
 
 app.post("/clan/join", authMiddleware, async (req, res) => {
   const user = req.user;
-  if (user.clanId) return res.status(400).json({ message: "Tu jau esi klanā." });
-  const code = String(req.body?.inviteCode || req.body?.code || "").trim().toUpperCase();
-  const tag = String(req.body?.tag || "").trim().toUpperCase();
+  if (user.clanId)
+    return res.status(400).json({ message: "Tu jau esi klanā." });
+  const code = String(req.body?.inviteCode || req.body?.code || "")
+    .trim()
+    .toUpperCase();
+  const tag = String(req.body?.tag || "")
+    .trim()
+    .toUpperCase();
   let clan = null;
   if (code) {
-    clan = (clanStore.clans || []).find((c) => (c.inviteCode || "").toUpperCase() === code) || null;
+    clan =
+      (clanStore.clans || []).find(
+        (c) => (c.inviteCode || "").toUpperCase() === code
+      ) || null;
   } else if (tag) {
     clan = getClanByTag(tag);
   }
@@ -7121,22 +7304,37 @@ app.post("/clan/join", authMiddleware, async (req, res) => {
   if (isClanMember(clan, user.username)) {
     user.clanId = clan.id;
     saveUsers(USERS);
-    return res.json({ ok: true, clan: buildClanPayload(clan, user), me: await buildMePayload(user) });
+    return res.json({
+      ok: true,
+      clan: buildClanPayload(clan, user),
+      me: await buildMePayload(user),
+    });
   }
   clan.members = clan.members || [];
-  clan.members.push({ username: user.username, role: "member", joinedAt: Date.now() });
+  clan.members.push({
+    username: user.username,
+    role: "member",
+    joinedAt: Date.now(),
+  });
   user.clanId = clan.id;
-  user.clanInvitesIn = (user.clanInvitesIn || []).filter((inv) => String(inv?.clanId || "") !== String(clan.id));
+  user.clanInvitesIn = (user.clanInvitesIn || []).filter(
+    (inv) => String(inv?.clanId || "") !== String(clan.id)
+  );
   saveClanStore();
   saveUsers(USERS);
   io.emit("clan:update", { clanId: clan.id });
-  return res.json({ ok: true, clan: buildClanPayload(clan, user), me: await buildMePayload(user) });
+  return res.json({
+    ok: true,
+    clan: buildClanPayload(clan, user),
+    me: await buildMePayload(user),
+  });
 });
 
 app.post("/clan/invite", authMiddleware, (req, res) => {
   const user = req.user;
   const targetName = String(req.body?.username || "").trim();
-  if (!targetName) return res.status(400).json({ message: "Norādi lietotājvārdu." });
+  if (!targetName)
+    return res.status(400).json({ message: "Norādi lietotājvārdu." });
   const clan = user.clanId ? getClanById(user.clanId) : null;
   if (!clan || !canClanManage(clan, user.username)) {
     return res.status(403).json({ message: "Nav tiesību aicināt." });
@@ -7146,9 +7344,17 @@ app.post("/clan/invite", authMiddleware, (req, res) => {
   }
   const targetKey = findUserKeyCaseInsensitive(targetName);
   const target = targetKey ? USERS[targetKey] : null;
-  if (!target) return res.status(404).json({ message: "Lietotājs nav atrasts." });
-  if (target.clanId) return res.status(400).json({ message: "Lietotājs jau ir klanā." });
-  const inv = { clanId: clan.id, clanName: clan.name, clanTag: clan.tag, from: user.username, at: Date.now() };
+  if (!target)
+    return res.status(404).json({ message: "Lietotājs nav atrasts." });
+  if (target.clanId)
+    return res.status(400).json({ message: "Lietotājs jau ir klanā." });
+  const inv = {
+    clanId: clan.id,
+    clanName: clan.name,
+    clanTag: clan.tag,
+    from: user.username,
+    at: Date.now(),
+  };
   if (!Array.isArray(target.clanInvitesIn)) target.clanInvitesIn = [];
   if (target.clanInvitesIn.some((i) => String(i?.clanId) === String(clan.id))) {
     return res.json({ ok: true, message: "Ielūgums jau nosūtīts." });
@@ -7161,34 +7367,53 @@ app.post("/clan/invite", authMiddleware, (req, res) => {
 app.post("/clan/invite/accept", authMiddleware, async (req, res) => {
   const user = req.user;
   const clanId = String(req.body?.clanId || "").trim();
-  const inv = (user.clanInvitesIn || []).find((i) => String(i?.clanId) === clanId);
+  const inv = (user.clanInvitesIn || []).find(
+    (i) => String(i?.clanId) === clanId
+  );
   if (!inv) return res.status(404).json({ message: "Ielūgums nav atrasts." });
   const clan = getClanById(clanId);
   if (!clan) {
-    user.clanInvitesIn = (user.clanInvitesIn || []).filter((i) => String(i?.clanId) !== clanId);
+    user.clanInvitesIn = (user.clanInvitesIn || []).filter(
+      (i) => String(i?.clanId) !== clanId
+    );
     saveUsers(USERS);
     return res.status(404).json({ message: "Klans vairs neeksistē." });
   }
-  if (user.clanId) return res.status(400).json({ message: "Tu jau esi klanā." });
+  if (user.clanId)
+    return res.status(400).json({ message: "Tu jau esi klanā." });
   if ((clan.members || []).length >= CLAN_MAX_MEMBERS) {
-    user.clanInvitesIn = (user.clanInvitesIn || []).filter((i) => String(i?.clanId) !== clanId);
+    user.clanInvitesIn = (user.clanInvitesIn || []).filter(
+      (i) => String(i?.clanId) !== clanId
+    );
     saveUsers(USERS);
     return res.status(400).json({ message: "Klans ir pilns." });
   }
   clan.members = clan.members || [];
-  clan.members.push({ username: user.username, role: "member", joinedAt: Date.now() });
+  clan.members.push({
+    username: user.username,
+    role: "member",
+    joinedAt: Date.now(),
+  });
   user.clanId = clan.id;
-  user.clanInvitesIn = (user.clanInvitesIn || []).filter((i) => String(i?.clanId) !== clanId);
+  user.clanInvitesIn = (user.clanInvitesIn || []).filter(
+    (i) => String(i?.clanId) !== clanId
+  );
   saveClanStore();
   saveUsers(USERS);
   io.emit("clan:update", { clanId: clan.id });
-  return res.json({ ok: true, clan: buildClanPayload(clan, user), me: await buildMePayload(user) });
+  return res.json({
+    ok: true,
+    clan: buildClanPayload(clan, user),
+    me: await buildMePayload(user),
+  });
 });
 
 app.post("/clan/invite/decline", authMiddleware, (req, res) => {
   const user = req.user;
   const clanId = String(req.body?.clanId || "").trim();
-  user.clanInvitesIn = (user.clanInvitesIn || []).filter((i) => String(i?.clanId) !== clanId);
+  user.clanInvitesIn = (user.clanInvitesIn || []).filter(
+    (i) => String(i?.clanId) !== clanId
+  );
   saveUsers(USERS);
   return res.json({ ok: true });
 });
@@ -7196,19 +7421,31 @@ app.post("/clan/invite/decline", authMiddleware, (req, res) => {
 app.post("/clan/kick", authMiddleware, (req, res) => {
   const user = req.user;
   const targetName = String(req.body?.username || "").trim();
-  if (!targetName) return res.status(400).json({ message: "Norādi lietotājvārdu." });
+  if (!targetName)
+    return res.status(400).json({ message: "Norādi lietotājvārdu." });
   const clan = user.clanId ? getClanById(user.clanId) : null;
   if (!clan || !canClanManage(clan, user.username)) {
     return res.status(403).json({ message: "Nav tiesību izmest." });
   }
   const targetRole = getClanMemberRole(clan, targetName);
-  if (targetRole === "leader") return res.status(400).json({ message: "Nevar izmest vadītāju." });
+  if (targetRole === "leader")
+    return res.status(400).json({ message: "Nevar izmest vadītāju." });
   const isAdmin = canClanManage(clan, user.username);
-  if (targetRole === "admin" && !(String(clan.owner || "").toLowerCase() === String(user.username).toLowerCase())) {
-    return res.status(403).json({ message: "Tikai vadītājs var izmest administratoru." });
+  if (
+    targetRole === "admin" &&
+    !(
+      String(clan.owner || "").toLowerCase() ===
+      String(user.username).toLowerCase()
+    )
+  ) {
+    return res
+      .status(403)
+      .json({ message: "Tikai vadītājs var izmest administratoru." });
   }
   clan.members = (clan.members || []).filter(
-    (m) => String(m.username || "").toLowerCase() !== String(targetName).toLowerCase()
+    (m) =>
+      String(m.username || "").toLowerCase() !==
+      String(targetName).toLowerCase()
   );
   const targetKey = findUserKeyCaseInsensitive(targetName);
   const target = targetKey ? USERS[targetKey] : null;
@@ -7225,14 +7462,24 @@ app.post("/clan/role", authMiddleware, (req, res) => {
   const user = req.user;
   const targetName = String(req.body?.username || "").trim();
   const role = String(req.body?.role || "").toLowerCase();
-  if (!targetName) return res.status(400).json({ message: "Norādi lietotājvārdu." });
-  if (!["admin", "member"].includes(role)) return res.status(400).json({ message: "Nederīga loma." });
+  if (!targetName)
+    return res.status(400).json({ message: "Norādi lietotājvārdu." });
+  if (!["admin", "member"].includes(role))
+    return res.status(400).json({ message: "Nederīga loma." });
   const clan = user.clanId ? getClanById(user.clanId) : null;
-  if (!clan || String(clan.owner || "").toLowerCase() !== String(user.username).toLowerCase()) {
-    return res.status(403).json({ message: "Tikai vadītājs var mainīt lomas." });
+  if (
+    !clan ||
+    String(clan.owner || "").toLowerCase() !==
+      String(user.username).toLowerCase()
+  ) {
+    return res
+      .status(403)
+      .json({ message: "Tikai vadītājs var mainīt lomas." });
   }
   const m = (clan.members || []).find(
-    (x) => String(x.username || "").toLowerCase() === String(targetName).toLowerCase()
+    (x) =>
+      String(x.username || "").toLowerCase() ===
+      String(targetName).toLowerCase()
   );
   if (!m) return res.status(404).json({ message: "Dalībnieks nav atrasts." });
   m.role = role;
@@ -7258,23 +7505,20 @@ app.get("/clan/:id", authMiddleware, (req, res) => {
   res.json({ clan: buildClanPayload(clan, req.user) });
 });
 
-app.post(
-  "/duel/offline-invites/:from/consume",
-  authMiddleware,
-  (req, res) => {
-    const user = req.user;
-    const fromRaw = String(req.params.from || "").trim();
-    if (!fromRaw) return res.status(400).json({ message: "Nav norādīts sūtītājs." });
-    ensurePendingDuelInvites(user);
-    const key = fromRaw.toLowerCase();
-    const before = (user.pendingDuelInvites || []).length;
-    user.pendingDuelInvites = (user.pendingDuelInvites || []).filter(
-      (inv) => String(inv?.from || "").toLowerCase() !== key
-    );
-    if (user.pendingDuelInvites.length !== before) saveUsers(USERS);
-    return res.json({ ok: true });
-  }
-);
+app.post("/duel/offline-invites/:from/consume", authMiddleware, (req, res) => {
+  const user = req.user;
+  const fromRaw = String(req.params.from || "").trim();
+  if (!fromRaw)
+    return res.status(400).json({ message: "Nav norādīts sūtītājs." });
+  ensurePendingDuelInvites(user);
+  const key = fromRaw.toLowerCase();
+  const before = (user.pendingDuelInvites || []).length;
+  user.pendingDuelInvites = (user.pendingDuelInvites || []).filter(
+    (inv) => String(inv?.from || "").toLowerCase() !== key
+  );
+  if (user.pendingDuelInvites.length !== before) saveUsers(USERS);
+  return res.json({ ok: true });
+});
 
 app.get("/vip/status", authMiddleware, (req, res) => {
   const user = req.user;
@@ -7430,7 +7674,8 @@ app.post("/avatar", authMiddleware, async (req, res) => {
         const verifyUrl = getSupabasePublicUrl(filePath);
         let verified = false;
         for (let attempt = 0; attempt < 3; attempt++) {
-          if (attempt > 0) await new Promise((r) => setTimeout(r, 300 * attempt));
+          if (attempt > 0)
+            await new Promise((r) => setTimeout(r, 300 * attempt));
           try {
             const check = await fetch(verifyUrl, { method: "HEAD" });
             if (check.ok) {
@@ -8274,9 +8519,13 @@ app.post(
         (name) => String(name || "").toLowerCase() === requesterKey
       );
 
-      if (room.clanId && String(requester.clanId || "") !== String(room.clanId)) {
+      if (
+        room.clanId &&
+        String(requester.clanId || "") !== String(room.clanId)
+      ) {
         return res.status(403).json({
-          message: "Šai klana turnīra istabai var pievienoties tikai klana dalībnieki.",
+          message:
+            "Šai klana turnīra istabai var pievienoties tikai klana dalībnieki.",
         });
       }
 
@@ -9065,7 +9314,8 @@ app.post("/challenge/:id/guess", authMiddleware, (req, res) => {
         const letter = g[cIdx].toUpperCase();
         if (!letter) continue;
         if (p[cIdx] === "present") {
-          if (!wrongPositionsByLetter.has(letter)) wrongPositionsByLetter.set(letter, new Set());
+          if (!wrongPositionsByLetter.has(letter))
+            wrongPositionsByLetter.set(letter, new Set());
           wrongPositionsByLetter.get(letter).add(cIdx);
           rowYellowCount.set(letter, (rowYellowCount.get(letter) || 0) + 1);
         } else if (p[cIdx] === "correct") {
@@ -9073,7 +9323,10 @@ app.post("/challenge/:id/guess", authMiddleware, (req, res) => {
         }
       }
       for (const [letter, count] of rowYellowCount) {
-        yellowCountPerRow.set(letter, Math.max(yellowCountPerRow.get(letter) || 0, count));
+        yellowCountPerRow.set(
+          letter,
+          Math.max(yellowCountPerRow.get(letter) || 0, count)
+        );
       }
     }
     const gArr = guessRaw.split("");
@@ -9089,7 +9342,8 @@ app.post("/challenge/:id/guess", authMiddleware, (req, res) => {
           validCount++;
       }
       if (validCount < requiredCount) {
-        for (let k = 0; k < requiredCount - validCount; k++) missing.push(letter);
+        for (let k = 0; k < requiredCount - validCount; k++)
+          missing.push(letter);
       }
     }
     if (missing.length > 0) {
@@ -9373,7 +9627,8 @@ app.post("/guess", guessRateLimiter, authMiddleware, (req, res) => {
         const letter = g[c].toUpperCase();
         if (!letter) continue;
         if (p[c] === "present") {
-          if (!wrongPositionsByLetter.has(letter)) wrongPositionsByLetter.set(letter, new Set());
+          if (!wrongPositionsByLetter.has(letter))
+            wrongPositionsByLetter.set(letter, new Set());
           wrongPositionsByLetter.get(letter).add(c);
           rowYellowCount.set(letter, (rowYellowCount.get(letter) || 0) + 1);
         } else if (p[c] === "correct") {
@@ -9381,7 +9636,10 @@ app.post("/guess", guessRateLimiter, authMiddleware, (req, res) => {
         }
       }
       for (const [letter, count] of rowYellowCount) {
-        yellowCountPerRow.set(letter, Math.max(yellowCountPerRow.get(letter) || 0, count));
+        yellowCountPerRow.set(
+          letter,
+          Math.max(yellowCountPerRow.get(letter) || 0, count)
+        );
       }
     }
     const gArr = guessRaw.split("");
@@ -9397,7 +9655,8 @@ app.post("/guess", guessRateLimiter, authMiddleware, (req, res) => {
           validCount++;
       }
       if (validCount < requiredCount) {
-        for (let k = 0; k < requiredCount - validCount; k++) missing.push(letter);
+        for (let k = 0; k < requiredCount - validCount; k++)
+          missing.push(letter);
       }
     }
     if (missing.length > 0) {
@@ -10347,7 +10606,8 @@ io.on("connection", (socket) => {
     };
     if (!Array.isArray(clan.chat)) clan.chat = [];
     clan.chat.push(payload);
-    if (clan.chat.length > CLAN_CHAT_HISTORY) clan.chat = clan.chat.slice(-CLAN_CHAT_HISTORY);
+    if (clan.chat.length > CLAN_CHAT_HISTORY)
+      clan.chat = clan.chat.slice(-CLAN_CHAT_HISTORY);
     saveClanStore();
     io.to(`clan:${clan.id}`).emit("clan.chat", payload);
   });
@@ -11061,7 +11321,8 @@ io.on("connection", (socket) => {
           const letter = g[cIdx].toUpperCase();
           if (!letter) continue;
           if (p[cIdx] === "present") {
-            if (!wrongPositionsByLetter.has(letter)) wrongPositionsByLetter.set(letter, new Set());
+            if (!wrongPositionsByLetter.has(letter))
+              wrongPositionsByLetter.set(letter, new Set());
             wrongPositionsByLetter.get(letter).add(cIdx);
             rowYellowCount.set(letter, (rowYellowCount.get(letter) || 0) + 1);
           } else if (p[cIdx] === "correct") {
@@ -11069,7 +11330,10 @@ io.on("connection", (socket) => {
           }
         }
         for (const [letter, count] of rowYellowCount) {
-          yellowCountPerRow.set(letter, Math.max(yellowCountPerRow.get(letter) || 0, count));
+          yellowCountPerRow.set(
+            letter,
+            Math.max(yellowCountPerRow.get(letter) || 0, count)
+          );
         }
       }
       const gArr = guess.split("");
@@ -11085,7 +11349,8 @@ io.on("connection", (socket) => {
             validCount++;
         }
         if (validCount < requiredCount) {
-          for (let k = 0; k < requiredCount - validCount; k++) missing.push(letter);
+          for (let k = 0; k < requiredCount - validCount; k++)
+            missing.push(letter);
         }
       }
       if (missing.length > 0) {
@@ -11141,15 +11406,24 @@ io.on("connection", (socket) => {
   socket.on("board.invite", (payload) => {
     const fromUser = socket.data.user;
     if (!fromUser) return;
-    const targetName = String(payload?.target || payload?.username || "").trim();
+    const targetName = String(
+      payload?.target || payload?.username || ""
+    ).trim();
     const gameType = String(payload?.type || "dambrete").toLowerCase();
-    if (!targetName) return socket.emit("board.error", { message: "Nav norādīts pretinieks." });
-    if (fromUser.username === targetName) return socket.emit("board.error", { message: "Nevari izaicināt sevi." });
+    if (!targetName)
+      return socket.emit("board.error", {
+        message: "Nav norādīts pretinieks.",
+      });
+    if (fromUser.username === targetName)
+      return socket.emit("board.error", { message: "Nevari izaicināt sevi." });
     const targetKey = findUserKeyCaseInsensitive(targetName);
     const targetUser = targetKey ? USERS[targetKey] : null;
-    if (!targetUser) return socket.emit("board.error", { message: "Lietotājs nav atrasts." });
-    if (userToBoardGame.has(fromUser.username)) return socket.emit("board.error", { message: "Tu jau esi spēlē." });
-    if (userToBoardGame.has(targetUser.username)) return socket.emit("board.error", { message: "Pretinieks jau spēlē." });
+    if (!targetUser)
+      return socket.emit("board.error", { message: "Lietotājs nav atrasts." });
+    if (userToBoardGame.has(fromUser.username))
+      return socket.emit("board.error", { message: "Tu jau esi spēlē." });
+    if (userToBoardGame.has(targetUser.username))
+      return socket.emit("board.error", { message: "Pretinieks jau spēlē." });
     const inviteId = crypto.randomBytes(6).toString("hex");
     const invite = {
       id: inviteId,
@@ -11166,7 +11440,11 @@ io.on("connection", (socket) => {
         type: gameType,
       });
     }
-    socket.emit("board.inviteSent", { inviteId, target: targetUser.username, type: gameType });
+    socket.emit("board.inviteSent", {
+      inviteId,
+      target: targetUser.username,
+      type: gameType,
+    });
   });
 
   socket.on("board.accept", (payload) => {
@@ -11174,12 +11452,18 @@ io.on("connection", (socket) => {
     if (!user) return;
     const inviteId = String(payload?.inviteId || "").trim();
     const gameType = String(payload?.type || "dambrete").toLowerCase();
-    if (!inviteId) return socket.emit("board.error", { message: "Nav aicinājuma." });
+    if (!inviteId)
+      return socket.emit("board.error", { message: "Nav aicinājuma." });
     const targetSocket = getSocketByUsername(payload?.from || "");
     const challengerName = payload?.from || "";
     const opponentName = user.username;
-    if (!challengerName || challengerName === opponentName) return socket.emit("board.error", { message: "Nederīgs aicinājums." });
-    if (userToBoardGame.has(challengerName) || userToBoardGame.has(opponentName)) return socket.emit("board.error", { message: "Kāds jau spēlē." });
+    if (!challengerName || challengerName === opponentName)
+      return socket.emit("board.error", { message: "Nederīgs aicinājums." });
+    if (
+      userToBoardGame.has(challengerName) ||
+      userToBoardGame.has(opponentName)
+    )
+      return socket.emit("board.error", { message: "Kāds jau spēlē." });
     let game;
     if (gameType === "chess") {
       game = createChessGame(challengerName, opponentName);
@@ -11203,16 +11487,50 @@ io.on("connection", (socket) => {
     io.to(room).emit("board.start", payloadOut);
   });
 
+  socket.on("board.startVsBot", (payload) => {
+    const user = socket.data.user;
+    if (!user) return;
+    const gameType = String(payload?.type || "dambrete").toLowerCase();
+    const difficulty = String(payload?.difficulty || "medium").toLowerCase();
+    const validDifficulty = ["easy", "medium", "hard"].includes(difficulty)
+      ? difficulty
+      : "medium";
+    if (userToBoardGame.has(user.username))
+      return socket.emit("board.error", { message: "Tu jau spēlē." });
+    if (gameType !== "dambrete" && gameType !== "chess")
+      return socket.emit("board.error", { message: "Nederīgs spēles tips." });
+    let game;
+    if (gameType === "chess") {
+      game = createChessVsBot(user.username, validDifficulty);
+    } else {
+      game = createDambreteVsBot(user.username, validDifficulty);
+    }
+    const payloadOut = {
+      gameId: game.id,
+      type: game.type,
+      players: game.players,
+      turn: game.turn,
+      status: game.status,
+      board: game.board,
+      fen: game.fen,
+      vsBot: true,
+    };
+    socket.emit("board.start", payloadOut);
+    if (game.turn === 1) setImmediate(() => playBoardBotMove(io, game));
+  });
+
   socket.on("board.move", (payload) => {
     const user = socket.data.user;
     if (!user) return;
     const gameId = payload?.gameId;
     const game = gameId ? boardGames.get(gameId) : null;
-    if (!game || game.status !== "active") return socket.emit("board.error", { message: "Spēle nav aktīva." });
+    if (!game || game.status !== "active")
+      return socket.emit("board.error", { message: "Spēle nav aktīva." });
     if (!game.players.includes(user.username)) return;
     const turnIdx = game.turn;
     const currentPlayer = game.players[turnIdx];
-    if (currentPlayer !== user.username) return socket.emit("board.error", { message: "Nav tavas kārtas." });
+    if (currentPlayer !== user.username)
+      return socket.emit("board.error", { message: "Nav tavas kārtas." });
 
     if (game.type === "dambrete") {
       const move = payload?.move;
@@ -11220,37 +11538,104 @@ io.on("connection", (socket) => {
       const isWhiteTurn = turnIdx === 0;
       const allMoves = getAllMoves(game.board, isWhiteTurn);
       const legal = findLegalMove(allMoves, move);
-      if (!legal) return socket.emit("board.error", { message: "Nederīgs gājiens." });
+      if (!legal)
+        return socket.emit("board.error", { message: "Nederīgs gājiens." });
       const newBoard = applyMove(game.board, move);
-      if (!newBoard) return socket.emit("board.error", { message: "Neizdevās izpildīt gājienu." });
+      if (!newBoard)
+        return socket.emit("board.error", {
+          message: "Neizdevās izpildīt gājienu.",
+        });
       game.board = newBoard;
       game.moves.push({ move, by: user.username, ts: Date.now() });
       game.turn = 1 - game.turn;
       game.lastMoveAt = Date.now();
       const result = checkGameOver(newBoard, game.turn === 0);
+      const emitTarget = game.vsBot
+        ? getSocketByUsername(game.players[0])
+        : null;
+      const emitCh = emitTarget
+        ? (ev, payload) => emitTarget.emit(ev, payload)
+        : (ev, payload) => io.to(`board:${gameId}`).emit(ev, payload);
       if (result.over) {
-        const winner = result.winner === WHITE ? game.players[0] : game.players[1];
+        const winner =
+          result.winner === WHITE ? game.players[0] : game.players[1];
         finishBoardGame(game, winner, "win");
-        io.to(`board:${gameId}`).emit("board.end", { gameId, winner, reason: "win", board: newBoard, coinsGain: BOARD_GAME_REWARD_COINS, coinsLoss: BOARD_GAME_LOSE_COINS });
+        emitCh("board.end", {
+          gameId,
+          winner,
+          reason: "win",
+          board: newBoard,
+          coinsGain:
+            game.vsBot && winner !== BOARD_BOT_USERNAME
+              ? BOARD_GAME_REWARD_COINS
+              : winner
+                ? BOARD_GAME_REWARD_COINS
+                : 0,
+          coinsLoss:
+            game.vsBot && winner === BOARD_BOT_USERNAME
+              ? BOARD_GAME_LOSE_COINS
+              : winner
+                ? BOARD_GAME_LOSE_COINS
+                : 0,
+        });
       } else {
-        io.to(`board:${gameId}`).emit("board.move", { gameId, board: newBoard, turn: game.turn, move });
+        emitCh("board.move", {
+          gameId,
+          board: newBoard,
+          turn: game.turn,
+          move,
+        });
+        if (game.vsBot && game.turn === 1)
+          setImmediate(() => playBoardBotMove(io, game));
       }
     } else if (game.type === "chess") {
       const san = payload?.san || payload?.move;
       if (!san) return socket.emit("board.error", { message: "Nav gājiena." });
       const chess = new Chess(game.fen);
       const m = chess.move(san);
-      if (!m) return socket.emit("board.error", { message: "Nederīgs gājiens." });
+      if (!m)
+        return socket.emit("board.error", { message: "Nederīgs gājiens." });
       game.fen = chess.fen();
       game.moves.push({ san: m.san, by: user.username, ts: Date.now() });
       game.turn = 1 - game.turn;
       game.lastMoveAt = Date.now();
+      const chessEmit = game.vsBot
+        ? (ev, p) => getSocketByUsername(game.players[0])?.emit(ev, p)
+        : (ev, p) => io.to(`board:${gameId}`).emit(ev, p);
       if (chess.isCheckmate() || chess.isStalemate() || chess.isDraw()) {
-        const winner = chess.isCheckmate() ? user.username : null;
-        finishBoardGame(game, winner, chess.isCheckmate() ? "checkmate" : "draw");
-        io.to(`board:${gameId}`).emit("board.end", { gameId, winner, reason: chess.isCheckmate() ? "checkmate" : "draw", fen: game.fen, coinsGain: winner ? BOARD_GAME_REWARD_COINS : 0, coinsLoss: winner ? BOARD_GAME_LOSE_COINS : 0 });
+        const winner = chess.isCheckmate()
+          ? game.players[chess.turn() === "w" ? 1 : 0]
+          : null;
+        finishBoardGame(
+          game,
+          winner,
+          chess.isCheckmate() ? "checkmate" : "draw"
+        );
+        chessEmit("board.end", {
+          gameId,
+          winner,
+          reason: chess.isCheckmate() ? "checkmate" : "draw",
+          fen: game.fen,
+          coinsGain:
+            game.vsBot && winner !== BOARD_BOT_USERNAME
+              ? BOARD_GAME_REWARD_COINS
+              : winner
+                ? BOARD_GAME_REWARD_COINS
+                : 0,
+          coinsLoss:
+            game.vsBot && winner === BOARD_BOT_USERNAME
+              ? BOARD_GAME_LOSE_COINS
+              : 0,
+        });
       } else {
-        io.to(`board:${gameId}`).emit("board.move", { gameId, fen: game.fen, turn: game.turn, move: m.san });
+        chessEmit("board.move", {
+          gameId,
+          fen: game.fen,
+          turn: game.turn,
+          move: m.san,
+        });
+        if (game.vsBot && game.turn === 1)
+          setImmediate(() => playBoardBotMove(io, game));
       }
     }
   });
@@ -11264,7 +11649,18 @@ io.on("connection", (socket) => {
     if (!game.players.includes(user.username)) return;
     const winner = getBoardGameOpponent(game, user.username);
     finishBoardGame(game, winner, "resign");
-    io.to(`board:${gameId}`).emit("board.end", { gameId, winner, reason: "resign", coinsGain: winner ? BOARD_GAME_REWARD_COINS : 0, coinsLoss: winner ? BOARD_GAME_LOSE_COINS : 0 });
+    const endPayload = {
+      gameId,
+      winner,
+      reason: "resign",
+      coinsGain: 0,
+      coinsLoss: winner ? BOARD_GAME_LOSE_COINS : 0,
+    };
+    if (game.vsBot) {
+      getSocketByUsername(game.players[0])?.emit("board.end", endPayload);
+    } else {
+      io.to(`board:${gameId}`).emit("board.end", endPayload);
+    }
   });
 
   socket.on("disconnect", () => {

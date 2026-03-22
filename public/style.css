@@ -5040,6 +5040,39 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-lb-list .vz-board-lb-row:last-child { border-bottom: none; }
 .vz-board-lb-place { font-weight: 700; min-width: 20px; }
 .vz-board-lb-elo { opacity: 0.85; margin-left: auto; }
+.vz-board-bot-section {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.vz-board-bot-label {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.vz-board-bot-diff {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.vz-board-bot-diff label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.vz-board-bot-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.vz-board-divider {
+  margin: 12px 0;
+  font-size: 12px;
+  opacity: 0.7;
+  text-align: center;
+}
 .vz-board-invite-form input {
   width: 100%;
   padding: 10px 12px;

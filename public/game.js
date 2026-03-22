@@ -36,7 +36,11 @@ const { createApiBase, fetchWithTimeout, readJsonOrThrow } = VZServices;
 const { $, createEl, safeText, applyRankColor } = VZUI;
 
 function escapeHtml(s) {
-  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 const {
   dmNormalizeMessageForStore,
@@ -1254,7 +1258,8 @@ function normalizeRateState(input) {
 
   base.totalWins = Number.isFinite(totalWins) && totalWins > 0 ? totalWins : 0;
   base.nextPromptWins =
-    Number.isFinite(nextPromptWins) && nextPromptWins >= RATE_PROMPT_INITIAL_WINS
+    Number.isFinite(nextPromptWins) &&
+    nextPromptWins >= RATE_PROMPT_INITIAL_WINS
       ? nextPromptWins
       : RATE_PROMPT_INITIAL_WINS;
   base.accepted = input.accepted === true;
@@ -1297,7 +1302,8 @@ function saveRateState(input) {
 function shouldShowRatePrompt(rateState, now) {
   if (!isTwa() || !rateOverlayEl) return false;
   if (!rateState || rateState.accepted) return false;
-  if ((rateState.totalWins || 0) < (rateState.nextPromptWins || 0)) return false;
+  if ((rateState.totalWins || 0) < (rateState.nextPromptWins || 0))
+    return false;
   if ((rateState.snoozedUntil || 0) > now) return false;
   if (now - PAGE_SESSION_STARTED_AT < RATE_PROMPT_MIN_SESSION_MS) return false;
   return true;
@@ -1386,13 +1392,27 @@ const TUTORIAL_STEPS = [
     title: "Zaļš = pareizā vieta",
     body: "Burts ir vārdā un pareizajā vietā.",
     example: ["A", "B", "C", "D", "E", "F"],
-    exampleStatus: ["correct", "absent", "absent", "absent", "absent", "absent"],
+    exampleStatus: [
+      "correct",
+      "absent",
+      "absent",
+      "absent",
+      "absent",
+      "absent",
+    ],
   },
   {
     title: "Dzeltenš = pareizs burts, nepareiza vieta",
     body: "Burts ir vārdā, bet citā ailē. Izmanto to nākamajā minējumā.",
     example: ["A", "B", "C", "D", "E", "F"],
-    exampleStatus: ["absent", "present", "absent", "absent", "absent", "absent"],
+    exampleStatus: [
+      "absent",
+      "present",
+      "absent",
+      "absent",
+      "absent",
+      "absent",
+    ],
   },
   {
     title: "Pelēks = burta nav vārdā",
@@ -1443,7 +1463,8 @@ function showTutorial() {
       tutorialDotsEl.appendChild(dot);
     });
     if (tutorialNextBtn) {
-      tutorialNextBtn.textContent = step === TUTORIAL_STEPS.length - 1 ? "Sākt!" : "Tālāk";
+      tutorialNextBtn.textContent =
+        step === TUTORIAL_STEPS.length - 1 ? "Sākt!" : "Tālāk";
     }
   }
 
@@ -2351,7 +2372,9 @@ function renderClanCard(me) {
     invitesEl.querySelectorAll(".vz-clan-invite-accept").forEach((btn) => {
       btn.addEventListener("click", async () => {
         try {
-          const data = await apiPost("/clan/invite/accept", { clanId: btn.dataset.clanId });
+          const data = await apiPost("/clan/invite/accept", {
+            clanId: btn.dataset.clanId,
+          });
           if (data?.me) updatePlayerCard(data.me);
         } catch (err) {
           appendSystemMessage(err?.message || "Kļūda");
@@ -2389,12 +2412,16 @@ function renderClanCard(me) {
           )
           .join("")}
       </div>
-      ${clan.canManage ? `
+      ${
+        clan.canManage
+          ? `
         <div class="vz-clan-invite-form">
           <input id="vz-clan-invite-input" type="text" placeholder="Lietotājvārds" />
           <button id="vz-clan-invite-btn" type="button">Uzaicināt</button>
         </div>
-      ` : ""}
+      `
+          : ""
+      }
       <div class="vz-clan-actions">
         <span class="vz-clan-invite-code">Kods: ${escapeHtml(clan.inviteCode || "—")}</span>
         <button id="vz-clan-leave-btn" type="button" class="vz-clan-leave">Iziet no klana</button>
@@ -2444,8 +2471,12 @@ function renderClanCard(me) {
     const joinBtn = contentEl.querySelector("#vz-clan-join-btn");
     if (createBtn) {
       createBtn.addEventListener("click", async () => {
-        const name = document.getElementById("vz-clan-create-name")?.value?.trim();
-        const tag = document.getElementById("vz-clan-create-tag")?.value?.trim();
+        const name = document
+          .getElementById("vz-clan-create-name")
+          ?.value?.trim();
+        const tag = document
+          .getElementById("vz-clan-create-tag")
+          ?.value?.trim();
         if (!name || !tag) {
           appendSystemMessage("Aizpildi nosaukumu un tagu.");
           return;
@@ -2460,7 +2491,9 @@ function renderClanCard(me) {
     }
     if (joinBtn) {
       joinBtn.addEventListener("click", async () => {
-        const code = document.getElementById("vz-clan-join-code")?.value?.trim();
+        const code = document
+          .getElementById("vz-clan-join-code")
+          ?.value?.trim();
         if (!code) {
           appendSystemMessage("Ievadi ielūguma kodu.");
           return;
@@ -3014,9 +3047,12 @@ function showPlayerProfile(data) {
     if (copyBtn && linkInput) {
       copyBtn.addEventListener("click", () => {
         linkInput.select();
-        navigator.clipboard?.writeText?.(data.referralLink).then(() => {
-          appendSystemMessage("Links nokopēts!");
-        }).catch(() => {});
+        navigator.clipboard
+          ?.writeText?.(data.referralLink)
+          .then(() => {
+            appendSystemMessage("Links nokopēts!");
+          })
+          .catch(() => {});
       });
     }
   } else if (referralBox) {
@@ -4343,10 +4379,13 @@ function showWinEffects(winRowIndex) {
     const row = state.gridTiles[winRowIndex];
     row.forEach((tile, i) => {
       if (tile?.classList?.contains?.("correct")) {
-        setTimeout(() => {
-          tile.classList.add("vz-tile-win-bounce");
-          setTimeout(() => tile.classList.remove("vz-tile-win-bounce"), 400);
-        }, 100 + i * 50);
+        setTimeout(
+          () => {
+            tile.classList.add("vz-tile-win-bounce");
+            setTimeout(() => tile.classList.remove("vz-tile-win-bounce"), 400);
+          },
+          100 + i * 50
+        );
       }
     });
   }
@@ -4375,7 +4414,8 @@ async function submitChallengeGuess() {
     const check = validateHardModeGuess(guess);
     if (!check.valid) {
       flashRow(state.currentRow);
-      if (gameMessageEl) gameMessageEl.textContent = formatYellowLetterError(check.missing);
+      if (gameMessageEl)
+        gameMessageEl.textContent = formatYellowLetterError(check.missing);
       return;
     }
   }
@@ -4431,7 +4471,8 @@ function getHardModeConstraints() {
       const letter = raw.toUpperCase();
       if (!letter) continue;
       if (tile.classList.contains("present")) {
-        if (!wrongPositionsByLetter.has(letter)) wrongPositionsByLetter.set(letter, new Set());
+        if (!wrongPositionsByLetter.has(letter))
+          wrongPositionsByLetter.set(letter, new Set());
         wrongPositionsByLetter.get(letter).add(c);
         rowYellowCount.set(letter, (rowYellowCount.get(letter) || 0) + 1);
       } else if (tile.classList.contains("correct")) {
@@ -4448,7 +4489,8 @@ function getHardModeConstraints() {
     const yellowCount = yellowCountPerRow.get(letter) || 0;
     const greenCount = greenByLetter.get(letter) || 0;
     const needCount = Math.max(0, yellowCount - greenCount);
-    if (needCount > 0) required.set(letter, { wrongPositions, requiredCount: needCount });
+    if (needCount > 0)
+      required.set(letter, { wrongPositions, requiredCount: needCount });
   }
   return required;
 }
@@ -4506,7 +4548,8 @@ async function submitGuess() {
     const check = validateHardModeGuess(guess);
     if (!check.valid) {
       flashRow(state.currentRow);
-      if (gameMessageEl) gameMessageEl.textContent = formatYellowLetterError(check.missing);
+      if (gameMessageEl)
+        gameMessageEl.textContent = formatYellowLetterError(check.missing);
       return;
     }
   }
@@ -4647,7 +4690,8 @@ function submitDuelGuess() {
     const check = validateHardModeGuess(guess);
     if (!check.valid) {
       flashRow(state.currentRow);
-      if (gameMessageEl) gameMessageEl.textContent = formatYellowLetterError(check.missing);
+      if (gameMessageEl)
+        gameMessageEl.textContent = formatYellowLetterError(check.missing);
       return;
     }
   }
@@ -4881,7 +4925,8 @@ window.addEventListener("keydown", (e) => {
   const ch = normalizeLetter(e.key);
   if (!ch) return;
   e.preventDefault();
-  const layoutKey = Object.entries(LATVIAN_MAP).find(([, v]) => v === ch)?.[0] || ch;
+  const layoutKey =
+    Object.entries(LATVIAN_MAP).find(([, v]) => v === ch)?.[0] || ch;
   const kbBtn = state.keyboardButtons.get(layoutKey);
   if (kbBtn && !PREFERS_REDUCED_MOTION) {
     kbBtn.classList.add("kb-key-press");
@@ -5726,7 +5771,8 @@ async function handleVipRoomCreate() {
       playMode,
       slots,
       invitedFriends: state.vipRoomDraftInvites,
-      autoReportOnly: playMode === "dambrete" || playMode === "chess" ? false : true,
+      autoReportOnly:
+        playMode === "dambrete" || playMode === "chess" ? false : true,
       clanOnly,
     };
     const resp = await apiPost("/tournaments/vip-rooms", payload);
@@ -8958,7 +9004,9 @@ function initSocket() {
     boardState.gameId = null;
     let msg = "";
     if (winner === state.username) {
-      msg = coinsGain ? `♟️ Tu uzvarēji! +${coinsGain} coins` : "♟️ Tu uzvarēji!";
+      msg = coinsGain
+        ? `♟️ Tu uzvarēji! +${coinsGain} coins`
+        : "♟️ Tu uzvarēji!";
     } else if (winner) {
       msg = coinsLoss ? `♟️ Zaudēji. -${coinsLoss} coins` : "♟️ Zaudēji.";
     } else {
@@ -8967,7 +9015,9 @@ function initSocket() {
     appendSystemMessage(msg);
     hideBoardGameArea();
     updateBoardGameBadge(false);
-    apiGet("/me").then(updatePlayerCard).catch(() => {});
+    apiGet("/me")
+      .then(updatePlayerCard)
+      .catch(() => {});
   });
   socket.on("board:leaderboard", () => {
     const modal = document.getElementById("board-games-modal");
@@ -9005,20 +9055,22 @@ async function loadBoardLeaderboards() {
     const dEl = document.getElementById("board-lb-dambrete");
     const cEl = document.getElementById("board-lb-chess");
     if (dEl && d?.list) {
-      dEl.innerHTML = d.list
-        .map(
-          (r) =>
-            `<div class="vz-board-lb-row"><span class="vz-board-lb-place">${r.place}.</span><span>${escapeHtml(r.username)}</span><span class="vz-board-lb-elo">${r.elo} ELO</span></div>`
-        )
-        .join("") || "<p>Vēl nav spēlētāju</p>";
+      dEl.innerHTML =
+        d.list
+          .map(
+            (r) =>
+              `<div class="vz-board-lb-row"><span class="vz-board-lb-place">${r.place}.</span><span>${escapeHtml(r.username)}</span><span class="vz-board-lb-elo">${r.elo} ELO</span></div>`
+          )
+          .join("") || "<p>Vēl nav spēlētāju</p>";
     }
     if (cEl && c?.list) {
-      cEl.innerHTML = c.list
-        .map(
-          (r) =>
-            `<div class="vz-board-lb-row"><span class="vz-board-lb-place">${r.place}.</span><span>${escapeHtml(r.username)}</span><span class="vz-board-lb-elo">${r.elo} ELO</span></div>`
-        )
-        .join("") || "<p>Vēl nav spēlētāju</p>";
+      cEl.innerHTML =
+        c.list
+          .map(
+            (r) =>
+              `<div class="vz-board-lb-row"><span class="vz-board-lb-place">${r.place}.</span><span>${escapeHtml(r.username)}</span><span class="vz-board-lb-elo">${r.elo} ELO</span></div>`
+          )
+          .join("") || "<p>Vēl nav spēlētāju</p>";
     }
   } catch {}
 }
@@ -9096,13 +9148,18 @@ function renderBoardGame() {
   const turnEl = document.getElementById("board-game-turn");
   const dambreteContainer = document.getElementById("board-dambrete-container");
   const chessContainer = document.getElementById("board-chess-container");
-  if (typeEl) typeEl.textContent = boardState.type === "chess" ? "♔ Šahs" : "♟️ Dambrete";
+  if (typeEl)
+    typeEl.textContent = boardState.type === "chess" ? "♔ Šahs" : "♟️ Dambrete";
   const myIdx = boardState.players.indexOf(state.username);
   const isMyTurn = myIdx === boardState.turn;
   const turnName = boardState.players[boardState.turn] || "?";
-  if (turnEl) turnEl.textContent = isMyTurn ? "Tava kārta" : `${turnName} gājienā`;
+  if (turnEl)
+    turnEl.textContent = isMyTurn ? "Tava kārta" : `${turnName} gājienā`;
   const hintEl = document.getElementById("board-game-hint");
-  if (hintEl) hintEl.textContent = isMyTurn ? "Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt" : "Gaidām pretinieka gājienu";
+  if (hintEl)
+    hintEl.textContent = isMyTurn
+      ? "Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt"
+      : "Gaidām pretinieka gājienu";
 
   if (boardState.type === "dambrete" && boardState.board) {
     if (chessContainer) chessContainer.classList.add("hidden");
@@ -9189,11 +9246,21 @@ async function handleDambreteCellClick(r, c, isPiece) {
       const seq = j.jumps || [];
       const first = seq[0];
       const last = seq[seq.length - 1];
-      return first && last && first.from[0] === fr && first.from[1] === fc && last.to[0] === r && last.to[1] === c;
+      return (
+        first &&
+        last &&
+        first.from[0] === fr &&
+        first.from[1] === fc &&
+        last.to[0] === r &&
+        last.to[1] === c
+      );
     });
     if (move) move = { jumps: move.jumps };
   } else {
-    move = moves.find((m) => m.from[0] === fr && m.from[1] === fc && m.to[0] === r && m.to[1] === c);
+    move = moves.find(
+      (m) =>
+        m.from[0] === fr && m.from[1] === fc && m.to[0] === r && m.to[1] === c
+    );
   }
   if (!move) {
     boardState.selectedCell = null;
@@ -9228,20 +9295,38 @@ function bindBoardGames() {
     state.socket.emit("board.invite", { target, type });
     document.getElementById("board-invite-pending")?.classList.remove("hidden");
   };
-  if (inviteDambrete) inviteDambrete.addEventListener("click", () => doInvite("dambrete"));
-  if (inviteChess) inviteChess.addEventListener("click", () => doInvite("chess"));
+  if (inviteDambrete)
+    inviteDambrete.addEventListener("click", () => doInvite("dambrete"));
+  if (inviteChess)
+    inviteChess.addEventListener("click", () => doInvite("chess"));
+  const vsBotDambrete = document.getElementById("board-vsbot-dambrete");
+  const vsBotChess = document.getElementById("board-vsbot-chess");
+  const doVsBot = (type) => {
+    if (!state.socket) return;
+    const diffEl = document.querySelector(
+      'input[name="board-bot-diff"]:checked'
+    );
+    const difficulty = diffEl?.value || "medium";
+    state.socket.emit("board.startVsBot", { type, difficulty });
+    document.getElementById("board-invite-pending")?.classList.add("hidden");
+  };
+  if (vsBotDambrete)
+    vsBotDambrete.addEventListener("click", () => doVsBot("dambrete"));
+  if (vsBotChess) vsBotChess.addEventListener("click", () => doVsBot("chess"));
   if (acceptBtn)
     acceptBtn.addEventListener("click", () => {
       const invite = document.getElementById("board-games-invite");
       const from = invite?.dataset?.from || "";
       const type = invite?.dataset?.type || "dambrete";
-      if (state.socket) state.socket.emit("board.accept", { inviteId: "", from, type });
+      if (state.socket)
+        state.socket.emit("board.accept", { inviteId: "", from, type });
       hideBoardInviteModal();
     });
   if (declineBtn) declineBtn.addEventListener("click", hideBoardInviteModal);
   if (resignBtn)
     resignBtn.addEventListener("click", () => {
-      if (boardState.gameId && state.socket) state.socket.emit("board.resign", { gameId: boardState.gameId });
+      if (boardState.gameId && state.socket)
+        state.socket.emit("board.resign", { gameId: boardState.gameId });
     });
   if (ppInviteDambrete)
     ppInviteDambrete.addEventListener("click", () => {
@@ -9627,7 +9712,11 @@ async function compressAvatarDataUrl(dataUrl, maxDim = 512) {
     for (const fmt of formats) {
       try {
         const out = canvas.toDataURL(fmt.type, fmt.quality);
-        if (out && out.startsWith("data:image/") && out.length <= AVATAR_COMPRESS_MAX_CHARS) {
+        if (
+          out &&
+          out.startsWith("data:image/") &&
+          out.length <= AVATAR_COMPRESS_MAX_CHARS
+        ) {
           return out;
         }
       } catch {}
@@ -10806,7 +10895,12 @@ function showLevelUpAnimation(level, rankTitle) {
   };
   overlay.onclick = dismiss;
   if (typeof confetti === "function") {
-    confetti({ particleCount: 100, spread: 100, origin: { y: 0.5 }, colors: ["#ffd700", "#ff8c00", "#00c853"] });
+    confetti({
+      particleCount: 100,
+      spread: 100,
+      origin: { y: 0.5 },
+      colors: ["#ffd700", "#ff8c00", "#00c853"],
+    });
   }
   _levelUpDismissTimer = setTimeout(dismiss, 4000);
 }

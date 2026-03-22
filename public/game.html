@@ -831,6 +831,19 @@
         <div id="board-games-lobby" class="vz-board-lobby">
           <h3 class="vz-board-title">♟️ Dambrete & ♔ Šahs</h3>
           <p class="vz-board-desc">Izaicini draugu uz dambreti vai šahu. Uzvaras dod novada un klana punktus!</p>
+          <div class="vz-board-bot-section">
+            <p class="vz-board-bot-label">🤖 Spēlēt vs botu</p>
+            <div class="vz-board-bot-diff">
+              <label><input type="radio" name="board-bot-diff" value="easy" /> Vājš</label>
+              <label><input type="radio" name="board-bot-diff" value="medium" checked /> Vidējs</label>
+              <label><input type="radio" name="board-bot-diff" value="hard" /> Spēcīgs</label>
+            </div>
+            <div class="vz-board-bot-btns">
+              <button id="board-vsbot-dambrete" type="button" class="vz-board-invite-btn">♟️ Dambrete vs bot</button>
+              <button id="board-vsbot-chess" type="button" class="vz-board-invite-btn">♔ Šahs vs bot</button>
+            </div>
+          </div>
+          <p class="vz-board-divider">— vai izacini draugu —</p>
           <div class="vz-board-invite-form">
             <label for="board-invite-username" class="vz-board-label">Pretinieka lietotājvārds</label>
             <input id="board-invite-username" type="text" placeholder="piemēram: spēlētājs123" autocomplete="username" aria-describedby="board-invite-hint" />
