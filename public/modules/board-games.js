@@ -182,13 +182,24 @@
       table.appendChild(tr);
     }
 
+    let lastHandled = { r: -1, c: -1, t: 0 };
     function handleCellEvent(e) {
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
-      e.preventDefault();
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
+      const now = Date.now();
+      if (
+        r === lastHandled.r &&
+        c === lastHandled.c &&
+        now - lastHandled.t < 400
+      ) {
+        e.preventDefault();
+        return;
+      }
+      lastHandled = { r, c, t: now };
+      e.preventDefault();
       const st = dambreteState;
       const piece = (st.board && st.board[r]?.[c]) ?? 0;
       const isMyPiece =
@@ -204,8 +215,15 @@
       else if (st.selectedCell) cb(r, c, false);
     }
 
-    table.addEventListener("pointerdown", handleCellEvent, { capture: true });
-    table.addEventListener("click", handleCellEvent);
+    let lastPointerOrTouch = 0;
+    function wrappedHandler(e) {
+      if (e.type === "click" && Date.now() - lastPointerOrTouch < 450) return;
+      if (e.type !== "click") lastPointerOrTouch = Date.now();
+      handleCellEvent(e);
+    }
+    table.addEventListener("touchstart", wrappedHandler, { passive: false });
+    table.addEventListener("pointerdown", wrappedHandler, { capture: true });
+    table.addEventListener("click", wrappedHandler);
     container.appendChild(table);
   }
 
