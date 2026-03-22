@@ -99,12 +99,12 @@
         if (isSelected) td.classList.add("vz-dambrete-selected");
         if (isValidDest) td.classList.add("vz-dambrete-valid");
         if (canMove) td.tabIndex = 0;
-        td.dataset.clickable = String(
+        const clickable =
           canMove &&
-            ((piece === 0 && isValidDest) ||
-              isMyPiece ||
-              (selectedCell && !isValidDest && !isMyPiece))
-        );
+          (isMyPiece ||
+            (piece === 0 && isValidDest) ||
+            (selectedCell && !isValidDest));
+        td.dataset.clickable = String(!!clickable);
         tr.appendChild(td);
       }
       table.appendChild(tr);
@@ -112,6 +112,7 @@
     function handleCellEvent(e) {
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
+      if (e.type === "touchend") e.preventDefault();
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
@@ -122,11 +123,12 @@
           (myPlayerIdx === 1 && (piece === BLACK || piece === BLACK_KING)));
       const isValidDest =
         piece === 0 && isValidDestination(r, c, selectedCell, legalMoves);
-      if (piece === 0 && isValidDest) onCellClick(r, c, false);
-      else if (isMyPiece) onCellClick(r, c, true);
+      if (isMyPiece) onCellClick(r, c, true);
+      else if (piece === 0 && isValidDest) onCellClick(r, c, false);
       else if (selectedCell) onCellClick(r, c, false);
     }
     table.addEventListener("click", handleCellEvent);
+    table.addEventListener("touchend", handleCellEvent, { passive: false });
     container.appendChild(table);
   }
 
@@ -258,9 +260,10 @@
       }
       table.appendChild(tr);
     }
-    table.addEventListener("click", (e) => {
+    function handleChessCellEvent(e) {
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
+      if (e.type === "touchend") e.preventDefault();
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
@@ -273,6 +276,10 @@
       if (piece && isMyPiece) onCellClick(r, c, true);
       else if (isValidDest) onCellClick(r, c, false);
       else if (selectedCell) onCellClick(r, c, false);
+    }
+    table.addEventListener("click", handleChessCellEvent);
+    table.addEventListener("touchend", handleChessCellEvent, {
+      passive: false,
     });
     container.appendChild(table);
   }
