@@ -109,22 +109,13 @@
       }
       table.appendChild(tr);
     }
-    let lastTouchCell = null;
     function handleCellEvent(e) {
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
+      e.preventDefault();
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
-      if (e.type === "touchend") {
-        e.preventDefault();
-        lastTouchCell = `${r},${c}`;
-        setTimeout(() => {
-          lastTouchCell = null;
-        }, 400);
-      } else if (e.type === "click" && lastTouchCell === `${r},${c}`) {
-        return;
-      }
       const piece = board[r]?.[c] ?? 0;
       const isMyPiece =
         piece !== 0 &&
@@ -136,8 +127,7 @@
       else if (piece === 0 && isValidDest) onCellClick(r, c, false);
       else if (selectedCell) onCellClick(r, c, false);
     }
-    table.addEventListener("click", handleCellEvent);
-    table.addEventListener("touchend", handleCellEvent, { passive: false });
+    table.addEventListener("pointerdown", handleCellEvent, { capture: true });
     container.appendChild(table);
   }
 
@@ -269,22 +259,13 @@
       }
       table.appendChild(tr);
     }
-    let lastChessTouchCell = null;
     function handleChessCellEvent(e) {
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
+      e.preventDefault();
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
-      if (e.type === "touchend") {
-        e.preventDefault();
-        lastChessTouchCell = `${r},${c}`;
-        setTimeout(() => {
-          lastChessTouchCell = null;
-        }, 400);
-      } else if (e.type === "click" && lastChessTouchCell === `${r},${c}`) {
-        return;
-      }
       const piece = board[r]?.[c];
       const isMyPiece =
         piece &&
@@ -295,9 +276,8 @@
       else if (isValidDest) onCellClick(r, c, false);
       else if (selectedCell) onCellClick(r, c, false);
     }
-    table.addEventListener("click", handleChessCellEvent);
-    table.addEventListener("touchend", handleChessCellEvent, {
-      passive: false,
+    table.addEventListener("pointerdown", handleChessCellEvent, {
+      capture: true,
     });
     container.appendChild(table);
   }

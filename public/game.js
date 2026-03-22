@@ -9205,12 +9205,20 @@ async function handleChessCellClick(r, c, isPiece) {
       renderBoardGame();
       return;
     }
-    boardState.selectedCell = [r, c];
+    const clickedCell = [r, c];
+    boardState.selectedCell = clickedCell;
+    renderBoardGame();
     try {
       const data = await apiGet(`/board/${boardState.gameId}/moves`);
-      boardState.legalMoves = data || { moves: [] };
+      if (
+        boardState.selectedCell &&
+        boardState.selectedCell[0] === clickedCell[0] &&
+        boardState.selectedCell[1] === clickedCell[1]
+      ) {
+        boardState.legalMoves = data || { moves: [] };
+        renderBoardGame();
+      }
     } catch {}
-    renderBoardGame();
     return;
   }
 
@@ -9245,12 +9253,20 @@ async function handleDambreteCellClick(r, c, isPiece) {
       renderBoardGame();
       return;
     }
-    boardState.selectedCell = [r, c];
+    const clickedCell = [r, c];
+    boardState.selectedCell = clickedCell;
+    renderBoardGame();
     try {
       const data = await apiGet(`/board/${boardState.gameId}/moves`);
-      boardState.legalMoves = data || { jumps: [], moves: [] };
+      if (
+        boardState.selectedCell &&
+        boardState.selectedCell[0] === clickedCell[0] &&
+        boardState.selectedCell[1] === clickedCell[1]
+      ) {
+        boardState.legalMoves = data || { jumps: [], moves: [] };
+        renderBoardGame();
+      }
     } catch {}
-    renderBoardGame();
     return;
   }
 
