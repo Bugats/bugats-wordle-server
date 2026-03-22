@@ -62,6 +62,7 @@
     const table = document.createElement("table");
     table.className = "vz-dambrete-board";
     table.setAttribute("role", "grid");
+    const canMove = isMyTurn && myPlayerIdx === turnIdx;
     for (let r = 0; r < ROWS; r++) {
       const tr = document.createElement("tr");
       for (let c = 0; c < COLS; c++) {
@@ -87,7 +88,6 @@
           span.textContent = Math.abs(piece) === 2 ? "K" : "●";
           td.appendChild(span);
         }
-        const canMove = isMyTurn && myPlayerIdx === turnIdx;
         const isSelected =
           selectedCell && selectedCell[0] === r && selectedCell[1] === c;
         const isValidDest =
@@ -98,20 +98,35 @@
             (myPlayerIdx === 1 && (piece === BLACK || piece === BLACK_KING)));
         if (isSelected) td.classList.add("vz-dambrete-selected");
         if (isValidDest) td.classList.add("vz-dambrete-valid");
-        if (canMove) {
-          td.tabIndex = 0;
-          if (piece === 0 && isValidDest) {
-            td.addEventListener("click", () => onCellClick(r, c, false));
-          } else if (isMyPiece) {
-            td.addEventListener("click", () => onCellClick(r, c, true));
-          } else if (selectedCell && !isValidDest && !isMyPiece) {
-            td.addEventListener("click", () => onCellClick(r, c, false));
-          }
-        }
+        if (canMove) td.tabIndex = 0;
+        td.dataset.clickable = String(
+          canMove &&
+            ((piece === 0 && isValidDest) ||
+              isMyPiece ||
+              (selectedCell && !isValidDest && !isMyPiece))
+        );
         tr.appendChild(td);
       }
       table.appendChild(tr);
     }
+    function handleCellEvent(e) {
+      const td = e.target.closest("td[data-row][data-col]");
+      if (!td || td.dataset.clickable !== "true") return;
+      const r = parseInt(td.dataset.row, 10);
+      const c = parseInt(td.dataset.col, 10);
+      if (isNaN(r) || isNaN(c)) return;
+      const piece = board[r]?.[c] ?? 0;
+      const isMyPiece =
+        piece !== 0 &&
+        ((myPlayerIdx === 0 && (piece === WHITE || piece === WHITE_KING)) ||
+          (myPlayerIdx === 1 && (piece === BLACK || piece === BLACK_KING)));
+      const isValidDest =
+        piece === 0 && isValidDestination(r, c, selectedCell, legalMoves);
+      if (piece === 0 && isValidDest) onCellClick(r, c, false);
+      else if (isMyPiece) onCellClick(r, c, true);
+      else if (selectedCell) onCellClick(r, c, false);
+    }
+    table.addEventListener("click", handleCellEvent);
     container.appendChild(table);
   }
 
@@ -206,6 +221,7 @@
     const table = document.createElement("table");
     table.className = "vz-chess-board";
     table.setAttribute("role", "grid");
+    const canMove = isMyTurn && myPlayerIdx === turnIdx;
     for (let r = 0; r < 8; r++) {
       const tr = document.createElement("tr");
       for (let c = 0; c < 8; c++) {
@@ -221,7 +237,6 @@
           span.textContent = CHESS_PIECES[piece].symbol;
           td.appendChild(span);
         }
-        const canMove = isMyTurn && myPlayerIdx === turnIdx;
         const isSelected =
           selectedCell && selectedCell[0] === r && selectedCell[1] === c;
         const isValidDest = isChessValidDest(r, c, selectedCell, legalMoves);
@@ -232,20 +247,33 @@
             (myPlayerIdx === 1 && /[pnbrqk]/.test(piece)));
         if (isSelected) td.classList.add("vz-chess-selected");
         if (isValidDest) td.classList.add("vz-chess-valid");
-        if (canMove) {
-          td.tabIndex = 0;
-          if (hasPiece && isMyPiece) {
-            td.addEventListener("click", () => onCellClick(r, c, true));
-          } else if (isValidDest) {
-            td.addEventListener("click", () => onCellClick(r, c, false));
-          } else if (selectedCell && !isValidDest) {
-            td.addEventListener("click", () => onCellClick(r, c, false));
-          }
-        }
+        if (canMove) td.tabIndex = 0;
+        td.dataset.clickable = String(
+          canMove &&
+            ((hasPiece && isMyPiece) ||
+              isValidDest ||
+              (selectedCell && !isValidDest))
+        );
         tr.appendChild(td);
       }
       table.appendChild(tr);
     }
+    table.addEventListener("click", (e) => {
+      const td = e.target.closest("td[data-row][data-col]");
+      if (!td || td.dataset.clickable !== "true") return;
+      const r = parseInt(td.dataset.row, 10);
+      const c = parseInt(td.dataset.col, 10);
+      if (isNaN(r) || isNaN(c)) return;
+      const piece = board[r]?.[c];
+      const isMyPiece =
+        piece &&
+        ((myPlayerIdx === 0 && /[PNBRQK]/.test(piece)) ||
+          (myPlayerIdx === 1 && /[pnbrqk]/.test(piece)));
+      const isValidDest = isChessValidDest(r, c, selectedCell, legalMoves);
+      if (piece && isMyPiece) onCellClick(r, c, true);
+      else if (isValidDest) onCellClick(r, c, false);
+      else if (selectedCell) onCellClick(r, c, false);
+    });
     container.appendChild(table);
   }
 
