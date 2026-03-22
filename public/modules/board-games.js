@@ -109,13 +109,19 @@
       }
       table.appendChild(tr);
     }
+    let lastPointerEventAt = 0;
     function handleCellEvent(e) {
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
-      e.preventDefault();
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
+      const now = Date.now();
+      if (e.type === "click" && now - lastPointerEventAt < 350) return;
+      if (e.type === "pointerdown" || e.type === "touchend") {
+        lastPointerEventAt = now;
+        if (e.type === "touchend") e.preventDefault();
+      }
       const piece = board[r]?.[c] ?? 0;
       const isMyPiece =
         piece !== 0 &&
@@ -128,6 +134,8 @@
       else if (selectedCell) onCellClick(r, c, false);
     }
     table.addEventListener("pointerdown", handleCellEvent, { capture: true });
+    table.addEventListener("touchend", handleCellEvent, { passive: false });
+    table.addEventListener("click", handleCellEvent);
     container.appendChild(table);
   }
 
@@ -259,13 +267,19 @@
       }
       table.appendChild(tr);
     }
+    let lastChessPointerEventAt = 0;
     function handleChessCellEvent(e) {
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
-      e.preventDefault();
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
+      const now = Date.now();
+      if (e.type === "click" && now - lastChessPointerEventAt < 350) return;
+      if (e.type === "pointerdown" || e.type === "touchend") {
+        lastChessPointerEventAt = now;
+        if (e.type === "touchend") e.preventDefault();
+      }
       const piece = board[r]?.[c];
       const isMyPiece =
         piece &&
@@ -279,6 +293,10 @@
     table.addEventListener("pointerdown", handleChessCellEvent, {
       capture: true,
     });
+    table.addEventListener("touchend", handleChessCellEvent, {
+      passive: false,
+    });
+    table.addEventListener("click", handleChessCellEvent);
     container.appendChild(table);
   }
 

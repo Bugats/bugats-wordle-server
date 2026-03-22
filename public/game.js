@@ -9190,6 +9190,7 @@ function renderBoardGame() {
   }
 }
 
+let lastChessSelectAt = 0;
 async function handleChessCellClick(r, c, isPiece) {
   if (!state.socket || !boardState.gameId) return;
   const myIdx = boardState.players.indexOf(state.username);
@@ -9201,10 +9202,13 @@ async function handleChessCellClick(r, c, isPiece) {
       boardState.selectedCell[0] === r &&
       boardState.selectedCell[1] === c
     ) {
+      const now = Date.now();
+      if (now - lastChessSelectAt < 400) return;
       boardState.selectedCell = null;
       renderBoardGame();
       return;
     }
+    lastChessSelectAt = Date.now();
     const clickedCell = [r, c];
     boardState.selectedCell = clickedCell;
     renderBoardGame();
@@ -9238,6 +9242,7 @@ async function handleChessCellClick(r, c, isPiece) {
   boardState.selectedCell = null;
 }
 
+let lastDambreteSelectAt = 0;
 async function handleDambreteCellClick(r, c, isPiece) {
   if (!state.socket || !boardState.gameId) return;
   const myIdx = boardState.players.indexOf(state.username);
@@ -9249,10 +9254,13 @@ async function handleDambreteCellClick(r, c, isPiece) {
       boardState.selectedCell[0] === r &&
       boardState.selectedCell[1] === c
     ) {
+      const now = Date.now();
+      if (now - lastDambreteSelectAt < 400) return;
       boardState.selectedCell = null;
       renderBoardGame();
       return;
     }
+    lastDambreteSelectAt = Date.now();
     const clickedCell = [r, c];
     boardState.selectedCell = clickedCell;
     renderBoardGame();
