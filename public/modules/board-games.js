@@ -21,18 +21,40 @@
     const moves = legalMoves.moves || [];
     const jumps = legalMoves.jumps || [];
     for (const m of moves) {
-      if (m.from[0] === fr && m.from[1] === fc && m.to[0] === r && m.to[1] === c) return true;
+      if (
+        m.from[0] === fr &&
+        m.from[1] === fc &&
+        m.to[0] === r &&
+        m.to[1] === c
+      )
+        return true;
     }
     for (const j of jumps) {
       const seq = j.jumps || [];
       const first = seq[0];
       const last = seq[seq.length - 1];
-      if (first && last && first.from[0] === fr && first.from[1] === fc && last.to[0] === r && last.to[1] === c) return true;
+      if (
+        first &&
+        last &&
+        first.from[0] === fr &&
+        first.from[1] === fc &&
+        last.to[0] === r &&
+        last.to[1] === c
+      )
+        return true;
     }
     return false;
   }
 
-  function renderDambreteBoard(board, turnIdx, isMyTurn, myPlayerIdx, onCellClick, selectedCell, legalMoves) {
+  function renderDambreteBoard(
+    board,
+    turnIdx,
+    isMyTurn,
+    myPlayerIdx,
+    onCellClick,
+    selectedCell,
+    legalMoves
+  ) {
     const container = document.getElementById("board-dambrete-container");
     if (!container) return;
     container.innerHTML = "";
@@ -57,29 +79,32 @@
           const span = document.createElement("span");
           span.className = "vz-dambrete-piece";
           if (piece === WHITE) span.classList.add("vz-dambrete-white");
-          else if (piece === WHITE_KING) span.classList.add("vz-dambrete-white", "vz-dambrete-king");
+          else if (piece === WHITE_KING)
+            span.classList.add("vz-dambrete-white", "vz-dambrete-king");
           else if (piece === BLACK) span.classList.add("vz-dambrete-black");
-          else if (piece === BLACK_KING) span.classList.add("vz-dambrete-black", "vz-dambrete-king");
+          else if (piece === BLACK_KING)
+            span.classList.add("vz-dambrete-black", "vz-dambrete-king");
           span.textContent = Math.abs(piece) === 2 ? "K" : "●";
           td.appendChild(span);
         }
         const canMove = isMyTurn && myPlayerIdx === turnIdx;
-        const isSelected = selectedCell && selectedCell[0] === r && selectedCell[1] === c;
-        const isValidDest = piece === 0 && isValidDestination(r, c, selectedCell, legalMoves);
+        const isSelected =
+          selectedCell && selectedCell[0] === r && selectedCell[1] === c;
+        const isValidDest =
+          piece === 0 && isValidDestination(r, c, selectedCell, legalMoves);
+        const isMyPiece =
+          piece !== 0 &&
+          ((myPlayerIdx === 0 && (piece === WHITE || piece === WHITE_KING)) ||
+            (myPlayerIdx === 1 && (piece === BLACK || piece === BLACK_KING)));
         if (isSelected) td.classList.add("vz-dambrete-selected");
         if (isValidDest) td.classList.add("vz-dambrete-valid");
-        if (canMove && (piece === 0 ? isValidDest : !selectedCell)) {
+        if (canMove) {
           td.tabIndex = 0;
           if (piece === 0 && isValidDest) {
             td.addEventListener("click", () => onCellClick(r, c, false));
-          } else if (piece !== 0) {
-            const myColor = myPlayerIdx === 0 ? WHITE : BLACK;
-            if ((piece > 0 && myColor === WHITE) || (piece < 0 && myColor === BLACK)) {
-              td.addEventListener("click", () => onCellClick(r, c, true));
-            }
+          } else if (isMyPiece) {
+            td.addEventListener("click", () => onCellClick(r, c, true));
           }
-        } else if (canMove && piece === 0 && isValidDest) {
-          td.addEventListener("click", () => onCellClick(r, c, false));
         }
         tr.appendChild(td);
       }
@@ -108,7 +133,9 @@
     const board = Array(8)
       .fill(null)
       .map(() => Array(8).fill(null));
-    const parts = String(fen || "").trim().split(/\s+/);
+    const parts = String(fen || "")
+      .trim()
+      .split(/\s+/);
     const placement = parts[0] || "";
     const ranks = placement.split("/");
     for (let r = 0; r < 8 && r < ranks.length; r++) {
@@ -131,7 +158,8 @@
     if (!sq || sq.length < 2) return null;
     const file = sq.charCodeAt(0) - 97;
     const rank = parseInt(sq[1], 10);
-    if (isNaN(rank) || file < 0 || file > 7 || rank < 1 || rank > 8) return null;
+    if (isNaN(rank) || file < 0 || file > 7 || rank < 1 || rank > 8)
+      return null;
     return [8 - rank, file];
   }
 
@@ -159,7 +187,15 @@
     return moves.find((m) => m.from === fromSq && m.to === toSq);
   }
 
-  function renderChessBoard(fen, turnIdx, isMyTurn, myPlayerIdx, onCellClick, selectedCell, legalMoves) {
+  function renderChessBoard(
+    fen,
+    turnIdx,
+    isMyTurn,
+    myPlayerIdx,
+    onCellClick,
+    selectedCell,
+    legalMoves
+  ) {
     const container = document.getElementById("board-chess-container");
     if (!container) return;
     container.innerHTML = "";
@@ -178,17 +214,20 @@
         const piece = board[r][c];
         if (piece && CHESS_PIECES[piece]) {
           const span = document.createElement("span");
-          span.className = "vz-chess-piece vz-chess-" + CHESS_PIECES[piece].color;
+          span.className =
+            "vz-chess-piece vz-chess-" + CHESS_PIECES[piece].color;
           span.textContent = CHESS_PIECES[piece].symbol;
           td.appendChild(span);
         }
         const canMove = isMyTurn && myPlayerIdx === turnIdx;
-        const isSelected = selectedCell && selectedCell[0] === r && selectedCell[1] === c;
+        const isSelected =
+          selectedCell && selectedCell[0] === r && selectedCell[1] === c;
         const isValidDest = isChessValidDest(r, c, selectedCell, legalMoves);
         const hasPiece = !!piece;
         const isMyPiece =
           hasPiece &&
-          ((myPlayerIdx === 0 && /[PNBRQK]/.test(piece)) || (myPlayerIdx === 1 && /[pnbrqk]/.test(piece)));
+          ((myPlayerIdx === 0 && /[PNBRQK]/.test(piece)) ||
+            (myPlayerIdx === 1 && /[pnbrqk]/.test(piece)));
         if (isSelected) td.classList.add("vz-chess-selected");
         if (isValidDest) td.classList.add("vz-chess-valid");
         if (canMove) {

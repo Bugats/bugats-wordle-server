@@ -9227,6 +9227,15 @@ async function handleDambreteCellClick(r, c, isPiece) {
   if (myIdx !== boardState.turn) return;
 
   if (isPiece) {
+    if (
+      boardState.selectedCell &&
+      boardState.selectedCell[0] === r &&
+      boardState.selectedCell[1] === c
+    ) {
+      boardState.selectedCell = null;
+      renderBoardGame();
+      return;
+    }
     boardState.selectedCell = [r, c];
     try {
       const data = await apiGet(`/board/${boardState.gameId}/moves`);
