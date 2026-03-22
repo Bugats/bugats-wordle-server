@@ -46,6 +46,15 @@
     return false;
   }
 
+  let dambreteTable = null;
+  let dambreteState = {
+    board: null,
+    selectedCell: null,
+    legalMoves: null,
+    myPlayerIdx: 0,
+    onCellClick: null,
+  };
+
   function renderDambreteBoard(
     board,
     turnIdx,
@@ -57,12 +66,75 @@
   ) {
     const container = document.getElementById("board-dambrete-container");
     if (!container) return;
-    container.innerHTML = "";
     container.classList.remove("hidden");
+
+    const canMove = isMyTurn && myPlayerIdx === turnIdx;
+
+    if (dambreteTable && container.contains(dambreteTable)) {
+      dambreteState.board = board;
+      dambreteState.selectedCell = selectedCell;
+      dambreteState.legalMoves = legalMoves;
+      dambreteState.myPlayerIdx = myPlayerIdx;
+      dambreteState.onCellClick = onCellClick;
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const td = dambreteTable.querySelector(
+            `td[data-row="${r}"][data-col="${c}"]`
+          );
+          if (!td || !isDark(r, c)) continue;
+          const piece = board[r][c];
+          const isSelected =
+            selectedCell && selectedCell[0] === r && selectedCell[1] === c;
+          const isValidDest =
+            piece === 0 && isValidDestination(r, c, selectedCell, legalMoves);
+          const isMyPiece =
+            piece !== 0 &&
+            ((myPlayerIdx === 0 && (piece === WHITE || piece === WHITE_KING)) ||
+              (myPlayerIdx === 1 && (piece === BLACK || piece === BLACK_KING)));
+          const clickable =
+            canMove &&
+            (isMyPiece ||
+              (piece === 0 && isValidDest) ||
+              (selectedCell && !isValidDest));
+          td.dataset.clickable = String(!!clickable);
+          td.classList.toggle("vz-dambrete-selected", !!isSelected);
+          td.classList.toggle("vz-dambrete-valid", !!isValidDest);
+          let span = td.querySelector(".vz-dambrete-piece");
+          if (piece !== 0) {
+            if (!span) {
+              span = document.createElement("span");
+              td.appendChild(span);
+            }
+            span.className = "vz-dambrete-piece";
+            span.classList.remove(
+              "vz-dambrete-white",
+              "vz-dambrete-king",
+              "vz-dambrete-black"
+            );
+            if (piece === WHITE) span.classList.add("vz-dambrete-white");
+            else if (piece === WHITE_KING)
+              span.classList.add("vz-dambrete-white", "vz-dambrete-king");
+            else if (piece === BLACK) span.classList.add("vz-dambrete-black");
+            else if (piece === BLACK_KING)
+              span.classList.add("vz-dambrete-black", "vz-dambrete-king");
+            span.textContent = Math.abs(piece) === 2 ? "K" : "●";
+          } else if (span) span.remove();
+        }
+      }
+      return;
+    }
+
+    container.innerHTML = "";
     const table = document.createElement("table");
     table.className = "vz-dambrete-board";
     table.setAttribute("role", "grid");
-    const canMove = isMyTurn && myPlayerIdx === turnIdx;
+    dambreteTable = table;
+    dambreteState.board = board;
+    dambreteState.selectedCell = selectedCell;
+    dambreteState.legalMoves = legalMoves;
+    dambreteState.myPlayerIdx = myPlayerIdx;
+    dambreteState.onCellClick = onCellClick;
+
     for (let r = 0; r < ROWS; r++) {
       const tr = document.createElement("tr");
       for (let c = 0; c < COLS; c++) {
@@ -109,32 +181,29 @@
       }
       table.appendChild(tr);
     }
-    let lastTap = { key: "", t: 0 };
+
     function handleCellEvent(e) {
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
+      e.preventDefault();
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
-      const key = `${r},${c}`;
-      const now = Date.now();
-      if (e.type === "touchstart" || e.type === "pointerdown") {
-        if (key === lastTap.key && now - lastTap.t < 150) return;
-        lastTap = { key, t: now };
-        e.preventDefault();
-      } else if (e.type === "click" && now - lastTap.t < 400) return;
-      const piece = board[r]?.[c] ?? 0;
+      const st = dambreteState;
+      const piece = (st.board && st.board[r]?.[c]) ?? 0;
       const isMyPiece =
         piece !== 0 &&
-        ((myPlayerIdx === 0 && (piece === WHITE || piece === WHITE_KING)) ||
-          (myPlayerIdx === 1 && (piece === BLACK || piece === BLACK_KING)));
+        ((st.myPlayerIdx === 0 && (piece === WHITE || piece === WHITE_KING)) ||
+          (st.myPlayerIdx === 1 && (piece === BLACK || piece === BLACK_KING)));
       const isValidDest =
-        piece === 0 && isValidDestination(r, c, selectedCell, legalMoves);
-      if (isMyPiece) onCellClick(r, c, true);
-      else if (piece === 0 && isValidDest) onCellClick(r, c, false);
-      else if (selectedCell) onCellClick(r, c, false);
+        piece === 0 && isValidDestination(r, c, st.selectedCell, st.legalMoves);
+      const cb = st.onCellClick;
+      if (!cb) return;
+      if (isMyPiece) cb(r, c, true);
+      else if (piece === 0 && isValidDest) cb(r, c, false);
+      else if (st.selectedCell) cb(r, c, false);
     }
-    table.addEventListener("touchstart", handleCellEvent, { passive: false });
+
     table.addEventListener("pointerdown", handleCellEvent, { capture: true });
     table.addEventListener("click", handleCellEvent);
     container.appendChild(table);
@@ -302,6 +371,10 @@
     container.appendChild(table);
   }
 
+  function resetDambreteTable() {
+    dambreteTable = null;
+  }
+
   global.VZBoardGames = Object.freeze({
     ROWS,
     COLS,
@@ -311,6 +384,7 @@
     BLACK_KING,
     isDark,
     renderDambreteBoard,
+    resetDambreteTable,
     renderChessBoard,
     parseFenToBoard,
     squareToRowCol,

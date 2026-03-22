@@ -9124,6 +9124,9 @@ function startBoardGame(payload) {
 }
 
 function hideBoardGameArea() {
+  if (window.VZBoardGames?.resetDambreteTable) {
+    window.VZBoardGames.resetDambreteTable();
+  }
   const gameArea = document.getElementById("board-game-area");
   const modal = document.getElementById("board-games-modal");
   if (gameArea) gameArea.classList.add("hidden");
@@ -9175,6 +9178,9 @@ function renderBoardGame() {
       );
     }
   } else if (boardState.type === "chess" && boardState.fen) {
+    if (window.VZBoardGames?.resetDambreteTable) {
+      window.VZBoardGames.resetDambreteTable();
+    }
     if (dambreteContainer) dambreteContainer.classList.add("hidden");
     if (chessContainer && window.VZBoardGames) {
       window.VZBoardGames.renderChessBoard(
