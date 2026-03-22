@@ -109,13 +109,22 @@
       }
       table.appendChild(tr);
     }
+    let lastTouchCell = null;
     function handleCellEvent(e) {
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
-      if (e.type === "touchend") e.preventDefault();
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
+      if (e.type === "touchend") {
+        e.preventDefault();
+        lastTouchCell = `${r},${c}`;
+        setTimeout(() => {
+          lastTouchCell = null;
+        }, 400);
+      } else if (e.type === "click" && lastTouchCell === `${r},${c}`) {
+        return;
+      }
       const piece = board[r]?.[c] ?? 0;
       const isMyPiece =
         piece !== 0 &&
@@ -260,13 +269,22 @@
       }
       table.appendChild(tr);
     }
+    let lastChessTouchCell = null;
     function handleChessCellEvent(e) {
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
-      if (e.type === "touchend") e.preventDefault();
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
+      if (e.type === "touchend") {
+        e.preventDefault();
+        lastChessTouchCell = `${r},${c}`;
+        setTimeout(() => {
+          lastChessTouchCell = null;
+        }, 400);
+      } else if (e.type === "click" && lastChessTouchCell === `${r},${c}`) {
+        return;
+      }
       const piece = board[r]?.[c];
       const isMyPiece =
         piece &&
