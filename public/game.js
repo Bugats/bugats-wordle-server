@@ -9268,19 +9268,22 @@ async function handleChessCellClick(r, c, isPiece) {
     const clickedCell = [r, c];
     boardState.selectedCell = clickedCell;
     renderBoardGame();
-    const fetchId = ++boardLegalMovesFetchId;
-    try {
-      const data = await apiGet(`/board/${boardState.gameId}/moves`);
-      if (fetchId !== boardLegalMovesFetchId) return;
-      if (
-        boardState.selectedCell &&
-        boardState.selectedCell[0] === clickedCell[0] &&
-        boardState.selectedCell[1] === clickedCell[1]
-      ) {
-        boardState.legalMoves = data || { moves: [] };
-        renderBoardGame();
-      }
-    } catch {}
+    const hasServerMoves = (boardState.legalMoves?.moves || []).length > 0;
+    if (!hasServerMoves) {
+      const fetchId = ++boardLegalMovesFetchId;
+      try {
+        const data = await apiGet(`/board/${boardState.gameId}/moves`);
+        if (fetchId !== boardLegalMovesFetchId) return;
+        if (
+          boardState.selectedCell &&
+          boardState.selectedCell[0] === clickedCell[0] &&
+          boardState.selectedCell[1] === clickedCell[1]
+        ) {
+          boardState.legalMoves = data || { moves: [] };
+          renderBoardGame();
+        }
+      } catch {}
+    }
     return;
   }
 
@@ -9339,19 +9342,24 @@ async function handleDambreteCellClick(r, c, isPiece) {
     const clickedCell = [r, c];
     boardState.selectedCell = clickedCell;
     renderBoardGame();
-    const fetchId = ++boardLegalMovesFetchId;
-    try {
-      const data = await apiGet(`/board/${boardState.gameId}/moves`);
-      if (fetchId !== boardLegalMovesFetchId) return;
-      if (
-        boardState.selectedCell &&
-        boardState.selectedCell[0] === clickedCell[0] &&
-        boardState.selectedCell[1] === clickedCell[1]
-      ) {
-        boardState.legalMoves = data || { jumps: [], moves: [] };
-        renderBoardGame();
-      }
-    } catch {}
+    const hasServerMoves =
+      (boardState.legalMoves?.jumps || []).length > 0 ||
+      (boardState.legalMoves?.moves || []).length > 0;
+    if (!hasServerMoves) {
+      const fetchId = ++boardLegalMovesFetchId;
+      try {
+        const data = await apiGet(`/board/${boardState.gameId}/moves`);
+        if (fetchId !== boardLegalMovesFetchId) return;
+        if (
+          boardState.selectedCell &&
+          boardState.selectedCell[0] === clickedCell[0] &&
+          boardState.selectedCell[1] === clickedCell[1]
+        ) {
+          boardState.legalMoves = data || { jumps: [], moves: [] };
+          renderBoardGame();
+        }
+      } catch {}
+    }
     return;
   }
 
