@@ -12,6 +12,15 @@
       .replace(/"/g, "&quot;");
   }
 
+  const ZOLE_SUIT_CLUBS = 2;
+
+  const SUIT_META = [
+    { sym: "♥", red: true },
+    { sym: "♦", red: true },
+    { sym: "♣", red: false },
+    { sym: "♠", red: false },
+  ];
+
   const RANK_LABELS = {
     7: "7",
     8: "8",
@@ -23,12 +32,63 @@
     14: "A",
   };
 
+  function isZoleTrumpCard(card) {
+    if (!card || typeof card.r !== "number") return false;
+    if (card.r === 12 || card.r === 11) return true;
+    if (
+      card.s === ZOLE_SUIT_CLUBS &&
+      card.r !== 12 &&
+      card.r !== 11
+    )
+      return true;
+    return false;
+  }
+
   function cardLabel(card) {
     if (!card) return "?";
     const suits = ["♥", "♦", "♣", "♠"];
     const s = suits[card.s] || "?";
     const r = RANK_LABELS[card.r] || String(card.r);
     return s + r;
+  }
+
+  /**
+   * Klasiska spēļu kārta (CSS), nevis tikai teksts.
+   */
+  function createPlayingCardEl(card, opts) {
+    const o = opts || {};
+    const small = !!o.small;
+    const meta = SUIT_META[card.s] || SUIT_META[0];
+    const rank = RANK_LABELS[card.r] || String(card.r);
+    const trump = isZoleTrumpCard(card);
+
+    const el = document.createElement("div");
+    el.className =
+      "vz-zole-playing-card" +
+      (small ? " vz-zole-playing-card--sm" : "") +
+      (meta.red
+        ? " vz-zole-playing-card--red"
+        : " vz-zole-playing-card--black");
+    if (trump) el.classList.add("vz-zole-playing-card--trump");
+    el.setAttribute("aria-hidden", "true");
+
+    const tl = document.createElement("span");
+    tl.className = "vz-zole-pc-corner vz-zole-pc-corner--tl";
+    tl.innerHTML = esc(rank) + "<br>" + meta.sym;
+
+    const center = document.createElement("span");
+    center.className = "vz-zole-pc-center";
+    center.textContent = meta.sym;
+
+    const br = document.createElement("span");
+    br.className = "vz-zole-pc-corner vz-zole-pc-corner--br";
+    br.innerHTML = esc(rank) + "<br>" + meta.sym;
+
+    el.appendChild(tl);
+    el.appendChild(center);
+    el.appendChild(br);
+
+    return el;
   }
 
   function cardKey(c) {
@@ -229,7 +289,11 @@
       const t = trick[i];
       if (t) {
         const who = zole.players[t.playerIdx] || "?";
-        slot.innerHTML = `<span class="vz-zole-trick-who">${esc(who)}</span><span class="vz-zole-card vz-zole-card--sm">${esc(cardLabel(t.card))}</span>`;
+        const whoEl = document.createElement("span");
+        whoEl.className = "vz-zole-trick-who";
+        whoEl.textContent = who;
+        slot.appendChild(whoEl);
+        slot.appendChild(createPlayingCardEl(t.card, { small: true }));
       } else {
         slot.textContent = "—";
       }
@@ -264,7 +328,9 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "vz-zole-card-btn";
-      btn.textContent = cardLabel(card);
+      btn.setAttribute("aria-label", cardLabel(card));
+      btn.title = cardLabel(card);
+      btn.appendChild(createPlayingCardEl(card, {}));
       btn.dataset.s = String(card.s);
       btn.dataset.r = String(card.r);
       const k = cardKey(card);
@@ -317,7 +383,7 @@
           ? "Tiešsaiste: 2 cilvēki + bots."
           : "Pret diviem botiem.";
     note.innerHTML =
-      "26 kārtis (♣ kāravas 8, pārējie masti 6). Trumpji: visas <strong>dāmas</strong> un <strong>kalpi</strong>, kā arī pārējās ♣. Acis: A=11, 10=10, K=4, D=3, J=2. Lielais: pirkums + norok 2 (acis pieskaita lielajam). Zole: pirkuma acis mazo pusē. Uzvara <strong>61+</strong>. " +
+      "Kārtis kā uz galda (baltas, sarkans/melns). <strong>Zelta rāmītis</strong> = trumpis (D, J, ♣ kāravas). 26 kārtis. Acis: A=11, 10=10, K=4, D=3, J=2. Lielais: pirkums + norok 2. Uzvara <strong>61+</strong>. " +
       noteTail;
     handEl.appendChild(note);
 
@@ -329,5 +395,6 @@
     renderZoleBoard,
     cardLabel,
     cardKey,
+    isZoleTrumpCard,
   });
 })(window);

@@ -5337,10 +5337,6 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   margin-top: 4px;
   line-height: 1.35;
 }
-.vz-zole-card--selected {
-  outline: 2px solid #fbbf24;
-  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.35);
-}
 .vz-zole-discard-hint {
   margin: 0 0 8px;
   font-size: 12px;
@@ -5455,14 +5451,78 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   margin-bottom: 4px;
   word-break: break-word;
 }
-.vz-zole-card {
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  font-weight: 700;
+/* Spēļu kārtas (īsts izskats — balta kārtīte, stūri, sarkans/melns) */
+.vz-zole-playing-card {
+  position: relative;
+  box-sizing: border-box;
+  width: 56px;
+  height: 80px;
+  border-radius: 6px;
+  background: linear-gradient(165deg, #fefefe 0%, #e8e4dc 45%, #d4cfc4 100%);
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.85) inset,
+    0 2px 6px rgba(0, 0, 0, 0.35);
+  font-family: "Georgia", "Times New Roman", serif;
+  line-height: 1.05;
+  flex-shrink: 0;
 }
-.vz-zole-card--sm { font-size: 14px; }
+.vz-zole-playing-card--trump {
+  box-shadow:
+    0 0 0 2px rgba(251, 191, 36, 0.95),
+    0 1px 0 rgba(255, 255, 255, 0.85) inset,
+    0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.vz-zole-playing-card--sm {
+  width: 44px;
+  height: 62px;
+  border-radius: 5px;
+  font-size: 9px;
+}
+.vz-zole-playing-card--sm .vz-zole-pc-center {
+  font-size: 22px;
+}
+.vz-zole-playing-card--red .vz-zole-pc-corner,
+.vz-zole-playing-card--red .vz-zole-pc-center {
+  color: #c41e3a;
+}
+.vz-zole-playing-card--black .vz-zole-pc-corner,
+.vz-zole-playing-card--black .vz-zole-pc-center {
+  color: #1a1a1a;
+}
+.vz-zole-pc-corner {
+  position: absolute;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.vz-zole-pc-corner--tl {
+  top: 5px;
+  left: 4px;
+}
+.vz-zole-pc-corner--br {
+  bottom: 5px;
+  right: 4px;
+  transform: rotate(180deg);
+}
+.vz-zole-pc-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -52%);
+  font-size: 28px;
+  line-height: 1;
+  opacity: 0.92;
+}
+.vz-zole-card--selected {
+  outline: none;
+}
+.vz-zole-card-btn.vz-zole-card--selected {
+  transform: translateY(-4px);
+  filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.85));
+}
 .vz-zole-hand-title {
   font-size: 11px;
   font-weight: 700;
@@ -5477,23 +5537,24 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   gap: 8px;
 }
 .vz-zole-card-btn {
-  min-width: 48px;
-  padding: 10px 12px;
-  font-size: 15px;
-  font-weight: 600;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  min-width: unset;
+  padding: 4px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background: transparent;
+  color: inherit;
   cursor: pointer;
   touch-action: manipulation;
+  transition: transform 0.12s ease, border-color 0.12s ease, filter 0.12s ease;
 }
 .vz-zole-card-btn:disabled {
-  opacity: 0.35;
+  opacity: 0.4;
   cursor: not-allowed;
+  filter: grayscale(0.35);
 }
 .vz-zole-card-btn:not(:disabled):hover {
-  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(251, 191, 36, 0.5);
+  transform: translateY(-2px);
 }
 .vz-zole-note {
   margin: 12px 0 0;
