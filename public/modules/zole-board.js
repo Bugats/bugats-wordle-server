@@ -538,10 +538,10 @@
           ? "Tiešsaiste: 2 cilvēki + bots."
           : "Pret diviem botiem.";
     note.innerHTML =
-      "<strong>Trumpji</strong> — visas <strong>D</strong> un <strong>J</strong> (katrā mastā) un ♦ <strong>7–A</strong>. " +
-      "<strong>Parastās</strong> — tikai ♣ ♥ ♠: A, 10, K, 9. " +
-      "<strong>Sekšana:</strong> ja vada <strong>parastā</strong> — jāliek <strong>tas pats masts</strong> (♥D/♥J, ja vada ♥); ja masta nav — <strong>atmesties</strong> (jebkura cita). " +
-      "Ja vada <strong>trumpis</strong> — obligāti <strong>trumpis</strong>, ja ir rokā; ja <strong>nav</strong> neviena trumpja — tikai <strong>parastā</strong> (atmesties). " +
+      "<strong>Trumpji</strong> — <strong>D un J vienmēr trumpa</strong> (visos mastos) + ♦ <strong>7–A</strong>. " +
+      "<strong>Parastās</strong> — tikai ♣ ♥ ♠: A, 10, K, 9 (D/J tur nav). " +
+      "<strong>Sekšana:</strong> vada parasto — <strong>tas pats masts</strong> (♥D/♥J = ♥ mastam, bet tās ir trumpa kārtis); ja masta nav — atmesties. " +
+      "Vada trumpis — obligāti trumpis, ja ir; ja nav neviena trumpja — parastā. " +
       "Zelta rāmītis = trumpis. Roka: parastie masti kopā, tad trumpji. Uzvara <strong>61+</strong> (lielais/zole). " +
       noteTail;
     handEl.appendChild(note);
