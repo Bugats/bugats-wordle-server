@@ -5391,6 +5391,15 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   line-height: 1.15;
   color: rgba(255, 255, 255, 0.8);
 }
+.vz-zole-players-av-role {
+  font-size: 9px;
+  font-weight: 600;
+  text-align: center;
+  max-width: 100px;
+  line-height: 1.2;
+  color: rgba(196, 181, 253, 0.95);
+  margin-top: 1px;
+}
 .vz-zole-board-avatar {
   width: 40px !important;
   height: 40px !important;

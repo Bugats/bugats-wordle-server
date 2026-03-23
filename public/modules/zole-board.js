@@ -170,6 +170,24 @@
     return String(c || "—");
   }
 
+  /** Lomu teksts blakus vārdam: Galdiņš / Galds / Lielais / Mazais + līgums. */
+  function zolePlayerRoleLine(zole, playerIdx) {
+    const ph = zole.phase || "";
+    const c = zole.contract;
+    if (ph === "bid" || !c) return "—";
+    if (c === "galdins") return "Galdiņš";
+    if (c === "galds") return "Galds";
+    const ci = zole.contractorIdx;
+    if (ci == null || ci < 0) return "—";
+    const isContractor = playerIdx === ci;
+    if (c === "big") return isContractor ? "Lielais" : "Mazais";
+    if (c === "zole")
+      return isContractor ? "Zole · lielais" : "Zole · mazais";
+    if (c === "maza_zole")
+      return isContractor ? "Mazā zole · lielais" : "Mazā zole · mazais";
+    return "—";
+  }
+
   function formatTableDelta(zole, players) {
     const d = zole.tableDelta;
     if (!d || d.length !== 3) return "";
@@ -497,6 +515,8 @@
       for (let pi = 0; pi < 3; pi++) {
         const el = existingWrap.querySelector(`[data-zole-eye="${pi}"]`);
         if (el) el.textContent = `${eyes[pi] ?? 0} acis`;
+        const roleEl = existingWrap.querySelector(`[data-zole-role="${pi}"]`);
+        if (roleEl) roleEl.textContent = zolePlayerRoleLine(zole, pi);
       }
       const turnLine = existingWrap.querySelector(".vz-zole-turn");
       if (turnLine) {
@@ -588,6 +608,11 @@
         lab.className = "vz-zole-players-av-name";
         lab.textContent = un || "?";
         cell.appendChild(lab);
+        const roleLab = document.createElement("div");
+        roleLab.className = "vz-zole-players-av-role";
+        roleLab.dataset.zoleRole = String(pi);
+        roleLab.textContent = zolePlayerRoleLine(zole, pi);
+        cell.appendChild(roleLab);
         const eyeLab = document.createElement("div");
         eyeLab.className = "vz-zole-players-av-eyes";
         eyeLab.dataset.zoleEye = String(pi);
