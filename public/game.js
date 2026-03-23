@@ -9171,10 +9171,20 @@ function renderBoardGame() {
   if (turnEl)
     turnEl.textContent = isMyTurn ? "Tava kārta" : `${turnName} gājienā`;
   const hintEl = document.getElementById("board-game-hint");
-  if (hintEl)
-    hintEl.textContent = isMyTurn
-      ? "Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt"
-      : "Gaidām pretinieka gājienu";
+  if (hintEl) {
+    if (!isMyTurn) {
+      hintEl.textContent = "Gaidām pretinieka gājienu";
+    } else if (
+      boardState.type === "dambrete" &&
+      (boardState.legalMoves?.jumps || []).length > 0
+    ) {
+      hintEl.textContent =
+        "Kad var ēst pretinieku — obligāti jālēcas. Izvēlies kauliņu, kas var ēst (parādīsies zaļie lauki). Citus šajā brīdī izvēlēt nevar.";
+    } else {
+      hintEl.textContent =
+        "Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt. Lai mainītu figūru — pieskaries citam savam kauliņam.";
+    }
+  }
 
   if (boardState.type === "dambrete" && boardState.board) {
     if (chessContainer) chessContainer.classList.add("hidden");

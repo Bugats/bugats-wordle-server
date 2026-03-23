@@ -15,17 +15,44 @@
     return (r + c) % 2 === 1;
   }
 
+  function cellFromPointerLikeEvent(e) {
+    const t = e.changedTouches && e.changedTouches[0];
+    if (t) {
+      const el = document.elementFromPoint(t.clientX, t.clientY);
+      return el && el.closest ? el.closest("td[data-row][data-col]") : null;
+    }
+    return e.target && e.target.closest
+      ? e.target.closest("td[data-row][data-col]")
+      : null;
+  }
+
   /**
-   * pointerdown (touch + pele). passive: false — citādi mobilajos pārlūkos
-   * preventDefault() neaptur 300ms/gesture kavēšanu un pieskāriens „nedarbojas”.
+   * Pele/pen: pointerdown. Skārienam: touchend + elementFromPoint — dažos mobilajos
+   * WebKit pēc pirmā pieskāriena otrais pointerdown uz šūnas netiek uzticami piegādāts.
+   * passive: false, lai preventDefault() darbotos.
    */
   function bindBoardCellInput(table, handleCell) {
     table.addEventListener(
       "pointerdown",
       function boardPointerDown(e) {
         if (e.button != null && e.button !== 0) return;
+        if (e.pointerType === "touch") {
+          e.preventDefault();
+          return;
+        }
         e.preventDefault();
         handleCell(e);
+      },
+      { capture: true, passive: false }
+    );
+    table.addEventListener(
+      "touchend",
+      function boardTouchEnd(e) {
+        const td = cellFromPointerLikeEvent(e);
+        if (!td || !table.contains(td)) return;
+        if (td.dataset.clickable !== "true") return;
+        e.preventDefault();
+        handleCell({ target: td, preventDefault: function () {} });
       },
       { capture: true, passive: false }
     );
@@ -199,12 +226,15 @@
     }
 
     function handleCellEvent(e) {
-      const td = e.target.closest("td[data-row][data-col]");
+      const td =
+        e.target && e.target.closest
+          ? e.target.closest("td[data-row][data-col]")
+          : null;
       if (!td || td.dataset.clickable !== "true") return;
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
-      e.preventDefault();
+      if (typeof e.preventDefault === "function") e.preventDefault();
       const st = dambreteState;
       const piece = (st.board && st.board[r]?.[c]) ?? 0;
       const isMyPiece =
@@ -353,12 +383,15 @@
       table.appendChild(tr);
     }
     function handleChessCellEvent(e) {
-      const td = e.target.closest("td[data-row][data-col]");
+      const td =
+        e.target && e.target.closest
+          ? e.target.closest("td[data-row][data-col]")
+          : null;
       if (!td || td.dataset.clickable !== "true") return;
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
-      e.preventDefault();
+      if (typeof e.preventDefault === "function") e.preventDefault();
       const piece = board[r]?.[c];
       const isMyPiece =
         piece &&
