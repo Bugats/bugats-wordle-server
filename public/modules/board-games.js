@@ -280,6 +280,15 @@
         piece === 0 && isValidDestination(r, c, st.selectedCell, st.legalMoves);
       const cb = st.onCellClick;
       if (!cb) return;
+      if (
+        st.selectedCell &&
+        st.selectedCell[0] === r &&
+        st.selectedCell[1] === c &&
+        isMyPiece
+      ) {
+        cb(r, c, true);
+        return;
+      }
       if (isMyPieceSelectable) cb(r, c, true);
       else if (piece === 0 && isValidDest) cb(r, c, false);
       else if (st.selectedCell) cb(r, c, false);

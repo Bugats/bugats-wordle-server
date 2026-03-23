@@ -9344,6 +9344,15 @@ async function handleDambreteCellClick(r, c, isPiece) {
   }
 
   if (isPiece) {
+    if (
+      boardState.selectedCell &&
+      boardState.selectedCell[0] === r &&
+      boardState.selectedCell[1] === c
+    ) {
+      boardState.selectedCell = null;
+      renderBoardGame();
+      return;
+    }
     const jumps = boardState.legalMoves?.jumps || [];
     if (jumps.length > 0) {
       let canStartJumpHere = false;
@@ -9355,15 +9364,6 @@ async function handleDambreteCellClick(r, c, isPiece) {
         }
       }
       if (!canStartJumpHere) return;
-    }
-    if (
-      boardState.selectedCell &&
-      boardState.selectedCell[0] === r &&
-      boardState.selectedCell[1] === c
-    ) {
-      boardState.selectedCell = null;
-      renderBoardGame();
-      return;
     }
     const clickedCell = [r, c];
     boardState.selectedCell = clickedCell;
