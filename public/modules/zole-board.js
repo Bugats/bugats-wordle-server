@@ -540,8 +540,8 @@
     note.innerHTML =
       "<strong>Trumpji</strong> — visas <strong>D</strong> un <strong>J</strong> (katrā mastā) un ♦ <strong>7–A</strong>. " +
       "<strong>Parastās</strong> — tikai ♣ ♥ ♠: A, 10, K, 9. " +
-      "<strong>Sekšana:</strong> jāatbild ar <strong>to pašu mastu</strong> kā pirmā uz galda; ♥D un ♥J skaitās ♥ mastam. " +
-      "Ja tā masta kārtis <strong>nav</strong> — vari jebkuru (citu masta vai trumpi). " +
+      "<strong>Sekšana:</strong> ja vada <strong>parastā</strong> — jāliek <strong>tas pats masts</strong> (♥D/♥J, ja vada ♥); ja masta nav — <strong>atmesties</strong> (jebkura cita). " +
+      "Ja vada <strong>trumpis</strong> — obligāti <strong>trumpis</strong>, ja ir rokā; ja <strong>nav</strong> neviena trumpja — tikai <strong>parastā</strong> (atmesties). " +
       "Zelta rāmītis = trumpis. Roka: parastie masti kopā, tad trumpji. Uzvara <strong>61+</strong> (lielais/zole). " +
       noteTail;
     handEl.appendChild(note);
