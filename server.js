@@ -44,7 +44,9 @@ import {
   createZoleVsBotState,
   createZoleOnline2pState,
   zolePlayCard,
+  zoleProcessBid,
   zolePickBotCard,
+  zolePickBotBid,
   zolePublicSnapshot,
   ZOLE_BOT_1,
   isZoleBotUsername,
@@ -923,7 +925,7 @@ function createZoleVsBotGame(humanUsername) {
     type: "zole",
     players: zole.players.slice(),
     zole,
-    turn: zole.turn,
+    turn: zole.phase === "bid" ? zole.bidTurn : zole.turn,
     status: "active",
     moves: [],
     createdAt: Date.now(),
@@ -944,7 +946,7 @@ function createZoleOnline2pGame(usernameA, usernameB) {
     type: "zole",
     players: zole.players.slice(),
     zole,
-    turn: zole.turn,
+    turn: zole.phase === "bid" ? zole.bidTurn : zole.turn,
     status: "active",
     moves: [],
     createdAt: Date.now(),
@@ -970,6 +972,42 @@ function emitZoleToHumans(io, game, event, base) {
       zole: zolePublicSnapshot(game.zole, i),
     });
   }
+}
+
+function playZoleBotBids(io, game) {
+  if (!game || game.type !== "zole" || !game.zole) return;
+  while (
+    game.status === "active" &&
+    game.zole.phase === "bid" &&
+    isZoleBotUsername(game.players[game.zole.bidTurn])
+  ) {
+    const t = game.zole.bidTurn;
+    const bid = zolePickBotBid(game.zole, t);
+    const res = zoleProcessBid(game.zole, t, bid);
+    if (!res.ok) break;
+    game.lastMoveAt = Date.now();
+    game.moves.push({ bid, by: game.players[t], ts: Date.now() });
+    if (game.zole.phase === "play") {
+      game.turn = game.zole.turn;
+      emitZoleToHumans(io, game, "board.move", {
+        gameId: game.id,
+        type: "zole",
+        turn: game.zole.turn,
+        zoleMode: game.zoleMode,
+      });
+      setImmediate(() => playZoleBotTurns(io, game));
+      return;
+    }
+    game.turn =
+      game.zole.phase === "play" ? game.zole.turn : game.zole.bidTurn;
+    emitZoleToHumans(io, game, "board.move", {
+      gameId: game.id,
+      type: "zole",
+      turn: game.turn,
+      zoleMode: game.zoleMode,
+    });
+  }
+  if (game.zole.phase === "bid") game.turn = game.zole.bidTurn;
 }
 
 function playZoleBotTurns(io, game) {
@@ -10687,6 +10725,12 @@ io.on("connection", (socket) => {
     const boardGame = boardGameId ? boardGames.get(boardGameId) : null;
     if (boardGame && boardGame.status === "active") {
       socket.join(`board:${boardGame.id}`);
+      if (boardGame.type === "zole" && boardGame.zole) {
+        boardGame.turn =
+          boardGame.zole.phase === "bid"
+            ? boardGame.zole.bidTurn
+            : boardGame.zole.turn;
+      }
       socket.emit("board.resume", {
         gameId: boardGame.id,
         type: boardGame.type,
@@ -11812,7 +11856,7 @@ io.on("connection", (socket) => {
           ...base,
           zole: zolePublicSnapshot(game.zole, idxOp),
         });
-      setImmediate(() => playZoleBotTurns(io, game));
+      setImmediate(() => playZoleBotBids(io, game));
     } else {
       const payloadOut = {
         gameId: game.id,
@@ -11868,7 +11912,7 @@ io.on("connection", (socket) => {
     };
     socket.emit("board.start", payloadOut);
     if (game.type === "zole") {
-      setImmediate(() => playZoleBotTurns(io, game));
+      setImmediate(() => playZoleBotBids(io, game));
     } else if (game.turn === 1) {
       setImmediate(() => playBoardBotMove(io, game));
     }
@@ -11882,6 +11926,71 @@ io.on("connection", (socket) => {
     if (!game || game.status !== "active")
       return socket.emit("board.error", { message: "Spēle nav aktīva." });
     if (!game.players.includes(user.username)) return;
+
+    if (game.type === "zole" && game.zole?.phase === "bid") {
+      const pIdx = boardGameSeatIndex(game, user.username);
+      if (pIdx < 0 || isZoleBotUsername(game.players[pIdx]))
+        return socket.emit("board.error", { message: "Nederīgs spēlētājs." });
+      if (game.zole.bidTurn !== pIdx)
+        return socket.emit("board.error", { message: "Nav tavas likšanas kārtas." });
+      const bid = String(payload?.bid || payload?.zoleBid || "").toLowerCase();
+      if (
+        bid !== "pass" &&
+        bid !== "big" &&
+        bid !== "zole" &&
+        bid !== "maza_zole"
+      )
+        return socket.emit("board.error", { message: "Nederīga likšana." });
+      const res = zoleProcessBid(game.zole, pIdx, bid);
+      if (!res.ok)
+        return socket.emit("board.error", {
+          message: res.error || "Neizdevās.",
+        });
+      game.turn =
+        game.zole.phase === "play" ? game.zole.turn : game.zole.bidTurn;
+      game.lastMoveAt = Date.now();
+      game.moves.push({ bid, by: user.username, ts: Date.now() });
+      if (game.zole.phase === "end") {
+        const w = game.zole.winnerUsername;
+        finishBoardGame(game, w, "win");
+        const humans = game.players.filter((p) => !isZoleBotUsername(p));
+        for (const h of humans) {
+          const idx = boardGameSeatIndex(game, h);
+          const sock = getSocketByUsername(h);
+          if (!sock) continue;
+          const coinsGain =
+            w && String(w).toLowerCase() === String(h).toLowerCase()
+              ? BOARD_GAME_REWARD_COINS
+              : 0;
+          const coinsLoss =
+            w && String(w).toLowerCase() !== String(h).toLowerCase()
+              ? BOARD_GAME_LOSE_COINS
+              : 0;
+          sock.emit("board.end", {
+            gameId,
+            type: "zole",
+            players: game.players,
+            vsBot: !!game.vsBot,
+            winner: w,
+            reason: "win",
+            zole: zolePublicSnapshot(game.zole, idx),
+            coinsGain,
+            coinsLoss,
+            zoleMode: game.zoleMode,
+          });
+        }
+        return;
+      }
+      emitZoleToHumans(io, game, "board.move", {
+        gameId,
+        type: "zole",
+        turn: game.turn,
+        zoleMode: game.zoleMode,
+      });
+      setImmediate(() => playZoleBotBids(io, game));
+      return;
+    }
+
     const turnIdx = game.turn;
     const currentPlayer = game.players[turnIdx];
     if (currentPlayer !== user.username)
@@ -12003,6 +12112,8 @@ io.on("connection", (socket) => {
           setImmediate(() => playBoardBotMove(io, game));
       }
     } else if (game.type === "zole") {
+      if (game.zole?.phase !== "play")
+        return socket.emit("board.error", { message: "Nav spēles fāzes." });
       const card = payload?.card || payload?.move;
       if (!card || typeof card.s !== "number" || typeof card.r !== "number")
         return socket.emit("board.error", { message: "Nav gājiena." });
@@ -12052,6 +12163,7 @@ io.on("connection", (socket) => {
         gameId,
         type: "zole",
         turn: game.zole.turn,
+        zoleMode: game.zoleMode,
       });
       setImmediate(() => playZoleBotTurns(io, game));
     }

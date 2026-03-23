@@ -5332,7 +5332,78 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 .vz-zole-trump strong { color: #fbbf24; }
 .vz-zole-scores { opacity: 0.9; margin-top: 4px; }
+.vz-zole-tricks-sub { font-size: 11px; opacity: 0.75; margin-top: 2px; }
+.vz-zole-contract {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #c4b5fd;
+}
 .vz-zole-turn { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+.vz-zole-bid {
+  border: 1px solid rgba(196, 181, 253, 0.25);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: rgba(30, 27, 60, 0.35);
+}
+.vz-zole-bid-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 8px;
+}
+.vz-zole-bid-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.vz-zole-bid-btn {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.vz-zole-bid-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.vz-zole-bid-wait {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.75;
+}
+.vz-zole-result {
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: rgba(60, 45, 10, 0.25);
+}
+.vz-zole-result-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(251, 191, 36, 0.85);
+  margin-bottom: 6px;
+}
+.vz-zole-result-delta {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.vz-zole-result-detail {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  opacity: 0.85;
+}
 .vz-zole-trick {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 4px;

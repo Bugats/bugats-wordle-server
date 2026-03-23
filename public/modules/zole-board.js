@@ -1,5 +1,5 @@
 /**
- * Zole UI (3 spēlētāji, vienkāršots MVP)
+ * Zole UI — acis, likšana (lielais / zole / mazā zole / galdiņš), tabulas punkti
  */
 (function (global) {
   "use strict";
@@ -35,11 +35,38 @@
     return c.s + ":" + c.r;
   }
 
+  function contractLabel(c) {
+    if (c === "big") return "Lielais";
+    if (c === "zole") return "Zole";
+    if (c === "maza_zole") return "Mazā zole";
+    if (c === "galdins") return "Galdiņš";
+    return String(c || "—");
+  }
+
+  function formatTableDelta(zole, players) {
+    const d = zole.tableDelta;
+    if (!d || d.length !== 3) return "";
+    const parts = [];
+    for (let i = 0; i < 3; i++) {
+      const n = d[i];
+      if (!n) continue;
+      const sign = n > 0 ? "+" : "";
+      parts.push(`${esc(players[i] || "?")}: ${sign}${n}`);
+    }
+    return parts.join(" · ");
+  }
+
   function renderZoleBoard(zole, isMyTurn, onPlayCard, opts) {
     const container = document.getElementById("board-zole-container");
     if (!container) return;
     container.classList.remove("hidden");
     container.innerHTML = "";
+
+    const myIdx =
+      opts && typeof opts.myIdx === "number" && opts.myIdx >= 0
+        ? opts.myIdx
+        : 0;
+    const onBid = opts && typeof opts.onBid === "function" ? opts.onBid : null;
 
     const wrap = document.createElement("div");
     wrap.className = "vz-zole-wrap";
@@ -47,16 +74,113 @@
     const meta = document.createElement("div");
     meta.className = "vz-zole-meta";
     meta.innerHTML = `<div class="vz-zole-trump">Lācis: <strong>${esc(zole.trumpLabel)}</strong></div>`;
+
+    const eyes = zole.eyePoints || [0, 0, 0];
+    const tricks = zole.tricksWon || [0, 0, 0];
     const scoreLine = document.createElement("div");
     scoreLine.className = "vz-zole-scores";
-    scoreLine.textContent = `Stiķi: ${(zole.scores || []).join(" · ")}`;
+    scoreLine.innerHTML = `<div>Acis: ${eyes.map((e) => esc(String(e))).join(" · ")}</div><div class="vz-zole-tricks-sub">Stiķi: ${tricks.map((t) => esc(String(t))).join(" · ")}</div>`;
     meta.appendChild(scoreLine);
+
+    if (zole.phase === "play" && zole.contract) {
+      const cEl = document.createElement("div");
+      cEl.className = "vz-zole-contract";
+      const who =
+        zole.contractorIdx != null && zole.players
+          ? zole.players[zole.contractorIdx]
+          : "—";
+      cEl.textContent = `Līgums: ${contractLabel(zole.contract)} — ${esc(who)}`;
+      meta.appendChild(cEl);
+    }
+
     const turnLine = document.createElement("div");
     turnLine.className = "vz-zole-turn";
-    const tName = zole.players[zole.turn] || "?";
-    turnLine.textContent = `Kārta: ${tName}`;
+    if (zole.phase === "bid") {
+      const bt = zole.bidTurn ?? 0;
+      turnLine.textContent =
+        bt === myIdx ? "Tava likšanas kārta" : `Likšana: ${esc(zole.players[bt] || "?")}`;
+    } else if (zole.phase === "end") {
+      turnLine.textContent = "Partija beigusies";
+    } else {
+      const tName = zole.players[zole.turn] || "?";
+      turnLine.textContent = isMyTurn ? "Tava kārta (kārtis)" : `Kārta: ${esc(tName)}`;
+    }
     meta.appendChild(turnLine);
     wrap.appendChild(meta);
+
+    if (zole.phase === "bid") {
+      const bidBox = document.createElement("div");
+      bidBox.className = "vz-zole-bid";
+      const bidTitle = document.createElement("div");
+      bidTitle.className = "vz-zole-bid-title";
+      bidTitle.textContent = "Likšana";
+      bidBox.appendChild(bidTitle);
+      const isMyBid = (zole.bidTurn ?? 0) === myIdx;
+      if (isMyBid && onBid) {
+        const row = document.createElement("div");
+        row.className = "vz-zole-bid-btns";
+        const bids = [
+          { key: "pass", label: "Pasēt" },
+          { key: "big", label: "Lielais" },
+          { key: "zole", label: "Zole" },
+          { key: "maza_zole", label: "Mazā zole" },
+        ];
+        for (const b of bids) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "vz-zole-bid-btn";
+          btn.textContent = b.label;
+          btn.addEventListener("click", () => onBid(b.key));
+          row.appendChild(btn);
+        }
+        bidBox.appendChild(row);
+      } else if (!isMyBid) {
+        const wait = document.createElement("p");
+        wait.className = "vz-zole-bid-wait";
+        wait.textContent = "Gaidām citu spēlētāju likšanu…";
+        bidBox.appendChild(wait);
+      }
+      wrap.appendChild(bidBox);
+    }
+
+    if (zole.phase === "end" && zole.tableDelta) {
+      const resBox = document.createElement("div");
+      resBox.className = "vz-zole-result";
+      const h = document.createElement("div");
+      h.className = "vz-zole-result-title";
+      h.textContent = "Tabula (punkti šai partijai)";
+      resBox.appendChild(h);
+      const deltaLine = document.createElement("div");
+      deltaLine.className = "vz-zole-result-delta";
+      deltaLine.textContent = formatTableDelta(zole, zole.players || []);
+      resBox.appendChild(deltaLine);
+      const lr = zole.lastResult;
+      if (lr && lr.kind) {
+        const det = document.createElement("div");
+        det.className = "vz-zole-result-detail";
+        let txt = "";
+        if (lr.kind === "galdins") {
+          if (lr.tie) txt = "Galdiņš: trīs vienādi — bez izmaksām.";
+          else
+            txt = `Galdiņš: zaudētājs ${esc(zole.players[lr.loserIdx])}, maksā katram uzvarētājam ${lr.payEach} p.`;
+        } else if (lr.kind === "big") {
+          txt = lr.win
+            ? `Lielais uzvarēja (${lr.tier} p. no katra mazā).`
+            : `Lielais zaudēja (${lr.tier} p. katram mazajam).`;
+        } else if (lr.kind === "zole") {
+          txt = lr.win
+            ? `Zole uzvarēta (${lr.tier} p. no katra).`
+            : `Zole zaudēta (${lr.tier} p. katram pretiniekam).`;
+        } else if (lr.kind === "maza_zole") {
+          txt = lr.win
+            ? "Mazā zole uzvarēta (6 p. no katra)."
+            : "Mazā zole zaudēta (6 p. katram).";
+        }
+        det.textContent = txt;
+        resBox.appendChild(det);
+      }
+      wrap.appendChild(resBox);
+    }
 
     const trickEl = document.createElement("div");
     trickEl.className = "vz-zole-trick";
@@ -118,9 +242,11 @@
     note.className = "vz-zole-note";
     const online =
       opts && String(opts.zoleMode || "").toLowerCase() === "online_2p";
-    note.textContent = online
-      ? "MVP: 3 krāsas × 8 kārtis, 8 stiķi. Tiešsaiste: tu + draugs + trešais ir bots."
-      : "MVP: 3 krāsas × 8 kārtis, 8 stiķi. Pret diviem botiem.";
+    note.innerHTML =
+      "Acis: A=11, 10=10, K=4, D=3, J=2. Uzvara ar <strong>61+</strong> acīm (lielajam / zolei). " +
+      (online
+        ? "Tiešsaiste: 2 cilvēki + bots."
+        : "Pret diviem botiem.");
     handEl.appendChild(note);
 
     wrap.appendChild(handEl);

@@ -799,10 +799,20 @@ function showBoardGameResult(payload) {
     } else if (reason === "checkmate") {
       detail = `Tu uzvarēji ar matu pret ${oppName}.`;
     } else if (gameType === "zole") {
+      const snap = payload?.zole || boardState.zole;
+      const td = snap?.tableDelta;
+      const myI = boardGamePlayerIndex(players, me);
+      const tab =
+        td &&
+        myI >= 0 &&
+        typeof td[myI] === "number" &&
+        td[myI] !== 0
+          ? ` Tabulā šai partijai: ${td[myI] > 0 ? "+" : ""}${td[myI]} p.`
+          : "";
       detail =
-        boardState.zoleMode === "online_2p"
-          ? "Tu uzvarēji zolē (tiešsaistes partija)."
-          : "Tu uzvarēji pār diviem Zole botiem.";
+        (boardState.zoleMode === "online_2p"
+          ? "Labākais tabulas rezultāts šajā partijā (tiešsaiste)."
+          : "Labākais tabulas rezultāts šajā partijā (pret botiem).") + tab;
     } else {
       detail = `Tu uzvarēji pret ${oppName}.`;
     }
@@ -817,6 +827,18 @@ function showBoardGameResult(payload) {
           : `Tu zaudēji pret ${String(winner)}.`;
     } else if (reason === "checkmate") {
       detail = `Tu zaudēji — ${String(winner)} uzvarēja ar matu.`;
+    } else if (gameType === "zole") {
+      const snap = payload?.zole || boardState.zole;
+      const td = snap?.tableDelta;
+      const myI = boardGamePlayerIndex(players, me);
+      const tab =
+        td &&
+        myI >= 0 &&
+        typeof td[myI] === "number" &&
+        td[myI] !== 0
+          ? ` Tabulā: ${td[myI] > 0 ? "+" : ""}${td[myI]} p.`
+          : "";
+      detail = `Uz tabulas uzvarēja ${String(winner)}.${tab}`;
     } else {
       detail = `Tu zaudēji — uzvarēja ${String(winner)}.`;
     }
@@ -9480,7 +9502,12 @@ function renderBoardGame() {
       typeEl.textContent = `♟️ Dambrete (${boardDambreteModeLabel(boardState.dambreteVariant)})`;
   }
   const myIdx = boardGamePlayerIndex(boardState.players, state.username);
-  const isMyTurn = myIdx === boardState.turn;
+  const zoleBidTurn =
+    boardState.type === "zole" && boardState.zole?.phase === "bid"
+      ? boardState.zole.bidTurn
+      : null;
+  const isMyTurn =
+    zoleBidTurn != null ? myIdx === zoleBidTurn : myIdx === boardState.turn;
   if (
     boardState.type === "dambrete" &&
     isMyTurn &&
@@ -9489,17 +9516,38 @@ function renderBoardGame() {
   ) {
     boardState.selectedCell = null;
   }
-  const turnName = boardState.players[boardState.turn] || "?";
-  if (turnEl)
-    turnEl.textContent = isMyTurn ? "Tava kārta" : `${turnName} gājienā`;
+  const turnName =
+    zoleBidTurn != null
+      ? boardState.players[zoleBidTurn] || "?"
+      : boardState.players[boardState.turn] || "?";
+  if (turnEl) {
+    if (boardState.type === "zole" && boardState.zole?.phase === "bid") {
+      turnEl.textContent = isMyTurn ? "Tava likšanas kārta" : `${turnName} likšanā`;
+    } else if (boardState.type === "zole" && boardState.zole?.phase === "end") {
+      turnEl.textContent = "Partija beigusies";
+    } else {
+      turnEl.textContent = isMyTurn ? "Tava kārta" : `${turnName} gājienā`;
+    }
+  }
   const hintEl = document.getElementById("board-game-hint");
   if (hintEl) {
     if (boardState.type === "zole") {
-      hintEl.textContent = isMyTurn
-        ? "Spied uz kārtas, ko gribi izspēlēt (jāievēro krāsa)."
-        : boardState.zoleMode === "online_2p"
-          ? "Gaidām otra spēlētāja vai bota gājienu…"
-          : "Gaidām Zole botu gājienu…";
+      if (boardState.zole?.phase === "bid") {
+        hintEl.textContent = isMyTurn
+          ? "Izvēlies: Pasēt, Lielais, Zole vai Mazā zole (pirmais, kas nepasē, spēlē viens pret diviem)."
+          : boardState.zoleMode === "online_2p"
+            ? "Gaidām likšanu…"
+            : "Gaidām bota likšanu…";
+      } else if (boardState.zole?.phase === "end") {
+        hintEl.textContent =
+          "Skaties tabulas punktus zemāk. Uzvarētājs pēc spēles — labākais +/− šajā partijā.";
+      } else {
+        hintEl.textContent = isMyTurn
+          ? "Spied uz kārtas (jāievēro krāsa). Uzvara ar 61+ acīm, ja esi lielais / zole."
+          : boardState.zoleMode === "online_2p"
+            ? "Gaidām otra spēlētāja vai bota gājienu…"
+            : "Gaidām Zole botu gājienu…";
+      }
     } else if (!isMyTurn) {
       hintEl.textContent = "Gaidām pretinieka gājienu";
     } else if (
@@ -9531,7 +9579,17 @@ function renderBoardGame() {
             card,
           });
         },
-        { zoleMode: boardState.zoleMode }
+        {
+          zoleMode: boardState.zoleMode,
+          myIdx,
+          onBid: (bid) => {
+            if (!state.socket || !boardState.gameId) return;
+            state.socket.emit("board.move", {
+              gameId: boardState.gameId,
+              bid,
+            });
+          },
+        }
       );
     }
   } else if (boardState.type === "dambrete" && boardState.board) {
