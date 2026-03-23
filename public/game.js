@@ -810,7 +810,7 @@ function showBoardGameResult(payload) {
     gameType === "chess"
       ? "Šahs"
       : gameType === "zole"
-        ? "Zole (MVP)"
+        ? "Zole"
         : `Dambrete (${boardDambreteModeLabel(dVar)})`;
 
   overlay.classList.remove(
@@ -9570,7 +9570,7 @@ function renderBoardGame() {
   const zoleContainer = document.getElementById("board-zole-container");
   if (typeEl) {
     if (boardState.type === "chess") typeEl.textContent = "♔ Šahs";
-    else if (boardState.type === "zole") typeEl.textContent = "🃏 Zole (MVP)";
+    else if (boardState.type === "zole") typeEl.textContent = "🃏 Zole";
     else
       typeEl.textContent = `♟️ Dambrete (${boardDambreteModeLabel(boardState.dambreteVariant)})`;
   }
@@ -9580,7 +9580,13 @@ function renderBoardGame() {
       ? boardState.zole.bidTurn
       : null;
   const isMyTurn =
-    zoleBidTurn != null ? myIdx === zoleBidTurn : myIdx === boardState.turn;
+    zoleBidTurn != null
+      ? myIdx === zoleBidTurn
+      : boardState.type === "zole" &&
+          boardState.zole?.phase === "discard" &&
+          boardState.zole?.contract === "big"
+        ? myIdx === boardState.zole.contractorIdx
+        : myIdx === boardState.turn;
   if (
     boardState.type === "dambrete" &&
     isMyTurn &&
@@ -9596,6 +9602,13 @@ function renderBoardGame() {
   if (turnEl) {
     if (boardState.type === "zole" && boardState.zole?.phase === "bid") {
       turnEl.textContent = isMyTurn ? "Tava likšanas kārta" : `${turnName} likšanā`;
+    } else if (
+      boardState.type === "zole" &&
+      boardState.zole?.phase === "discard"
+    ) {
+      turnEl.textContent = isMyTurn
+        ? "Tava kārta — norok 2 kārtas"
+        : "Lielais norok kārtas…";
     } else if (boardState.type === "zole" && boardState.zole?.phase === "end") {
       turnEl.textContent = "Partija beigusies";
     } else {
@@ -9611,12 +9624,19 @@ function renderBoardGame() {
           : boardState.zoleMode === "vs_bot"
             ? "Gaidām bota likšanu…"
             : "Gaidām citu spēlētāju likšanu…";
+      } else if (
+        boardState.zole?.phase === "discard" &&
+        boardState.zole?.contract === "big"
+      ) {
+        hintEl.textContent = isMyTurn
+          ? "Tu paņēmi pirkumu (10 kārtu rokā). Norok 2 kārtas — to acis pieskaitās tev."
+          : "Gaidām, kamēr lielais norok 2 kārtas…";
       } else if (boardState.zole?.phase === "end") {
         hintEl.textContent =
           "Skaties tabulas punktus zemāk. Uzvarētājs pēc spēles — labākais +/− šajā partijā.";
       } else {
         hintEl.textContent = isMyTurn
-          ? "Spied uz kārtas (jāievēro krāsa). Uzvara ar 61+ acīm, ja esi lielais / zole."
+          ? "Spied uz kārtas (jāievēro masts; dāmas un kalpi ir trumpji). Uzvara ar 61+ acīm, ja esi lielais / zole."
           : boardState.zoleMode === "vs_bot"
             ? "Gaidām Zole botu gājienu…"
             : boardState.zoleMode === "online_2p"
@@ -9662,6 +9682,13 @@ function renderBoardGame() {
             state.socket.emit("board.move", {
               gameId: boardState.gameId,
               bid,
+            });
+          },
+          onDiscard: (pair) => {
+            if (!state.socket || !boardState.gameId || pair.length !== 2) return;
+            state.socket.emit("board.move", {
+              gameId: boardState.gameId,
+              discard: pair,
             });
           },
         }

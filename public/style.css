@@ -5331,6 +5331,21 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   line-height: 1.45;
 }
 .vz-zole-trump strong { color: #fbbf24; }
+.vz-zole-trump-note {
+  font-size: 11px;
+  opacity: 0.75;
+  margin-top: 4px;
+  line-height: 1.35;
+}
+.vz-zole-card--selected {
+  outline: 2px solid #fbbf24;
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.35);
+}
+.vz-zole-discard-hint {
+  margin: 0 0 8px;
+  font-size: 12px;
+  opacity: 0.85;
+}
 .vz-zole-scores { opacity: 0.9; margin-top: 4px; }
 .vz-zole-tricks-sub { font-size: 11px; opacity: 0.75; margin-top: 2px; }
 .vz-zole-contract {

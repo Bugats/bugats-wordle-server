@@ -40,7 +40,7 @@ describe("zoleComputeTableDeltas", () => {
     expect(delta[2]).toBe(-2);
   });
 
-  it("zole: contractor loses max tier", () => {
+  it("zole: contractor loses max tier (no tricks)", () => {
     const eyes = [20, 40, 30];
     const tricks = [0, 5, 3];
     const { delta, summary } = zoleComputeTableDeltas("zole", 0, eyes, tricks);
@@ -50,5 +50,16 @@ describe("zoleComputeTableDeltas", () => {
     expect(delta[0]).toBe(-16);
     expect(delta[1]).toBe(8);
     expect(delta[2]).toBe(8);
+  });
+
+  it("zole: contractor wins with 91+ acis → 6 p. no katra", () => {
+    const eyes = [95, 5, 5];
+    const tricks = [7, 1, 0];
+    const { delta, summary } = zoleComputeTableDeltas("zole", 0, eyes, tricks);
+    expect(summary.win).toBe(true);
+    expect(summary.tier).toBe(6);
+    expect(delta[0]).toBe(12);
+    expect(delta[1]).toBe(-6);
+    expect(delta[2]).toBe(-6);
   });
 });

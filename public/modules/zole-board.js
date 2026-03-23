@@ -18,14 +18,14 @@
     9: "9",
     10: "10",
     11: "J",
-    12: "Q",
+    12: "D",
     13: "K",
     14: "A",
   };
 
   function cardLabel(card) {
     if (!card) return "?";
-    const suits = ["♥", "♦", "♣"];
+    const suits = ["♥", "♦", "♣", "♠"];
     const s = suits[card.s] || "?";
     const r = RANK_LABELS[card.r] || String(card.r);
     return s + r;
@@ -67,13 +67,18 @@
         ? opts.myIdx
         : 0;
     const onBid = opts && typeof opts.onBid === "function" ? opts.onBid : null;
+    const onDiscard =
+      opts && typeof opts.onDiscard === "function" ? opts.onDiscard : null;
 
     const wrap = document.createElement("div");
     wrap.className = "vz-zole-wrap";
 
     const meta = document.createElement("div");
     meta.className = "vz-zole-meta";
-    meta.innerHTML = `<div class="vz-zole-trump">Lācis: <strong>${esc(zole.trumpLabel)}</strong></div>`;
+    const trumpNote = zole.trumpNote
+      ? `<div class="vz-zole-trump-note">${esc(zole.trumpNote)}</div>`
+      : "";
+    meta.innerHTML = `<div class="vz-zole-trump">Galda lācis (pēc pirkuma): <strong>${esc(zole.trumpLabel)}</strong></div>${trumpNote}`;
 
     const eyes = zole.eyePoints || [0, 0, 0];
     const tricks = zole.tricksWon || [0, 0, 0];
@@ -99,6 +104,11 @@
       const bt = zole.bidTurn ?? 0;
       turnLine.textContent =
         bt === myIdx ? "Tava likšanas kārta" : `Likšana: ${esc(zole.players[bt] || "?")}`;
+    } else if (zole.phase === "discard") {
+      const isBig = zole.contract === "big";
+      turnLine.textContent = isBig && myIdx === zole.contractorIdx
+        ? "Tu esi lielais — norok 2 kārtas (tās pieskaitās tavām acīm)"
+        : "Lielais norok 2 kārtas…";
     } else if (zole.phase === "end") {
       turnLine.textContent = "Partija beigusies";
     } else {
@@ -141,6 +151,31 @@
         bidBox.appendChild(wait);
       }
       wrap.appendChild(bidBox);
+    }
+
+    let discardConfirmBtn = null;
+    if (zole.phase === "discard" && zole.contract === "big") {
+      const dBox = document.createElement("div");
+      dBox.className = "vz-zole-discard";
+      const dt = document.createElement("div");
+      dt.className = "vz-zole-bid-title";
+      dt.textContent = "Norakšana";
+      dBox.appendChild(dt);
+      const dh = document.createElement("p");
+      dh.className = "vz-zole-discard-hint";
+      dh.textContent =
+        "Izvēlies divas kārtas rokā un spied «Norakt».";
+      dBox.appendChild(dh);
+      const confirmRow = document.createElement("div");
+      confirmRow.className = "vz-zole-discard-actions";
+      discardConfirmBtn = document.createElement("button");
+      discardConfirmBtn.type = "button";
+      discardConfirmBtn.className = "vz-zole-bid-btn vz-zole-discard-confirm";
+      discardConfirmBtn.textContent = "Norakt";
+      discardConfirmBtn.disabled = true;
+      confirmRow.appendChild(discardConfirmBtn);
+      dBox.appendChild(confirmRow);
+      wrap.appendChild(dBox);
     }
 
     if (zole.phase === "end" && zole.tableDelta) {
@@ -219,6 +254,12 @@
       ? new Set(zole.legalCardKeys)
       : null;
 
+    const discardSel = [];
+    const isDiscardMe =
+      zole.phase === "discard" &&
+      zole.contract === "big" &&
+      myIdx === zole.contractorIdx;
+
     for (const card of hand) {
       const btn = document.createElement("button");
       btn.type = "button";
@@ -226,15 +267,43 @@
       btn.textContent = cardLabel(card);
       btn.dataset.s = String(card.s);
       btn.dataset.r = String(card.r);
-      const can =
-        isMyTurn &&
-        zole.phase === "play" &&
-        (!legalSet || legalSet.has(cardKey(card)));
-      btn.disabled = !can;
-      if (can) {
-        btn.addEventListener("click", () => onPlayCard(card));
+      const k = cardKey(card);
+      let can = false;
+      if (isDiscardMe && onDiscard) {
+        can = true;
+        btn.addEventListener("click", () => {
+          const ix = discardSel.findIndex(
+            (c) => cardKey(c) === k
+          );
+          if (ix >= 0) {
+            discardSel.splice(ix, 1);
+            btn.classList.remove("vz-zole-card--selected");
+          } else if (discardSel.length < 2) {
+            discardSel.push(card);
+            btn.classList.add("vz-zole-card--selected");
+          }
+          if (discardConfirmBtn)
+            discardConfirmBtn.disabled = discardSel.length !== 2;
+        });
+      } else {
+        can =
+          isMyTurn &&
+          zole.phase === "play" &&
+          (!legalSet || legalSet.has(k));
+        if (can) {
+          btn.addEventListener("click", () => onPlayCard(card));
+        }
       }
+      btn.disabled = !can && !isDiscardMe;
+      if (isDiscardMe && !onDiscard) btn.disabled = true;
       btnRow.appendChild(btn);
+    }
+
+    if (isDiscardMe && onDiscard && discardConfirmBtn) {
+      discardConfirmBtn.addEventListener("click", () => {
+        if (discardSel.length !== 2) return;
+        onDiscard(discardSel.slice());
+      });
     }
     handEl.appendChild(btnRow);
 
@@ -248,7 +317,7 @@
           ? "Tiešsaiste: 2 cilvēki + bots."
           : "Pret diviem botiem.";
     note.innerHTML =
-      "Acis: A=11, 10=10, K=4, D=3, J=2. Uzvara ar <strong>61+</strong> acīm (lielajam / zolei). " +
+      "26 kārtis (♣ kāravas 8, pārējie masti 6). Trumpji: visas <strong>dāmas</strong> un <strong>kalpi</strong>, kā arī pārējās ♣. Acis: A=11, 10=10, K=4, D=3, J=2. Lielais: pirkums + norok 2 (acis pieskaita lielajam). Zole: pirkuma acis mazo pusē. Uzvara <strong>61+</strong>. " +
       noteTail;
     handEl.appendChild(note);
 
