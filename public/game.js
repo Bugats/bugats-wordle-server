@@ -624,6 +624,15 @@ const duelExtraMsgEl = document.getElementById("duel-result-reason");
 const duelOkBtn = document.getElementById("duel-result-close");
 
 // GALDA SPĒLES (dambrete, šahs)
+function boardGamePlayerIndex(players, username) {
+  if (!username || !Array.isArray(players)) return -1;
+  const want = String(username).trim().toLowerCase();
+  for (let i = 0; i < players.length; i++) {
+    if (String(players[i] || "").trim().toLowerCase() === want) return i;
+  }
+  return -1;
+}
+
 let boardLegalMovesFetchId = 0;
 let boardState = {
   gameId: null,
@@ -8962,13 +8971,13 @@ function initSocket() {
   socket.on("board.start", (payload) => {
     hideBoardModal();
     startBoardGame(payload);
-    const myIdx = (payload?.players || []).indexOf(state.username);
+    const myIdx = boardGamePlayerIndex(payload?.players || [], state.username);
     const isMyTurn = myIdx === (payload?.turn ?? 0);
     updateBoardGameBadge(isMyTurn);
   });
   socket.on("board.resume", (payload) => {
     startBoardGame(payload);
-    const myIdx = (payload?.players || []).indexOf(state.username);
+    const myIdx = boardGamePlayerIndex(payload?.players || [], state.username);
     const isMyTurn = myIdx === (payload?.turn ?? 0);
     updateBoardGameBadge(isMyTurn);
   });
@@ -8980,7 +8989,7 @@ function initSocket() {
     boardState.turn = payload?.turn ?? boardState.turn;
     boardState.selectedCell = null;
     renderBoardGame();
-    const myIdx = boardState.players.indexOf(state.username);
+    const myIdx = boardGamePlayerIndex(boardState.players, state.username);
     const isMyTurn = myIdx === boardState.turn;
     if (isMyTurn) {
       appendSystemMessage("♟️ Tava kārta galda spēlē!");
@@ -9156,7 +9165,7 @@ function renderBoardGame() {
   const chessContainer = document.getElementById("board-chess-container");
   if (typeEl)
     typeEl.textContent = boardState.type === "chess" ? "♔ Šahs" : "♟️ Dambrete";
-  const myIdx = boardState.players.indexOf(state.username);
+  const myIdx = boardGamePlayerIndex(boardState.players, state.username);
   const isMyTurn = myIdx === boardState.turn;
   const turnName = boardState.players[boardState.turn] || "?";
   if (turnEl)
@@ -9201,8 +9210,18 @@ function renderBoardGame() {
 
 async function handleChessCellClick(r, c, isPiece) {
   if (!state.socket || !boardState.gameId) return;
-  const myIdx = boardState.players.indexOf(state.username);
+  const myIdx = boardGamePlayerIndex(boardState.players, state.username);
   if (myIdx !== boardState.turn) return;
+
+  const chBoard = window.VZBoardGames?.parseFenToBoard?.(boardState.fen);
+  const ch = chBoard?.[r]?.[c];
+  if (
+    ch &&
+    ((myIdx === 0 && /[PNBRQK]/.test(ch)) ||
+      (myIdx === 1 && /[pnbrqk]/.test(ch)))
+  ) {
+    isPiece = true;
+  }
 
   if (isPiece) {
     if (
@@ -9251,8 +9270,17 @@ async function handleChessCellClick(r, c, isPiece) {
 
 async function handleDambreteCellClick(r, c, isPiece) {
   if (!state.socket || !boardState.gameId) return;
-  const myIdx = boardState.players.indexOf(state.username);
+  const myIdx = boardGamePlayerIndex(boardState.players, state.username);
   if (myIdx !== boardState.turn) return;
+
+  const cellPiece = boardState.board?.[r]?.[c] ?? 0;
+  const absP = Math.abs(cellPiece);
+  if (
+    (absP === 1 || absP === 2) &&
+    ((myIdx === 0 && cellPiece > 0) || (myIdx === 1 && cellPiece < 0))
+  ) {
+    isPiece = true;
+  }
 
   if (isPiece) {
     if (
