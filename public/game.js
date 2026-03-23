@@ -2124,6 +2124,21 @@ function fetchAvatarForUser(username, imgEl, initialsEl) {
   return p;
 }
 
+/** Zoles galdam — mazs aplis ar profila bildi (vai iniciāli) */
+function createZoleBoardPlayerAvatar(username) {
+  const wrap = document.createElement("div");
+  wrap.className = "vz-avatar-circle vz-zole-board-avatar";
+  const img = document.createElement("img");
+  img.alt = "";
+  img.decoding = "async";
+  const ini = document.createElement("span");
+  ini.className = "vz-online-avatar-initials";
+  wrap.appendChild(img);
+  wrap.appendChild(ini);
+  applyMiniAvatar(username, img, ini);
+  return wrap;
+}
+
 // ==================== PROFILA STATI + MEDAĻAS ====================
 function renderPlayerMedals(medals, container, full = false) {
   const strip = container || playerMedalsStripEl;
@@ -9708,6 +9723,7 @@ function renderBoardGame() {
         {
           zoleMode: boardState.zoleMode,
           myIdx,
+          mountPlayerAvatar: createZoleBoardPlayerAvatar,
           onBid: (bid) => {
             if (!state.socket || !boardState.gameId) return;
             state.socket.emit("board.move", {

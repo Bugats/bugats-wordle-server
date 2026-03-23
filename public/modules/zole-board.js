@@ -183,7 +183,7 @@
     return parts.join(" · ");
   }
 
-  function renderZoleTableFelt(zole) {
+  function renderZoleTableFelt(zole, mountPlayerAvatar) {
     const felt = document.createElement("div");
     felt.className = "vz-zole-table-felt";
     const cap = document.createElement("div");
@@ -195,22 +195,21 @@
     if (phase === "bid") {
       const p = document.createElement("p");
       p.className = "vz-zole-table-hint";
-      p.textContent =
-        "Šeit uz filca parādīsies izspēlētās kārtis (stiķis).";
+      p.textContent = "Šeit — stiķa kārtis.";
       felt.appendChild(p);
       return felt;
     }
     if (phase === "discard") {
       const p = document.createElement("p");
       p.className = "vz-zole-table-hint";
-      p.textContent = "Lielais norok kārtas — izspēle sāksies pēc tam.";
+      p.textContent = "Gaida norakšanu…";
       felt.appendChild(p);
       return felt;
     }
     if (phase === "end") {
       const p = document.createElement("p");
       p.className = "vz-zole-table-hint";
-      p.textContent = "Partija beigusies.";
+      p.textContent = "Beigas.";
       felt.appendChild(p);
       return felt;
     }
@@ -219,23 +218,38 @@
     const leader = zole.trickLeader ?? 0;
     const fan = document.createElement("div");
     fan.className = "vz-zole-trick-fan";
+    const mountAv =
+      mountPlayerAvatar && typeof mountPlayerAvatar === "function"
+        ? mountPlayerAvatar
+        : null;
     for (let i = 0; i < 3; i++) {
       const seat = (leader + i) % 3;
       const col = document.createElement("div");
       col.className = "vz-zole-trick-seat";
       col.style.setProperty("--seat-tilt", `${(i - 1) * 7}deg`);
       const t = trick[i];
+      const head = document.createElement("div");
+      head.className = "vz-zole-trick-seat-head";
+      const pname = zole.players[seat] || "?";
+      if (mountAv && pname && pname !== "?") {
+        try {
+          head.appendChild(mountAv(pname));
+        } catch {
+          /* ignore */
+        }
+      }
       const who = document.createElement("div");
       who.className = "vz-zole-trick-seat-name";
-      who.textContent = zole.players[seat] || "?";
-      col.appendChild(who);
+      who.textContent = pname;
+      head.appendChild(who);
+      col.appendChild(head);
       if (t) {
         col.appendChild(createPlayingCardEl(t.card, { table: true }));
       } else {
         const ph = document.createElement("div");
         ph.className = "vz-zole-trick-placeholder";
         ph.textContent =
-          zole.turn === seat ? "Domā…" : "Gaida kārtu…";
+          zole.turn === seat ? "Domā…" : "Gaida…";
         col.appendChild(ph);
       }
       fan.appendChild(col);
@@ -257,23 +271,62 @@
     const onBid = opts && typeof opts.onBid === "function" ? opts.onBid : null;
     const onDiscard =
       opts && typeof opts.onDiscard === "function" ? opts.onDiscard : null;
+    const mountPlayerAvatar =
+      opts && typeof opts.mountPlayerAvatar === "function"
+        ? opts.mountPlayerAvatar
+        : null;
 
     const wrap = document.createElement("div");
     wrap.className = "vz-zole-wrap";
 
     const meta = document.createElement("div");
     meta.className = "vz-zole-meta";
-    const trumpNote = zole.trumpNote
-      ? `<div class="vz-zole-trump-note">${esc(zole.trumpNote)}</div>`
-      : "";
-    meta.innerHTML = `<div class="vz-zole-trump">Galda lācis (pēc pirkuma): <strong>${esc(zole.trumpLabel)}</strong></div>${trumpNote}`;
-
     const eyes = zole.eyePoints || [0, 0, 0];
     const tricks = zole.tricksWon || [0, 0, 0];
-    const scoreLine = document.createElement("div");
-    scoreLine.className = "vz-zole-scores";
-    scoreLine.innerHTML = `<div>Acis: ${eyes.map((e) => esc(String(e))).join(" · ")}</div><div class="vz-zole-tricks-sub">Stiķi: ${tricks.map((t) => esc(String(t))).join(" · ")}</div>`;
-    meta.appendChild(scoreLine);
+    const bar = document.createElement("div");
+    bar.className = "vz-zole-compact-bar";
+    const scoresLine = document.createElement("div");
+    scoresLine.className = "vz-zole-compact-scores";
+    scoresLine.innerHTML =
+      `<strong>Lācis</strong> ${esc(zole.trumpLabel)} · <strong>Acis</strong> ${eyes.map((e) => esc(String(e))).join(" · ")} · <strong>Stiķi</strong> ${tricks.map((t) => esc(String(t))).join(" · ")}`;
+    bar.appendChild(scoresLine);
+    if (zole.trumpNote) {
+      const det = document.createElement("details");
+      det.className = "vz-zole-sek-details";
+      const sum = document.createElement("summary");
+      sum.className = "vz-zole-sek-summary";
+      sum.textContent = "Sekšana · trumpji";
+      const body = document.createElement("div");
+      body.className = "vz-zole-sek-body";
+      body.textContent = zole.trumpNote;
+      det.appendChild(sum);
+      det.appendChild(body);
+      bar.appendChild(det);
+    }
+    meta.appendChild(bar);
+
+    if (mountPlayerAvatar && zole.players && zole.players.length === 3) {
+      const avRow = document.createElement("div");
+      avRow.className = "vz-zole-players-av";
+      for (let pi = 0; pi < 3; pi++) {
+        const cell = document.createElement("div");
+        cell.className = "vz-zole-players-av-cell";
+        const un = zole.players[pi];
+        if (un) {
+          try {
+            cell.appendChild(mountPlayerAvatar(un));
+          } catch {
+            /* ignore */
+          }
+        }
+        const lab = document.createElement("div");
+        lab.className = "vz-zole-players-av-name";
+        lab.textContent = un || "?";
+        cell.appendChild(lab);
+        avRow.appendChild(cell);
+      }
+      meta.appendChild(avRow);
+    }
 
     if (zole.phase === "play" && zole.contract) {
       const cEl = document.createElement("div");
@@ -319,7 +372,7 @@
     meta.appendChild(turnLine);
     wrap.appendChild(meta);
 
-    wrap.appendChild(renderZoleTableFelt(zole));
+    wrap.appendChild(renderZoleTableFelt(zole, mountPlayerAvatar));
 
     if (zole.phase === "bid") {
       const bidBox = document.createElement("div");
@@ -537,12 +590,8 @@
         : zm === "online_2p"
           ? "Tiešsaiste: 2 cilvēki + bots."
           : "Pret diviem botiem.";
-    note.innerHTML =
-      "<strong>Trumpji</strong> — <strong>D un J vienmēr trumpa</strong> (visos mastos) + ♦ <strong>7–A</strong>. " +
-      "<strong>Parastās</strong> — tikai ♣ ♥ ♠: A, 10, K, 9 (D/J tur nav). " +
-      "<strong>Sekšana:</strong> vada parasto — <strong>tas pats masts</strong> (♥D/♥J = ♥ mastam, bet tās ir trumpa kārtis); ja masta nav — atmesties. " +
-      "Vada trumpis — obligāti trumpis, ja ir; ja nav neviena trumpja — parastā. " +
-      "Zelta rāmītis = trumpis. Roka: parastie masti kopā, tad trumpji. Uzvara <strong>61+</strong> (lielais/zole). " +
+    note.textContent =
+      "Zelta rāmītis = trumpis. Pilni noteikumi — augšā «Īsi noteikumi». " +
       noteTail;
     handEl.appendChild(note);
 
