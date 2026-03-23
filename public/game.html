@@ -848,8 +848,12 @@
             <span class="vz-board-dambrete-mode-label">Zoles režīms</span>
             <div class="vz-board-dambrete-mode-radios">
               <label class="vz-board-dambrete-mode-opt"
-                ><input type="radio" name="board-zole-mode" value="online_2p" checked />
-                Tiešsaistē (tu + draugs + bots)</label
+                ><input type="radio" name="board-zole-mode" value="online_3p" checked />
+                3 cilvēki (bez bota)</label
+              >
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-zole-mode" value="online_2p" />
+                2 cilvēki + bots</label
               >
               <label class="vz-board-dambrete-mode-opt"
                 ><input type="radio" name="board-zole-mode" value="vs_bot" /> Tikai pret botiem</label
@@ -881,12 +885,24 @@
             </div>
           </div>
           <div id="board-invite-pending" class="vz-board-pending hidden">Gaidām atbildi…</div>
+          <div id="board-zole-3p-lobby" class="vz-board-zole-3p-lobby hidden" aria-live="polite">
+            <p id="board-zole-3p-lobby-text" class="vz-board-zole-3p-text"></p>
+            <div id="board-zole-3p-host-actions" class="hidden">
+              <label for="board-zole-3p-third" class="vz-board-label">Trešā spēlētāja vārds</label>
+              <input id="board-zole-3p-third" type="text" placeholder="lietotājvārds" autocomplete="username" />
+              <div class="vz-board-zole-3p-btns">
+                <button id="board-zole-3p-invite-third" type="button" class="vz-board-invite-btn">Uzaicināt trešo</button>
+                <button id="board-zole-3p-cancel-lobby" type="button" class="vz-board-resign">Atcelt</button>
+              </div>
+            </div>
+            <p id="board-zole-3p-guest-hint" class="vz-board-hint hidden">Gaidām, kamēr saimnieks uzaicina trešo spēlētāju…</p>
+          </div>
           <details class="vz-board-rules">
             <summary class="vz-board-rules-summary">📖 Īsi noteikumi</summary>
             <div class="vz-board-rules-content">
               <p><strong>Dambrete — izvēlies režīmu:</strong> <em>Krievijas šaškas</em> — bārdiņa iet uz priekšu, ķer visos virzienos; dāma slīd un ķer tālu pa diagonāli; promocija var notikt ķeršanas laikā. <em>Angļu dambrete</em> — bārdiņa tikai uz priekšu, ķer tikai uz priekšu; dāma vienu lauciņu visos virzienos.</p>
               <p><strong>Šahs:</strong> Standarta šaha noteikumi. Uzvar tas, kas izveido matu pretinieka karalim.</p>
-              <p><strong>Zole (MVP):</strong> 3 spēlētāji, 24 kārtis, acis kā klasiskajā zolē (A 11, 10 10, K 4, D 3, J 2). Likšana: <em>Lielais</em>, <em>Zole</em>, <em>Mazā zole</em> vai visi pasē → <em>galdiņš</em>. Lielajam / zolei jādabū <strong>61+</strong> acis; tabulas punkti pēc slieksņiem (mazāk kā 30 acīm pretiniekiem, bez stiķiem utt.). Nav pirkuma kārtīņu un četratā — pilni turnīra noteikumi vēl sekos.</p>
+              <p><strong>Zole (MVP):</strong> 3 spēlētāji, 24 kārtis, acis kā klasiskajā zolē. <em>3 cilvēki</em>: uzaicini vienu draugu, pēc pieņemšanas tu kā saimnieks uzaicini trešo. <em>2+bots</em> vai <em>tikai boti</em> — arī pieejams. Nav pirkuma kārtīņu un četratā.</p>
             </div>
           </details>
           <div class="vz-board-leaderboards">

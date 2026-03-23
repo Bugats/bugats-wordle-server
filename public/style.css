@@ -5487,6 +5487,25 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   opacity: 0.65;
 }
 
+.vz-board-zole-3p-lobby {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(196, 181, 253, 0.3);
+  background: rgba(30, 27, 50, 0.45);
+}
+.vz-board-zole-3p-text {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.vz-board-zole-3p-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .vz-profile-board-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 .vz-profile-invite-board {
   padding: 6px 12px;

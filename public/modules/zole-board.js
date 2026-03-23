@@ -240,13 +240,16 @@
 
     const note = document.createElement("p");
     note.className = "vz-zole-note";
-    const online =
-      opts && String(opts.zoleMode || "").toLowerCase() === "online_2p";
+    const zm = opts && String(opts.zoleMode || "").toLowerCase();
+    const noteTail =
+      zm === "online_3p"
+        ? "Tiešsaiste: 3 cilvēki."
+        : zm === "online_2p"
+          ? "Tiešsaiste: 2 cilvēki + bots."
+          : "Pret diviem botiem.";
     note.innerHTML =
       "Acis: A=11, 10=10, K=4, D=3, J=2. Uzvara ar <strong>61+</strong> acīm (lielajam / zolei). " +
-      (online
-        ? "Tiešsaiste: 2 cilvēki + bots."
-        : "Pret diviem botiem.");
+      noteTail;
     handEl.appendChild(note);
 
     wrap.appendChild(handEl);
