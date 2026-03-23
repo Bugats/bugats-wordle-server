@@ -9158,6 +9158,17 @@ function updateBoardGameBadge(show) {
   }
 }
 
+function dambreteSelectedIsValidJumpOrigin() {
+  const jumps = boardState.legalMoves?.jumps || [];
+  if (!jumps.length || !boardState.selectedCell) return true;
+  const [r, c] = boardState.selectedCell;
+  for (let i = 0; i < jumps.length; i++) {
+    const first = jumps[i].jumps && jumps[i].jumps[0];
+    if (first && first.from[0] === r && first.from[1] === c) return true;
+  }
+  return false;
+}
+
 function renderBoardGame() {
   const typeEl = document.getElementById("board-game-type");
   const turnEl = document.getElementById("board-game-turn");
@@ -9167,6 +9178,14 @@ function renderBoardGame() {
     typeEl.textContent = boardState.type === "chess" ? "♔ Šahs" : "♟️ Dambrete";
   const myIdx = boardGamePlayerIndex(boardState.players, state.username);
   const isMyTurn = myIdx === boardState.turn;
+  if (
+    boardState.type === "dambrete" &&
+    isMyTurn &&
+    boardState.selectedCell &&
+    !dambreteSelectedIsValidJumpOrigin()
+  ) {
+    boardState.selectedCell = null;
+  }
   const turnName = boardState.players[boardState.turn] || "?";
   if (turnEl)
     turnEl.textContent = isMyTurn ? "Tava kārta" : `${turnName} gājienā`;
@@ -9179,7 +9198,7 @@ function renderBoardGame() {
       (boardState.legalMoves?.jumps || []).length > 0
     ) {
       hintEl.textContent =
-        "Kad var ēst pretinieku — obligāti jālēcas. Izvēlies kauliņu, kas var ēst (parādīsies zaļie lauki). Citus šajā brīdī izvēlēt nevar.";
+        "Obligāti jālēcas. Spied tikai uz kauliņa ar dzeltenu rāmīti — tad parādīsies zaļie lauki. Pārējos savus kauliņus šajā brīdī nevar izvēlēties.";
     } else {
       hintEl.textContent =
         "Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt. Lai mainītu figūru — pieskaries citam savam kauliņam.";
@@ -9293,6 +9312,18 @@ async function handleDambreteCellClick(r, c, isPiece) {
   }
 
   if (isPiece) {
+    const jumps = boardState.legalMoves?.jumps || [];
+    if (jumps.length > 0) {
+      let canStartJumpHere = false;
+      for (let i = 0; i < jumps.length; i++) {
+        const first = jumps[i].jumps && jumps[i].jumps[0];
+        if (first && first.from[0] === r && first.from[1] === c) {
+          canStartJumpHere = true;
+          break;
+        }
+      }
+      if (!canStartJumpHere) return;
+    }
     if (
       boardState.selectedCell &&
       boardState.selectedCell[0] === r &&

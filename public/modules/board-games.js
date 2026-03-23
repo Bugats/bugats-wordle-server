@@ -58,6 +58,21 @@
     );
   }
 
+  function isJumpOrigin(r, c, legalMoves) {
+    const jumps = legalMoves?.jumps || [];
+    for (let i = 0; i < jumps.length; i++) {
+      const first = jumps[i].jumps && jumps[i].jumps[0];
+      if (
+        first &&
+        first.from &&
+        first.from[0] === r &&
+        first.from[1] === c
+      )
+        return true;
+    }
+    return false;
+  }
+
   function isValidDestination(r, c, selectedCell, legalMoves) {
     if (!selectedCell || !legalMoves) return false;
     const [fr, fc] = selectedCell;
@@ -134,14 +149,22 @@
             piece !== 0 &&
             ((myPlayerIdx === 0 && (piece === WHITE || piece === WHITE_KING)) ||
               (myPlayerIdx === 1 && (piece === BLACK || piece === BLACK_KING)));
+          const jumpsMandatory = (legalMoves?.jumps || []).length > 0;
+          const isMyPieceSelectable =
+            isMyPiece &&
+            (!jumpsMandatory || isJumpOrigin(r, c, legalMoves));
           const clickable =
             canMove &&
-            (isMyPiece ||
+            (isMyPieceSelectable ||
               (piece === 0 && isValidDest) ||
               (selectedCell && !isValidDest));
           td.dataset.clickable = String(!!clickable);
           td.classList.toggle("vz-dambrete-selected", !!isSelected);
           td.classList.toggle("vz-dambrete-valid", !!isValidDest);
+          td.classList.toggle(
+            "vz-dambrete-jump-origin",
+            jumpsMandatory && isMyPiece && isJumpOrigin(r, c, legalMoves)
+          );
           let span = td.querySelector(".vz-dambrete-piece");
           if (piece !== 0) {
             if (!span) {
@@ -211,12 +234,20 @@
           piece !== 0 &&
           ((myPlayerIdx === 0 && (piece === WHITE || piece === WHITE_KING)) ||
             (myPlayerIdx === 1 && (piece === BLACK || piece === BLACK_KING)));
+        const jumpsMandatory = (legalMoves?.jumps || []).length > 0;
+        const isMyPieceSelectable =
+          isMyPiece &&
+          (!jumpsMandatory || isJumpOrigin(r, c, legalMoves));
         if (isSelected) td.classList.add("vz-dambrete-selected");
         if (isValidDest) td.classList.add("vz-dambrete-valid");
+        td.classList.toggle(
+          "vz-dambrete-jump-origin",
+          jumpsMandatory && isMyPiece && isJumpOrigin(r, c, legalMoves)
+        );
         if (canMove) td.tabIndex = 0;
         const clickable =
           canMove &&
-          (isMyPiece ||
+          (isMyPieceSelectable ||
             (piece === 0 && isValidDest) ||
             (selectedCell && !isValidDest));
         td.dataset.clickable = String(!!clickable);
@@ -241,11 +272,15 @@
         piece !== 0 &&
         ((st.myPlayerIdx === 0 && (piece === WHITE || piece === WHITE_KING)) ||
           (st.myPlayerIdx === 1 && (piece === BLACK || piece === BLACK_KING)));
+      const jumpsMandatory = (st.legalMoves?.jumps || []).length > 0;
+      const isMyPieceSelectable =
+        isMyPiece &&
+        (!jumpsMandatory || isJumpOrigin(r, c, st.legalMoves));
       const isValidDest =
         piece === 0 && isValidDestination(r, c, st.selectedCell, st.legalMoves);
       const cb = st.onCellClick;
       if (!cb) return;
-      if (isMyPiece) cb(r, c, true);
+      if (isMyPieceSelectable) cb(r, c, true);
       else if (piece === 0 && isValidDest) cb(r, c, false);
       else if (st.selectedCell) cb(r, c, false);
     }

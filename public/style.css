@@ -5170,6 +5170,10 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-dambrete-dark:active { background: #4a7a4a; }
 .vz-dambrete-dark.vz-dambrete-selected { background: #22c55e; box-shadow: inset 0 0 0 2px #fff; }
 .vz-dambrete-dark.vz-dambrete-valid { background: #5a8a5a; }
+/* Obligāta ēšana: kauliņi, ar kuriem drīkst sākt lēcienu (pārējie nav klikšķināmi) */
+.vz-dambrete-dark.vz-dambrete-jump-origin:not(.vz-dambrete-selected) {
+  box-shadow: inset 0 0 0 2px rgba(250, 204, 21, 0.9);
+}
 .vz-dambrete-piece {
   display: inline-block;
   width: 28px;
