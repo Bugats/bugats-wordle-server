@@ -782,6 +782,21 @@ function boardGameOpponentName(players, vsBot) {
   return String(opp);
 }
 
+function zoleResultExtraLine(snap) {
+  const lr = snap?.lastResult;
+  if (!lr || !lr.kind) return "";
+  if (lr.kind === "galdins" && !lr.tie && lr.loserNoTricks)
+    return " Galdiņš: zaudētājam bezstiķis.";
+  if (lr.kind === "big" && lr.win && lr.opponentsNoTricks)
+    return " Mazajiem bezstiķis.";
+  if (lr.kind === "big" && !lr.win && lr.contractorNoTricks)
+    return " Lielajam bezstiķis.";
+  if (lr.kind === "zole" && lr.win && lr.allTricks) return " Visi stiķi.";
+  if (lr.kind === "zole" && !lr.win && lr.contractorNoTricks)
+    return " Lielajam bezstiķis.";
+  return "";
+}
+
 function showBoardGameResult(payload) {
   const overlay = document.getElementById("board-result-overlay");
   const eyebrow = document.getElementById("board-result-eyebrow");
@@ -864,7 +879,9 @@ function showBoardGameResult(payload) {
           ? "Labākais tabulas rezultāts (3 cilvēki, bez bota)."
           : boardState.zoleMode === "online_2p"
             ? "Labākais tabulas rezultāts (2 cilvēki + bots)."
-            : "Labākais tabulas rezultāts (pret botiem).") + tab;
+            : "Labākais tabulas rezultāts (pret botiem).") +
+        tab +
+        zoleResultExtraLine(snap);
     } else {
       detail = `Tu uzvarēji pret ${oppName}.`;
     }
@@ -890,7 +907,9 @@ function showBoardGameResult(payload) {
         td[myI] !== 0
           ? ` Tabulā: ${td[myI] > 0 ? "+" : ""}${td[myI]} p.`
           : "";
-      detail = `Uz tabulas uzvarēja ${String(winner)}.${tab}`;
+      detail =
+        `Uz tabulas uzvarēja ${String(winner)}.${tab}` +
+        zoleResultExtraLine(snap);
     } else {
       detail = `Tu zaudēji — uzvarēja ${String(winner)}.`;
     }

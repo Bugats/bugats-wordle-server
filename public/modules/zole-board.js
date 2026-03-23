@@ -385,16 +385,38 @@
         let txt = "";
         if (lr.kind === "galdins") {
           if (lr.tie) txt = "Galdiņš: trīs vienādi — bez izmaksām.";
-          else
-            txt = `Galdiņš: zaudētājs ${esc(zole.players[lr.loserIdx])}, maksā katram uzvarētājam ${lr.payEach} p.`;
+          else {
+            const bs =
+              lr.loserNoTricks === true
+                ? " Zaudētājam bezstiķis — maksā pa 3 p."
+                : "";
+            txt = `Galdiņš: zaudētājs ${esc(zole.players[lr.loserIdx])}, maksā katram uzvarētājam ${lr.payEach} p.${bs}`;
+          }
         } else if (lr.kind === "big") {
-          txt = lr.win
-            ? `Lielais uzvarēja (${lr.tier} p. no katra mazā).`
-            : `Lielais zaudēja (${lr.tier} p. katram mazajam).`;
+          if (lr.win) {
+            const bs =
+              lr.opponentsNoTricks === true
+                ? " Mazajiem bezstiķis."
+                : "";
+            txt = `Lielais uzvarēja (${lr.tier} p. no katra mazā).${bs}`;
+          } else {
+            const bs =
+              lr.contractorNoTricks === true
+                ? " Lielajam bezstiķis."
+                : "";
+            txt = `Lielais zaudēja (${lr.tier} p. katram mazajam).${bs}`;
+          }
         } else if (lr.kind === "zole") {
-          txt = lr.win
-            ? `Zole uzvarēta (${lr.tier} p. no katra).`
-            : `Zole zaudēta (${lr.tier} p. katram pretiniekam).`;
+          if (lr.win) {
+            const vs = lr.allTricks === true ? " Visi stiķi." : "";
+            txt = `Zole uzvarēta (${lr.tier} p. no katra).${vs}`;
+          } else {
+            const bs =
+              lr.contractorNoTricks === true
+                ? " Lielajam bezstiķis."
+                : "";
+            txt = `Zole zaudēta (${lr.tier} p. katram pretiniekam).${bs}`;
+          }
         } else if (lr.kind === "maza_zole") {
           txt = lr.win
             ? "Mazā zole uzvarēta (6 p. no katra)."
