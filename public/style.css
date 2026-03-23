@@ -5147,7 +5147,8 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   border-collapse: collapse;
   margin: 0 auto;
   background: #2d2d2d;
-  touch-action: manipulation;
+  /* none: pārlūks negaida scroll žestu — pirksta pieskāriens uzreiz dod pointerdown */
+  touch-action: none;
   -webkit-tap-highlight-color: transparent;
 }
 .vz-dambrete-board td {
@@ -5163,7 +5164,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-dambrete-dark {
   background: #3d5a3d;
   cursor: pointer;
-  touch-action: manipulation;
+  touch-action: none;
 }
 .vz-dambrete-dark:hover { background: #4a6a4a; }
 .vz-dambrete-dark:active { background: #4a7a4a; }
@@ -5197,7 +5198,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   border-collapse: collapse;
   margin: 0 auto;
   background: #2d2d2d;
-  touch-action: manipulation;
+  touch-action: none;
   -webkit-tap-highlight-color: transparent;
 }
 .vz-chess-board td {
@@ -5209,7 +5210,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   text-align: center;
   vertical-align: middle;
   cursor: pointer;
-  touch-action: manipulation;
+  touch-action: none;
 }
 .vz-chess-light { background: #f0d9b5; }
 .vz-chess-dark { background: #b58863; }

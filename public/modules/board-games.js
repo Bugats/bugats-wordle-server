@@ -16,8 +16,8 @@
   }
 
   /**
-   * Tikai pointerdown (touch + pele) — bez click/touchstart, lai viens pieskāriens
-   * neatkārtojas un var brīvi pārslēgt izvēlēto kauliņu.
+   * pointerdown (touch + pele). passive: false — citādi mobilajos pārlūkos
+   * preventDefault() neaptur 300ms/gesture kavēšanu un pieskāriens „nedarbojas”.
    */
   function bindBoardCellInput(table, handleCell) {
     table.addEventListener(
@@ -27,7 +27,7 @@
         e.preventDefault();
         handleCell(e);
       },
-      { capture: true }
+      { capture: true, passive: false }
     );
   }
 
