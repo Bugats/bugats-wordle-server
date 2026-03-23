@@ -1,5 +1,5 @@
 /**
- * Galda spēles (dambrete, šahs) – klienta loģika
+ * Galda spēles (dambrete = Krievijas šaškas 8×8, šahs) – klienta loģika
  */
 (function (global) {
   "use strict";
