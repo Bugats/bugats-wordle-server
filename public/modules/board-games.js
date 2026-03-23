@@ -15,6 +15,22 @@
     return (r + c) % 2 === 1;
   }
 
+  /**
+   * Tikai pointerdown (touch + pele) — bez click/touchstart, lai viens pieskāriens
+   * neatkārtojas un var brīvi pārslēgt izvēlēto kauliņu.
+   */
+  function bindBoardCellInput(table, handleCell) {
+    table.addEventListener(
+      "pointerdown",
+      function boardPointerDown(e) {
+        if (e.button != null && e.button !== 0) return;
+        e.preventDefault();
+        handleCell(e);
+      },
+      { capture: true }
+    );
+  }
+
   function isValidDestination(r, c, selectedCell, legalMoves) {
     if (!selectedCell || !legalMoves) return false;
     const [fr, fc] = selectedCell;
@@ -204,31 +220,7 @@
       else if (st.selectedCell) cb(r, c, false);
     }
 
-    // pointerdown + vēlāk click no viena pieskāriena: ja neatcel click, pēc ~300–500 ms
-    // otrais izsaukums pārslēdz izvēli. Peles klikšķim — apstrādā pointerdown, click ignorē.
-    let dambreteConsumedClick = false;
-    let lastPointerDownMs = 0;
-    function wrappedHandler(e) {
-      if (e.type === "pointerdown") {
-        if (e.button != null && e.button !== 0) return;
-        dambreteConsumedClick = true;
-        lastPointerDownMs = Date.now();
-        handleCellEvent(e);
-        return;
-      }
-      if (e.type === "click") {
-        if (dambreteConsumedClick) {
-          dambreteConsumedClick = false;
-          e.preventDefault();
-          e.stopPropagation();
-          return;
-        }
-        if (Date.now() - lastPointerDownMs < 450) return;
-        handleCellEvent(e);
-      }
-    }
-    table.addEventListener("pointerdown", wrappedHandler, { capture: true });
-    table.addEventListener("click", wrappedHandler);
+    bindBoardCellInput(table, handleCellEvent);
     container.appendChild(table);
   }
 
@@ -360,28 +352,13 @@
       }
       table.appendChild(tr);
     }
-    let chessConsumedClick = false;
-    let lastChessPointerDownMs = 0;
     function handleChessCellEvent(e) {
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
-      if (e.type === "pointerdown") {
-        if (e.button != null && e.button !== 0) return;
-        chessConsumedClick = true;
-        lastChessPointerDownMs = Date.now();
-        e.preventDefault();
-      } else if (e.type === "click") {
-        if (chessConsumedClick) {
-          chessConsumedClick = false;
-          e.preventDefault();
-          e.stopPropagation();
-          return;
-        }
-        if (Date.now() - lastChessPointerDownMs < 450) return;
-      }
+      e.preventDefault();
       const piece = board[r]?.[c];
       const isMyPiece =
         piece &&
@@ -392,10 +369,7 @@
       else if (isValidDest) onCellClick(r, c, false);
       else if (selectedCell) onCellClick(r, c, false);
     }
-    table.addEventListener("pointerdown", handleChessCellEvent, {
-      capture: true,
-    });
-    table.addEventListener("click", handleChessCellEvent);
+    bindBoardCellInput(table, handleChessCellEvent);
     container.appendChild(table);
   }
 
