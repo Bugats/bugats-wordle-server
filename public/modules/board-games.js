@@ -182,23 +182,12 @@
       table.appendChild(tr);
     }
 
-    let lastHandled = { r: -1, c: -1, t: 0 };
     function handleCellEvent(e) {
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
-      const now = Date.now();
-      if (
-        r === lastHandled.r &&
-        c === lastHandled.c &&
-        now - lastHandled.t < 400
-      ) {
-        e.preventDefault();
-        return;
-      }
-      lastHandled = { r, c, t: now };
       e.preventDefault();
       const st = dambreteState;
       const piece = (st.board && st.board[r]?.[c]) ?? 0;
@@ -215,13 +204,28 @@
       else if (st.selectedCell) cb(r, c, false);
     }
 
-    // Tikai pointerdown + click: touch ierīcēs touchstart un pointerdown abi
-    // izsauc vienu pieskārienu — dubulta apstrāde pārslēdza pirmo izvēlēto kauliņu.
-    let lastPointerOrTouch = 0;
+    // pointerdown + vēlāk click no viena pieskāriena: ja neatcel click, pēc ~300–500 ms
+    // otrais izsaukums pārslēdz izvēli. Peles klikšķim — apstrādā pointerdown, click ignorē.
+    let dambreteConsumedClick = false;
+    let lastPointerDownMs = 0;
     function wrappedHandler(e) {
-      if (e.type === "click" && Date.now() - lastPointerOrTouch < 450) return;
-      if (e.type !== "click") lastPointerOrTouch = Date.now();
-      handleCellEvent(e);
+      if (e.type === "pointerdown") {
+        if (e.button != null && e.button !== 0) return;
+        dambreteConsumedClick = true;
+        lastPointerDownMs = Date.now();
+        handleCellEvent(e);
+        return;
+      }
+      if (e.type === "click") {
+        if (dambreteConsumedClick) {
+          dambreteConsumedClick = false;
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        if (Date.now() - lastPointerDownMs < 450) return;
+        handleCellEvent(e);
+      }
     }
     table.addEventListener("pointerdown", wrappedHandler, { capture: true });
     table.addEventListener("click", wrappedHandler);
@@ -356,18 +360,28 @@
       }
       table.appendChild(tr);
     }
-    let lastChessPointer = 0;
+    let chessConsumedClick = false;
+    let lastChessPointerDownMs = 0;
     function handleChessCellEvent(e) {
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
-      const now = Date.now();
       if (e.type === "pointerdown") {
-        lastChessPointer = now;
+        if (e.button != null && e.button !== 0) return;
+        chessConsumedClick = true;
+        lastChessPointerDownMs = Date.now();
         e.preventDefault();
-      } else if (e.type === "click" && now - lastChessPointer < 450) return;
+      } else if (e.type === "click") {
+        if (chessConsumedClick) {
+          chessConsumedClick = false;
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        if (Date.now() - lastChessPointerDownMs < 450) return;
+      }
       const piece = board[r]?.[c];
       const isMyPiece =
         piece &&
