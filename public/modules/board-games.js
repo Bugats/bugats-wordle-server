@@ -215,13 +215,14 @@
       else if (st.selectedCell) cb(r, c, false);
     }
 
+    // Tikai pointerdown + click: touch ierīcēs touchstart un pointerdown abi
+    // izsauc vienu pieskārienu — dubulta apstrāde pārslēdza pirmo izvēlēto kauliņu.
     let lastPointerOrTouch = 0;
     function wrappedHandler(e) {
       if (e.type === "click" && Date.now() - lastPointerOrTouch < 450) return;
       if (e.type !== "click") lastPointerOrTouch = Date.now();
       handleCellEvent(e);
     }
-    table.addEventListener("touchstart", wrappedHandler, { passive: false });
     table.addEventListener("pointerdown", wrappedHandler, { capture: true });
     table.addEventListener("click", wrappedHandler);
     container.appendChild(table);
@@ -355,20 +356,18 @@
       }
       table.appendChild(tr);
     }
-    let lastChessTap = { key: "", t: 0 };
+    let lastChessPointer = 0;
     function handleChessCellEvent(e) {
       const td = e.target.closest("td[data-row][data-col]");
       if (!td || td.dataset.clickable !== "true") return;
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
-      const key = `${r},${c}`;
       const now = Date.now();
-      if (e.type === "touchstart" || e.type === "pointerdown") {
-        if (key === lastChessTap.key && now - lastChessTap.t < 150) return;
-        lastChessTap = { key, t: now };
+      if (e.type === "pointerdown") {
+        lastChessPointer = now;
         e.preventDefault();
-      } else if (e.type === "click" && now - lastChessTap.t < 400) return;
+      } else if (e.type === "click" && now - lastChessPointer < 450) return;
       const piece = board[r]?.[c];
       const isMyPiece =
         piece &&
@@ -379,9 +378,6 @@
       else if (isValidDest) onCellClick(r, c, false);
       else if (selectedCell) onCellClick(r, c, false);
     }
-    table.addEventListener("touchstart", handleChessCellEvent, {
-      passive: false,
-    });
     table.addEventListener("pointerdown", handleChessCellEvent, {
       capture: true,
     });

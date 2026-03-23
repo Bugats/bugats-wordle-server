@@ -624,6 +624,7 @@ const duelExtraMsgEl = document.getElementById("duel-result-reason");
 const duelOkBtn = document.getElementById("duel-result-close");
 
 // GALDA SPĒLES (dambrete, šahs)
+let boardLegalMovesFetchId = 0;
 let boardState = {
   gameId: null,
   type: null,
@@ -8973,6 +8974,7 @@ function initSocket() {
   });
   socket.on("board.move", (payload) => {
     if (payload?.gameId !== boardState.gameId) return;
+    boardLegalMovesFetchId++;
     boardState.board = payload?.board || boardState.board;
     boardState.fen = payload?.fen || boardState.fen;
     boardState.turn = payload?.turn ?? boardState.turn;
@@ -9104,6 +9106,7 @@ function hideBoardInviteModal() {
 }
 
 function startBoardGame(payload) {
+  boardLegalMovesFetchId++;
   boardState = {
     gameId: payload?.gameId,
     type: payload?.type || "dambrete",
@@ -9214,8 +9217,10 @@ async function handleChessCellClick(r, c, isPiece) {
     const clickedCell = [r, c];
     boardState.selectedCell = clickedCell;
     renderBoardGame();
+    const fetchId = ++boardLegalMovesFetchId;
     try {
       const data = await apiGet(`/board/${boardState.gameId}/moves`);
+      if (fetchId !== boardLegalMovesFetchId) return;
       if (
         boardState.selectedCell &&
         boardState.selectedCell[0] === clickedCell[0] &&
@@ -9262,8 +9267,10 @@ async function handleDambreteCellClick(r, c, isPiece) {
     const clickedCell = [r, c];
     boardState.selectedCell = clickedCell;
     renderBoardGame();
+    const fetchId = ++boardLegalMovesFetchId;
     try {
       const data = await apiGet(`/board/${boardState.gameId}/moves`);
+      if (fetchId !== boardLegalMovesFetchId) return;
       if (
         boardState.selectedCell &&
         boardState.selectedCell[0] === clickedCell[0] &&
