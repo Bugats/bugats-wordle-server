@@ -633,6 +633,17 @@ function boardGamePlayerIndex(players, username) {
   return -1;
 }
 
+/** Zole: `boardState.turn` nav vienīgais indikators (likšana / norakšana / spēle). */
+function boardZoleIsHumanTurn(myIdx, zole) {
+  if (myIdx < 0 || !zole) return false;
+  const ph = zole.phase;
+  if (ph === "bid") return myIdx === (zole.bidTurn ?? 0);
+  if (ph === "discard" && zole.contract === "big")
+    return myIdx === zole.contractorIdx;
+  if (ph === "play") return myIdx === (zole.turn ?? 0);
+  return false;
+}
+
 /** Rinda: ātri nomainot izvēli pirms pirmās /moves atbildes, pieprasījumi nedrīkst pārklāties. */
 function queueBoardLegalMovesFetch(clickedCell, gameType) {
   const gid = boardState.gameId;
@@ -9327,7 +9338,10 @@ function initSocket() {
     boardState.legalMoves = { jumps: [], moves: [] };
     renderBoardGame();
     const myIdx = boardGamePlayerIndex(boardState.players, state.username);
-    const isMyTurn = myIdx === boardState.turn;
+    const isMyTurn =
+      boardState.type === "zole" && boardState.zole
+        ? boardZoleIsHumanTurn(myIdx, boardState.zole)
+        : myIdx === boardState.turn;
     if (isMyTurn) {
       appendSystemMessage("♟️ Tava kārta galda spēlē!");
       const modal = document.getElementById("board-games-modal");

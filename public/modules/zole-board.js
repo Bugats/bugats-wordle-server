@@ -351,9 +351,20 @@
     btnRow.className = "vz-zole-hand-btns";
 
     const hand = sortZoleHandClient(zole.myHand || []);
-    const legalSet = zole.legalCardKeys
-      ? new Set(zole.legalCardKeys)
-      : null;
+    let legalSet = null;
+    if (zole.phase === "play" && isMyTurn) {
+      if (global.VZZoleLegal) {
+        const legal = global.VZZoleLegal.zoleLegalPlays(
+          zole.myHand || [],
+          zole.trick || []
+        );
+        legalSet = new Set(legal.map((c) => global.VZZoleLegal.zoleCardKey(c)));
+      } else if (zole.legalCardKeys && zole.legalCardKeys.length) {
+        legalSet = new Set(zole.legalCardKeys);
+      } else {
+        legalSet = new Set();
+      }
+    }
 
     const discardSel = [];
     const isDiscardMe =
@@ -429,9 +440,14 @@
         : zm === "online_2p"
           ? "Tiešsaiste: 2 cilvēki + bots."
           : "Pret diviem botiem.";
+    const playGreyHint =
+      zole.phase === "play" && isMyTurn
+        ? " Pelēkās = šajā brīdī nevar izspēlēt (sekšana / likšana)."
+        : "";
     note.textContent =
       "Zelta rāmītis = trumpis. Pilni noteikumi — augšā «Īsi noteikumi». " +
-      noteTail;
+      noteTail +
+      playGreyHint;
     handEl.appendChild(note);
     return handEl;
   }
