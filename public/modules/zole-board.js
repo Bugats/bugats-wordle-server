@@ -68,6 +68,7 @@
   function createPlayingCardEl(card, opts) {
     const o = opts || {};
     const small = !!o.small;
+    const table = !!o.table;
     const meta = SUIT_META[card.s] || SUIT_META[0];
     const rank = RANK_LABELS[card.r] || String(card.r);
     const trump = isZoleTrumpCard(card);
@@ -76,6 +77,7 @@
     el.className =
       "vz-zole-playing-card" +
       (small ? " vz-zole-playing-card--sm" : "") +
+      (table ? " vz-zole-playing-card--table" : "") +
       (meta.red
         ? " vz-zole-playing-card--red"
         : " vz-zole-playing-card--black");
@@ -124,6 +126,67 @@
       parts.push(`${esc(players[i] || "?")}: ${sign}${n}`);
     }
     return parts.join(" · ");
+  }
+
+  function renderZoleTableFelt(zole) {
+    const felt = document.createElement("div");
+    felt.className = "vz-zole-table-felt";
+    const cap = document.createElement("div");
+    cap.className = "vz-zole-table-caption";
+    cap.textContent = "Galds";
+    felt.appendChild(cap);
+
+    const phase = zole.phase || "bid";
+    if (phase === "bid") {
+      const p = document.createElement("p");
+      p.className = "vz-zole-table-hint";
+      p.textContent =
+        "Šeit uz filca parādīsies izspēlētās kārtis (stiķis).";
+      felt.appendChild(p);
+      return felt;
+    }
+    if (phase === "discard") {
+      const p = document.createElement("p");
+      p.className = "vz-zole-table-hint";
+      p.textContent = "Lielais norok kārtas — izspēle sāksies pēc tam.";
+      felt.appendChild(p);
+      return felt;
+    }
+    if (phase === "end") {
+      const p = document.createElement("p");
+      p.className = "vz-zole-table-hint";
+      p.textContent = "Partija beigusies.";
+      felt.appendChild(p);
+      return felt;
+    }
+
+    const trick = zole.trick || [];
+    const leader = zole.trickLeader ?? 0;
+    const fan = document.createElement("div");
+    fan.className = "vz-zole-trick-fan";
+    for (let i = 0; i < 3; i++) {
+      const seat = (leader + i) % 3;
+      const col = document.createElement("div");
+      col.className = "vz-zole-trick-seat";
+      col.style.setProperty("--seat-tilt", `${(i - 1) * 7}deg`);
+      const t = trick[i];
+      const who = document.createElement("div");
+      who.className = "vz-zole-trick-seat-name";
+      who.textContent = zole.players[seat] || "?";
+      col.appendChild(who);
+      if (t) {
+        col.appendChild(createPlayingCardEl(t.card, { table: true }));
+      } else {
+        const ph = document.createElement("div");
+        ph.className = "vz-zole-trick-placeholder";
+        ph.textContent =
+          zole.turn === seat ? "Domā…" : "Gaida kārtu…";
+        col.appendChild(ph);
+      }
+      fan.appendChild(col);
+    }
+    felt.appendChild(fan);
+    return felt;
   }
 
   function renderZoleBoard(zole, isMyTurn, onPlayCard, opts) {
@@ -187,6 +250,8 @@
     }
     meta.appendChild(turnLine);
     wrap.appendChild(meta);
+
+    wrap.appendChild(renderZoleTableFelt(zole));
 
     if (zole.phase === "bid") {
       const bidBox = document.createElement("div");
@@ -286,31 +351,6 @@
       }
       wrap.appendChild(resBox);
     }
-
-    const trickEl = document.createElement("div");
-    trickEl.className = "vz-zole-trick";
-    trickEl.innerHTML = "<span class=\"vz-zole-trick-title\">Uz galda</span>";
-    const row = document.createElement("div");
-    row.className = "vz-zole-trick-row";
-    const trick = zole.trick || [];
-    for (let i = 0; i < 3; i++) {
-      const slot = document.createElement("div");
-      slot.className = "vz-zole-trick-slot";
-      const t = trick[i];
-      if (t) {
-        const who = zole.players[t.playerIdx] || "?";
-        const whoEl = document.createElement("span");
-        whoEl.className = "vz-zole-trick-who";
-        whoEl.textContent = who;
-        slot.appendChild(whoEl);
-        slot.appendChild(createPlayingCardEl(t.card, { small: true }));
-      } else {
-        slot.textContent = "—";
-      }
-      row.appendChild(slot);
-    }
-    trickEl.appendChild(row);
-    wrap.appendChild(trickEl);
 
     const handEl = document.createElement("div");
     handEl.className = "vz-zole-hand";
