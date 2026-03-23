@@ -538,7 +538,11 @@
           ? "Tiešsaiste: 2 cilvēki + bots."
           : "Pret diviem botiem.";
     note.innerHTML =
-      "Roka: vispirms <strong>parastie</strong> masti kopā (♣, ♠, ♥), katrā 9→K→10→A; tad <strong>trumpji</strong> augošā secībā. Masti: ♣ ♦ ♥ ♠. Uzvara <strong>61+</strong>. " +
+      "<strong>Trumpji</strong> — visas <strong>D</strong> un <strong>J</strong> (katrā mastā) un ♦ <strong>7–A</strong>. " +
+      "<strong>Parastās</strong> — tikai ♣ ♥ ♠: A, 10, K, 9. " +
+      "<strong>Sekšana:</strong> jāatbild ar <strong>to pašu mastu</strong> kā pirmā uz galda; ♥D un ♥J skaitās ♥ mastam. " +
+      "Ja tā masta kārtis <strong>nav</strong> — vari jebkuru (citu masta vai trumpi). " +
+      "Zelta rāmītis = trumpis. Roka: parastie masti kopā, tad trumpji. Uzvara <strong>61+</strong> (lielais/zole). " +
       noteTail;
     handEl.appendChild(note);
 
