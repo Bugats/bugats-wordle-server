@@ -3,6 +3,8 @@ import {
   zoleIsTrump,
   zoleLegalPlays,
   zoleTrickWinner,
+  zoleCardTrickStrength,
+  sortZoleHand,
   ZOLE_SUIT_KARAVS,
 } from "../lib/zole.js";
 
@@ -36,5 +38,36 @@ describe("Latvian trump / follow suit (♣ kreicis, ♦ kāravs, ♥ ercens, ♠
       { playerIdx: 2, card: { s: 2, r: 12 } },
     ];
     expect(zoleTrickWinner(trick)).toBe(2);
+  });
+});
+
+describe("sortZoleHand", () => {
+  it("groups plain suits ♣ ♠ ♥ then trumps ascending strength", () => {
+    const hand = [
+      { s: 2, r: 14 },
+      { s: 0, r: 9 },
+      { s: 0, r: 14 },
+      { s: 1, r: 7 },
+      { s: 3, r: 12 },
+      { s: 1, r: 12 },
+      { s: 2, r: 12 },
+    ];
+    const sorted = sortZoleHand(hand);
+    const keys = sorted.map((c) => `${c.s}:${c.r}`);
+    expect(keys).toEqual([
+      "0:9",
+      "0:14",
+      "2:14",
+      "1:7",
+      "1:12",
+      "2:12",
+      "3:12",
+    ]);
+    const trumpPart = sorted.filter(zoleIsTrump);
+    for (let i = 1; i < trumpPart.length; i++) {
+      expect(zoleCardTrickStrength(trumpPart[i - 1])).toBeLessThanOrEqual(
+        zoleCardTrickStrength(trumpPart[i])
+      );
+    }
   });
 });

@@ -23,14 +23,6 @@
     { sym: "♠", red: false },
   ];
 
-  /** Mastu secība vienādam rangam: kreicis, pīķis, ercens, kāravs */
-  const SUIT_SORT_ORDER = [0, 3, 2, 1];
-
-  function suitSortKey(s) {
-    const idx = SUIT_SORT_ORDER.indexOf(s);
-    return idx >= 0 ? idx : s;
-  }
-
   const RANK_LABELS = {
     7: "7",
     8: "8",
@@ -52,6 +44,68 @@
     )
       return true;
     return false;
+  }
+
+  const RANK_A = 14;
+  const RANK_10 = 10;
+  const RANK_K = 13;
+  const RANK_Q = 12;
+  const RANK_J = 11;
+  const RANK_9 = 9;
+  const RANK_8 = 8;
+  const RANK_7 = 7;
+
+  /** Dāmu/kalpu stiprums mastā (kā lib/zole.js) */
+  const TRUMP_FACE_ORDER = [0, 3, 2, 1];
+
+  function trumpFaceStrengthSort(suit) {
+    const idx = TRUMP_FACE_ORDER.indexOf(suit);
+    return idx >= 0 ? idx : 9;
+  }
+
+  /** Stiprums stiķim; rokas kārtošanai: augošā secībā = mazāka vērtība pa kreisi */
+  function zoleCardTrickStrengthSort(card) {
+    if (!card) return -1;
+    if (card.r === RANK_Q) {
+      return 4000 - trumpFaceStrengthSort(card.s);
+    }
+    if (card.r === RANK_J) {
+      return 3000 - trumpFaceStrengthSort(card.s);
+    }
+    if (card.s === ZOLE_SUIT_KARAVS) {
+      const karRank = [RANK_7, RANK_8, RANK_9, RANK_K, RANK_10, RANK_A].indexOf(
+        card.r
+      );
+      return 2000 + (karRank >= 0 ? karRank : 0);
+    }
+    const plain = [RANK_9, RANK_K, RANK_10, RANK_A].indexOf(card.r);
+    return plain >= 0 ? plain : 0;
+  }
+
+  /** Parastie masti kopā: ♣, ♠, ♥; tad trumpji augošā secībā */
+  function sortZoleHandClient(hand) {
+    if (!hand || !hand.length) return [];
+    const PLAIN_SUIT_ORDER = [0, 3, 2];
+    function plainSuitKey(s) {
+      const i = PLAIN_SUIT_ORDER.indexOf(s);
+      return i >= 0 ? i : 99;
+    }
+    function plainRankKey(r) {
+      const order = [RANK_9, RANK_K, RANK_10, RANK_A];
+      const i = order.indexOf(r);
+      return i >= 0 ? i : 99;
+    }
+    return hand.slice().sort((a, b) => {
+      const ta = isZoleTrumpCard(a);
+      const tb = isZoleTrumpCard(b);
+      if (ta !== tb) return ta ? 1 : -1;
+      if (!ta) {
+        const ds = plainSuitKey(a.s) - plainSuitKey(b.s);
+        if (ds !== 0) return ds;
+        return plainRankKey(a.r) - plainRankKey(b.r);
+      }
+      return zoleCardTrickStrengthSort(a) - zoleCardTrickStrengthSort(b);
+    });
   }
 
   function cardLabel(card) {
@@ -362,10 +416,7 @@
     const btnRow = document.createElement("div");
     btnRow.className = "vz-zole-hand-btns";
 
-    const hand = (zole.myHand || []).slice();
-    hand.sort(
-      (a, b) => a.r - b.r || suitSortKey(a.s) - suitSortKey(b.s)
-    );
+    const hand = sortZoleHandClient(zole.myHand || []);
     const legalSet = zole.legalCardKeys
       ? new Set(zole.legalCardKeys)
       : null;
@@ -435,7 +486,7 @@
           ? "Tiešsaiste: 2 cilvēki + bots."
           : "Pret diviem botiem.";
     note.innerHTML =
-      "Kārtis kā uz galda. Masti: ♣ kreicis, ♦ kāravs, ♥ ercens, ♠ pīķis. <strong>Zelta rāmītis</strong> = trumpis (D, J, ♦ kāravas). 26 kārtis. Uzvara <strong>61+</strong>. " +
+      "Roka: vispirms <strong>parastie</strong> masti kopā (♣, ♠, ♥), katrā 9→K→10→A; tad <strong>trumpji</strong> augošā secībā. Masti: ♣ ♦ ♥ ♠. Uzvara <strong>61+</strong>. " +
       noteTail;
     handEl.appendChild(note);
 
