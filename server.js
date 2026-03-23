@@ -1116,57 +1116,60 @@ function playZoleBotBids(io, game) {
 
 function playZoleBotTurns(io, game) {
   if (!game || game.type !== "zole" || !game.zole) return;
-  while (
-    game.status === "active" &&
-    game.zole.phase === "play" &&
-    isZoleBotUsername(game.players[game.zole.turn])
-  ) {
-    const t = game.zole.turn;
-    const card = zolePickBotCard(game.zole, t);
-    if (!card) break;
-    const res = zolePlayCard(game.zole, t, card);
-    if (!res.ok) break;
-    game.turn = game.zole.turn;
-    game.lastMoveAt = Date.now();
-    game.moves.push({ by: game.players[t], card, ts: Date.now() });
-    if (game.zole.phase === "end") {
-      const w = game.zole.winnerUsername;
-      finishBoardGame(game, w, "win");
-      const humans = game.players.filter((p) => !isZoleBotUsername(p));
-      for (const h of humans) {
-        const idx = game.players.indexOf(h);
-        const sock = getSocketByUsername(h);
-        if (!sock) continue;
-        const coinsGain =
-          w && String(w).toLowerCase() === String(h).toLowerCase()
-            ? BOARD_GAME_REWARD_COINS
-            : 0;
-        const coinsLoss =
-          w && String(w).toLowerCase() !== String(h).toLowerCase()
-            ? BOARD_GAME_LOSE_COINS
-            : 0;
-        sock.emit("board.end", {
-          gameId: game.id,
-          type: "zole",
-          players: game.players,
-          vsBot: !!game.vsBot,
-          winner: w,
-          reason: "win",
-          zole: zolePublicSnapshot(game.zole, idx),
-          coinsGain,
-          coinsLoss,
-          zoleMode: game.zoleMode,
-        });
-      }
-      return;
+  if (
+    !(
+      game.status === "active" &&
+      game.zole.phase === "play" &&
+      isZoleBotUsername(game.players[game.zole.turn])
+    )
+  )
+    return;
+  const t = game.zole.turn;
+  const card = zolePickBotCard(game.zole, t);
+  if (!card) return;
+  const res = zolePlayCard(game.zole, t, card);
+  if (!res.ok) return;
+  game.turn = game.zole.turn;
+  game.lastMoveAt = Date.now();
+  game.moves.push({ by: game.players[t], card, ts: Date.now() });
+  if (game.zole.phase === "end") {
+    const w = game.zole.winnerUsername;
+    finishBoardGame(game, w, "win");
+    const humans = game.players.filter((p) => !isZoleBotUsername(p));
+    for (const h of humans) {
+      const idx = game.players.indexOf(h);
+      const sock = getSocketByUsername(h);
+      if (!sock) continue;
+      const coinsGain =
+        w && String(w).toLowerCase() === String(h).toLowerCase()
+          ? BOARD_GAME_REWARD_COINS
+          : 0;
+      const coinsLoss =
+        w && String(w).toLowerCase() !== String(h).toLowerCase()
+          ? BOARD_GAME_LOSE_COINS
+          : 0;
+      sock.emit("board.end", {
+        gameId: game.id,
+        type: "zole",
+        players: game.players,
+        vsBot: !!game.vsBot,
+        winner: w,
+        reason: "win",
+        zole: zolePublicSnapshot(game.zole, idx),
+        coinsGain,
+        coinsLoss,
+        zoleMode: game.zoleMode,
+      });
     }
-    emitZoleToHumans(io, game, "board.move", {
-      gameId: game.id,
-      type: "zole",
-      turn: game.zole.turn,
-      zoleMode: game.zoleMode,
-    });
+    return;
   }
+  emitZoleToHumans(io, game, "board.move", {
+    gameId: game.id,
+    type: "zole",
+    turn: game.zole.turn,
+    zoleMode: game.zoleMode,
+  });
+  setImmediate(() => playZoleBotTurns(io, game));
 }
 
 const BOARD_ELO_DEFAULT = 1000;
