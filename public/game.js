@@ -8988,6 +8988,9 @@ function initSocket() {
     boardState.fen = payload?.fen || boardState.fen;
     boardState.turn = payload?.turn ?? boardState.turn;
     boardState.selectedCell = null;
+    // Obligāti notīrīt — pretējā gadījumā paliek iepriekšējās kārtas jumps/moves
+    // pret jauno laukumu (piem. pēc bota gājiena) un neviens kauliņš nav klikšķināms līdz refresh.
+    boardState.legalMoves = { jumps: [], moves: [] };
     renderBoardGame();
     const myIdx = boardGamePlayerIndex(boardState.players, state.username);
     const isMyTurn = myIdx === boardState.turn;
