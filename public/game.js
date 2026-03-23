@@ -678,6 +678,8 @@ let boardState = {
   board: null,
   fen: null,
   zole: null,
+  zoleMode: null,
+  vsBot: false,
   dambreteVariant: null,
   selectedCell: null,
   legalMoves: { jumps: [], moves: [] },
@@ -702,6 +704,18 @@ function getSelectedBoardDambreteVariant() {
     'input[name="board-dambrete-variant"]:checked'
   );
   return normalizeDambreteVariantClient(el?.value);
+}
+
+function getSelectedBoardZoleMode() {
+  const el = document.querySelector('input[name="board-zole-mode"]:checked');
+  const v = String(el?.value || "online_2p").toLowerCase();
+  return v === "vs_bot" ? "vs_bot" : "online_2p";
+}
+
+function boardZoleModeLabel(mode) {
+  return mode === "vs_bot"
+    ? "pret botiem"
+    : "tiešsaistē (2 cilvēki + bots)";
 }
 
 function hideBoardResultOverlay() {
@@ -785,7 +799,10 @@ function showBoardGameResult(payload) {
     } else if (reason === "checkmate") {
       detail = `Tu uzvarēji ar matu pret ${oppName}.`;
     } else if (gameType === "zole") {
-      detail = "Tu uzvarēji pār diviem Zole botiem.";
+      detail =
+        boardState.zoleMode === "online_2p"
+          ? "Tu uzvarēji zolē (tiešsaistes partija)."
+          : "Tu uzvarēji pār diviem Zole botiem.";
     } else {
       detail = `Tu uzvarēji pret ${oppName}.`;
     }
@@ -9172,6 +9189,10 @@ function initSocket() {
     if (boardState.type === "zole" && payload?.zole) {
       boardState.zole = payload.zole;
     }
+    if (boardState.type === "zole" && payload?.zoleMode != null) {
+      const m = String(payload.zoleMode).toLowerCase();
+      boardState.zoleMode = m === "vs_bot" ? "vs_bot" : "online_2p";
+    }
     if (
       boardState.type === "dambrete" &&
       payload?.dambreteVariant != null
@@ -9204,6 +9225,10 @@ function initSocket() {
   });
   socket.on("board.end", (payload) => {
     if (payload?.gameId !== boardState.gameId) return;
+    if (payload?.type === "zole" && payload?.zoleMode != null) {
+      const m = String(payload.zoleMode).toLowerCase();
+      boardState.zoleMode = m === "vs_bot" ? "vs_bot" : "online_2p";
+    }
     const winner = payload?.winner;
     const coinsGain = payload?.coinsGain || 0;
     const coinsLoss = payload?.coinsLoss || 0;
@@ -9240,9 +9265,11 @@ function initSocket() {
 
 function syncBoardDambreteModePanelVisibility() {
   const wrap = document.getElementById("board-dambrete-mode-wrap");
+  const zoleWrap = document.getElementById("board-zole-mode-wrap");
   const invite = document.getElementById("board-games-invite");
   const inInvite = invite && !invite.classList.contains("hidden");
   if (wrap) wrap.classList.toggle("hidden", !!inInvite);
+  if (zoleWrap) zoleWrap.classList.toggle("hidden", !!inInvite);
 }
 
 function showBoardModal() {
@@ -9331,15 +9358,26 @@ function showBoardInviteModal(from, type, payload) {
         type === "chess" ? "šahu" : type === "zole" ? "zoli" : "dambreti";
     invite.dataset.from = from;
     invite.dataset.type = type || "dambrete";
+    invite.dataset.inviteId = String(payload?.inviteId || "").trim();
     const dv =
       type === "dambrete"
         ? normalizeDambreteVariantClient(payload?.dambreteVariant)
         : "russian";
     invite.dataset.dambreteVariant = dv;
+    const zm =
+      type === "zole"
+        ? String(payload?.zoleMode || "online_2p").toLowerCase() === "vs_bot"
+          ? "vs_bot"
+          : "online_2p"
+        : "";
+    invite.dataset.zoleMode = zm;
     if (varEl) {
       if (type === "chess") {
         varEl.textContent = "";
         varEl.classList.add("hidden");
+      } else if (type === "zole") {
+        varEl.textContent = `Režīms: ${boardZoleModeLabel(zm)}`;
+        varEl.classList.remove("hidden");
       } else {
         varEl.textContent = `Režīms: ${boardDambreteModeLabel(dv)}`;
         varEl.classList.remove("hidden");
@@ -9368,6 +9406,16 @@ function startBoardGame(payload) {
     board: payload?.board ? payload.board.map((r) => r.slice()) : null,
     fen: payload?.fen || null,
     zole: payload?.type === "zole" ? payload?.zole || null : null,
+    zoleMode:
+      payload?.type === "zole"
+        ? (() => {
+            const m = String(payload?.zoleMode || "").toLowerCase();
+            if (m === "vs_bot") return "vs_bot";
+            if (m === "online_2p") return "online_2p";
+            return payload?.vsBot ? "vs_bot" : "online_2p";
+          })()
+        : null,
+    vsBot: !!payload?.vsBot,
     dambreteVariant:
       payload?.type === "dambrete"
         ? normalizeDambreteVariantClient(payload?.dambreteVariant)
@@ -9431,10 +9479,7 @@ function renderBoardGame() {
     else
       typeEl.textContent = `♟️ Dambrete (${boardDambreteModeLabel(boardState.dambreteVariant)})`;
   }
-  const myIdx =
-    boardState.type === "zole"
-      ? 0
-      : boardGamePlayerIndex(boardState.players, state.username);
+  const myIdx = boardGamePlayerIndex(boardState.players, state.username);
   const isMyTurn = myIdx === boardState.turn;
   if (
     boardState.type === "dambrete" &&
@@ -9452,7 +9497,9 @@ function renderBoardGame() {
     if (boardState.type === "zole") {
       hintEl.textContent = isMyTurn
         ? "Spied uz kārtas, ko gribi izspēlēt (jāievēro krāsa)."
-        : "Gaidām Zole botu gājienu…";
+        : boardState.zoleMode === "online_2p"
+          ? "Gaidām otra spēlētāja vai bota gājienu…"
+          : "Gaidām Zole botu gājienu…";
     } else if (!isMyTurn) {
       hintEl.textContent = "Gaidām pretinieka gājienu";
     } else if (
@@ -9474,13 +9521,18 @@ function renderBoardGame() {
       window.VZBoardGames.resetDambreteTable();
     }
     if (window.VZZoleBoard && zoleContainer) {
-      window.VZZoleBoard.renderZoleBoard(boardState.zole, isMyTurn, (card) => {
-        if (!state.socket || !boardState.gameId) return;
-        state.socket.emit("board.move", {
-          gameId: boardState.gameId,
-          card,
-        });
-      });
+      window.VZZoleBoard.renderZoleBoard(
+        boardState.zole,
+        isMyTurn,
+        (card) => {
+          if (!state.socket || !boardState.gameId) return;
+          state.socket.emit("board.move", {
+            gameId: boardState.gameId,
+            card,
+          });
+        },
+        { zoleMode: boardState.zoleMode }
+      );
     }
   } else if (boardState.type === "dambrete" && boardState.board) {
     if (zoleContainer) {
@@ -9689,6 +9741,16 @@ function bindBoardGames() {
     const payload = { target, type };
     if (type === "dambrete")
       payload.dambreteVariant = getSelectedBoardDambreteVariant();
+    if (type === "zole") {
+      const zm = getSelectedBoardZoleMode();
+      if (zm !== "online_2p") {
+        appendSystemMessage(
+          "Drauga zolei izvēlies režīmu «Tiešsaistē» (lobijā augšā)."
+        );
+        return;
+      }
+      payload.zoleMode = zm;
+    }
     state.socket.emit("board.invite", payload);
     document.getElementById("board-invite-pending")?.classList.remove("hidden");
   };
@@ -9696,6 +9758,8 @@ function bindBoardGames() {
     inviteDambrete.addEventListener("click", () => doInvite("dambrete"));
   if (inviteChess)
     inviteChess.addEventListener("click", () => doInvite("chess"));
+  const inviteZole = document.getElementById("board-invite-zole");
+  if (inviteZole) inviteZole.addEventListener("click", () => doInvite("zole"));
   const vsBotDambrete = document.getElementById("board-vsbot-dambrete");
   const vsBotChess = document.getElementById("board-vsbot-chess");
   const doVsBot = (type) => {
@@ -9707,6 +9771,7 @@ function bindBoardGames() {
     const payload = { type, difficulty };
     if (type === "dambrete")
       payload.dambreteVariant = getSelectedBoardDambreteVariant();
+    if (type === "zole") payload.zoleMode = "vs_bot";
     state.socket.emit("board.startVsBot", payload);
     document.getElementById("board-invite-pending")?.classList.add("hidden");
   };
@@ -9720,9 +9785,15 @@ function bindBoardGames() {
       const invite = document.getElementById("board-games-invite");
       const from = invite?.dataset?.from || "";
       const type = invite?.dataset?.type || "dambrete";
-      const acc = { inviteId: "", from, type };
+      const acc = {
+        inviteId: String(invite?.dataset?.inviteId || "").trim(),
+        from,
+        type,
+      };
       if (type === "dambrete" && invite?.dataset?.dambreteVariant)
         acc.dambreteVariant = invite.dataset.dambreteVariant;
+      if (type === "zole" && invite?.dataset?.zoleMode)
+        acc.zoleMode = invite.dataset.zoleMode;
       if (state.socket) state.socket.emit("board.accept", acc);
       hideBoardInviteModal();
     });

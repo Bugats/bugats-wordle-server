@@ -42,10 +42,12 @@ import { getBestDambreteMove } from "./lib/draughts-bot.js";
 import { getBestChessMove } from "./lib/chess-bot.js";
 import {
   createZoleVsBotState,
+  createZoleOnline2pState,
   zolePlayCard,
   zolePickBotCard,
   zolePublicSnapshot,
   ZOLE_BOT_1,
+  isZoleBotUsername,
 } from "./lib/zole.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -682,10 +684,27 @@ function parseDambreteVariantFromPayload(payload) {
   return normalizeDambreteVariant(v === "english" ? "english" : "russian");
 }
 
+function parseZoleModeFromPayload(payload) {
+  const m = String(payload?.zoleMode ?? payload?.zole_mode ?? "online_2p")
+    .toLowerCase()
+    .trim();
+  if (m === "vs_bot" || m === "bot") return "vs_bot";
+  return "online_2p";
+}
+
 function boardInvitePairKey(a, b) {
   const x = String(a || "").toLowerCase();
   const y = String(b || "").toLowerCase();
   return x < y ? `${x}\0${y}` : `${y}\0${x}`;
+}
+
+function boardGameSeatIndex(game, username) {
+  if (!game?.players) return -1;
+  const u = String(username || "").toLowerCase();
+  for (let i = 0; i < game.players.length; i++) {
+    if (String(game.players[i] || "").toLowerCase() === u) return i;
+  }
+  return -1;
 }
 
 function playBoardBotMove(io, game) {
@@ -778,8 +797,20 @@ function playBoardBotMove(io, game) {
 function getBoardGameOpponent(game, username) {
   if (!game || !Array.isArray(game.players)) return null;
   if (game.type === "zole" && game.players.length === 3) {
-    if (username === game.players[0]) return ZOLE_BOT_1;
-    return game.players[0] || null;
+    const humans = game.players.filter((p) => !isZoleBotUsername(p));
+    if (humans.length === 1) {
+      if (username === humans[0]) return ZOLE_BOT_1;
+      return humans[0] || null;
+    }
+    if (humans.length >= 2) {
+      const h0 = humans[0];
+      const h1 = humans[1];
+      if (String(username).toLowerCase() === String(h0).toLowerCase())
+        return h1;
+      if (String(username).toLowerCase() === String(h1).toLowerCase())
+        return h0;
+    }
+    return null;
   }
   const [p1, p2] = game.players;
   if (username === p1) return p2 || null;
@@ -898,20 +929,55 @@ function createZoleVsBotGame(humanUsername) {
     createdAt: Date.now(),
     lastMoveAt: Date.now(),
     vsBot: true,
+    zoleMode: "vs_bot",
   };
   boardGames.set(gameId, game);
   userToBoardGame.set(humanUsername, gameId);
   return game;
 }
 
-function playZoleBotTurns(_io, game) {
+function createZoleOnline2pGame(usernameA, usernameB) {
+  const gameId = crypto.randomBytes(8).toString("hex");
+  const zole = createZoleOnline2pState(usernameA, usernameB);
+  const game = {
+    id: gameId,
+    type: "zole",
+    players: zole.players.slice(),
+    zole,
+    turn: zole.turn,
+    status: "active",
+    moves: [],
+    createdAt: Date.now(),
+    lastMoveAt: Date.now(),
+    vsBot: false,
+    zoleMode: "online_2p",
+  };
+  boardGames.set(gameId, game);
+  userToBoardGame.set(usernameA, gameId);
+  userToBoardGame.set(usernameB, gameId);
+  return game;
+}
+
+function emitZoleToHumans(io, game, event, base) {
+  if (!game?.zole) return;
+  for (let i = 0; i < game.players.length; i++) {
+    const uname = game.players[i];
+    if (isZoleBotUsername(uname)) continue;
+    const sock = getSocketByUsername(uname);
+    if (!sock) continue;
+    sock.emit(event, {
+      ...base,
+      zole: zolePublicSnapshot(game.zole, i),
+    });
+  }
+}
+
+function playZoleBotTurns(io, game) {
   if (!game || game.type !== "zole" || !game.zole) return;
-  const human = game.players[0];
-  const sock = getSocketByUsername(human);
   while (
     game.status === "active" &&
     game.zole.phase === "play" &&
-    game.zole.turn !== 0
+    isZoleBotUsername(game.players[game.zole.turn])
   ) {
     const t = game.zole.turn;
     const card = zolePickBotCard(game.zole, t);
@@ -924,33 +990,40 @@ function playZoleBotTurns(_io, game) {
     if (game.zole.phase === "end") {
       const w = game.zole.winnerUsername;
       finishBoardGame(game, w, "win");
-      const coinsGain =
-        w && w === human ? BOARD_GAME_REWARD_COINS : 0;
-      const coinsLoss =
-        w && w !== human && human ? BOARD_GAME_LOSE_COINS : 0;
-      if (sock) {
+      const humans = game.players.filter((p) => !isZoleBotUsername(p));
+      for (const h of humans) {
+        const idx = game.players.indexOf(h);
+        const sock = getSocketByUsername(h);
+        if (!sock) continue;
+        const coinsGain =
+          w && String(w).toLowerCase() === String(h).toLowerCase()
+            ? BOARD_GAME_REWARD_COINS
+            : 0;
+        const coinsLoss =
+          w && String(w).toLowerCase() !== String(h).toLowerCase()
+            ? BOARD_GAME_LOSE_COINS
+            : 0;
         sock.emit("board.end", {
           gameId: game.id,
           type: "zole",
           players: game.players,
-          vsBot: true,
+          vsBot: !!game.vsBot,
           winner: w,
           reason: "win",
-          zole: zolePublicSnapshot(game.zole, 0),
+          zole: zolePublicSnapshot(game.zole, idx),
           coinsGain,
           coinsLoss,
+          zoleMode: game.zoleMode,
         });
       }
       return;
     }
-    if (sock) {
-      sock.emit("board.move", {
-        gameId: game.id,
-        type: "zole",
-        turn: game.zole.turn,
-        zole: zolePublicSnapshot(game.zole, 0),
-      });
-    }
+    emitZoleToHumans(io, game, "board.move", {
+      gameId: game.id,
+      type: "zole",
+      turn: game.zole.turn,
+      zoleMode: game.zoleMode,
+    });
   }
 }
 
@@ -999,15 +1072,25 @@ function finishBoardGame(game, winnerUsername, reason) {
   const winner = winnerKey ? USERS[winnerKey] : null;
 
   let loser = null;
+  const zoleLosers = [];
   if (game.type === "zole" && game.players?.length === 3) {
-    const human = game.players[0];
-    const hKey = findUserKeyCaseInsensitive(human);
-    if (
-      winnerUsername &&
-      human &&
-      String(winnerUsername).toLowerCase() !== String(human).toLowerCase()
-    ) {
-      loser = hKey ? USERS[hKey] : null;
+    const humans = game.players.filter((p) => !isZoleBotUsername(p));
+    if (winnerUsername) {
+      if (isZoleBotUsername(winnerUsername)) {
+        for (const h of humans) {
+          const hKey = findUserKeyCaseInsensitive(h);
+          if (hKey && USERS[hKey]) zoleLosers.push(USERS[hKey]);
+        }
+      } else {
+        for (const h of humans) {
+          if (
+            String(h).toLowerCase() === String(winnerUsername).toLowerCase()
+          )
+            continue;
+          const hKey = findUserKeyCaseInsensitive(h);
+          if (hKey && USERS[hKey]) zoleLosers.push(USERS[hKey]);
+        }
+      }
     }
   } else if (game.players?.length >= 2) {
     const [p1, p2] = game.players;
@@ -1039,6 +1122,10 @@ function finishBoardGame(game, winnerUsername, reason) {
   if (loser) {
     const currentCoins = Math.max(0, Math.floor(loser.coins || 0));
     loser.coins = Math.max(0, currentCoins - BOARD_GAME_LOSE_COINS);
+  }
+  for (const lz of zoleLosers) {
+    const currentCoins = Math.max(0, Math.floor(lz.coins || 0));
+    lz.coins = Math.max(0, currentCoins - BOARD_GAME_LOSE_COINS);
   }
   if (
     winner &&
@@ -10610,8 +10697,13 @@ io.on("connection", (socket) => {
         dambreteVariant: boardGame.dambreteVariant,
         zole:
           boardGame.type === "zole" && boardGame.zole
-            ? zolePublicSnapshot(boardGame.zole, 0)
+            ? zolePublicSnapshot(
+                boardGame.zole,
+                boardGameSeatIndex(boardGame, user.username)
+              )
             : undefined,
+        vsBot: boardGame.type === "zole" ? !!boardGame.vsBot : undefined,
+        zoleMode: boardGame.type === "zole" ? boardGame.zoleMode : undefined,
       });
     }
   } catch {}
@@ -11582,9 +11674,11 @@ io.on("connection", (socket) => {
       payload?.target || payload?.username || ""
     ).trim();
     const gameType = String(payload?.type || "dambrete").toLowerCase();
-    if (gameType === "zole")
+    const zoleMode =
+      gameType === "zole" ? parseZoleModeFromPayload(payload) : undefined;
+    if (gameType === "zole" && zoleMode !== "online_2p")
       return socket.emit("board.error", {
-        message: "Zoli pagaidām var spēlēt tikai pret botu (lobijā).",
+        message: "Drauga zole: izvēlies tiešsaistes režīmu (2 cilvēki + bots).",
       });
     if (!targetName)
       return socket.emit("board.error", {
@@ -11617,6 +11711,7 @@ io.on("connection", (socket) => {
       {
         type: gameType,
         dambreteVariant,
+        zoleMode,
         expiresAt: invite.expiresAt,
       }
     );
@@ -11627,6 +11722,7 @@ io.on("connection", (socket) => {
         from: fromUser.username,
         type: gameType,
         dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
+        zoleMode: gameType === "zole" ? zoleMode : undefined,
       });
     }
     socket.emit("board.inviteSent", {
@@ -11634,6 +11730,7 @@ io.on("connection", (socket) => {
       target: targetUser.username,
       type: gameType,
       dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
+      zoleMode: gameType === "zole" ? zoleMode : undefined,
     });
   });
 
@@ -11642,13 +11739,8 @@ io.on("connection", (socket) => {
     if (!user) return;
     const inviteId = String(payload?.inviteId || "").trim();
     const gameType = String(payload?.type || "dambrete").toLowerCase();
-    if (gameType === "zole")
-      return socket.emit("board.error", {
-        message: "Zoli pagaidām var spēlēt tikai pret botu.",
-      });
     if (!inviteId)
       return socket.emit("board.error", { message: "Nav aicinājuma." });
-    const targetSocket = getSocketByUsername(payload?.from || "");
     const challengerName = payload?.from || "";
     const opponentName = user.username;
     if (!challengerName || challengerName === opponentName)
@@ -11660,6 +11752,19 @@ io.on("connection", (socket) => {
       return socket.emit("board.error", { message: "Kāds jau spēlē." });
     const pairKey = boardInvitePairKey(challengerName, opponentName);
     const pendingVar = boardInviteVariantByPair.get(pairKey);
+    if (gameType === "zole") {
+      const zm = pendingVar?.zoleMode || "online_2p";
+      if (
+        !pendingVar ||
+        pendingVar.expiresAt <= Date.now() ||
+        pendingVar.type !== "zole" ||
+        zm !== "online_2p"
+      ) {
+        return socket.emit("board.error", {
+          message: "Zoles aicinājums nav derīgs vai ir beidzies.",
+        });
+      }
+    }
     let dambreteVariant = "russian";
     if (
       pendingVar &&
@@ -11673,7 +11778,9 @@ io.on("connection", (socket) => {
     boardInviteVariantByPair.delete(pairKey);
 
     let game;
-    if (gameType === "chess") {
+    if (gameType === "zole") {
+      game = createZoleOnline2pGame(challengerName, opponentName);
+    } else if (gameType === "chess") {
       game = createChessGame(challengerName, opponentName);
     } else {
       game = createDambreteGame(challengerName, opponentName, dambreteVariant);
@@ -11683,17 +11790,42 @@ io.on("connection", (socket) => {
     const s2 = getSocketByUsername(opponentName);
     if (s1) s1.join(room);
     if (s2) s2.join(room);
-    const payloadOut = {
-      gameId: game.id,
-      type: game.type,
-      players: game.players,
-      turn: game.turn,
-      status: game.status,
-      board: game.board,
-      fen: game.fen,
-      dambreteVariant: game.dambreteVariant,
-    };
-    io.to(room).emit("board.start", payloadOut);
+    if (game.type === "zole") {
+      const idxCh = game.players.indexOf(challengerName);
+      const idxOp = game.players.indexOf(opponentName);
+      const base = {
+        gameId: game.id,
+        type: "zole",
+        players: game.players,
+        turn: game.turn,
+        status: game.status,
+        vsBot: false,
+        zoleMode: game.zoleMode,
+      };
+      if (s1)
+        s1.emit("board.start", {
+          ...base,
+          zole: zolePublicSnapshot(game.zole, idxCh),
+        });
+      if (s2)
+        s2.emit("board.start", {
+          ...base,
+          zole: zolePublicSnapshot(game.zole, idxOp),
+        });
+      setImmediate(() => playZoleBotTurns(io, game));
+    } else {
+      const payloadOut = {
+        gameId: game.id,
+        type: game.type,
+        players: game.players,
+        turn: game.turn,
+        status: game.status,
+        board: game.board,
+        fen: game.fen,
+        dambreteVariant: game.dambreteVariant,
+      };
+      io.to(room).emit("board.start", payloadOut);
+    }
   });
 
   socket.on("board.startVsBot", (payload) => {
@@ -11717,6 +11849,7 @@ io.on("connection", (socket) => {
       game = createChessVsBot(user.username, validDifficulty);
     } else if (gameType === "zole") {
       game = createZoleVsBotGame(user.username);
+      game.zoleMode = "vs_bot";
     } else {
       game = createDambreteVsBot(user.username, validDifficulty, dVar);
     }
@@ -11731,6 +11864,7 @@ io.on("connection", (socket) => {
       vsBot: true,
       dambreteVariant: game.dambreteVariant,
       zole: game.type === "zole" ? zolePublicSnapshot(game.zole, 0) : undefined,
+      zoleMode: game.type === "zole" ? game.zoleMode : undefined,
     };
     socket.emit("board.start", payloadOut);
     if (game.type === "zole") {
@@ -11872,10 +12006,10 @@ io.on("connection", (socket) => {
       const card = payload?.card || payload?.move;
       if (!card || typeof card.s !== "number" || typeof card.r !== "number")
         return socket.emit("board.error", { message: "Nav gājiena." });
-      const humanIdx = game.players.indexOf(user.username);
-      if (humanIdx !== 0)
+      const pIdx = boardGameSeatIndex(game, user.username);
+      if (pIdx < 0 || isZoleBotUsername(game.players[pIdx]))
         return socket.emit("board.error", { message: "Nederīgs spēlētājs." });
-      const res = zolePlayCard(game.zole, 0, card);
+      const res = zolePlayCard(game.zole, pIdx, card);
       if (!res.ok)
         return socket.emit("board.error", {
           message: res.error || "Nederīgs gājiens.",
@@ -11883,30 +12017,41 @@ io.on("connection", (socket) => {
       game.turn = game.zole.turn;
       game.lastMoveAt = Date.now();
       game.moves.push({ card, by: user.username, ts: Date.now() });
-      const sock = getSocketByUsername(game.players[0]);
       if (game.zole.phase === "end") {
         const w = game.zole.winnerUsername;
         finishBoardGame(game, w, "win");
-        const human = game.players[0];
-        sock?.emit("board.end", {
-          gameId,
-          type: "zole",
-          players: game.players,
-          vsBot: true,
-          winner: w,
-          reason: "win",
-          zole: zolePublicSnapshot(game.zole, 0),
-          coinsGain: w === human ? BOARD_GAME_REWARD_COINS : 0,
-          coinsLoss:
-            w && w !== human ? BOARD_GAME_LOSE_COINS : 0,
-        });
+        const humans = game.players.filter((p) => !isZoleBotUsername(p));
+        for (const h of humans) {
+          const idx = boardGameSeatIndex(game, h);
+          const sock = getSocketByUsername(h);
+          if (!sock) continue;
+          const coinsGain =
+            w && String(w).toLowerCase() === String(h).toLowerCase()
+              ? BOARD_GAME_REWARD_COINS
+              : 0;
+          const coinsLoss =
+            w && String(w).toLowerCase() !== String(h).toLowerCase()
+              ? BOARD_GAME_LOSE_COINS
+              : 0;
+          sock.emit("board.end", {
+            gameId,
+            type: "zole",
+            players: game.players,
+            vsBot: !!game.vsBot,
+            winner: w,
+            reason: "win",
+            zole: zolePublicSnapshot(game.zole, idx),
+            coinsGain,
+            coinsLoss,
+            zoleMode: game.zoleMode,
+          });
+        }
         return;
       }
-      sock?.emit("board.move", {
+      emitZoleToHumans(io, game, "board.move", {
         gameId,
         type: "zole",
         turn: game.zole.turn,
-        zole: zolePublicSnapshot(game.zole, 0),
       });
       setImmediate(() => playZoleBotTurns(io, game));
     }
@@ -11921,26 +12066,44 @@ io.on("connection", (socket) => {
     if (!game.players.includes(user.username)) return;
     const winner = getBoardGameOpponent(game, user.username);
     finishBoardGame(game, winner, "resign");
-    const endPayload = {
-      gameId,
-      type: game.type,
-      players: game.players,
-      vsBot: !!game.vsBot,
-      dambreteVariant: game.dambreteVariant,
-      zole:
-        game.type === "zole" && game.zole
-          ? zolePublicSnapshot(game.zole, 0)
-          : undefined,
-      winner,
-      reason: "resign",
-      resignedBy: user.username,
-      coinsGain: 0,
-      coinsLoss: winner ? BOARD_GAME_LOSE_COINS : 0,
-    };
-    if (game.vsBot) {
-      getSocketByUsername(game.players[0])?.emit("board.end", endPayload);
+    if (game.type === "zole" && game.zole) {
+      const humans = game.players.filter((p) => !isZoleBotUsername(p));
+      for (const h of humans) {
+        const idx = boardGameSeatIndex(game, h);
+        const sock = getSocketByUsername(h);
+        if (!sock) continue;
+        sock.emit("board.end", {
+          gameId,
+          type: "zole",
+          players: game.players,
+          vsBot: !!game.vsBot,
+          zole: zolePublicSnapshot(game.zole, idx),
+          winner,
+          reason: "resign",
+          resignedBy: user.username,
+          coinsGain: 0,
+          coinsLoss: winner ? BOARD_GAME_LOSE_COINS : 0,
+          zoleMode: game.zoleMode,
+        });
+      }
     } else {
-      io.to(`board:${gameId}`).emit("board.end", endPayload);
+      const endPayload = {
+        gameId,
+        type: game.type,
+        players: game.players,
+        vsBot: !!game.vsBot,
+        dambreteVariant: game.dambreteVariant,
+        winner,
+        reason: "resign",
+        resignedBy: user.username,
+        coinsGain: 0,
+        coinsLoss: winner ? BOARD_GAME_LOSE_COINS : 0,
+      };
+      if (game.vsBot) {
+        getSocketByUsername(game.players[0])?.emit("board.end", endPayload);
+      } else {
+        io.to(`board:${gameId}`).emit("board.end", endPayload);
+      }
     }
   });
 

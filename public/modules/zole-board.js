@@ -35,7 +35,7 @@
     return c.s + ":" + c.r;
   }
 
-  function renderZoleBoard(zole, isMyTurn, onPlayCard) {
+  function renderZoleBoard(zole, isMyTurn, onPlayCard, opts) {
     const container = document.getElementById("board-zole-container");
     if (!container) return;
     container.classList.remove("hidden");
@@ -116,8 +116,11 @@
 
     const note = document.createElement("p");
     note.className = "vz-zole-note";
-    note.textContent =
-      "MVP: 3 krāsas × 8 kārtis, 8 stiķi. Jāievēro pirmā krāsa; lācis sit pāri. Pret diviem botiem.";
+    const online =
+      opts && String(opts.zoleMode || "").toLowerCase() === "online_2p";
+    note.textContent = online
+      ? "MVP: 3 krāsas × 8 kārtis, 8 stiķi. Tiešsaiste: tu + draugs + trešais ir bots."
+      : "MVP: 3 krāsas × 8 kārtis, 8 stiķi. Pret diviem botiem.";
     handEl.appendChild(note);
 
     wrap.appendChild(handEl);

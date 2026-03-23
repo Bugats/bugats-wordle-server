@@ -843,6 +843,18 @@
               >
             </div>
           </div>
+          <div id="board-zole-mode-wrap" class="vz-board-dambrete-mode" aria-label="Zoles režīms">
+            <span class="vz-board-dambrete-mode-label">Zoles režīms</span>
+            <div class="vz-board-dambrete-mode-radios">
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-zole-mode" value="online_2p" checked />
+                Tiešsaistē (tu + draugs + bots)</label
+              >
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-zole-mode" value="vs_bot" /> Tikai pret botiem</label
+              >
+            </div>
+          </div>
           <div class="vz-board-bot-section">
             <p class="vz-board-bot-label">🤖 Spēlēt vs botu</p>
             <div class="vz-board-bot-diff">
@@ -864,6 +876,7 @@
             <div class="vz-board-invite-btns">
               <button id="board-invite-dambrete" type="button" class="vz-board-invite-btn">♟️ Dambrete</button>
               <button id="board-invite-chess" type="button" class="vz-board-invite-btn">♔ Šahs</button>
+              <button id="board-invite-zole" type="button" class="vz-board-invite-btn">🃏 Zole</button>
             </div>
           </div>
           <div id="board-invite-pending" class="vz-board-pending hidden">Gaidām atbildi…</div>
@@ -872,7 +885,7 @@
             <div class="vz-board-rules-content">
               <p><strong>Dambrete — izvēlies režīmu:</strong> <em>Krievijas šaškas</em> — bārdiņa iet uz priekšu, ķer visos virzienos; dāma slīd un ķer tālu pa diagonāli; promocija var notikt ķeršanas laikā. <em>Angļu dambrete</em> — bārdiņa tikai uz priekšu, ķer tikai uz priekšu; dāma vienu lauciņu visos virzienos.</p>
               <p><strong>Šahs:</strong> Standarta šaha noteikumi. Uzvar tas, kas izveido matu pretinieka karalim.</p>
-              <p><strong>Zole (MVP):</strong> Vienkāršota versija — 3 spēlētāji, 3 krāsas, 8 stiķi. Tu spēlē pret diviem botiem. Pilni latviešu zoles noteikumi (līgums, zole, galdiņš) vēl sekos.</p>
+              <p><strong>Zole (MVP):</strong> Vienkāršota versija — 3 spēlētāji, 3 krāsas, 8 stiķi. Izvēlies <em>tikai pret botiem</em> vai <em>tiešsaistē</em> (tu + viens draugs + trešais ir bots). Pilni latviešu zoles noteikumi vēl sekos.</p>
             </div>
           </details>
           <div class="vz-board-leaderboards">
