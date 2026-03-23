@@ -21,6 +21,14 @@
     { sym: "♠", red: false },
   ];
 
+  /** Mastu secība vienādam rangam: kreicis, pīķis, ercs, kāravs (kā zolē) */
+  const SUIT_SORT_ORDER = [0, 3, 1, 2];
+
+  function suitSortKey(s) {
+    const idx = SUIT_SORT_ORDER.indexOf(s);
+    return idx >= 0 ? idx : s;
+  }
+
   const RANK_LABELS = {
     7: "7",
     8: "8",
@@ -312,8 +320,10 @@
     const btnRow = document.createElement("div");
     btnRow.className = "vz-zole-hand-btns";
 
-    const hand = zole.myHand || [];
-    hand.sort((a, b) => a.s - b.s || a.r - b.r);
+    const hand = (zole.myHand || []).slice();
+    hand.sort(
+      (a, b) => a.r - b.r || suitSortKey(a.s) - suitSortKey(b.s)
+    );
     const legalSet = zole.legalCardKeys
       ? new Set(zole.legalCardKeys)
       : null;
