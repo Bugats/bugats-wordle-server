@@ -40,6 +40,13 @@ import {
 } from "./lib/draughts.js";
 import { getBestDambreteMove } from "./lib/draughts-bot.js";
 import { getBestChessMove } from "./lib/chess-bot.js";
+import {
+  createZoleVsBotState,
+  zolePlayCard,
+  zolePickBotCard,
+  zolePublicSnapshot,
+  ZOLE_BOT_1,
+} from "./lib/zole.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -770,6 +777,10 @@ function playBoardBotMove(io, game) {
 
 function getBoardGameOpponent(game, username) {
   if (!game || !Array.isArray(game.players)) return null;
+  if (game.type === "zole" && game.players.length === 3) {
+    if (username === game.players[0]) return ZOLE_BOT_1;
+    return game.players[0] || null;
+  }
   const [p1, p2] = game.players;
   if (username === p1) return p2 || null;
   if (username === p2) return p1 || null;
@@ -873,6 +884,76 @@ function createChessVsBot(humanUsername, difficulty = "medium") {
   return game;
 }
 
+function createZoleVsBotGame(humanUsername) {
+  const gameId = crypto.randomBytes(8).toString("hex");
+  const zole = createZoleVsBotState(humanUsername);
+  const game = {
+    id: gameId,
+    type: "zole",
+    players: zole.players.slice(),
+    zole,
+    turn: zole.turn,
+    status: "active",
+    moves: [],
+    createdAt: Date.now(),
+    lastMoveAt: Date.now(),
+    vsBot: true,
+  };
+  boardGames.set(gameId, game);
+  userToBoardGame.set(humanUsername, gameId);
+  return game;
+}
+
+function playZoleBotTurns(_io, game) {
+  if (!game || game.type !== "zole" || !game.zole) return;
+  const human = game.players[0];
+  const sock = getSocketByUsername(human);
+  while (
+    game.status === "active" &&
+    game.zole.phase === "play" &&
+    game.zole.turn !== 0
+  ) {
+    const t = game.zole.turn;
+    const card = zolePickBotCard(game.zole, t);
+    if (!card) break;
+    const res = zolePlayCard(game.zole, t, card);
+    if (!res.ok) break;
+    game.turn = game.zole.turn;
+    game.lastMoveAt = Date.now();
+    game.moves.push({ by: game.players[t], card, ts: Date.now() });
+    if (game.zole.phase === "end") {
+      const w = game.zole.winnerUsername;
+      finishBoardGame(game, w, "win");
+      const coinsGain =
+        w && w === human ? BOARD_GAME_REWARD_COINS : 0;
+      const coinsLoss =
+        w && w !== human && human ? BOARD_GAME_LOSE_COINS : 0;
+      if (sock) {
+        sock.emit("board.end", {
+          gameId: game.id,
+          type: "zole",
+          players: game.players,
+          vsBot: true,
+          winner: w,
+          reason: "win",
+          zole: zolePublicSnapshot(game.zole, 0),
+          coinsGain,
+          coinsLoss,
+        });
+      }
+      return;
+    }
+    if (sock) {
+      sock.emit("board.move", {
+        gameId: game.id,
+        type: "zole",
+        turn: game.zole.turn,
+        zole: zolePublicSnapshot(game.zole, 0),
+      });
+    }
+  }
+}
+
 const BOARD_ELO_DEFAULT = 1000;
 const BOARD_ELO_K = 32;
 
@@ -908,16 +989,35 @@ function finishBoardGame(game, winnerUsername, reason) {
   game.winner = winnerUsername || null;
   game.finishedReason = reason || "finished";
   game.finishedAt = Date.now();
-  const [p1, p2] = game.players;
-  userToBoardGame.delete(p1);
-  userToBoardGame.delete(p2);
+  for (const p of game.players || []) {
+    if (p) userToBoardGame.delete(p);
+  }
 
   const winnerKey = winnerUsername
     ? findUserKeyCaseInsensitive(winnerUsername)
     : null;
   const winner = winnerKey ? USERS[winnerKey] : null;
-  const loserKey = winnerUsername ? (p1 === winnerUsername ? p2 : p1) : null;
-  const loser = loserKey ? USERS[findUserKeyCaseInsensitive(loserKey)] : null;
+
+  let loser = null;
+  if (game.type === "zole" && game.players?.length === 3) {
+    const human = game.players[0];
+    const hKey = findUserKeyCaseInsensitive(human);
+    if (
+      winnerUsername &&
+      human &&
+      String(winnerUsername).toLowerCase() !== String(human).toLowerCase()
+    ) {
+      loser = hKey ? USERS[hKey] : null;
+    }
+  } else if (game.players?.length >= 2) {
+    const [p1, p2] = game.players;
+    const loserKey = winnerUsername
+      ? p1 === winnerUsername
+        ? p2
+        : p1
+      : null;
+    loser = loserKey ? USERS[findUserKeyCaseInsensitive(loserKey)] : null;
+  }
 
   if (winner) {
     winner.xp = (winner.xp || 0) + BOARD_GAME_REWARD_XP;
@@ -931,19 +1031,31 @@ function finishBoardGame(game, winnerUsername, reason) {
     ensureRankFields(winner);
     if (winner.dambreteWins == null) winner.dambreteWins = 0;
     if (winner.chessWins == null) winner.chessWins = 0;
+    if (winner.zoleWins == null) winner.zoleWins = 0;
     if (game.type === "dambrete") winner.dambreteWins++;
     else if (game.type === "chess") winner.chessWins++;
+    else if (game.type === "zole") winner.zoleWins++;
   }
   if (loser) {
     const currentCoins = Math.max(0, Math.floor(loser.coins || 0));
     loser.coins = Math.max(0, currentCoins - BOARD_GAME_LOSE_COINS);
   }
-  if (winner && loser && winnerUsername && !game.vsBot) {
+  if (
+    winner &&
+    loser &&
+    winnerUsername &&
+    !game.vsBot &&
+    game.type !== "zole"
+  ) {
     applyBoardElo(winner, loser, game.type);
   }
   saveUsers(USERS);
   broadcastLeaderboard(false);
-  io.emit("board:leaderboard", { type: game.type });
+  if (game.type === "zole") {
+    io.emit("board:leaderboard", { type: "zole" });
+  } else {
+    io.emit("board:leaderboard", { type: game.type });
+  }
 }
 
 // ======== ČATS (mini anti-spam) ========
@@ -1066,6 +1178,7 @@ const TOURNAMENT_PLAY_MODES = new Set([
   "accuracy",
   "survival",
   "dambrete",
+  "zole",
   "chess",
 ]);
 const TOURNAMENT_GRAND_FINAL_TYPES = new Set(["none", "simple", "double"]);
@@ -1140,6 +1253,7 @@ function tournamentPlayModeLabel(mode) {
   if (key === "survival") return "Survival duel (streak izturība)";
   if (key === "dambrete") return "♟️ Dambrete";
   if (key === "chess") return "♔ Šahs";
+  if (key === "zole") return "🃏 Zole";
   return "Classic duel";
 }
 
@@ -1157,6 +1271,8 @@ function tournamentPlayModeRule(mode) {
     return "Dambrete: automātiska uzvara pēc dambreteElo, vai manuāli iesniegt rezultātu.";
   if (key === "chess")
     return "Šahs: automātiska uzvara pēc chessElo, vai manuāli iesniegt rezultātu.";
+  if (key === "zole")
+    return "Zole: automātiska uzvara pēc zoleWins, vai manuāli iesniegt rezultātu.";
   return "Classic: automātiska uzvara spēlētājam ar augstāku kopējo score.";
 }
 
@@ -5188,6 +5304,7 @@ async function buildMePayload(u) {
     duelEloGames: u.duelEloGames || 0,
     dambreteWins: u.dambreteWins || 0,
     chessWins: u.chessWins || 0,
+    zoleWins: u.zoleWins || 0,
     dambreteElo: u.dambreteElo || BOARD_ELO_DEFAULT,
     chessElo: u.chessElo || BOARD_ELO_DEFAULT,
     rankTitle: u.rankTitle || rankInfo.title,
@@ -7195,6 +7312,22 @@ app.get("/board/:gameId/moves", authMiddleware, (req, res) => {
 
 app.get("/board/leaderboard/:type", authMiddleware, (req, res) => {
   const type = String(req.params?.type || "dambrete").toLowerCase();
+  if (type === "zole") {
+    const arr = Object.values(USERS || {})
+      .filter(
+        (u) => u && u.username && !u.isBanned && Number(u.zoleWins || 0) > 0
+      )
+      .sort((a, b) => (Number(b.zoleWins) || 0) - (Number(a.zoleWins) || 0))
+      .slice(0, 20)
+      .map((u, i) => ({
+        place: i + 1,
+        username: u.username,
+        elo: Number(u.zoleWins) || 0,
+        wins: u.zoleWins || 0,
+        avatarUrl: avatarForBroadcast(u),
+      }));
+    return res.json({ type, list: arr });
+  }
   const key = type === "chess" ? "chessElo" : "dambreteElo";
   const arr = Object.values(USERS || {})
     .filter((u) => u && u.username && !u.isBanned && Number(u[key] || 0) > 0)
@@ -10475,6 +10608,10 @@ io.on("connection", (socket) => {
         board: boardGame.board,
         fen: boardGame.fen,
         dambreteVariant: boardGame.dambreteVariant,
+        zole:
+          boardGame.type === "zole" && boardGame.zole
+            ? zolePublicSnapshot(boardGame.zole, 0)
+            : undefined,
       });
     }
   } catch {}
@@ -11445,6 +11582,10 @@ io.on("connection", (socket) => {
       payload?.target || payload?.username || ""
     ).trim();
     const gameType = String(payload?.type || "dambrete").toLowerCase();
+    if (gameType === "zole")
+      return socket.emit("board.error", {
+        message: "Zoli pagaidām var spēlēt tikai pret botu (lobijā).",
+      });
     if (!targetName)
       return socket.emit("board.error", {
         message: "Nav norādīts pretinieks.",
@@ -11501,6 +11642,10 @@ io.on("connection", (socket) => {
     if (!user) return;
     const inviteId = String(payload?.inviteId || "").trim();
     const gameType = String(payload?.type || "dambrete").toLowerCase();
+    if (gameType === "zole")
+      return socket.emit("board.error", {
+        message: "Zoli pagaidām var spēlēt tikai pret botu.",
+      });
     if (!inviteId)
       return socket.emit("board.error", { message: "Nav aicinājuma." });
     const targetSocket = getSocketByUsername(payload?.from || "");
@@ -11561,7 +11706,7 @@ io.on("connection", (socket) => {
       : "medium";
     if (userToBoardGame.has(user.username))
       return socket.emit("board.error", { message: "Tu jau spēlē." });
-    if (gameType !== "dambrete" && gameType !== "chess")
+    if (gameType !== "dambrete" && gameType !== "chess" && gameType !== "zole")
       return socket.emit("board.error", { message: "Nederīgs spēles tips." });
     let game;
     const dVar =
@@ -11570,6 +11715,8 @@ io.on("connection", (socket) => {
         : "russian";
     if (gameType === "chess") {
       game = createChessVsBot(user.username, validDifficulty);
+    } else if (gameType === "zole") {
+      game = createZoleVsBotGame(user.username);
     } else {
       game = createDambreteVsBot(user.username, validDifficulty, dVar);
     }
@@ -11583,9 +11730,14 @@ io.on("connection", (socket) => {
       fen: game.fen,
       vsBot: true,
       dambreteVariant: game.dambreteVariant,
+      zole: game.type === "zole" ? zolePublicSnapshot(game.zole, 0) : undefined,
     };
     socket.emit("board.start", payloadOut);
-    if (game.turn === 1) setImmediate(() => playBoardBotMove(io, game));
+    if (game.type === "zole") {
+      setImmediate(() => playZoleBotTurns(io, game));
+    } else if (game.turn === 1) {
+      setImmediate(() => playBoardBotMove(io, game));
+    }
   });
 
   socket.on("board.move", (payload) => {
@@ -11716,6 +11868,47 @@ io.on("connection", (socket) => {
         if (game.vsBot && game.turn === 1)
           setImmediate(() => playBoardBotMove(io, game));
       }
+    } else if (game.type === "zole") {
+      const card = payload?.card || payload?.move;
+      if (!card || typeof card.s !== "number" || typeof card.r !== "number")
+        return socket.emit("board.error", { message: "Nav gājiena." });
+      const humanIdx = game.players.indexOf(user.username);
+      if (humanIdx !== 0)
+        return socket.emit("board.error", { message: "Nederīgs spēlētājs." });
+      const res = zolePlayCard(game.zole, 0, card);
+      if (!res.ok)
+        return socket.emit("board.error", {
+          message: res.error || "Nederīgs gājiens.",
+        });
+      game.turn = game.zole.turn;
+      game.lastMoveAt = Date.now();
+      game.moves.push({ card, by: user.username, ts: Date.now() });
+      const sock = getSocketByUsername(game.players[0]);
+      if (game.zole.phase === "end") {
+        const w = game.zole.winnerUsername;
+        finishBoardGame(game, w, "win");
+        const human = game.players[0];
+        sock?.emit("board.end", {
+          gameId,
+          type: "zole",
+          players: game.players,
+          vsBot: true,
+          winner: w,
+          reason: "win",
+          zole: zolePublicSnapshot(game.zole, 0),
+          coinsGain: w === human ? BOARD_GAME_REWARD_COINS : 0,
+          coinsLoss:
+            w && w !== human ? BOARD_GAME_LOSE_COINS : 0,
+        });
+        return;
+      }
+      sock?.emit("board.move", {
+        gameId,
+        type: "zole",
+        turn: game.zole.turn,
+        zole: zolePublicSnapshot(game.zole, 0),
+      });
+      setImmediate(() => playZoleBotTurns(io, game));
     }
   });
 
@@ -11734,6 +11927,10 @@ io.on("connection", (socket) => {
       players: game.players,
       vsBot: !!game.vsBot,
       dambreteVariant: game.dambreteVariant,
+      zole:
+        game.type === "zole" && game.zole
+          ? zolePublicSnapshot(game.zole, 0)
+          : undefined,
       winner,
       reason: "resign",
       resignedBy: user.username,
