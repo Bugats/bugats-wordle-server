@@ -12,17 +12,19 @@
       .replace(/"/g, "&quot;");
   }
 
-  const ZOLE_SUIT_CLUBS = 2;
+  /** ♦ kāravas — garš masts (atbilst lib/zole.js ZOLE_SUIT_KARAVS) */
+  const ZOLE_SUIT_KARAVS = 1;
 
+  /** Indeksi: 0 ♣ kreicis, 1 ♦ kāravs, 2 ♥ ercens, 3 ♠ pīķis */
   const SUIT_META = [
-    { sym: "♥", red: true },
-    { sym: "♦", red: true },
     { sym: "♣", red: false },
+    { sym: "♦", red: true },
+    { sym: "♥", red: true },
     { sym: "♠", red: false },
   ];
 
-  /** Mastu secība vienādam rangam: kreicis, pīķis, ercs, kāravs (kā zolē) */
-  const SUIT_SORT_ORDER = [0, 3, 1, 2];
+  /** Mastu secība vienādam rangam: kreicis, pīķis, ercens, kāravs */
+  const SUIT_SORT_ORDER = [0, 3, 2, 1];
 
   function suitSortKey(s) {
     const idx = SUIT_SORT_ORDER.indexOf(s);
@@ -44,7 +46,7 @@
     if (!card || typeof card.r !== "number") return false;
     if (card.r === 12 || card.r === 11) return true;
     if (
-      card.s === ZOLE_SUIT_CLUBS &&
+      card.s === ZOLE_SUIT_KARAVS &&
       card.r !== 12 &&
       card.r !== 11
     )
@@ -54,7 +56,7 @@
 
   function cardLabel(card) {
     if (!card) return "?";
-    const suits = ["♥", "♦", "♣", "♠"];
+    const suits = ["♣", "♦", "♥", "♠"];
     const s = suits[card.s] || "?";
     const r = RANK_LABELS[card.r] || String(card.r);
     return s + r;
@@ -393,7 +395,7 @@
           ? "Tiešsaiste: 2 cilvēki + bots."
           : "Pret diviem botiem.";
     note.innerHTML =
-      "Kārtis kā uz galda (baltas, sarkans/melns). <strong>Zelta rāmītis</strong> = trumpis (D, J, ♣ kāravas). 26 kārtis. Acis: A=11, 10=10, K=4, D=3, J=2. Lielais: pirkums + norok 2. Uzvara <strong>61+</strong>. " +
+      "Kārtis kā uz galda. Masti: ♣ kreicis, ♦ kāravs, ♥ ercens, ♠ pīķis. <strong>Zelta rāmītis</strong> = trumpis (D, J, ♦ kāravas). 26 kārtis. Uzvara <strong>61+</strong>. " +
       noteTail;
     handEl.appendChild(note);
 
