@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   zoleCardEyes,
   zoleComputeTableDeltas,
+  zoleGaldsLoserIdx,
 } from "../lib/zole.js";
 
 describe("zoleCardEyes", () => {
@@ -92,5 +93,18 @@ describe("zoleComputeTableDeltas", () => {
     expect(summary.win).toBe(true);
     expect(summary.tier).toBe(7);
     expect(summary.allTricks).toBe(true);
+  });
+
+  it("galds: zaudē ar vairāk stiķiem vai, ja vienādi, ar vairāk acīm", () => {
+    expect(zoleGaldsLoserIdx([10, 20, 30], [2, 4, 3])).toBe(1);
+    const { summary } = zoleComputeTableDeltas("galds", 0, [10, 20, 30], [2, 4, 3]);
+    expect(summary.kind).toBe("galds");
+    expect(summary.loserIdx).toBe(1);
+    expect(zoleGaldsLoserIdx([10, 20, 30], [2, 3, 3])).toBe(2);
+  });
+
+  it("galds: vienādi stiķi starp līderiem — zaudē ar vairāk acīm", () => {
+    expect(zoleGaldsLoserIdx([40, 50, 10], [2, 2, 4])).toBe(2);
+    expect(zoleGaldsLoserIdx([10, 50, 30], [2, 2, 2])).toBe(1);
   });
 });

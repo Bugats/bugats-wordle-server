@@ -166,6 +166,7 @@
     if (c === "zole") return "Zole";
     if (c === "maza_zole") return "Mazā zole";
     if (c === "galdins") return "Galdiņš";
+    if (c === "galds") return "Galds";
     return String(c || "—");
   }
 
@@ -277,11 +278,20 @@
     if (zole.phase === "play" && zole.contract) {
       const cEl = document.createElement("div");
       cEl.className = "vz-zole-contract";
-      const who =
-        zole.contractorIdx != null && zole.players
-          ? zole.players[zole.contractorIdx]
-          : "—";
-      cEl.textContent = `Līgums: ${contractLabel(zole.contract)} — ${esc(who)}`;
+      const c = zole.contract;
+      if (c === "galdins") {
+        cEl.textContent =
+          "Režīms: Galdiņš — zaudē tas, kam visvairāk acu stiķos.";
+      } else if (c === "galds") {
+        cEl.textContent =
+          "Režīms: Galds — zaudē tas, kam visvairāk stiķu; ja vienādi — pēc acīm.";
+      } else {
+        const who =
+          zole.contractorIdx != null && zole.players
+            ? zole.players[zole.contractorIdx]
+            : "—";
+        cEl.textContent = `Līgums: ${contractLabel(c)} — ${esc(who)}`;
+      }
       meta.appendChild(cEl);
     }
 
@@ -289,8 +299,12 @@
     turnLine.className = "vz-zole-turn";
     if (zole.phase === "bid") {
       const bt = zole.bidTurn ?? 0;
+      const rnd = zole.bidRound === 2 ? 2 : 1;
+      const rndTxt = rnd === 1 ? "1. kārta" : "2. kārta (bez galdiņa)";
       turnLine.textContent =
-        bt === myIdx ? "Tava likšanas kārta" : `Likšana: ${esc(zole.players[bt] || "?")}`;
+        bt === myIdx
+          ? `Tava likšanas kārta (${rndTxt})`
+          : `Likšana (${rndTxt}): ${esc(zole.players[bt] || "?")}`;
     } else if (zole.phase === "discard") {
       const isBig = zole.contract === "big";
       turnLine.textContent = isBig && myIdx === zole.contractorIdx
@@ -318,12 +332,22 @@
       if (isMyBid && onBid) {
         const row = document.createElement("div");
         row.className = "vz-zole-bid-btns";
-        const bids = [
-          { key: "pass", label: "Pasēt" },
-          { key: "big", label: "Lielais" },
-          { key: "zole", label: "Zole" },
-          { key: "maza_zole", label: "Mazā zole" },
-        ];
+        const br = zole.bidRound === 2 ? 2 : 1;
+        const bids =
+          br === 1
+            ? [
+                { key: "pass", label: "Pasēt" },
+                { key: "galdins", label: "Galdiņš" },
+                { key: "big", label: "Lielais" },
+                { key: "zole", label: "Zole" },
+                { key: "maza_zole", label: "Mazā zole" },
+              ]
+            : [
+                { key: "pass", label: "Pasēt" },
+                { key: "big", label: "Lielais" },
+                { key: "zole", label: "Zole" },
+                { key: "maza_zole", label: "Mazā zole" },
+              ];
         for (const b of bids) {
           const btn = document.createElement("button");
           btn.type = "button";
@@ -392,6 +416,12 @@
                 : "";
             txt = `Galdiņš: zaudētājs ${esc(zole.players[lr.loserIdx])}, maksā katram uzvarētājam ${lr.payEach} p.${bs}`;
           }
+        } else if (lr.kind === "galds") {
+          const bs =
+            lr.loserNoTricks === true
+              ? " Bezstiķis — maksā pa 3 p."
+              : "";
+          txt = `Galds: zaudē ${esc(zole.players[lr.loserIdx])} (vairāk stiķu vai, ja vienādi — vairāk acu), maksā katram ${lr.payEach} p.${bs}`;
         } else if (lr.kind === "big") {
           if (lr.win) {
             const bs =

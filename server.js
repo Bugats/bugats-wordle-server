@@ -12244,6 +12244,7 @@ io.on("connection", (socket) => {
       const bid = String(payload?.bid || payload?.zoleBid || "").toLowerCase();
       if (
         bid !== "pass" &&
+        bid !== "galdins" &&
         bid !== "big" &&
         bid !== "zole" &&
         bid !== "maza_zole"

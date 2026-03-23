@@ -787,6 +787,8 @@ function zoleResultExtraLine(snap) {
   if (!lr || !lr.kind) return "";
   if (lr.kind === "galdins" && !lr.tie && lr.loserNoTricks)
     return " Galdiņš: zaudētājam bezstiķis.";
+  if (lr.kind === "galds" && lr.loserNoTricks)
+    return " Galds: zaudētājam bezstiķis.";
   if (lr.kind === "big" && lr.win && lr.opponentsNoTricks)
     return " Mazajiem bezstiķis.";
   if (lr.kind === "big" && !lr.win && lr.contractorNoTricks)
@@ -9638,8 +9640,11 @@ function renderBoardGame() {
   if (hintEl) {
     if (boardState.type === "zole") {
       if (boardState.zole?.phase === "bid") {
+        const br = boardState.zole.bidRound === 2 ? 2 : 1;
         hintEl.textContent = isMyTurn
-          ? "Izvēlies: Pasēt, Lielais, Zole vai Mazā zole (pirmais, kas nepasē, spēlē viens pret diviem)."
+          ? br === 1
+            ? "1. kārta: vari pieteikt Galdiņu (visi pa sevi, zaudē ar visvairāk acu) vai Lielais/Zole/Mazā zole. Ja visi pasē — otrā kārta."
+            : "2. kārta: Galdiņš vairs nav. Pasēt vai Lielais/Zole/Mazā zole. Ja atkal visi pasē — spēlējas Galds (zaudē ar visvairāk stiķu; ja vienādi — pēc acīm)."
           : boardState.zoleMode === "vs_bot"
             ? "Gaidām bota likšanu…"
             : "Gaidām citu spēlētāju likšanu…";
@@ -9654,8 +9659,15 @@ function renderBoardGame() {
         hintEl.textContent =
           "Skaties tabulas punktus zemāk. Uzvarētājs pēc spēles — labākais +/− šajā partijā.";
       } else {
+        const c = boardState.zole?.contract;
+        let galHint = " Uzvara ar 61+ acīm, ja esi lielais / zole.";
+        if (c === "galdins")
+          galHint = " Galdiņš: zaudē tas, kam visvairāk acu stiķos.";
+        else if (c === "galds")
+          galHint =
+            " Galds: zaudē tas, kam visvairāk stiķu; ja vienādi — kam vairāk acu.";
         hintEl.textContent = isMyTurn
-          ? "Spied uz kārtas (jāievēro masts; dāmas un kalpi ir trumpji). Uzvara ar 61+ acīm, ja esi lielais / zole."
+          ? `Spied uz kārtas (jāievēro masts; dāmas un kalpi ir trumpji).${galHint}`
           : boardState.zoleMode === "vs_bot"
             ? "Gaidām Zole botu gājienu…"
             : boardState.zoleMode === "online_2p"
