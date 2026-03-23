@@ -681,6 +681,112 @@ let boardState = {
   legalMoves: { jumps: [], moves: [] },
 };
 
+const BOARD_BOT_DISPLAY_NAME = "VZBot";
+
+function hideBoardResultOverlay() {
+  document.getElementById("board-result-overlay")?.classList.add("hidden");
+}
+
+function boardGameOpponentName(players, vsBot) {
+  const arr = players || [];
+  const me = state.username;
+  const idx = boardGamePlayerIndex(arr, me);
+  const opp = idx === 0 ? arr[1] : arr[0];
+  if (!opp) return "pretinieks";
+  if (vsBot && String(opp) === BOARD_BOT_DISPLAY_NAME) return "bots (VZBot)";
+  return String(opp);
+}
+
+function showBoardGameResult(payload) {
+  const overlay = document.getElementById("board-result-overlay");
+  const eyebrow = document.getElementById("board-result-eyebrow");
+  const titleEl = document.getElementById("board-result-title");
+  const detailEl = document.getElementById("board-result-detail");
+  const coinsEl = document.getElementById("board-result-coins");
+  if (!overlay || !titleEl || !detailEl) return;
+
+  const gameType = payload?.type || boardState.type || "dambrete";
+  const vsBot = !!payload?.vsBot;
+  const players = payload?.players || boardState.players || [];
+  const winner = payload?.winner ?? null;
+  const reason = String(payload?.reason || "finished");
+  const resignedBy = payload?.resignedBy;
+  const coinsGain = Number(payload?.coinsGain) || 0;
+  const coinsLoss = Number(payload?.coinsLoss) || 0;
+  const me = state.username;
+  const oppName = boardGameOpponentName(players, vsBot);
+  const gameLabel = gameType === "chess" ? "Šahs" : "Dambrete";
+
+  overlay.classList.remove(
+    "vz-board-result--win",
+    "vz-board-result--loss",
+    "vz-board-result--draw"
+  );
+
+  let title = "";
+  let detail = "";
+  let eyebrowText = gameLabel.toUpperCase() + " · SPĒLES REZULTĀTS";
+
+  const iWon =
+    winner && me && String(winner).trim().toLowerCase() === String(me).trim().toLowerCase();
+  const iLost = winner && me && !iWon;
+
+  if (!winner) {
+    title = "Neizšķirts";
+    detail =
+      reason === "draw"
+        ? "Partija beidzās neizšķirti."
+        : "Spēle beigusies bez uzvarētāja.";
+    overlay.classList.add("vz-board-result--draw");
+  } else if (iWon) {
+    title = "Uzvara";
+    if (reason === "resign") {
+      detail =
+        resignedBy && String(resignedBy).trim().toLowerCase() !== String(me).trim().toLowerCase()
+          ? `Tu uzvarēji — ${oppName} padodas.`
+          : `Tu uzvarēji pret ${oppName}.`;
+    } else if (reason === "checkmate") {
+      detail = `Tu uzvarēji ar matu pret ${oppName}.`;
+    } else {
+      detail = `Tu uzvarēji pret ${oppName}.`;
+    }
+    overlay.classList.add("vz-board-result--win");
+  } else {
+    title = "Zaudējums";
+    if (reason === "resign") {
+      detail =
+        resignedBy &&
+        String(resignedBy).trim().toLowerCase() === String(me).trim().toLowerCase()
+          ? "Tu padodies — spēle zaudēta."
+          : `Tu zaudēji pret ${String(winner)}.`;
+    } else if (reason === "checkmate") {
+      detail = `Tu zaudēji — ${String(winner)} uzvarēja ar matu.`;
+    } else {
+      detail = `Tu zaudēji — uzvarēja ${String(winner)}.`;
+    }
+    overlay.classList.add("vz-board-result--loss");
+  }
+
+  if (eyebrow) eyebrow.textContent = eyebrowText;
+  titleEl.textContent = title;
+  detailEl.textContent = detail;
+
+  if (coinsEl) {
+    if (iWon && coinsGain > 0) {
+      coinsEl.textContent = `+${coinsGain} coins`;
+      coinsEl.classList.remove("hidden");
+    } else if (iLost && coinsLoss > 0) {
+      coinsEl.textContent = `−${coinsLoss} coins`;
+      coinsEl.classList.remove("hidden");
+    } else {
+      coinsEl.textContent = "";
+      coinsEl.classList.add("hidden");
+    }
+  }
+
+  overlay.classList.remove("hidden");
+}
+
 // TOP10 + ONLINE
 const lbListEl = $("#lb-list");
 const streakListEl = $("#streak-list");
@@ -9049,12 +9155,15 @@ function initSocket() {
   socket.on("board.end", (payload) => {
     if (payload?.gameId !== boardState.gameId) return;
     const winner = payload?.winner;
-    const reason = payload?.reason || "finished";
     const coinsGain = payload?.coinsGain || 0;
     const coinsLoss = payload?.coinsLoss || 0;
     boardState.gameId = null;
+    const won =
+      winner &&
+      String(winner).trim().toLowerCase() ===
+        String(state.username || "").trim().toLowerCase();
     let msg = "";
-    if (winner === state.username) {
+    if (won) {
       msg = coinsGain
         ? `♟️ Tu uzvarēji! +${coinsGain} coins`
         : "♟️ Tu uzvarēji!";
@@ -9064,6 +9173,7 @@ function initSocket() {
       msg = "♟️ Spēle beidzās (neizšķirts).";
     }
     appendSystemMessage(msg);
+    showBoardGameResult(payload);
     hideBoardGameArea();
     updateBoardGameBadge(false);
     apiGet("/me")
@@ -9079,6 +9189,7 @@ function initSocket() {
 }
 
 function showBoardModal() {
+  hideBoardResultOverlay();
   const modal = document.getElementById("board-games-modal");
   const lobby = document.getElementById("board-games-lobby");
   const invite = document.getElementById("board-games-invite");
@@ -9127,11 +9238,13 @@ async function loadBoardLeaderboards() {
 }
 
 function hideBoardModal() {
+  hideBoardResultOverlay();
   const modal = document.getElementById("board-games-modal");
   if (modal) modal.classList.add("hidden");
 }
 
 function showBoardInviteModal(from, type, payload) {
+  hideBoardResultOverlay();
   const modal = document.getElementById("board-games-modal");
   const lobby = document.getElementById("board-games-lobby");
   const invite = document.getElementById("board-games-invite");
@@ -9155,6 +9268,7 @@ function hideBoardInviteModal() {
 }
 
 function startBoardGame(payload) {
+  hideBoardResultOverlay();
   boardLegalMovesFetchId++;
   boardMovesFetchChain = Promise.resolve();
   boardState = {
@@ -9426,6 +9540,15 @@ function bindBoardGames() {
 
   if (btn) btn.addEventListener("click", showBoardModal);
   if (closeBtn) closeBtn.addEventListener("click", hideBoardModal);
+  const boardResultClose = document.getElementById("board-result-close");
+  const boardResultOverlay = document.getElementById("board-result-overlay");
+  if (boardResultClose)
+    boardResultClose.addEventListener("click", hideBoardResultOverlay);
+  if (boardResultOverlay) {
+    boardResultOverlay.addEventListener("click", (e) => {
+      if (e.target === boardResultOverlay) hideBoardResultOverlay();
+    });
+  }
   const doInvite = (type) => {
     const target = inviteUsername?.value?.trim() || currentProfileName?.trim();
     if (!target) {

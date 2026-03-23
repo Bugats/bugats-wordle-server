@@ -692,6 +692,9 @@ function playBoardBotMove(io, game) {
       finishBoardGame(game, winner, "win");
       humanSocket.emit("board.end", {
         gameId: game.id,
+        type: game.type,
+        players: game.players,
+        vsBot: true,
         winner,
         reason: "win",
         board: newBoard,
@@ -724,6 +727,9 @@ function playBoardBotMove(io, game) {
       finishBoardGame(game, winner, chess.isCheckmate() ? "checkmate" : "draw");
       humanSocket.emit("board.end", {
         gameId: game.id,
+        type: game.type,
+        players: game.players,
+        vsBot: true,
         winner,
         reason: chess.isCheckmate() ? "checkmate" : "draw",
         fen: game.fen,
@@ -11562,6 +11568,9 @@ io.on("connection", (socket) => {
         finishBoardGame(game, winner, "win");
         emitCh("board.end", {
           gameId,
+          type: game.type,
+          players: game.players,
+          vsBot: !!game.vsBot,
           winner,
           reason: "win",
           board: newBoard,
@@ -11613,6 +11622,9 @@ io.on("connection", (socket) => {
         );
         chessEmit("board.end", {
           gameId,
+          type: game.type,
+          players: game.players,
+          vsBot: !!game.vsBot,
           winner,
           reason: chess.isCheckmate() ? "checkmate" : "draw",
           fen: game.fen,
@@ -11651,8 +11663,12 @@ io.on("connection", (socket) => {
     finishBoardGame(game, winner, "resign");
     const endPayload = {
       gameId,
+      type: game.type,
+      players: game.players,
+      vsBot: !!game.vsBot,
       winner,
       reason: "resign",
+      resignedBy: user.username,
       coinsGain: 0,
       coinsLoss: winner ? BOARD_GAME_LOSE_COINS : 0,
     };

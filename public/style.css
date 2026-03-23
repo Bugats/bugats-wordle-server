@@ -4960,7 +4960,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-modal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.85);
+  background: rgba(0, 0, 0, 0.88);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4971,10 +4971,99 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   -webkit-overflow-scrolling: touch;
 }
 .vz-board-modal.hidden { display: none !important; }
+/* Spēles beigu ekrāns (virs visa) */
+.vz-board-result-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10020;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+  background: rgba(2, 6, 12, 0.92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.vz-board-result-overlay.hidden { display: none !important; }
+.vz-board-result-card {
+  width: 100%;
+  max-width: 380px;
+  padding: 28px 26px 24px;
+  border-radius: 4px;
+  background: linear-gradient(165deg, #12161f 0%, #0a0d12 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  text-align: center;
+}
+.vz-board-result-eyebrow {
+  margin: 0 0 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgba(255, 255, 255, 0.45);
+}
+.vz-board-result-title {
+  margin: 0 0 14px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+  color: #f4f4f5;
+}
+.vz-board-result-detail {
+  margin: 0 0 18px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.78);
+}
+.vz-board-result-coins {
+  margin: -8px 0 20px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: #e4e4e7;
+}
+.vz-board-result--win .vz-board-result-title { color: #bbf7d0; }
+.vz-board-result--win .vz-board-result-card {
+  border-color: rgba(34, 197, 94, 0.35);
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(34, 197, 94, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.vz-board-result--loss .vz-board-result-title { color: #fecaca; }
+.vz-board-result--loss .vz-board-result-card {
+  border-color: rgba(248, 113, 113, 0.35);
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(248, 113, 113, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.vz-board-result--draw .vz-board-result-title { color: #e4e4e7; }
+.vz-board-result-btn {
+  width: 100%;
+  padding: 14px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  color: #0a0a0a;
+  background: #e4e4e7;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.vz-board-result-btn:hover { background: #f4f4f5; }
+.vz-board-result-btn:active { opacity: 0.92; }
 .vz-board-modal-inner {
-  background: linear-gradient(145deg, #1a1d2e, #0f1219);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
+  background: linear-gradient(155deg, #151821 0%, #0c0e14 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
   padding: 24px;
   max-width: 440px;
   max-height: 90vh;
@@ -4998,7 +5087,13 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   min-height: 44px;
   touch-action: manipulation;
 }
-.vz-board-title { margin: 0 0 8px; font-size: 18px; }
+.vz-board-title {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #f4f4f5;
+}
 .vz-board-desc { font-size: 13px; opacity: 0.85; margin-bottom: 16px; }
 .vz-board-label {
   display: block;
