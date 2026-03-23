@@ -683,6 +683,25 @@ let boardState = {
 
 const BOARD_BOT_DISPLAY_NAME = "VZBot";
 
+function normalizeDambreteVariantClient(v) {
+  return String(v || "russian").toLowerCase() === "english"
+    ? "english"
+    : "russian";
+}
+
+function boardDambreteModeLabel(variant) {
+  return normalizeDambreteVariantClient(variant) === "english"
+    ? "Angļu dambrete"
+    : "Krievijas šaškas";
+}
+
+function getSelectedBoardDambreteVariant() {
+  const el = document.querySelector(
+    'input[name="board-dambrete-variant"]:checked'
+  );
+  return normalizeDambreteVariantClient(el?.value);
+}
+
 function hideBoardResultOverlay() {
   document.getElementById("board-result-overlay")?.classList.add("hidden");
 }
@@ -715,7 +734,16 @@ function showBoardGameResult(payload) {
   const coinsLoss = Number(payload?.coinsLoss) || 0;
   const me = state.username;
   const oppName = boardGameOpponentName(players, vsBot);
-  const gameLabel = gameType === "chess" ? "Šahs" : "Dambrete";
+  const dVar =
+    gameType === "dambrete"
+      ? normalizeDambreteVariantClient(
+          payload?.dambreteVariant ?? boardState.dambreteVariant
+        )
+      : null;
+  const gameLabel =
+    gameType === "chess"
+      ? "Šahs"
+      : `Dambrete (${boardDambreteModeLabel(dVar)})`;
 
   overlay.classList.remove(
     "vz-board-result--win",
@@ -725,7 +753,10 @@ function showBoardGameResult(payload) {
 
   let title = "";
   let detail = "";
-  let eyebrowText = gameLabel.toUpperCase() + " · SPĒLES REZULTĀTS";
+  let eyebrowText =
+    gameType === "chess"
+      ? "ŠAHS · SPĒLES REZULTĀTS"
+      : `DAMBRETE · ${boardDambreteModeLabel(dVar).toUpperCase()} · REZULTĀTS`;
 
   const iWon =
     winner && me && String(winner).trim().toLowerCase() === String(me).trim().toLowerCase();
@@ -9130,6 +9161,14 @@ function initSocket() {
     boardState.board = payload?.board || boardState.board;
     boardState.fen = payload?.fen || boardState.fen;
     boardState.turn = payload?.turn ?? boardState.turn;
+    if (
+      boardState.type === "dambrete" &&
+      payload?.dambreteVariant != null
+    ) {
+      boardState.dambreteVariant = normalizeDambreteVariantClient(
+        payload.dambreteVariant
+      );
+    }
     boardState.selectedCell = null;
     // Obligāti notīrīt — pretējā gadījumā paliek iepriekšējās kārtas jumps/moves
     // pret jauno laukumu (piem. pēc bota gājiena) un neviens kauliņš nav klikšķināms līdz refresh.
@@ -9188,6 +9227,13 @@ function initSocket() {
   });
 }
 
+function syncBoardDambreteModePanelVisibility() {
+  const wrap = document.getElementById("board-dambrete-mode-wrap");
+  const invite = document.getElementById("board-games-invite");
+  const inInvite = invite && !invite.classList.contains("hidden");
+  if (wrap) wrap.classList.toggle("hidden", !!inInvite);
+}
+
 function showBoardModal() {
   hideBoardResultOverlay();
   const modal = document.getElementById("board-games-modal");
@@ -9206,6 +9252,7 @@ function showBoardModal() {
     if (gameArea) gameArea.classList.add("hidden");
     loadBoardLeaderboards();
   }
+  syncBoardDambreteModePanelVisibility();
 }
 
 async function loadBoardLeaderboards() {
@@ -9241,6 +9288,7 @@ function hideBoardModal() {
   hideBoardResultOverlay();
   const modal = document.getElementById("board-games-modal");
   if (modal) modal.classList.add("hidden");
+  syncBoardDambreteModePanelVisibility();
 }
 
 function showBoardInviteModal(from, type, payload) {
@@ -9254,17 +9302,34 @@ function showBoardInviteModal(from, type, payload) {
     invite.classList.remove("hidden");
     const fromEl = document.getElementById("board-invite-from");
     const typeEl = document.getElementById("board-invite-type");
+    const varEl = document.getElementById("board-invite-dambrete-variant");
     if (fromEl) fromEl.textContent = from;
     if (typeEl) typeEl.textContent = type === "chess" ? "šahu" : "dambreti";
     invite.dataset.from = from;
     invite.dataset.type = type || "dambrete";
+    const dv =
+      type === "dambrete"
+        ? normalizeDambreteVariantClient(payload?.dambreteVariant)
+        : "russian";
+    invite.dataset.dambreteVariant = dv;
+    if (varEl) {
+      if (type === "chess") {
+        varEl.textContent = "";
+        varEl.classList.add("hidden");
+      } else {
+        varEl.textContent = `Režīms: ${boardDambreteModeLabel(dv)}`;
+        varEl.classList.remove("hidden");
+      }
+    }
   }
+  syncBoardDambreteModePanelVisibility();
 }
 
 function hideBoardInviteModal() {
   const invite = document.getElementById("board-games-invite");
   if (invite) invite.classList.add("hidden");
   showBoardModal();
+  syncBoardDambreteModePanelVisibility();
 }
 
 function startBoardGame(payload) {
@@ -9278,6 +9343,10 @@ function startBoardGame(payload) {
     turn: payload?.turn ?? 0,
     board: payload?.board ? payload.board.map((r) => r.slice()) : null,
     fen: payload?.fen || null,
+    dambreteVariant:
+      payload?.type === "chess"
+        ? null
+        : normalizeDambreteVariantClient(payload?.dambreteVariant),
     selectedCell: null,
     legalMoves: { jumps: [], moves: [] },
   };
@@ -9288,6 +9357,7 @@ function startBoardGame(payload) {
   if (lobby) lobby.classList.add("hidden");
   if (modal) modal.classList.remove("hidden");
   renderBoardGame();
+  syncBoardDambreteModePanelVisibility();
 }
 
 function hideBoardGameArea() {
@@ -9329,8 +9399,12 @@ function renderBoardGame() {
   const turnEl = document.getElementById("board-game-turn");
   const dambreteContainer = document.getElementById("board-dambrete-container");
   const chessContainer = document.getElementById("board-chess-container");
-  if (typeEl)
-    typeEl.textContent = boardState.type === "chess" ? "♔ Šahs" : "♟️ Dambrete";
+  if (typeEl) {
+    typeEl.textContent =
+      boardState.type === "chess"
+        ? "♔ Šahs"
+        : `♟️ Dambrete (${boardDambreteModeLabel(boardState.dambreteVariant)})`;
+  }
   const myIdx = boardGamePlayerIndex(boardState.players, state.username);
   const isMyTurn = myIdx === boardState.turn;
   if (
@@ -9556,7 +9630,10 @@ function bindBoardGames() {
       return;
     }
     if (!state.socket) return;
-    state.socket.emit("board.invite", { target, type });
+    const payload = { target, type };
+    if (type === "dambrete")
+      payload.dambreteVariant = getSelectedBoardDambreteVariant();
+    state.socket.emit("board.invite", payload);
     document.getElementById("board-invite-pending")?.classList.remove("hidden");
   };
   if (inviteDambrete)
@@ -9571,7 +9648,10 @@ function bindBoardGames() {
       'input[name="board-bot-diff"]:checked'
     );
     const difficulty = diffEl?.value || "medium";
-    state.socket.emit("board.startVsBot", { type, difficulty });
+    const payload = { type, difficulty };
+    if (type === "dambrete")
+      payload.dambreteVariant = getSelectedBoardDambreteVariant();
+    state.socket.emit("board.startVsBot", payload);
     document.getElementById("board-invite-pending")?.classList.add("hidden");
   };
   if (vsBotDambrete)
@@ -9582,8 +9662,10 @@ function bindBoardGames() {
       const invite = document.getElementById("board-games-invite");
       const from = invite?.dataset?.from || "";
       const type = invite?.dataset?.type || "dambrete";
-      if (state.socket)
-        state.socket.emit("board.accept", { inviteId: "", from, type });
+      const acc = { inviteId: "", from, type };
+      if (type === "dambrete" && invite?.dataset?.dambreteVariant)
+        acc.dambreteVariant = invite.dataset.dambreteVariant;
+      if (state.socket) state.socket.emit("board.accept", acc);
       hideBoardInviteModal();
     });
   if (declineBtn) declineBtn.addEventListener("click", hideBoardInviteModal);
@@ -9598,7 +9680,11 @@ function bindBoardGames() {
       if (target && state.socket) {
         showBoardModal();
         if (inviteUsername) inviteUsername.value = target;
-        state.socket.emit("board.invite", { target, type: "dambrete" });
+        state.socket.emit("board.invite", {
+          target,
+          type: "dambrete",
+          dambreteVariant: getSelectedBoardDambreteVariant(),
+        });
       }
     });
   if (ppInviteChess)

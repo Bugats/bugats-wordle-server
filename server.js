@@ -34,6 +34,7 @@ import {
   applyMove,
   checkGameOver,
   findLegalMove,
+  normalizeDambreteVariant,
   WHITE,
   BLACK,
 } from "./lib/draughts.js";
@@ -664,6 +665,21 @@ const BOARD_GAME_REGION_POINTS = 1;
 
 const boardGames = new Map(); // gameId -> { type, players, board, turn, status, ... }
 const userToBoardGame = new Map(); // username -> gameId
+/** @type {Map<string, { type: string, dambreteVariant: string, expiresAt: number }>} */
+const boardInviteVariantByPair = new Map();
+
+function parseDambreteVariantFromPayload(payload) {
+  const v = String(
+    payload?.dambreteVariant ?? payload?.dambreteMode ?? ""
+  ).toLowerCase();
+  return normalizeDambreteVariant(v === "english" ? "english" : "russian");
+}
+
+function boardInvitePairKey(a, b) {
+  const x = String(a || "").toLowerCase();
+  const y = String(b || "").toLowerCase();
+  return x < y ? `${x}\0${y}` : `${y}\0${x}`;
+}
 
 function playBoardBotMove(io, game) {
   if (!game || game.status !== "active" || !game.vsBot) return;
@@ -672,20 +688,21 @@ function playBoardBotMove(io, game) {
   if (!humanSocket) return;
 
   if (game.type === "dambrete") {
+    const dVar = game.dambreteVariant || "russian";
     const isWhiteTurn = game.turn === 0; // bot is black (index 1), so when turn=1 it's bot's (black's) turn
-    const allMoves = getAllMoves(game.board, isWhiteTurn);
+    const allMoves = getAllMoves(game.board, isWhiteTurn, dVar);
     const jumps = allMoves.jumps || [];
     const moves = allMoves.moves || [];
     if (jumps.length === 0 && moves.length === 0) return;
     const depth = game.botDepth || 5;
-    const move = getBestDambreteMove(game.board, isWhiteTurn, depth);
+    const move = getBestDambreteMove(game.board, isWhiteTurn, depth, dVar);
     if (!move) return;
-    const newBoard = applyMove(game.board, move);
+    const newBoard = applyMove(game.board, move, dVar);
     if (!newBoard) return;
     game.board = newBoard;
     game.turn = 1 - game.turn;
     game.moves.push({ move, by: BOARD_BOT_USERNAME, ts: Date.now() });
-    const result = checkGameOver(newBoard, game.turn === 0);
+    const result = checkGameOver(newBoard, game.turn === 0, dVar);
     if (result.over) {
       const winner =
         result.winner === WHITE ? game.players[0] : game.players[1];
@@ -695,6 +712,7 @@ function playBoardBotMove(io, game) {
         type: game.type,
         players: game.players,
         vsBot: true,
+        dambreteVariant: game.dambreteVariant,
         winner,
         reason: "win",
         board: newBoard,
@@ -708,6 +726,7 @@ function playBoardBotMove(io, game) {
         board: newBoard,
         turn: game.turn,
         move,
+        dambreteVariant: game.dambreteVariant,
       });
     }
   } else if (game.type === "chess") {
@@ -757,14 +776,16 @@ function getBoardGameOpponent(game, username) {
   return null;
 }
 
-function createDambreteGame(challenger, opponent) {
+function createDambreteGame(challenger, opponent, dambreteVariant = "russian") {
   const gameId = crypto.randomBytes(8).toString("hex");
   const board = createInitialBoard();
+  const dv = normalizeDambreteVariant(dambreteVariant);
   const game = {
     id: gameId,
     type: "dambrete",
     players: [challenger, opponent],
     board,
+    dambreteVariant: dv,
     turn: 0, // 0 = white (challenger), 1 = black (opponent)
     status: "active",
     moves: [],
@@ -800,15 +821,21 @@ function createChessGame(challenger, opponent) {
 
 const BOARD_BOT_USERNAME = "VZBot";
 
-function createDambreteVsBot(humanUsername, difficulty = "medium") {
+function createDambreteVsBot(
+  humanUsername,
+  difficulty = "medium",
+  dambreteVariant = "russian"
+) {
   const depth = difficulty === "easy" ? 3 : difficulty === "hard" ? 7 : 5;
   const gameId = crypto.randomBytes(8).toString("hex");
   const board = createInitialBoard();
+  const dv = normalizeDambreteVariant(dambreteVariant);
   const game = {
     id: gameId,
     type: "dambrete",
     players: [humanUsername, BOARD_BOT_USERNAME],
     board,
+    dambreteVariant: dv,
     turn: 0,
     status: "active",
     moves: [],
@@ -7154,7 +7181,8 @@ app.get("/board/:gameId/moves", authMiddleware, (req, res) => {
     return res.json({ jumps: [], moves: [] });
   if (game.type === "dambrete") {
     const isWhiteTurn = turnIdx === 0;
-    const allMoves = getAllMoves(game.board, isWhiteTurn);
+    const dVar = game.dambreteVariant || "russian";
+    const allMoves = getAllMoves(game.board, isWhiteTurn, dVar);
     return res.json(allMoves);
   }
   if (game.type === "chess") {
@@ -10446,6 +10474,7 @@ io.on("connection", (socket) => {
         turn: boardGame.turn,
         board: boardGame.board,
         fen: boardGame.fen,
+        dambreteVariant: boardGame.dambreteVariant,
       });
     }
   } catch {}
@@ -11431,6 +11460,10 @@ io.on("connection", (socket) => {
     if (userToBoardGame.has(targetUser.username))
       return socket.emit("board.error", { message: "Pretinieks jau spēlē." });
     const inviteId = crypto.randomBytes(6).toString("hex");
+    const dambreteVariant =
+      gameType === "dambrete"
+        ? parseDambreteVariantFromPayload(payload)
+        : "russian";
     const invite = {
       id: inviteId,
       from: fromUser.username,
@@ -11438,18 +11471,28 @@ io.on("connection", (socket) => {
       type: gameType,
       expiresAt: Date.now() + BOARD_GAME_INVITE_TIMEOUT_MS,
     };
+    boardInviteVariantByPair.set(
+      boardInvitePairKey(fromUser.username, targetUser.username),
+      {
+        type: gameType,
+        dambreteVariant,
+        expiresAt: invite.expiresAt,
+      }
+    );
     const targetSocket = getSocketByUsername(targetUser.username);
     if (targetSocket) {
       targetSocket.emit("board.invite", {
         inviteId,
         from: fromUser.username,
         type: gameType,
+        dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
       });
     }
     socket.emit("board.inviteSent", {
       inviteId,
       target: targetUser.username,
       type: gameType,
+      dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
     });
   });
 
@@ -11470,11 +11513,25 @@ io.on("connection", (socket) => {
       userToBoardGame.has(opponentName)
     )
       return socket.emit("board.error", { message: "Kāds jau spēlē." });
+    const pairKey = boardInvitePairKey(challengerName, opponentName);
+    const pendingVar = boardInviteVariantByPair.get(pairKey);
+    let dambreteVariant = "russian";
+    if (
+      pendingVar &&
+      pendingVar.expiresAt > Date.now() &&
+      pendingVar.type === "dambrete"
+    ) {
+      dambreteVariant = pendingVar.dambreteVariant || "russian";
+    } else if (gameType === "dambrete") {
+      dambreteVariant = parseDambreteVariantFromPayload(payload);
+    }
+    boardInviteVariantByPair.delete(pairKey);
+
     let game;
     if (gameType === "chess") {
       game = createChessGame(challengerName, opponentName);
     } else {
-      game = createDambreteGame(challengerName, opponentName);
+      game = createDambreteGame(challengerName, opponentName, dambreteVariant);
     }
     const room = `board:${game.id}`;
     const s1 = getSocketByUsername(challengerName);
@@ -11489,6 +11546,7 @@ io.on("connection", (socket) => {
       status: game.status,
       board: game.board,
       fen: game.fen,
+      dambreteVariant: game.dambreteVariant,
     };
     io.to(room).emit("board.start", payloadOut);
   });
@@ -11506,10 +11564,14 @@ io.on("connection", (socket) => {
     if (gameType !== "dambrete" && gameType !== "chess")
       return socket.emit("board.error", { message: "Nederīgs spēles tips." });
     let game;
+    const dVar =
+      gameType === "dambrete"
+        ? parseDambreteVariantFromPayload(payload)
+        : "russian";
     if (gameType === "chess") {
       game = createChessVsBot(user.username, validDifficulty);
     } else {
-      game = createDambreteVsBot(user.username, validDifficulty);
+      game = createDambreteVsBot(user.username, validDifficulty, dVar);
     }
     const payloadOut = {
       gameId: game.id,
@@ -11520,6 +11582,7 @@ io.on("connection", (socket) => {
       board: game.board,
       fen: game.fen,
       vsBot: true,
+      dambreteVariant: game.dambreteVariant,
     };
     socket.emit("board.start", payloadOut);
     if (game.turn === 1) setImmediate(() => playBoardBotMove(io, game));
@@ -11541,12 +11604,13 @@ io.on("connection", (socket) => {
     if (game.type === "dambrete") {
       const move = payload?.move;
       if (!move) return socket.emit("board.error", { message: "Nav gājiena." });
+      const dVar = game.dambreteVariant || "russian";
       const isWhiteTurn = turnIdx === 0;
-      const allMoves = getAllMoves(game.board, isWhiteTurn);
+      const allMoves = getAllMoves(game.board, isWhiteTurn, dVar);
       const legal = findLegalMove(allMoves, move);
       if (!legal)
         return socket.emit("board.error", { message: "Nederīgs gājiens." });
-      const newBoard = applyMove(game.board, move);
+      const newBoard = applyMove(game.board, move, dVar);
       if (!newBoard)
         return socket.emit("board.error", {
           message: "Neizdevās izpildīt gājienu.",
@@ -11555,7 +11619,7 @@ io.on("connection", (socket) => {
       game.moves.push({ move, by: user.username, ts: Date.now() });
       game.turn = 1 - game.turn;
       game.lastMoveAt = Date.now();
-      const result = checkGameOver(newBoard, game.turn === 0);
+      const result = checkGameOver(newBoard, game.turn === 0, dVar);
       const emitTarget = game.vsBot
         ? getSocketByUsername(game.players[0])
         : null;
@@ -11571,6 +11635,7 @@ io.on("connection", (socket) => {
           type: game.type,
           players: game.players,
           vsBot: !!game.vsBot,
+          dambreteVariant: game.dambreteVariant,
           winner,
           reason: "win",
           board: newBoard,
@@ -11593,6 +11658,7 @@ io.on("connection", (socket) => {
           board: newBoard,
           turn: game.turn,
           move,
+          dambreteVariant: game.dambreteVariant,
         });
         if (game.vsBot && game.turn === 1)
           setImmediate(() => playBoardBotMove(io, game));
@@ -11625,6 +11691,7 @@ io.on("connection", (socket) => {
           type: game.type,
           players: game.players,
           vsBot: !!game.vsBot,
+          dambreteVariant: game.dambreteVariant,
           winner,
           reason: chess.isCheckmate() ? "checkmate" : "draw",
           fen: game.fen,
@@ -11666,6 +11733,7 @@ io.on("connection", (socket) => {
       type: game.type,
       players: game.players,
       vsBot: !!game.vsBot,
+      dambreteVariant: game.dambreteVariant,
       winner,
       reason: "resign",
       resignedBy: user.username,

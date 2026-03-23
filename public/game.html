@@ -831,6 +831,18 @@
         <div id="board-games-lobby" class="vz-board-lobby">
           <h3 class="vz-board-title">♟️ Dambrete & ♔ Šahs</h3>
           <p class="vz-board-desc">Izaicini draugu uz dambreti vai šahu. Uzvaras dod novada un klana punktus!</p>
+          <div id="board-dambrete-mode-wrap" class="vz-board-dambrete-mode" aria-label="Dambretes noteikumi">
+            <span class="vz-board-dambrete-mode-label">Dambretes režīms</span>
+            <div class="vz-board-dambrete-mode-radios">
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-dambrete-variant" value="russian" checked />
+                Krievijas šaškas</label
+              >
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-dambrete-variant" value="english" /> Angļu dambrete</label
+              >
+            </div>
+          </div>
           <div class="vz-board-bot-section">
             <p class="vz-board-bot-label">🤖 Spēlēt vs botu</p>
             <div class="vz-board-bot-diff">
@@ -857,7 +869,7 @@
           <details class="vz-board-rules">
             <summary class="vz-board-rules-summary">📖 Īsi noteikumi</summary>
             <div class="vz-board-rules-content">
-              <p><strong>Dambrete (Krievijas šaškas 8×8):</strong> Bārdiņa iet tikai uz priekšu, bet ķer arī atpakaļ. Obligāti jāķer, ja var. Dāma brīvi kustas un ķer pa diagonāli (tālu). Ja ķeršanas laikā bārdiņa sasniedz dāmu rindu un var turpināt ķert — kļūst par dāmu un turpina.</p>
+              <p><strong>Dambrete — izvēlies režīmu:</strong> <em>Krievijas šaškas</em> — bārdiņa iet uz priekšu, ķer visos virzienos; dāma slīd un ķer tālu pa diagonāli; promocija var notikt ķeršanas laikā. <em>Angļu dambrete</em> — bārdiņa tikai uz priekšu, ķer tikai uz priekšu; dāma vienu lauciņu visos virzienos.</p>
               <p><strong>Šahs:</strong> Standarta šaha noteikumi. Uzvar tas, kas izveido matu pretinieka karalim.</p>
             </div>
           </details>
@@ -873,7 +885,10 @@
           </div>
         </div>
         <div id="board-games-invite" class="vz-board-invite hidden">
-          <p class="vz-board-invite-text"><span id="board-invite-from"></span> aicina uz <span id="board-invite-type"></span></p>
+          <p class="vz-board-invite-text">
+            <span id="board-invite-from"></span> aicina uz <span id="board-invite-type"></span>
+            <span id="board-invite-dambrete-variant" class="hidden"></span>
+          </p>
           <p class="vz-board-invite-sub">Uzvaras dod novada un klana punktus</p>
           <div class="vz-board-invite-actions">
             <button id="board-invite-accept" type="button">Pieņemt</button>
