@@ -9719,6 +9719,7 @@ function bindBoardGames() {
   const resignBtn = document.getElementById("board-resign-btn");
   const ppInviteDambrete = document.getElementById("pp-invite-dambrete");
   const ppInviteChess = document.getElementById("pp-invite-chess");
+  const ppInviteZole = document.getElementById("pp-invite-zole");
 
   if (btn) btn.addEventListener("click", showBoardModal);
   if (closeBtn) closeBtn.addEventListener("click", hideBoardModal);
@@ -9823,6 +9824,20 @@ function bindBoardGames() {
         showBoardModal();
         if (inviteUsername) inviteUsername.value = target;
         state.socket.emit("board.invite", { target, type: "chess" });
+      }
+    });
+  if (ppInviteZole)
+    ppInviteZole.addEventListener("click", () => {
+      const target = currentProfileName?.trim();
+      if (target && state.socket) {
+        showBoardModal();
+        if (inviteUsername) inviteUsername.value = target;
+        state.socket.emit("board.invite", {
+          target,
+          type: "zole",
+          zoleMode: "online_2p",
+        });
+        document.getElementById("board-invite-pending")?.classList.remove("hidden");
       }
     });
 }
