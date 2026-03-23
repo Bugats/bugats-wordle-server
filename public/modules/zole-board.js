@@ -226,6 +226,7 @@
       const seat = (leader + i) % 3;
       const col = document.createElement("div");
       col.className = "vz-zole-trick-seat";
+      col.dataset.zoleSeat = String(seat);
       col.style.setProperty("--seat-tilt", `${(i - 1) * 7}deg`);
       const t = trick[i];
       const head = document.createElement("div");
@@ -243,26 +244,202 @@
       who.textContent = pname;
       head.appendChild(who);
       col.appendChild(head);
+      const cardArea = document.createElement("div");
+      cardArea.className = "vz-zole-trick-card-area";
+      col.appendChild(cardArea);
       if (t) {
-        col.appendChild(createPlayingCardEl(t.card, { table: true }));
-      } else {
-        const ph = document.createElement("div");
-        ph.className = "vz-zole-trick-placeholder";
-        ph.textContent =
-          zole.turn === seat ? "Domā…" : "Gaida…";
-        col.appendChild(ph);
+        cardArea.appendChild(createPlayingCardEl(t.card, { table: true }));
       }
+      const ph = document.createElement("div");
+      ph.className = "vz-zole-trick-placeholder";
+      ph.textContent = zole.turn === seat ? "Domā…" : "Gaida…";
+      if (t) ph.style.display = "none";
+      col.appendChild(ph);
       fan.appendChild(col);
     }
     felt.appendChild(fan);
+
+    const lastWrap = document.createElement("div");
+    lastWrap.className = "vz-zole-last-trick";
+    const ltTitle = document.createElement("div");
+    ltTitle.className = "vz-zole-last-trick-title";
+    ltTitle.textContent = "Pēdējais stiķis";
+    lastWrap.appendChild(ltTitle);
+    const ltRow = document.createElement("div");
+    ltRow.className = "vz-zole-last-trick-row";
+    for (let li = 0; li < 3; li++) {
+      const slot = document.createElement("div");
+      slot.className = "vz-zole-last-slot";
+      slot.dataset.lastSlot = String(li);
+      ltRow.appendChild(slot);
+    }
+    lastWrap.appendChild(ltRow);
+    const ltSub = document.createElement("div");
+    ltSub.className = "vz-zole-last-trick-sub";
+    lastWrap.appendChild(ltSub);
+    felt.appendChild(lastWrap);
+    fillLastTrickSlots(felt, zole);
+
     return felt;
+  }
+
+  function fillLastTrickSlots(felt, zole) {
+    const lastWrap = felt.querySelector(".vz-zole-last-trick");
+    if (!lastWrap) return;
+    const sub = lastWrap.querySelector(".vz-zole-last-trick-sub");
+    const lc = zole.lastCompletedTrick;
+    const players = zole.players || [];
+    for (let li = 0; li < 3; li++) {
+      const slot = lastWrap.querySelector(`[data-last-slot="${li}"]`);
+      if (!slot) continue;
+      slot.innerHTML = "";
+      if (!lc || !lc.cards || !lc.cards[li]) continue;
+      const { card } = lc.cards[li];
+      slot.appendChild(createPlayingCardEl(card, { table: true }));
+    }
+    if (sub) {
+      if (lc && typeof lc.winnerIdx === "number" && players[lc.winnerIdx]) {
+        sub.textContent = `Uzvarēja: ${players[lc.winnerIdx]} · ${lc.trickEyes ?? 0} acis`;
+      } else {
+        sub.textContent = "—";
+      }
+    }
+  }
+
+  function updateZoleTrickColumns(felt, zole) {
+    const trick = zole.trick || [];
+    const leader = zole.trickLeader ?? 0;
+    for (let i = 0; i < 3; i++) {
+      const seat = (leader + i) % 3;
+      const col = felt.querySelector(`[data-zole-seat="${seat}"]`);
+      if (!col) continue;
+      const t = trick[i];
+      const cardArea = col.querySelector(".vz-zole-trick-card-area");
+      const ph = col.querySelector(".vz-zole-trick-placeholder");
+      if (cardArea) cardArea.innerHTML = "";
+      if (ph) {
+        ph.textContent = zole.turn === seat ? "Domā…" : "Gaida…";
+        ph.style.display = t ? "none" : "flex";
+      }
+      if (t && cardArea) {
+        cardArea.appendChild(createPlayingCardEl(t.card, { table: true }));
+      }
+    }
+    fillLastTrickSlots(felt, zole);
+  }
+
+  function buildZoleHandBlock(
+    zole,
+    isMyTurn,
+    onPlayCard,
+    opts,
+    onDiscard,
+    discardConfirmBtnRef
+  ) {
+    const myIdx =
+      opts && typeof opts.myIdx === "number" && opts.myIdx >= 0
+        ? opts.myIdx
+        : 0;
+    const handEl = document.createElement("div");
+    handEl.className = "vz-zole-hand";
+    const title = document.createElement("div");
+    title.className = "vz-zole-hand-title";
+    title.textContent = "Tavas kārtis";
+    handEl.appendChild(title);
+
+    const btnRow = document.createElement("div");
+    btnRow.className = "vz-zole-hand-btns";
+
+    const hand = sortZoleHandClient(zole.myHand || []);
+    const legalSet = zole.legalCardKeys
+      ? new Set(zole.legalCardKeys)
+      : null;
+
+    const discardSel = [];
+    const isDiscardMe =
+      zole.phase === "discard" &&
+      zole.contract === "big" &&
+      myIdx === zole.contractorIdx;
+
+    let discardConfirmBtn = discardConfirmBtnRef || null;
+
+    for (const card of hand) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "vz-zole-card-btn";
+      btn.setAttribute("aria-label", cardLabel(card));
+      btn.title = cardLabel(card);
+      btn.appendChild(createPlayingCardEl(card, {}));
+      btn.dataset.s = String(card.s);
+      btn.dataset.r = String(card.r);
+      const k = cardKey(card);
+      let can = false;
+      if (isDiscardMe && onDiscard) {
+        can = true;
+        btn.addEventListener("click", () => {
+          const ix = discardSel.findIndex((c) => cardKey(c) === k);
+          if (ix >= 0) {
+            discardSel.splice(ix, 1);
+            btn.classList.remove("vz-zole-card--selected");
+          } else if (discardSel.length < 2) {
+            discardSel.push(card);
+            btn.classList.add("vz-zole-card--selected");
+          }
+          if (discardConfirmBtn)
+            discardConfirmBtn.disabled = discardSel.length !== 2;
+        });
+      } else {
+        can =
+          isMyTurn &&
+          zole.phase === "play" &&
+          (!legalSet || legalSet.has(k));
+        if (can) {
+          btn.addEventListener("click", () => onPlayCard(card));
+        }
+      }
+      btn.disabled = !can && !isDiscardMe;
+      if (isDiscardMe && !onDiscard) btn.disabled = true;
+      btnRow.appendChild(btn);
+    }
+
+    if (isDiscardMe && onDiscard && discardConfirmBtn) {
+      discardConfirmBtn.onclick = () => {
+        const row = discardConfirmBtn.closest(".vz-zole-wrap")?.querySelector(
+          ".vz-zole-hand-btns"
+        );
+        if (!row) return;
+        const picked = [];
+        for (const b of row.querySelectorAll("button.vz-zole-card--selected")) {
+          const s = Number(b.dataset.s);
+          const r = Number(b.dataset.r);
+          if (Number.isFinite(s) && Number.isFinite(r)) picked.push({ s, r });
+        }
+        if (picked.length !== 2) return;
+        onDiscard(picked);
+      };
+    }
+    handEl.appendChild(btnRow);
+
+    const note = document.createElement("p");
+    note.className = "vz-zole-note";
+    const zm = opts && String(opts.zoleMode || "").toLowerCase();
+    const noteTail =
+      zm === "online_3p"
+        ? "Tiešsaiste: 3 cilvēki."
+        : zm === "online_2p"
+          ? "Tiešsaiste: 2 cilvēki + bots."
+          : "Pret diviem botiem.";
+    note.textContent =
+      "Zelta rāmītis = trumpis. Pilni noteikumi — augšā «Īsi noteikumi». " +
+      noteTail;
+    handEl.appendChild(note);
+    return handEl;
   }
 
   function renderZoleBoard(zole, isMyTurn, onPlayCard, opts) {
     const container = document.getElementById("board-zole-container");
     if (!container) return;
     container.classList.remove("hidden");
-    container.innerHTML = "";
 
     const myIdx =
       opts && typeof opts.myIdx === "number" && opts.myIdx >= 0
@@ -276,19 +453,91 @@
         ? opts.mountPlayerAvatar
         : null;
 
+    const zm = opts && String(opts.zoleMode || "").toLowerCase();
+    const stableSig = [
+      (zole.players || []).join("|"),
+      myIdx,
+      zm,
+      zole.contract || "",
+      zole.contractorIdx ?? "",
+    ].join("::");
+    const existingWrap = container.querySelector(".vz-zole-wrap");
+    const partialDiscard =
+      zole.phase === "discard" && zole.contract === "big";
+    const canPartialUpdate =
+      existingWrap &&
+      (zole.phase === "play" || partialDiscard) &&
+      existingWrap.dataset.zolePhase === zole.phase &&
+      existingWrap.dataset.zoleStableSig === stableSig;
+    if (canPartialUpdate) {
+      const eyes = zole.eyePoints || [0, 0, 0];
+      const tricks = zole.tricksWon || [0, 0, 0];
+      const cte = zole.currentTrickEyes != null ? zole.currentTrickEyes : 0;
+      const scoresLine = existingWrap.querySelector(".vz-zole-compact-scores");
+      if (scoresLine) {
+        scoresLine.innerHTML =
+          `<strong>Lācis</strong> ${esc(zole.trumpLabel)} · <strong>Stiķī tagad</strong> ${esc(String(cte))} acis · <strong>Kopā</strong> ${eyes.map((e) => esc(String(e))).join(" · ")} · <strong>Stiķi</strong> ${tricks.map((t) => esc(String(t))).join(" · ")}`;
+      }
+      for (let pi = 0; pi < 3; pi++) {
+        const el = existingWrap.querySelector(`[data-zole-eye="${pi}"]`);
+        if (el) el.textContent = `${eyes[pi] ?? 0} acis`;
+      }
+      const turnLine = existingWrap.querySelector(".vz-zole-turn");
+      if (turnLine) {
+        if (zole.phase === "discard") {
+          const isBig = zole.contract === "big";
+          turnLine.textContent =
+            isBig && myIdx === zole.contractorIdx
+              ? "Tu esi lielais — norok 2 kārtas (tās pieskaitās tavām acīm)"
+              : "Lielais norok 2 kārtas…";
+        } else {
+          const tName = zole.players[zole.turn] || "?";
+          turnLine.textContent = isMyTurn
+            ? "Tava kārta (kārtis)"
+            : `Kārta: ${esc(tName)}`;
+        }
+      }
+      const felt = existingWrap.querySelector(".vz-zole-table-felt");
+      if (felt && zole.phase === "play") updateZoleTrickColumns(felt, zole);
+      const oldHand = existingWrap.querySelector(".vz-zole-hand");
+      if (oldHand) oldHand.remove();
+      const discardBtn = partialDiscard
+        ? existingWrap.querySelector(".vz-zole-discard-confirm")
+        : null;
+      existingWrap.appendChild(
+        buildZoleHandBlock(
+          zole,
+          isMyTurn,
+          onPlayCard,
+          opts,
+          onDiscard,
+          discardBtn
+        )
+      );
+      return;
+    }
+
+    container.innerHTML = "";
+
     const wrap = document.createElement("div");
     wrap.className = "vz-zole-wrap";
+    wrap.dataset.zolePhase = zole.phase || "";
+    if (zole.phase === "play" || partialDiscard) {
+      wrap.dataset.zoleStableSig = stableSig;
+    }
 
     const meta = document.createElement("div");
     meta.className = "vz-zole-meta";
     const eyes = zole.eyePoints || [0, 0, 0];
     const tricks = zole.tricksWon || [0, 0, 0];
+    const cte =
+      zole.currentTrickEyes != null ? zole.currentTrickEyes : 0;
     const bar = document.createElement("div");
     bar.className = "vz-zole-compact-bar";
     const scoresLine = document.createElement("div");
     scoresLine.className = "vz-zole-compact-scores";
     scoresLine.innerHTML =
-      `<strong>Lācis</strong> ${esc(zole.trumpLabel)} · <strong>Acis</strong> ${eyes.map((e) => esc(String(e))).join(" · ")} · <strong>Stiķi</strong> ${tricks.map((t) => esc(String(t))).join(" · ")}`;
+      `<strong>Lācis</strong> ${esc(zole.trumpLabel)} · <strong>Stiķī tagad</strong> ${esc(String(cte))} acis · <strong>Kopā</strong> ${eyes.map((e) => esc(String(e))).join(" · ")} · <strong>Stiķi</strong> ${tricks.map((t) => esc(String(t))).join(" · ")}`;
     bar.appendChild(scoresLine);
     if (zole.trumpNote) {
       const det = document.createElement("details");
@@ -323,6 +572,11 @@
         lab.className = "vz-zole-players-av-name";
         lab.textContent = un || "?";
         cell.appendChild(lab);
+        const eyeLab = document.createElement("div");
+        eyeLab.className = "vz-zole-players-av-eyes";
+        eyeLab.dataset.zoleEye = String(pi);
+        eyeLab.textContent = `${eyes[pi] ?? 0} acis`;
+        cell.appendChild(eyeLab);
         avRow.appendChild(cell);
       }
       meta.appendChild(avRow);
@@ -511,91 +765,16 @@
       wrap.appendChild(resBox);
     }
 
-    const handEl = document.createElement("div");
-    handEl.className = "vz-zole-hand";
-    const title = document.createElement("div");
-    title.className = "vz-zole-hand-title";
-    title.textContent = "Tavas kārtis";
-    handEl.appendChild(title);
-
-    const btnRow = document.createElement("div");
-    btnRow.className = "vz-zole-hand-btns";
-
-    const hand = sortZoleHandClient(zole.myHand || []);
-    const legalSet = zole.legalCardKeys
-      ? new Set(zole.legalCardKeys)
-      : null;
-
-    const discardSel = [];
-    const isDiscardMe =
-      zole.phase === "discard" &&
-      zole.contract === "big" &&
-      myIdx === zole.contractorIdx;
-
-    for (const card of hand) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "vz-zole-card-btn";
-      btn.setAttribute("aria-label", cardLabel(card));
-      btn.title = cardLabel(card);
-      btn.appendChild(createPlayingCardEl(card, {}));
-      btn.dataset.s = String(card.s);
-      btn.dataset.r = String(card.r);
-      const k = cardKey(card);
-      let can = false;
-      if (isDiscardMe && onDiscard) {
-        can = true;
-        btn.addEventListener("click", () => {
-          const ix = discardSel.findIndex(
-            (c) => cardKey(c) === k
-          );
-          if (ix >= 0) {
-            discardSel.splice(ix, 1);
-            btn.classList.remove("vz-zole-card--selected");
-          } else if (discardSel.length < 2) {
-            discardSel.push(card);
-            btn.classList.add("vz-zole-card--selected");
-          }
-          if (discardConfirmBtn)
-            discardConfirmBtn.disabled = discardSel.length !== 2;
-        });
-      } else {
-        can =
-          isMyTurn &&
-          zole.phase === "play" &&
-          (!legalSet || legalSet.has(k));
-        if (can) {
-          btn.addEventListener("click", () => onPlayCard(card));
-        }
-      }
-      btn.disabled = !can && !isDiscardMe;
-      if (isDiscardMe && !onDiscard) btn.disabled = true;
-      btnRow.appendChild(btn);
-    }
-
-    if (isDiscardMe && onDiscard && discardConfirmBtn) {
-      discardConfirmBtn.addEventListener("click", () => {
-        if (discardSel.length !== 2) return;
-        onDiscard(discardSel.slice());
-      });
-    }
-    handEl.appendChild(btnRow);
-
-    const note = document.createElement("p");
-    note.className = "vz-zole-note";
-    const zm = opts && String(opts.zoleMode || "").toLowerCase();
-    const noteTail =
-      zm === "online_3p"
-        ? "Tiešsaiste: 3 cilvēki."
-        : zm === "online_2p"
-          ? "Tiešsaiste: 2 cilvēki + bots."
-          : "Pret diviem botiem.";
-    note.textContent =
-      "Zelta rāmītis = trumpis. Pilni noteikumi — augšā «Īsi noteikumi». " +
-      noteTail;
-    handEl.appendChild(note);
-
-    wrap.appendChild(handEl);
+    wrap.appendChild(
+      buildZoleHandBlock(
+        zole,
+        isMyTurn,
+        onPlayCard,
+        opts,
+        onDiscard,
+        discardConfirmBtn
+      )
+    );
     container.appendChild(wrap);
   }
 
