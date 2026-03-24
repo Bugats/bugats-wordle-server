@@ -5805,13 +5805,16 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex-wrap: wrap;
   gap: 8px;
 }
+/* Obligāti bez spraugām starp kārtīm — citādi negatīvie margini nedod pārklāšanos */
+.vz-zole-hand-btns.vz-zole-hand-overlap {
+  gap: 0;
+  flex-wrap: nowrap;
+}
 /* Roka: taisnas, pārklāšanās pielāgojas platumam — bez horizontālās ritināšanas */
 .vz-zole-hand-overlap {
   --vz-hand-pull: 0px;
-  flex-wrap: nowrap;
   justify-content: center;
   align-items: flex-end;
-  gap: 0;
   padding: 22px 6px 6px;
   max-width: 100%;
   overflow-x: visible;

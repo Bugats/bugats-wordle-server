@@ -545,6 +545,8 @@
       if (natural > budget) {
         pull = (natural - budget) / (n - 1);
         pull = Math.max(14, Math.min(w - 4, pull));
+      } else {
+        pull = Math.min(22, Math.max(10, w * 0.34));
       }
       btnRow.style.setProperty(
         "--vz-hand-pull",
@@ -554,11 +556,15 @@
     requestAnimationFrame(() => {
       requestAnimationFrame(fitZoleHandOverlap);
     });
+    global.setTimeout(fitZoleHandOverlap, 0);
+    global.setTimeout(fitZoleHandOverlap, 120);
     if (typeof ResizeObserver !== "undefined") {
       const ro = new ResizeObserver(() => fitZoleHandOverlap());
       ro.observe(handEl);
       const wrap = handEl.closest(".vz-zole-wrap");
       if (wrap) ro.observe(wrap);
+      const host = handEl.closest("#board-zole-container");
+      if (host) ro.observe(host);
     } else {
       global.addEventListener("resize", fitZoleHandOverlap, { passive: true });
     }
