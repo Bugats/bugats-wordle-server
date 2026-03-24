@@ -9696,7 +9696,7 @@ function renderBoardGame() {
           galHint =
             " Galds: zaudē tas, kam visvairāk stiķu; ja vienādi — kam vairāk acu.";
         hintEl.textContent = isMyTurn
-          ? `Spied uz kārtas (sekšana: parastā vada → vispirms parastā tā mastā; D/J tikai ja parastās nav; trumpis vada → trumpis, ja nav — parastā).${galHint}`
+          ? `Spied uz kārtas (sekšana: parastā vada → vispirms parastā tā mastā; ja parastās nav — atmesties vai trumpis; trumpis vada → trumpis, ja nav — parastā).${galHint}`
           : boardState.zoleMode === "vs_bot"
             ? "Gaidām Zole botu gājienu…"
             : boardState.zoleMode === "online_2p"

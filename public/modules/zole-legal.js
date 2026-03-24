@@ -31,8 +31,6 @@
       (c) => c.s === leadSuit && !zoleIsTrump(c)
     );
     if (plainOfSuit.length) return plainOfSuit;
-    const suitFace = hand.filter((c) => c.s === leadSuit);
-    if (suitFace.length) return suitFace;
     return hand.slice();
   }
 

@@ -41,7 +41,7 @@ describe("Latvian trump / follow suit (♣ kreicis, ♦ kāravs, ♥ ercens, ♠
     expect(legal).toEqual([{ s: 2, r: 14 }]);
   });
 
-  it("plain ♥ lead: may play ♥D/♥J only when no plain ♥ in hand", () => {
+  it("plain ♥ lead: no plain ♥ — may discard any or play trump (full hand legal)", () => {
     const hand = [
       { s: 2, r: 12 },
       { s: 2, r: 11 },
@@ -49,7 +49,17 @@ describe("Latvian trump / follow suit (♣ kreicis, ♦ kāravs, ♥ ercens, ♠
     ];
     const trick = [{ playerIdx: 0, card: { s: 2, r: 10 } }];
     const legal = zoleLegalPlays(hand, trick);
-    expect(legal.map((c) => `${c.s}:${c.r}`).sort()).toEqual(["2:11", "2:12"]);
+    expect(legal.length).toBe(3);
+  });
+
+  it("plain ♣ lead: no plain ♣ — K♠ and ♣J both legal (discard or trump)", () => {
+    const hand = [
+      { s: 3, r: 13 },
+      { s: 0, r: 11 },
+    ];
+    const trick = [{ playerIdx: 0, card: { s: 0, r: 10 } }];
+    const legal = zoleLegalPlays(hand, trick);
+    expect(legal.map((c) => `${c.s}:${c.r}`).sort()).toEqual(["0:11", "3:13"]);
   });
 
   it("trick: trump beats non-trump on lead", () => {
