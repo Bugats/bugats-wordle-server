@@ -1076,8 +1076,8 @@
       const rnd = zole.bidRound === 2 ? 2 : 1;
       const rndTxt =
         rnd === 1
-          ? "1. kārta · galdiņš atļauts"
-          : "2. kārta · ja visi pasē — Galdiņš";
+          ? "1. kārta · Lielais / Zole / Mazā zole vai pasēt"
+          : "2. kārta · ja visi pasē — automātiski Galdiņš";
       const rot =
         typeof zole.firstBidderOffset === "number"
           ? ` · sāk ${esc(zole.players[zole.firstBidderOffset] || "?")} (pulkstenī)`
@@ -1123,22 +1123,12 @@
       if (isMyBid && onBid) {
         const row = document.createElement("div");
         row.className = "vz-zole-bid-btns";
-        const br = zole.bidRound === 2 ? 2 : 1;
-        const bids =
-          br === 1
-            ? [
-                { key: "pass", label: "Pasēt" },
-                { key: "galdins", label: "Galdiņš" },
-                { key: "big", label: "Lielais" },
-                { key: "zole", label: "Zole" },
-                { key: "maza_zole", label: "Mazā zole" },
-              ]
-            : [
-                { key: "pass", label: "Pasēt" },
-                { key: "big", label: "Lielais" },
-                { key: "zole", label: "Zole" },
-                { key: "maza_zole", label: "Mazā zole" },
-              ];
+        const bids = [
+          { key: "pass", label: "Pasēt" },
+          { key: "big", label: "Lielais" },
+          { key: "zole", label: "Zole" },
+          { key: "maza_zole", label: "Mazā zole" },
+        ];
         for (const b of bids) {
           const btn = document.createElement("button");
           btn.type = "button";

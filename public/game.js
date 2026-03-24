@@ -9720,8 +9720,8 @@ function renderBoardGame() {
         const br = boardState.zole.bidRound === 2 ? 2 : 1;
         hintEl.textContent = isMyTurn
           ? br === 1
-            ? "1. kārta: vari pieteikt Galdiņu (visi pa sevi, zaudē ar visvairāk acu) vai Lielais/Zole/Mazā zole. Ja visi pasē — otrā kārta."
-            : "2. kārta: bez galdiņa. Pasēt vai Lielais/Zole/Mazā zole. Ja atkal visi pasē — Galdiņš (visi pa sevi). Pret botiem pēc partijas sākas nākamā (~2,5 s), tabula uzkrājas."
+            ? "1. kārta: Lielais, Zole vai Mazā zole — vai pasēt. Galdiņš nesākas ar pogu; ja 1. un 2. kārtā visi pasē, tas ieslēdzas pats (visi pa sevi, zaudē ar visvairāk acu)."
+            : "2. kārta: tās pašas iespējas (bez atsevišķa «Galdiņš»). Ja atkal visi pasē — automātiski Galdiņš. Pret botiem pēc partijas nākamā (~2,5 s), tabula uzkrājas."
           : boardState.zoleMode === "vs_bot"
             ? "Gaidām bota likšanu…"
             : "Gaidām citu spēlētāju likšanu…";

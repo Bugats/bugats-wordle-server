@@ -2,6 +2,13 @@ import { describe, it, expect } from "vitest";
 import { createZoleOnline3pState, zoleProcessBid } from "../lib/zole.js";
 
 describe("zoleProcessBid — divreiz visi pasējuši → Galdiņš", () => {
+  it("galdins is not a valid manual bid (only double pass)", () => {
+    const s = createZoleOnline3pState("A", "B", "C");
+    const res = zoleProcessBid(s, s.bidTurn, "galdins");
+    expect(res.ok).toBe(false);
+    expect(s.phase).toBe("bid");
+  });
+
   it("after two full pass rounds contract is galdins not galds", () => {
     const s = createZoleOnline3pState("A", "B", "C");
     expect(s.phase).toBe("bid");
