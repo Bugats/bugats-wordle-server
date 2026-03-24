@@ -5325,12 +5325,16 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   max-width: 100%;
   margin-top: 8px;
 }
+.vz-zole-hand {
+  margin-top: -6px;
+  padding-top: 4px;
+}
 /* Augša: divi pretinieki + vidū liels galds (kā mobilajā „duel” skatā) */
 .vz-zole-arena {
   display: flex;
   flex-direction: column;
   gap: 0;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 .vz-zole-duel-row {
   display: flex;
@@ -5692,10 +5696,10 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   color: rgba(255, 255, 255, 0.7);
   padding: 0 8px;
 }
-/* Rokā: nedaudz garāka kā uz galda — „tur rokās” (kompakts mobilajam) */
+/* Rokā: taisnas kārtis, nedaudz garākas par noklusējumu */
 .vz-zole-playing-card--hand {
-  width: 52px;
-  height: 76px;
+  width: 54px;
+  height: 80px;
   border-radius: 6px;
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.88) inset,
@@ -5703,7 +5707,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     0 6px 14px rgba(0, 0, 0, 0.26);
 }
 .vz-zole-playing-card--hand .vz-zole-pc-center {
-  font-size: 26px;
+  font-size: 28px;
 }
 .vz-zole-playing-card--hand .vz-zole-pc-corner {
   font-size: 10px;
@@ -5784,7 +5788,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   outline: none;
 }
 .vz-zole-card-btn.vz-zole-card--selected {
-  transform: translateY(-5px) rotate(var(--vz-strip-deg, 0deg));
+  transform: translateY(-5px);
   filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.85));
 }
 .vz-zole-hand-title {
@@ -5801,26 +5805,14 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   gap: 8px;
 }
 /* Roka: viena horizontāla josla, viegls vēdekļa pagrieziens, pārklāšanās + ritināšana */
-.vz-zole-hand-strip {
-  flex-wrap: nowrap;
+/* Roka: taisnas kārtis, rinda(s) ar atstarpi; pārlauž, ja nepietiek vietas */
+.vz-zole-hand-row {
+  flex-wrap: wrap;
   justify-content: center;
   align-items: flex-end;
-  gap: 0;
-  padding: 14px 16px 10px;
+  gap: 6px 8px;
+  padding: 8px 4px 6px;
   max-width: 100%;
-  overflow-x: auto;
-  overflow-y: visible;
-  -webkit-overflow-scrolling: touch;
-  scroll-padding-inline: 20px;
-  scrollbar-width: thin;
-  touch-action: pan-x;
-}
-.vz-zole-hand-strip .vz-zole-card-btn {
-  flex: 0 0 auto;
-  margin-left: -18px;
-}
-.vz-zole-hand-strip .vz-zole-card-btn:first-child {
-  margin-left: 0;
 }
 .vz-zole-card-btn {
   min-width: unset;
@@ -5832,8 +5824,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   cursor: pointer;
   touch-action: manipulation;
   transition: transform 0.12s ease, border-color 0.12s ease, filter 0.12s ease;
-  transform: rotate(var(--vz-strip-deg, 0deg));
-  transform-origin: 50% 100%;
+  transform: none;
 }
 .vz-zole-card-btn:disabled {
   opacity: 0.4;
@@ -5842,7 +5833,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 .vz-zole-card-btn:not(:disabled):hover {
   border-color: rgba(251, 191, 36, 0.5);
-  transform: translateY(-3px) rotate(var(--vz-strip-deg, 0deg));
+  transform: translateY(-3px);
 }
 .vz-zole-note {
   margin: 10px 0 0;
