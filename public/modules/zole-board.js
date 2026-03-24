@@ -524,6 +524,45 @@
     }
     handEl.appendChild(btnRow);
 
+    function fitZoleHandOverlap() {
+      const buttons = btnRow.querySelectorAll(".vz-zole-card-btn");
+      const n = buttons.length;
+      if (n <= 1) {
+        btnRow.style.setProperty("--vz-hand-pull", "0px");
+        return;
+      }
+      const w = buttons[0].getBoundingClientRect().width;
+      if (!(w > 0)) return;
+      const wrap = handEl.closest(".vz-zole-wrap");
+      const avail = Math.max(
+        160,
+        (wrap && wrap.clientWidth) || handEl.clientWidth || 320
+      );
+      const rowPad = 16;
+      const budget = avail - rowPad;
+      const natural = n * w;
+      let pull = 0;
+      if (natural > budget) {
+        pull = (natural - budget) / (n - 1);
+        pull = Math.max(14, Math.min(w - 4, pull));
+      }
+      btnRow.style.setProperty(
+        "--vz-hand-pull",
+        `${Math.round(pull * 100) / 100}px`
+      );
+    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(fitZoleHandOverlap);
+    });
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(() => fitZoleHandOverlap());
+      ro.observe(handEl);
+      const wrap = handEl.closest(".vz-zole-wrap");
+      if (wrap) ro.observe(wrap);
+    } else {
+      global.addEventListener("resize", fitZoleHandOverlap, { passive: true });
+    }
+
     const note = document.createElement("p");
     note.className = "vz-zole-note";
     const zm = opts && String(opts.zoleMode || "").toLowerCase();

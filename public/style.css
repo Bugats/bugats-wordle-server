@@ -5696,21 +5696,21 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   color: rgba(255, 255, 255, 0.7);
   padding: 0 8px;
 }
-/* Rokā: taisnas kārtis, nedaudz garākas par noklusējumu */
+/* Rokā: garākas kārtītes (portreta proporcijas) */
 .vz-zole-playing-card--hand {
-  width: 54px;
-  height: 80px;
-  border-radius: 6px;
+  width: 50px;
+  height: 96px;
+  border-radius: 7px;
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.88) inset,
     0 3px 10px rgba(0, 0, 0, 0.42),
     0 6px 14px rgba(0, 0, 0, 0.26);
 }
 .vz-zole-playing-card--hand .vz-zole-pc-center {
-  font-size: 28px;
+  font-size: 32px;
 }
 .vz-zole-playing-card--hand .vz-zole-pc-corner {
-  font-size: 10px;
+  font-size: 11px;
 }
 .vz-zole-playing-card--hand.vz-zole-playing-card--trump {
   box-shadow:
@@ -5788,8 +5788,9 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   outline: none;
 }
 .vz-zole-card-btn.vz-zole-card--selected {
-  transform: translateY(-5px);
-  filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.85));
+  transform: translateY(-14px) scale(1.06);
+  filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.9));
+  z-index: 80 !important;
 }
 .vz-zole-hand-title {
   font-size: 11px;
@@ -5804,23 +5805,22 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex-wrap: wrap;
   gap: 8px;
 }
-/* Roka: taisnas, viegli pārklājas pa kreisi → labi (kā klasiskā mobilā zole); ritināms */
+/* Roka: taisnas, pārklāšanās pielāgojas platumam — bez horizontālās ritināšanas */
 .vz-zole-hand-overlap {
+  --vz-hand-pull: 0px;
   flex-wrap: nowrap;
   justify-content: center;
   align-items: flex-end;
   gap: 0;
-  padding: 6px 20px 4px;
+  padding: 22px 6px 6px;
   max-width: 100%;
-  overflow-x: auto;
+  overflow-x: visible;
   overflow-y: visible;
-  -webkit-overflow-scrolling: touch;
-  scroll-padding-inline: 16px;
-  touch-action: pan-x;
+  touch-action: manipulation;
 }
 .vz-zole-hand-overlap .vz-zole-card-btn {
   flex: 0 0 auto;
-  margin-left: -20px;
+  margin-left: calc(-1 * var(--vz-hand-pull));
 }
 .vz-zole-hand-overlap .vz-zole-card-btn:first-child {
   margin-left: 0;
@@ -5834,17 +5834,28 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   color: inherit;
   cursor: pointer;
   touch-action: manipulation;
-  transition: transform 0.12s ease, border-color 0.12s ease, filter 0.12s ease;
+  transition:
+    transform 0.18s cubic-bezier(0.34, 1.2, 0.64, 1),
+    border-color 0.12s ease,
+    filter 0.12s ease;
   transform: none;
+  will-change: transform;
 }
 .vz-zole-card-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
   filter: grayscale(0.35);
 }
-.vz-zole-card-btn:not(:disabled):hover {
-  border-color: rgba(251, 191, 36, 0.5);
-  transform: translateY(-3px);
+@media (hover: hover) {
+  .vz-zole-card-btn:not(:disabled):hover {
+    border-color: rgba(251, 191, 36, 0.55);
+    transform: translateY(-14px) scale(1.05);
+    z-index: 70 !important;
+  }
+}
+.vz-zole-card-btn:not(:disabled):active {
+  transform: translateY(-12px) scale(1.04);
+  z-index: 70 !important;
 }
 .vz-zole-note {
   margin: 10px 0 0;
