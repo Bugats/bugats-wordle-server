@@ -5621,7 +5621,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  min-width: 92px;
+  min-width: 104px;
   transform: rotate(var(--seat-tilt, 0deg));
 }
 .vz-zole-trick-card-area {
@@ -5648,9 +5648,9 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 .vz-zole-trick-placeholder {
   box-sizing: border-box;
-  width: 78px;
-  height: 110px;
-  border-radius: 9px;
+  width: 88px;
+  height: 124px;
+  border-radius: 10px;
   border: 2px dashed rgba(255, 255, 255, 0.22);
   background: rgba(0, 0, 0, 0.12);
   display: flex;
@@ -5663,19 +5663,19 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding: 8px;
 }
 .vz-zole-playing-card--table {
-  width: 78px;
-  height: 110px;
-  border-radius: 9px;
-  font-size: 12px;
+  width: 88px;
+  height: 124px;
+  border-radius: 10px;
+  font-size: 13px;
   box-shadow:
     0 2px 8px rgba(0, 0, 0, 0.45),
     0 1px 0 rgba(255, 255, 255, 0.9) inset;
 }
 .vz-zole-playing-card--table .vz-zole-pc-corner {
-  font-size: 12px;
+  font-size: 13px;
 }
 .vz-zole-playing-card--table .vz-zole-pc-center {
-  font-size: 38px;
+  font-size: 42px;
 }
 .vz-zole-playing-card--table.vz-zole-playing-card--trump {
   box-shadow:
@@ -5698,19 +5698,19 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 /* Rokā: garākas kārtītes (portreta proporcijas) */
 .vz-zole-playing-card--hand {
-  width: 50px;
-  height: 96px;
-  border-radius: 7px;
+  width: 54px;
+  height: 104px;
+  border-radius: 8px;
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.88) inset,
     0 3px 10px rgba(0, 0, 0, 0.42),
     0 6px 14px rgba(0, 0, 0, 0.26);
 }
 .vz-zole-playing-card--hand .vz-zole-pc-center {
-  font-size: 32px;
+  font-size: 34px;
 }
 .vz-zole-playing-card--hand .vz-zole-pc-corner {
-  font-size: 11px;
+  font-size: 12px;
 }
 .vz-zole-playing-card--hand.vz-zole-playing-card--trump {
   box-shadow:
