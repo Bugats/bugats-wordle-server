@@ -9296,7 +9296,7 @@ function initSocket() {
   socket.on("board.start", (payload) => {
     zole3pLobbySnapshot = null;
     document.getElementById("board-zole-3p-lobby")?.classList.add("hidden");
-    hideBoardModal();
+    /* Neaizvērt modāli — startBoardGame atver spēles zonu; citādi Zole paliek aiz hidden. */
     startBoardGame(payload);
     const myIdx = boardGamePlayerIndex(payload?.players || [], state.username);
     const isMyTurn = myIdx === (payload?.turn ?? 0);
