@@ -51,6 +51,7 @@ import {
   zolePickBotBid,
   zolePickBotDiscard,
   zolePublicSnapshot,
+  zoleStartNextHand,
   ZOLE_BOT_1,
   isZoleBotUsername,
 } from "./lib/zole.js";
@@ -1114,6 +1115,47 @@ function playZoleBotBids(io, game) {
   if (game.zole.phase === "bid") game.turn = game.zole.bidTurn;
 }
 
+const ZOLE_VS_BOT_NEXT_HAND_MS = 2500;
+
+function scheduleZoleVsBotNextHand(io, game) {
+  if (!game?.vsBot || game.zoleMode !== "vs_bot" || !game.zole) return;
+  const gameId = game.id;
+  setTimeout(() => {
+    const g = boardGames.get(gameId);
+    if (!g || g.status !== "active" || g.type !== "zole" || !g.zole) return;
+    if (!g.vsBot || g.zoleMode !== "vs_bot") return;
+    const res = zoleStartNextHand(g.zole);
+    if (!res.ok) return;
+    g.turn =
+      g.zole.phase === "bid"
+        ? g.zole.bidTurn
+        : g.zole.phase === "discard"
+          ? g.zole.contractorIdx
+          : g.zole.turn;
+    g.lastMoveAt = Date.now();
+    emitZoleToHumans(io, g, "board.move", {
+      gameId,
+      type: "zole",
+      turn: g.turn,
+      zoleMode: g.zoleMode,
+      zoleSeriesNewHand: true,
+    });
+    setImmediate(() => playZoleBotBids(io, g));
+  }, ZOLE_VS_BOT_NEXT_HAND_MS);
+}
+
+function emitZoleVsBotHandEnd(io, game) {
+  if (!game?.vsBot || game.zoleMode !== "vs_bot") return;
+  emitZoleToHumans(io, game, "board.move", {
+    gameId: game.id,
+    type: "zole",
+    turn: game.turn,
+    zoleMode: game.zoleMode,
+    zoleSeriesHandEnd: true,
+  });
+  scheduleZoleVsBotNextHand(io, game);
+}
+
 function playZoleBotTurns(io, game) {
   if (!game || game.type !== "zole" || !game.zole) return;
   if (
@@ -1133,6 +1175,10 @@ function playZoleBotTurns(io, game) {
   game.lastMoveAt = Date.now();
   game.moves.push({ by: game.players[t], card, ts: Date.now() });
   if (game.zole.phase === "end") {
+    if (game.vsBot && game.zoleMode === "vs_bot") {
+      emitZoleVsBotHandEnd(io, game);
+      return;
+    }
     const w = game.zole.winnerUsername;
     finishBoardGame(game, w, "win");
     const humans = game.players.filter((p) => !isZoleBotUsername(p));
@@ -12490,6 +12536,10 @@ io.on("connection", (socket) => {
       game.lastMoveAt = Date.now();
       game.moves.push({ card, by: user.username, ts: Date.now() });
       if (game.zole.phase === "end") {
+        if (game.vsBot && game.zoleMode === "vs_bot") {
+          emitZoleVsBotHandEnd(io, game);
+          return;
+        }
         const w = game.zole.winnerUsername;
         finishBoardGame(game, w, "win");
         const humans = game.players.filter((p) => !isZoleBotUsername(p));

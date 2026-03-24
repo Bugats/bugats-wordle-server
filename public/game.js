@@ -9318,6 +9318,15 @@ function initSocket() {
     if (boardState.type === "zole" && payload?.zole) {
       boardState.zole = payload.zole;
     }
+    if (
+      boardState.type === "zole" &&
+      boardState.zoleMode === "vs_bot" &&
+      payload?.zoleSeriesHandEnd
+    ) {
+      appendSystemMessage(
+        "🃏 Partija beigusies — tabula atjaunināta. Drīz sāksies nākamā partija."
+      );
+    }
     if (boardState.type === "zole" && payload?.zoleMode != null) {
       const m = String(payload.zoleMode).toLowerCase();
       if (m === "vs_bot") boardState.zoleMode = "vs_bot";
@@ -9688,7 +9697,7 @@ function renderBoardGame() {
         hintEl.textContent = isMyTurn
           ? br === 1
             ? "1. kārta: vari pieteikt Galdiņu (visi pa sevi, zaudē ar visvairāk acu) vai Lielais/Zole/Mazā zole. Ja visi pasē — otrā kārta."
-            : "2. kārta: Galdiņš vairs nav. Pasēt vai Lielais/Zole/Mazā zole. Ja atkal visi pasē — spēlējas Galds (zaudē ar visvairāk stiķu; ja vienādi — pēc acīm)."
+            : "2. kārta: bez galdiņa. Pasēt vai Lielais/Zole/Mazā zole. Ja atkal visi pasē — Galdiņš (visi pa sevi). Pret botiem pēc partijas sākas nākamā (~2,5 s), tabula uzkrājas."
           : boardState.zoleMode === "vs_bot"
             ? "Gaidām bota likšanu…"
             : "Gaidām citu spēlētāju likšanu…";
@@ -9701,7 +9710,9 @@ function renderBoardGame() {
           : "Gaidām, kamēr lielais norok 2 kārtas…";
       } else if (boardState.zole?.phase === "end") {
         hintEl.textContent =
-          "Skaties tabulas punktus zemāk. Uzvarētājs pēc spēles — labākais +/− šajā partijā.";
+          boardState.zoleMode === "vs_bot"
+            ? "Šīs partijas punkti zemāk; «Kopā mačā» — uzkrātā tabula. Drīz sāksies nākamā partija (var pamest ar Atkāpties)."
+            : "Skaties tabulas punktus zemāk. Uzvarētājs pēc spēles — labākais +/− šajā partijā.";
       } else {
         const c = boardState.zole?.contract;
         let galHint = " Uzvara ar 61+ acīm, ja esi lielais / zole.";

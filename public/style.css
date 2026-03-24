@@ -5426,6 +5426,15 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex: 1 1 200px;
 }
 .vz-zole-compact-scores strong { color: #fbbf24; font-weight: 700; }
+.vz-zole-cumulative-scores {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(196, 181, 253, 0.95);
+}
+.vz-zole-cumulative-scores strong {
+  color: #c4b5fd;
+}
 .vz-zole-sek-details {
   flex: 0 0 auto;
   font-size: 11px;

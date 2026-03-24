@@ -281,6 +281,21 @@
     return { rows: lc.cards, leader, frozen: true };
   }
 
+  function zoleCumulativeScoresHtml(zole) {
+    const cum = zole.cumulativeTableDelta;
+    if (!cum || cum.length !== 3) return "";
+    const players = zole.players || [];
+    const mh = zole.matchHandsPlayed ?? 0;
+    if (mh < 1) return "";
+    const parts = [];
+    for (let i = 0; i < 3; i++) {
+      const n = cum[i] || 0;
+      const sign = n > 0 ? "+" : "";
+      parts.push(`${esc(players[i] || "?")} ${sign}${n}`);
+    }
+    return `<div class="vz-zole-cumulative-scores"><strong>Kopā mačā</strong> (${esc(String(mh))} p.) · ${parts.join(" · ")}</div>`;
+  }
+
   function formatTableDelta(zole, players) {
     const d = zole.tableDelta;
     if (!d || d.length !== 3) return "";
@@ -702,7 +717,8 @@
       const scoresLine = existingWrap.querySelector(".vz-zole-compact-scores");
       if (scoresLine) {
         scoresLine.innerHTML =
-          `<strong>Lācis</strong> ${esc(zole.trumpLabel)} · <strong>Stiķī tagad</strong> ${esc(String(cte))} acis · <strong>Kopā</strong> ${eyes.map((e) => esc(String(e))).join(" · ")} · <strong>Stiķi</strong> ${tricks.map((t) => esc(String(t))).join(" · ")}`;
+          `<strong>Lācis</strong> ${esc(zole.trumpLabel)} · <strong>Stiķī tagad</strong> ${esc(String(cte))} acis · <strong>Kopā</strong> ${eyes.map((e) => esc(String(e))).join(" · ")} · <strong>Stiķi</strong> ${tricks.map((t) => esc(String(t))).join(" · ")}` +
+          zoleCumulativeScoresHtml(zole);
       }
       for (let pi = 0; pi < 3; pi++) {
         const el = existingWrap.querySelector(`[data-zole-eye="${pi}"]`);
@@ -720,6 +736,13 @@
             isBig && myIdx === zole.contractorIdx
               ? "Tu esi lielais — norok 2 kārtas (tās pieskaitās tavām acīm)"
               : "Lielais norok 2 kārtas…";
+        } else if (zole.phase === "end") {
+          const zm = opts && String(opts.zoleMode || "").toLowerCase();
+          const mh = zole.matchHandsPlayed ?? 0;
+          turnLine.textContent =
+            zm === "vs_bot"
+              ? `Partija ${mh} beigusies. Nākamā pēc ~2,5 s…`
+              : "Partija beigusies";
         } else {
           const tName = zole.players[zole.turn] || "?";
           turnLine.textContent = isMyTurn
@@ -767,7 +790,8 @@
     const scoresLine = document.createElement("div");
     scoresLine.className = "vz-zole-compact-scores";
     scoresLine.innerHTML =
-      `<strong>Lācis</strong> ${esc(zole.trumpLabel)} · <strong>Stiķī tagad</strong> ${esc(String(cte))} acis · <strong>Kopā</strong> ${eyes.map((e) => esc(String(e))).join(" · ")} · <strong>Stiķi</strong> ${tricks.map((t) => esc(String(t))).join(" · ")}`;
+      `<strong>Lācis</strong> ${esc(zole.trumpLabel)} · <strong>Stiķī tagad</strong> ${esc(String(cte))} acis · <strong>Kopā</strong> ${eyes.map((e) => esc(String(e))).join(" · ")} · <strong>Stiķi</strong> ${tricks.map((t) => esc(String(t))).join(" · ")}` +
+      zoleCumulativeScoresHtml(zole);
     bar.appendChild(scoresLine);
     if (zole.trumpNote) {
       const det = document.createElement("details");
@@ -849,18 +873,30 @@
     if (zole.phase === "bid") {
       const bt = zole.bidTurn ?? 0;
       const rnd = zole.bidRound === 2 ? 2 : 1;
-      const rndTxt = rnd === 1 ? "1. kārta" : "2. kārta (bez galdiņa)";
+      const rndTxt =
+        rnd === 1
+          ? "1. kārta · galdiņš atļauts"
+          : "2. kārta · ja visi pasē — Galdiņš";
+      const rot =
+        typeof zole.firstBidderOffset === "number"
+          ? ` · sāk ${esc(zole.players[zole.firstBidderOffset] || "?")} (pulkstenī)`
+          : "";
       turnLine.textContent =
         bt === myIdx
-          ? `Tava likšanas kārta (${rndTxt})`
-          : `Likšana (${rndTxt}): ${esc(zole.players[bt] || "?")}`;
+          ? `Tava likšanas kārta (${rndTxt}${rot})`
+          : `Likšana (${rndTxt}${rot}): ${esc(zole.players[bt] || "?")}`;
     } else if (zole.phase === "discard") {
       const isBig = zole.contract === "big";
       turnLine.textContent = isBig && myIdx === zole.contractorIdx
         ? "Tu esi lielais — norok 2 kārtas (tās pieskaitās tavām acīm)"
         : "Lielais norok 2 kārtas…";
     } else if (zole.phase === "end") {
-      turnLine.textContent = "Partija beigusies";
+      const zm = opts && String(opts.zoleMode || "").toLowerCase();
+      const mh = zole.matchHandsPlayed ?? 0;
+      turnLine.textContent =
+        zm === "vs_bot"
+          ? `Partija ${mh} beigusies. Nākamā pēc ~2,5 s…`
+          : "Partija beigusies";
     } else {
       const tName = zole.players[zole.turn] || "?";
       turnLine.textContent = isMyTurn ? "Tava kārta (kārtis)" : `Kārta: ${esc(tName)}`;
