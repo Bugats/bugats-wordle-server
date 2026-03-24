@@ -190,6 +190,25 @@
     return "—";
   }
 
+  /** Kārtis rādīt stiķa kolonnās: aktīvais stiķis vai pēdējais, kamēr nav pirmā kārta jaunajā. */
+  function zoleTrickDisplayRows(zole) {
+    const trick = zole.trick || [];
+    if (trick.length > 0) {
+      return { rows: trick, leader: zole.trickLeader ?? 0, frozen: false };
+    }
+    const lc = zole.lastCompletedTrick;
+    if (!lc || !lc.cards || lc.cards.length !== 3) {
+      return { rows: [], leader: zole.trickLeader ?? 0, frozen: false };
+    }
+    const leader =
+      typeof lc.leaderIdx === "number"
+        ? lc.leaderIdx
+        : lc.cards[0] && typeof lc.cards[0].playerIdx === "number"
+          ? lc.cards[0].playerIdx
+          : zole.trickLeader ?? 0;
+    return { rows: lc.cards, leader, frozen: true };
+  }
+
   function formatTableDelta(zole, players) {
     const d = zole.tableDelta;
     if (!d || d.length !== 3) return "";
@@ -299,8 +318,7 @@
       return felt;
     }
 
-    const trick = zole.trick || [];
-    const leader = zole.trickLeader ?? 0;
+    const { rows: trickRows, leader, frozen } = zoleTrickDisplayRows(zole);
     const fan = document.createElement("div");
     fan.className = "vz-zole-trick-fan";
     const mountAv =
@@ -310,10 +328,11 @@
     for (let i = 0; i < 3; i++) {
       const seat = (leader + i) % 3;
       const col = document.createElement("div");
-      col.className = "vz-zole-trick-seat";
+      col.className =
+        "vz-zole-trick-seat" + (frozen ? " vz-zole-trick-seat--frozen" : "");
       col.dataset.zoleSeat = String(seat);
       col.style.setProperty("--seat-tilt", `${(i - 1) * 7}deg`);
-      const t = trick[i];
+      const t = trickRows[i];
       const head = document.createElement("div");
       head.className = "vz-zole-trick-seat-head";
       const pname = zole.players[seat] || "?";
@@ -337,85 +356,67 @@
       const cardArea = document.createElement("div");
       cardArea.className = "vz-zole-trick-card-area";
       col.appendChild(cardArea);
-      if (t) {
+      if (t && t.card) {
         cardArea.appendChild(createPlayingCardEl(t.card, { table: true }));
       }
       const ph = document.createElement("div");
       ph.className = "vz-zole-trick-placeholder";
       ph.textContent = zole.turn === seat ? "Domā…" : "Gaida…";
-      if (t) ph.style.display = "none";
+      if (t && t.card) ph.style.display = "none";
+      else if (frozen) {
+        ph.style.display = "none";
+      }
       col.appendChild(ph);
       fan.appendChild(col);
     }
     felt.appendChild(fan);
-
-    const lastWrap = document.createElement("div");
-    lastWrap.className = "vz-zole-last-trick";
-    const ltTitle = document.createElement("div");
-    ltTitle.className = "vz-zole-last-trick-title";
-    ltTitle.textContent = "Pēdējais stiķis";
-    lastWrap.appendChild(ltTitle);
-    const ltRow = document.createElement("div");
-    ltRow.className = "vz-zole-last-trick-row";
-    for (let li = 0; li < 3; li++) {
-      const slot = document.createElement("div");
-      slot.className = "vz-zole-last-slot";
-      slot.dataset.lastSlot = String(li);
-      ltRow.appendChild(slot);
-    }
-    lastWrap.appendChild(ltRow);
-    const ltSub = document.createElement("div");
-    ltSub.className = "vz-zole-last-trick-sub";
-    lastWrap.appendChild(ltSub);
-    felt.appendChild(lastWrap);
-    fillLastTrickSlots(felt, zole);
+    const freezeLine = document.createElement("div");
+    freezeLine.className = "vz-zole-trick-freeze-line";
+    felt.appendChild(freezeLine);
+    syncZoleTrickFreezeLine(freezeLine, zole);
 
     return felt;
   }
 
-  function fillLastTrickSlots(felt, zole) {
-    const lastWrap = felt.querySelector(".vz-zole-last-trick");
-    if (!lastWrap) return;
-    const sub = lastWrap.querySelector(".vz-zole-last-trick-sub");
+  function syncZoleTrickFreezeLine(el, zole) {
+    if (!el) return;
+    const { frozen } = zoleTrickDisplayRows(zole);
     const lc = zole.lastCompletedTrick;
     const players = zole.players || [];
-    for (let li = 0; li < 3; li++) {
-      const slot = lastWrap.querySelector(`[data-last-slot="${li}"]`);
-      if (!slot) continue;
-      slot.innerHTML = "";
-      if (!lc || !lc.cards || !lc.cards[li]) continue;
-      const { card } = lc.cards[li];
-      slot.appendChild(createPlayingCardEl(card, { table: true }));
-    }
-    if (sub) {
-      if (lc && typeof lc.winnerIdx === "number" && players[lc.winnerIdx]) {
-        sub.textContent = `Uzvarēja: ${players[lc.winnerIdx]} · ${lc.trickEyes ?? 0} acis`;
-      } else {
-        sub.textContent = "—";
-      }
+    if (frozen && lc && typeof lc.winnerIdx === "number") {
+      el.textContent = `Stiķis noslēgts · ${players[lc.winnerIdx] || "?"} · ${lc.trickEyes ?? 0} acis`;
+      el.style.display = "block";
+    } else {
+      el.textContent = "";
+      el.style.display = "none";
     }
   }
 
   function updateZoleTrickColumns(felt, zole) {
-    const trick = zole.trick || [];
-    const leader = zole.trickLeader ?? 0;
+    const { rows: trickRows, leader, frozen } = zoleTrickDisplayRows(zole);
     for (let i = 0; i < 3; i++) {
       const seat = (leader + i) % 3;
       const col = felt.querySelector(`[data-zole-seat="${seat}"]`);
       if (!col) continue;
-      const t = trick[i];
+      col.classList.toggle("vz-zole-trick-seat--frozen", frozen);
+      const t = trickRows[i];
       const cardArea = col.querySelector(".vz-zole-trick-card-area");
       const ph = col.querySelector(".vz-zole-trick-placeholder");
       if (cardArea) cardArea.innerHTML = "";
       if (ph) {
         ph.textContent = zole.turn === seat ? "Domā…" : "Gaida…";
-        ph.style.display = t ? "none" : "flex";
+        if (t && t.card) ph.style.display = "none";
+        else if (frozen) ph.style.display = "none";
+        else ph.style.display = "flex";
       }
-      if (t && cardArea) {
+      if (t && t.card && cardArea) {
         cardArea.appendChild(createPlayingCardEl(t.card, { table: true }));
       }
     }
-    fillLastTrickSlots(felt, zole);
+    syncZoleTrickFreezeLine(
+      felt.querySelector(".vz-zole-trick-freeze-line"),
+      zole
+    );
   }
 
   function buildZoleHandBlock(
