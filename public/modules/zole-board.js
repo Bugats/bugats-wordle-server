@@ -10,6 +10,8 @@
   let zoleTrickHoldSig = null;
   let zoleTrickHoldUntil = 0;
   let zoleTrickHoldCleared = false;
+  /** `tricksPlayed` brīdī, kad sākām rādīt pēdējo noslēgto stiķi (ja mainās — jauns stiķis, vecā «iesalde» vairs neder). */
+  let zoleTrickHoldTricksPlayed = null;
 
   function zoleCompletedTrickSignature(zole) {
     const lc = zole && zole.lastCompletedTrick;
@@ -32,6 +34,7 @@
     zoleTrickHoldSig = null;
     zoleTrickHoldUntil = 0;
     zoleTrickHoldCleared = false;
+    zoleTrickHoldTricksPlayed = null;
   }
 
   function scheduleZoleTrickHoldClear(scheduleRedraw) {
@@ -40,6 +43,10 @@
       zoleTrickHoldTimer = null;
       zoleTrickHoldCleared = true;
       scheduleRedraw();
+      /* Dažos pārlūkos/vidēs pirmais render var neuztvert; otrs ticks noņem «iesaldi» noteikti. */
+      global.requestAnimationFrame(() => {
+        global.requestAnimationFrame(() => scheduleRedraw());
+      });
     }, ZOLE_TRICK_HOLD_MS);
   }
 
@@ -56,14 +63,39 @@
         resetZoleTrickHold();
         return;
       }
+      /* Ja hold laiks jau pagājis, katrā snapshotā notīrām — pat ja setTimeout reizēm «pamet». */
+      if (
+        zoleTrickHoldUntil > 0 &&
+        Date.now() >= zoleTrickHoldUntil &&
+        !zoleTrickHoldCleared
+      ) {
+        zoleTrickHoldCleared = true;
+        clearZoleTrickHoldTimer();
+      }
       const sig = zoleCompletedTrickSignature(zole);
       if (!sig) {
         resetZoleTrickHold();
         return;
       }
+      const tp =
+        typeof zole.tricksPlayed === "number" ? zole.tricksPlayed : null;
+      if (
+        zoleTrickHoldTricksPlayed != null &&
+        tp != null &&
+        tp !== zoleTrickHoldTricksPlayed
+      ) {
+        resetZoleTrickHold();
+        zoleTrickHoldSig = sig;
+        zoleTrickHoldTricksPlayed = tp;
+        zoleTrickHoldUntil = Date.now() + ZOLE_TRICK_HOLD_MS;
+        zoleTrickHoldCleared = false;
+        scheduleZoleTrickHoldClear(scheduleRedraw);
+        return;
+      }
       if (sig !== zoleTrickHoldSig) {
         resetZoleTrickHold();
         zoleTrickHoldSig = sig;
+        zoleTrickHoldTricksPlayed = tp;
         zoleTrickHoldUntil = Date.now() + ZOLE_TRICK_HOLD_MS;
         zoleTrickHoldCleared = false;
         scheduleZoleTrickHoldClear(scheduleRedraw);
@@ -321,6 +353,15 @@
     }
     const lc = zole.lastCompletedTrick;
     if (!lc || !lc.cards || lc.cards.length !== 3 || zoleTrickHoldCleared) {
+      return { rows: [], leader: zole.trickLeader ?? 0, frozen: false };
+    }
+    const tpNow =
+      typeof zole.tricksPlayed === "number" ? zole.tricksPlayed : null;
+    if (
+      zoleTrickHoldTricksPlayed != null &&
+      tpNow != null &&
+      tpNow !== zoleTrickHoldTricksPlayed
+    ) {
       return { rows: [], leader: zole.trickLeader ?? 0, frozen: false };
     }
     if (zoleTrickHoldUntil > 0 && Date.now() >= zoleTrickHoldUntil) {
