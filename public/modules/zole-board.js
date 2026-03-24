@@ -368,7 +368,7 @@
     handEl.appendChild(title);
 
     const btnRow = document.createElement("div");
-    btnRow.className = "vz-zole-hand-btns vz-zole-hand-fan";
+    btnRow.className = "vz-zole-hand-btns vz-zole-hand-wrap";
 
     const hand = sortZoleHandClient(zole.myHand || []);
     let legalSet = null;
@@ -394,22 +394,12 @@
 
     let discardConfirmBtn = discardConfirmBtnRef || null;
 
-    for (let hi = 0; hi < hand.length; hi++) {
-      const card = hand[hi];
+    for (const card of hand) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "vz-zole-card-btn";
       btn.setAttribute("aria-label", cardLabel(card));
       btn.title = cardLabel(card);
-      const n = hand.length;
-      const maxSpread = Math.min(26, 11 + n * 2);
-      const deg =
-        n <= 1 ? 0 : ((hi / (n - 1)) * 2 - 1) * maxSpread;
-      const t = n <= 1 ? 0 : Math.abs(hi / (n - 1) - 0.5) * 2;
-      const arcY = n <= 1 ? 0 : (1 - t * t) * -10;
-      btn.style.setProperty("--vz-fan-deg", `${deg.toFixed(2)}deg`);
-      btn.style.setProperty("--vz-fan-y", `${arcY.toFixed(2)}px`);
-      btn.style.zIndex = String(10 + hi);
       btn.appendChild(createPlayingCardEl(card, { inHand: true }));
       btn.dataset.s = String(card.s);
       btn.dataset.r = String(card.r);
