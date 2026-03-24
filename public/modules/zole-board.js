@@ -281,19 +281,84 @@
     return { rows: lc.cards, leader, frozen: true };
   }
 
-  function zoleCumulativeScoresHtml(zole) {
-    const cum = zole.cumulativeTableDelta;
-    if (!cum || cum.length !== 3) return "";
+  function zolePtsCell(n) {
+    const v = n || 0;
+    if (v === 0) return "0";
+    return (v > 0 ? "+" : "") + String(v);
+  }
+
+  function buildZolePointsTable(zole, myIdx) {
     const players = zole.players || [];
+    const cum = zole.cumulativeTableDelta || [0, 0, 0];
+    const td = zole.tableDelta || [0, 0, 0];
+    const phase = zole.phase || "";
+    const showHand = phase === "end";
     const mh = zole.matchHandsPlayed ?? 0;
-    if (mh < 1) return "";
-    const parts = [];
-    for (let i = 0; i < 3; i++) {
-      const n = cum[i] || 0;
-      const sign = n > 0 ? "+" : "";
-      parts.push(`${esc(players[i] || "?")} ${sign}${n}`);
+
+    const wrap = document.createElement("div");
+    wrap.className = "vz-zole-points-table-wrap";
+    const cap = document.createElement("div");
+    cap.className = "vz-zole-points-table-caption";
+    cap.textContent =
+      mh > 0 ? `Punktu tabula · partijas: ${mh}` : "Punktu tabula";
+    wrap.appendChild(cap);
+
+    const table = document.createElement("table");
+    table.className = "vz-zole-points-table";
+    const thead = document.createElement("thead");
+    const hr = document.createElement("tr");
+    for (const lab of ["Spēlētājs", "Šī partija", "Kopā mačā"]) {
+      const th = document.createElement("th");
+      th.textContent = lab;
+      hr.appendChild(th);
     }
-    return `<div class="vz-zole-cumulative-scores"><strong>Kopā mačā</strong> (${esc(String(mh))} p.) · ${parts.join(" · ")}</div>`;
+    thead.appendChild(hr);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    tbody.className = "vz-zole-points-table-body";
+    for (let i = 0; i < 3; i++) {
+      const tr = document.createElement("tr");
+      if (myIdx === i) tr.classList.add("vz-zole-points-table--me");
+      const tdN = document.createElement("td");
+      tdN.className = "vz-zole-points-table-name";
+      tdN.textContent = players[i] || "?";
+      const tdH = document.createElement("td");
+      tdH.className = "vz-zole-points-table-num";
+      tdH.textContent = showHand ? zolePtsCell(td[i]) : "—";
+      const tdT = document.createElement("td");
+      tdT.className = "vz-zole-points-table-num";
+      tdT.textContent = zolePtsCell(cum[i]);
+      tr.appendChild(tdN);
+      tr.appendChild(tdH);
+      tr.appendChild(tdT);
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    return wrap;
+  }
+
+  function syncZolePointsTable(wrap, zole, myIdx) {
+    if (!wrap) return;
+    const cap = wrap.querySelector(".vz-zole-points-table-caption");
+    const mh = zole.matchHandsPlayed ?? 0;
+    if (cap) {
+      cap.textContent =
+        mh > 0 ? `Punktu tabula · partijas: ${mh}` : "Punktu tabula";
+    }
+    const tbody = wrap.querySelector(".vz-zole-points-table-body");
+    if (!tbody) return;
+    const tdArr = zole.tableDelta || [0, 0, 0];
+    const cum = zole.cumulativeTableDelta || [0, 0, 0];
+    const showHand = (zole.phase || "") === "end";
+    const rows = tbody.querySelectorAll("tr");
+    for (let i = 0; i < 3 && i < rows.length; i++) {
+      const cells = rows[i].querySelectorAll("td");
+      if (cells.length >= 3) {
+        cells[1].textContent = showHand ? zolePtsCell(tdArr[i]) : "—";
+        cells[2].textContent = zolePtsCell(cum[i]);
+      }
+    }
   }
 
   function formatTableDelta(zole, players) {
@@ -717,8 +782,24 @@
       const scoresLine = existingWrap.querySelector(".vz-zole-compact-scores");
       if (scoresLine) {
         scoresLine.innerHTML =
-          `<strong>Lācis</strong> ${esc(zole.trumpLabel)} · <strong>Stiķī tagad</strong> ${esc(String(cte))} acis · <strong>Kopā</strong> ${eyes.map((e) => esc(String(e))).join(" · ")} · <strong>Stiķi</strong> ${tricks.map((t) => esc(String(t))).join(" · ")}` +
-          zoleCumulativeScoresHtml(zole);
+          `<strong>Lācis</strong> ${esc(zole.trumpLabel)} · <strong>Stiķī tagad</strong> ${esc(String(cte))} acis · <strong>Kopā</strong> ${eyes.map((e) => esc(String(e))).join(" · ")} · <strong>Stiķi</strong> ${tricks.map((t) => esc(String(t))).join(" · ")}`;
+      }
+      const metaPart = existingWrap.querySelector(".vz-zole-meta");
+      const ptExisting = existingWrap.querySelector(".vz-zole-points-table-wrap");
+      if (metaPart) {
+        if (!ptExisting) {
+          const barEl = metaPart.querySelector(".vz-zole-compact-bar");
+          if (barEl) {
+            metaPart.insertBefore(
+              buildZolePointsTable(zole, myIdx),
+              barEl.nextSibling
+            );
+          } else {
+            metaPart.insertBefore(buildZolePointsTable(zole, myIdx), metaPart.firstChild);
+          }
+        } else {
+          syncZolePointsTable(ptExisting, zole, myIdx);
+        }
       }
       for (let pi = 0; pi < 3; pi++) {
         const el = existingWrap.querySelector(`[data-zole-eye="${pi}"]`);
@@ -790,8 +871,7 @@
     const scoresLine = document.createElement("div");
     scoresLine.className = "vz-zole-compact-scores";
     scoresLine.innerHTML =
-      `<strong>Lācis</strong> ${esc(zole.trumpLabel)} · <strong>Stiķī tagad</strong> ${esc(String(cte))} acis · <strong>Kopā</strong> ${eyes.map((e) => esc(String(e))).join(" · ")} · <strong>Stiķi</strong> ${tricks.map((t) => esc(String(t))).join(" · ")}` +
-      zoleCumulativeScoresHtml(zole);
+      `<strong>Lācis</strong> ${esc(zole.trumpLabel)} · <strong>Stiķī tagad</strong> ${esc(String(cte))} acis · <strong>Kopā</strong> ${eyes.map((e) => esc(String(e))).join(" · ")} · <strong>Stiķi</strong> ${tricks.map((t) => esc(String(t))).join(" · ")}`;
     bar.appendChild(scoresLine);
     if (zole.trumpNote) {
       const det = document.createElement("details");
@@ -807,6 +887,7 @@
       bar.appendChild(det);
     }
     meta.appendChild(bar);
+    meta.appendChild(buildZolePointsTable(zole, myIdx));
 
     const showClassicAvRow =
       mountPlayerAvatar &&

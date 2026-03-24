@@ -5426,14 +5426,65 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex: 1 1 200px;
 }
 .vz-zole-compact-scores strong { color: #fbbf24; font-weight: 700; }
-.vz-zole-cumulative-scores {
-  margin-top: 8px;
-  font-size: 12px;
-  line-height: 1.35;
-  color: rgba(196, 181, 253, 0.95);
+.vz-zole-points-table-wrap {
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(196, 181, 253, 0.2);
 }
-.vz-zole-cumulative-scores strong {
-  color: #c4b5fd;
+.vz-zole-points-table-caption {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(251, 191, 36, 0.9);
+  margin-bottom: 8px;
+}
+.vz-zole-points-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.vz-zole-points-table th {
+  text-align: left;
+  padding: 6px 8px 8px 0;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.vz-zole-points-table th:nth-child(2),
+.vz-zole-points-table th:nth-child(3),
+.vz-zole-points-table td:nth-child(2),
+.vz-zole-points-table td:nth-child(3) {
+  text-align: right;
+  padding-right: 0;
+  padding-left: 8px;
+}
+.vz-zole-points-table td {
+  padding: 8px 8px 8px 0;
+  color: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.vz-zole-points-table tr:last-child td {
+  border-bottom: none;
+}
+.vz-zole-points-table-name {
+  font-weight: 600;
+  max-width: 42vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vz-zole-points-table-num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.vz-zole-points-table--me .vz-zole-points-table-name {
+  color: #a5f3fc;
 }
 .vz-zole-sek-details {
   flex: 0 0 auto;
