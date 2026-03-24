@@ -4971,6 +4971,50 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   -webkit-overflow-scrolling: touch;
 }
 .vz-board-modal.hidden { display: none !important; }
+/* Zole: pilns ekrāns (aktīvā spēle) */
+.vz-board-modal--zole-fullscreen {
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-top: env(safe-area-inset-top);
+  overflow: hidden;
+}
+.vz-board-modal--zole-fullscreen .vz-board-modal-inner {
+  max-width: none;
+  max-height: none;
+  width: 100%;
+  min-height: 100%;
+  min-height: 100dvh;
+  border-radius: 0;
+  border-width: 0 0 1px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 12px 14px 14px;
+  padding-left: max(14px, env(safe-area-inset-left));
+  padding-right: max(14px, env(safe-area-inset-right));
+}
+.vz-board-modal--zole-fullscreen .vz-board-game-area {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: 0;
+  overflow: hidden;
+}
+.vz-board-modal--zole-fullscreen .vz-board-game-header {
+  flex-shrink: 0;
+}
+.vz-board-modal--zole-fullscreen .vz-board-game-hint {
+  flex-shrink: 0;
+}
+.vz-board-modal--zole-fullscreen #board-zole-container:not(.hidden) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
 /* Spēles beigu ekrāns (virs visa) */
 .vz-board-result-overlay {
   position: fixed;
@@ -6070,7 +6114,20 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 
 @media (max-width: 480px) {
   .vz-board-modal-inner { padding: 16px; max-height: 85vh; overflow-y: auto; }
+  .vz-board-modal--zole-fullscreen .vz-board-modal-inner {
+    max-height: none;
+    overflow: hidden;
+    padding: 10px 12px 12px;
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
   .vz-board-modal { padding: 8px; align-items: flex-start; }
+  .vz-board-modal--zole-fullscreen {
+    padding: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-top: env(safe-area-inset-top);
+    align-items: stretch;
+  }
   .vz-board-title { font-size: 16px; }
   .vz-board-desc { font-size: 12px; }
   .vz-dambrete-board td { width: 32px; height: 32px; min-width: 32px; min-height: 32px; }
@@ -6082,6 +6139,9 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 @media (max-width: 360px) {
   .vz-board-modal-inner { padding: 12px; max-width: calc(100vw - 16px); }
+  .vz-board-modal--zole-fullscreen .vz-board-modal-inner {
+    max-width: none;
+  }
   .vz-dambrete-board td { width: 28px; height: 28px; min-width: 28px; min-height: 28px; }
   .vz-dambrete-piece { width: 20px; height: 20px; font-size: 14px; line-height: 20px; }
   .vz-chess-board td { width: 32px; height: 32px; min-width: 32px; min-height: 32px; }
