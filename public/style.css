@@ -5345,6 +5345,29 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding: 6px 4px 10px;
   min-height: 108px;
 }
+.vz-zole-turn-pill {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-bottom: 2px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #1c1917;
+  background: linear-gradient(145deg, #fbbf24 0%, #f59e0b 100%);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.35);
+  line-height: 1;
+}
+.vz-zole-active-turn > .vz-zole-turn-pill,
+.vz-zole-active-turn .vz-zole-turn-pill {
+  display: inline-flex;
+}
 .vz-zole-duel-opp {
   display: flex;
   flex-direction: column;
@@ -5352,14 +5375,29 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   gap: 4px;
   flex: 0 1 42%;
   max-width: 46%;
+  border-radius: 10px;
+  padding: 4px 6px 6px;
+  transition:
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.vz-zole-duel-opp.vz-zole-active-turn {
+  background: rgba(251, 191, 36, 0.12);
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.55);
 }
 .vz-zole-duel-opp--left {
   align-items: flex-start;
   text-align: left;
 }
+.vz-zole-duel-opp--left.vz-zole-active-turn > .vz-zole-turn-pill {
+  align-self: flex-start;
+}
 .vz-zole-duel-opp--right {
   align-items: flex-end;
   text-align: right;
+}
+.vz-zole-duel-opp--right.vz-zole-active-turn > .vz-zole-turn-pill {
+  align-self: flex-end;
 }
 .vz-zole-deck-back {
   width: 36px;
@@ -5486,6 +5524,21 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-zole-points-table--me .vz-zole-points-table-name {
   color: #a5f3fc;
 }
+.vz-zole-points-table-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.vz-zole-points-table-player {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vz-zole-points-table tr.vz-zole-active-turn td {
+  background: rgba(251, 191, 36, 0.08);
+}
 .vz-zole-sek-details {
   flex: 0 0 auto;
   font-size: 11px;
@@ -5524,6 +5577,15 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   gap: 4px;
   flex: 1 1 72px;
   min-width: 64px;
+  border-radius: 10px;
+  padding: 4px 2px 6px;
+  transition:
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.vz-zole-players-av-cell.vz-zole-active-turn {
+  background: rgba(251, 191, 36, 0.1);
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.45);
 }
 .vz-zole-players-av-name {
   font-size: 10px;
@@ -5683,6 +5745,21 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   gap: 10px;
   min-width: 104px;
   transform: rotate(var(--seat-tilt, 0deg));
+  border-radius: 12px;
+  padding: 6px 4px 8px;
+  transition:
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+.vz-zole-trick-seat--turn:not(.vz-zole-trick-seat--frozen) {
+  box-shadow:
+    0 0 0 2px rgba(251, 191, 36, 0.75),
+    0 6px 18px rgba(0, 0, 0, 0.35);
+  background: rgba(251, 191, 36, 0.06);
+}
+.vz-zole-trick-seat--turn:not(.vz-zole-trick-seat--frozen) .vz-zole-trick-seat-name {
+  color: #fde68a;
+  font-weight: 800;
 }
 .vz-zole-trick-card-area {
   transform-style: preserve-3d;

@@ -79,6 +79,62 @@
       .replace(/"/g, "&quot;");
   }
 
+  /** Kurš spēlētājs šobrīd «iet» (likšana / norakšana / kārtis). */
+  function zoleActiveTurnPlayerIndex(zole) {
+    if (!zole) return null;
+    const ph = zole.phase || "";
+    if (ph === "bid") {
+      const bt = zole.bidTurn;
+      return typeof bt === "number" && bt >= 0 && bt < 3 ? bt : null;
+    }
+    if (ph === "discard" && zole.contract === "big") {
+      const c = zole.contractorIdx;
+      return typeof c === "number" && c >= 0 && c < 3 ? c : null;
+    }
+    if (ph === "play") {
+      const t = zole.turn;
+      return typeof t === "number" && t >= 0 && t < 3 ? t : null;
+    }
+    return null;
+  }
+
+  function createZoleTurnPill() {
+    const el = document.createElement("span");
+    el.className = "vz-zole-turn-pill";
+    el.setAttribute("aria-hidden", "true");
+    el.title = "Gājiens";
+    el.textContent = "▶";
+    return el;
+  }
+
+  function syncZoleActiveTurnHighlight(wrap, zole) {
+    if (!wrap || !zole) return;
+    const active = zoleActiveTurnPlayerIndex(zole);
+    const { frozen } = zoleTrickDisplayRows(zole);
+    const playTurnSeat =
+      zole.phase === "play" && !frozen && typeof active === "number"
+        ? active
+        : null;
+    for (let pi = 0; pi < 3; pi++) {
+      const on = active === pi;
+      wrap.querySelectorAll(`[data-zole-pi="${pi}"]`).forEach((node) => {
+        node.classList.toggle("vz-zole-active-turn", on);
+      });
+    }
+    const felt = wrap.querySelector(".vz-zole-table-felt");
+    if (felt) {
+      for (let seat = 0; seat < 3; seat++) {
+        const col = felt.querySelector(`[data-zole-seat="${seat}"]`);
+        if (col) {
+          col.classList.toggle(
+            "vz-zole-trick-seat--turn",
+            playTurnSeat != null && playTurnSeat === seat
+          );
+        }
+      }
+    }
+  }
+
   /** ♦ kāravas — garš masts (atbilst lib/zole.js ZOLE_SUIT_KARAVS) */
   const ZOLE_SUIT_KARAVS = 1;
 
@@ -316,12 +372,19 @@
     table.appendChild(thead);
     const tbody = document.createElement("tbody");
     tbody.className = "vz-zole-points-table-body";
+    const activePi = zoleActiveTurnPlayerIndex(zole);
     for (let i = 0; i < 3; i++) {
       const tr = document.createElement("tr");
+      tr.dataset.zolePi = String(i);
       if (myIdx === i) tr.classList.add("vz-zole-points-table--me");
+      if (activePi === i) tr.classList.add("vz-zole-active-turn");
       const tdN = document.createElement("td");
       tdN.className = "vz-zole-points-table-name";
-      tdN.textContent = players[i] || "?";
+      tdN.appendChild(createZoleTurnPill());
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "vz-zole-points-table-player";
+      nameSpan.textContent = players[i] || "?";
+      tdN.appendChild(nameSpan);
       const tdH = document.createElement("td");
       tdH.className = "vz-zole-points-table-num";
       tdH.textContent = showHand ? zolePtsCell(td[i]) : "—";
@@ -352,9 +415,14 @@
     const cum = zole.cumulativeTableDelta || [0, 0, 0];
     const showHand = (zole.phase || "") === "end";
     const rows = tbody.querySelectorAll("tr");
+    const activePi = zoleActiveTurnPlayerIndex(zole);
     for (let i = 0; i < 3 && i < rows.length; i++) {
-      const cells = rows[i].querySelectorAll("td");
+      const row = rows[i];
+      row.classList.toggle("vz-zole-active-turn", activePi === i);
+      const cells = row.querySelectorAll("td");
       if (cells.length >= 3) {
+        const nameEl = cells[0].querySelector(".vz-zole-points-table-player");
+        if (nameEl) nameEl.textContent = (zole.players || [])[i] || "?";
         cells[1].textContent = showHand ? zolePtsCell(tdArr[i]) : "—";
         cells[2].textContent = zolePtsCell(cum[i]);
       }
@@ -377,6 +445,8 @@
   function buildZoleOpponentCorner(zole, playerIdx, mountPlayerAvatar, eyes) {
     const cell = document.createElement("div");
     cell.className = "vz-zole-duel-opp";
+    cell.dataset.zolePi = String(playerIdx);
+    cell.appendChild(createZoleTurnPill());
     const deck = document.createElement("div");
     deck.className = "vz-zole-deck-back";
     deck.setAttribute("aria-hidden", "true");
@@ -833,6 +903,7 @@
       }
       const felt = existingWrap.querySelector(".vz-zole-table-felt");
       if (felt && zole.phase === "play") updateZoleTrickColumns(felt, zole);
+      syncZoleActiveTurnHighlight(existingWrap, zole);
       const oldHand = existingWrap.querySelector(".vz-zole-hand");
       if (oldHand) oldHand.remove();
       const discardBtn = partialDiscard
@@ -902,6 +973,8 @@
       for (let pi = 0; pi < 3; pi++) {
         const cell = document.createElement("div");
         cell.className = "vz-zole-players-av-cell";
+        cell.dataset.zolePi = String(pi);
+        cell.appendChild(createZoleTurnPill());
         const un = zole.players[pi];
         if (un) {
           try {
@@ -990,6 +1063,7 @@
     } else {
       wrap.appendChild(renderZoleTableFelt(zole, mountPlayerAvatar));
     }
+    syncZoleActiveTurnHighlight(wrap, zole);
 
     if (zole.phase === "bid") {
       const bidBox = document.createElement("div");
