@@ -4,6 +4,73 @@
 (function (global) {
   "use strict";
 
+  /** Pēc pabeigta stiķa kārtis paliek uz galda, tad pazūd (ms). */
+  const ZOLE_TRICK_HOLD_MS = 2400;
+  let zoleTrickHoldTimer = null;
+  let zoleTrickHoldSig = null;
+  let zoleTrickHoldUntil = 0;
+  let zoleTrickHoldCleared = false;
+
+  function zoleCompletedTrickSignature(zole) {
+    const lc = zole && zole.lastCompletedTrick;
+    if (!lc || !lc.cards || lc.cards.length !== 3) return null;
+    const parts = lc.cards.map(
+      (t) => `${t.playerIdx}:${t.card.s}:${t.card.r}`
+    );
+    return `${parts.join("|")}::w${lc.winnerIdx}::e${lc.trickEyes ?? 0}`;
+  }
+
+  function clearZoleTrickHoldTimer() {
+    if (zoleTrickHoldTimer != null) {
+      global.clearTimeout(zoleTrickHoldTimer);
+      zoleTrickHoldTimer = null;
+    }
+  }
+
+  function resetZoleTrickHold() {
+    clearZoleTrickHoldTimer();
+    zoleTrickHoldSig = null;
+    zoleTrickHoldUntil = 0;
+    zoleTrickHoldCleared = false;
+  }
+
+  function scheduleZoleTrickHoldClear(scheduleRedraw) {
+    if (typeof scheduleRedraw !== "function") return;
+    zoleTrickHoldTimer = global.setTimeout(() => {
+      zoleTrickHoldTimer = null;
+      zoleTrickHoldCleared = true;
+      scheduleRedraw();
+    }, ZOLE_TRICK_HOLD_MS);
+  }
+
+  global.VZZoleBoardTrickHold = Object.freeze({
+    reset: resetZoleTrickHold,
+    /** Izsauc katru reizi, kad nāk jauns zole snapshot (pirms render). */
+    onZoleSnapshot(zole, scheduleRedraw) {
+      if (!zole || zole.phase !== "play") {
+        resetZoleTrickHold();
+        return;
+      }
+      const trick = zole.trick || [];
+      if (trick.length > 0) {
+        resetZoleTrickHold();
+        return;
+      }
+      const sig = zoleCompletedTrickSignature(zole);
+      if (!sig) {
+        resetZoleTrickHold();
+        return;
+      }
+      if (sig !== zoleTrickHoldSig) {
+        resetZoleTrickHold();
+        zoleTrickHoldSig = sig;
+        zoleTrickHoldUntil = Date.now() + ZOLE_TRICK_HOLD_MS;
+        zoleTrickHoldCleared = false;
+        scheduleZoleTrickHoldClear(scheduleRedraw);
+      }
+    },
+  });
+
   function esc(s) {
     return String(s || "")
       .replace(/&/g, "&amp;")
@@ -190,14 +257,19 @@
     return "—";
   }
 
-  /** Kārtis rādīt stiķa kolonnās: aktīvais stiķis vai pēdējais, kamēr nav pirmā kārta jaunajā. */
+  /** Kārtis stiķa kolonnās: aktīvais stiķis; pēc pabeigšanas ~2.4 s pēdējais, tad tukšs. */
   function zoleTrickDisplayRows(zole) {
     const trick = zole.trick || [];
     if (trick.length > 0) {
       return { rows: trick, leader: zole.trickLeader ?? 0, frozen: false };
     }
     const lc = zole.lastCompletedTrick;
-    if (!lc || !lc.cards || lc.cards.length !== 3) {
+    if (!lc || !lc.cards || lc.cards.length !== 3 || zoleTrickHoldCleared) {
+      return { rows: [], leader: zole.trickLeader ?? 0, frozen: false };
+    }
+    if (zoleTrickHoldUntil > 0 && Date.now() >= zoleTrickHoldUntil) {
+      zoleTrickHoldCleared = true;
+      clearZoleTrickHoldTimer();
       return { rows: [], leader: zole.trickLeader ?? 0, frozen: false };
     }
     const leader =

@@ -9542,6 +9542,9 @@ function startBoardGame(payload) {
   hideBoardResultOverlay();
   boardLegalMovesFetchId++;
   boardMovesFetchChain = Promise.resolve();
+  if (window.VZZoleBoardTrickHold?.reset) {
+    window.VZZoleBoardTrickHold.reset();
+  }
   boardState = {
     gameId: payload?.gameId,
     type: payload?.type || "dambrete",
@@ -9579,6 +9582,9 @@ function startBoardGame(payload) {
 }
 
 function hideBoardGameArea() {
+  if (window.VZZoleBoardTrickHold?.reset) {
+    window.VZZoleBoardTrickHold.reset();
+  }
   if (window.VZBoardGames?.resetDambreteTable) {
     window.VZBoardGames.resetDambreteTable();
   }
@@ -9613,6 +9619,15 @@ function dambreteSelectedIsValidJumpOrigin() {
 }
 
 function renderBoardGame() {
+  if (
+    boardState.type === "zole" &&
+    boardState.zole &&
+    window.VZZoleBoardTrickHold?.onZoleSnapshot
+  ) {
+    window.VZZoleBoardTrickHold.onZoleSnapshot(boardState.zole, () => {
+      renderBoardGame();
+    });
+  }
   const typeEl = document.getElementById("board-game-type");
   const turnEl = document.getElementById("board-game-turn");
   const dambreteContainer = document.getElementById("board-dambrete-container");
