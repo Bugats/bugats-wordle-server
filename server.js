@@ -1065,7 +1065,7 @@ function playZoleBotDiscardIfNeeded(io, game) {
     turn: game.zole.turn,
     zoleMode: game.zoleMode,
   });
-  setImmediate(() => playZoleBotTurns(io, game));
+  scheduleNextZoleBotTurn(io, game);
 }
 
 function playZoleBotBids(io, game) {
@@ -1100,7 +1100,7 @@ function playZoleBotBids(io, game) {
         turn: game.zole.turn,
         zoleMode: game.zoleMode,
       });
-      setImmediate(() => playZoleBotTurns(io, game));
+      scheduleNextZoleBotTurn(io, game);
       return;
     }
     game.turn =
@@ -1116,6 +1116,28 @@ function playZoleBotBids(io, game) {
 }
 
 const ZOLE_VS_BOT_NEXT_HAND_MS = 2500;
+/** Pēc pabeigta stiķa pauze pirms nākamā gājiena (botu ķēde), lai klients redzētu kārtis uz galda. Jāsaskan ar zole-board ZOLE_TRICK_HOLD_MS. */
+const ZOLE_TRICK_HOLD_SERVER_MS = 2600;
+
+function scheduleNextZoleBotTurn(io, game) {
+  if (!game?.zole || game.zole.phase !== "play") {
+    setImmediate(() => playZoleBotTurns(io, game));
+    return;
+  }
+  const z = game.zole;
+  const trick = z.trick || [];
+  const lc = z.lastCompletedTrick;
+  const trickJustCompleted =
+    trick.length === 0 &&
+    lc &&
+    Array.isArray(lc.cards) &&
+    lc.cards.length === 3;
+  if (trickJustCompleted) {
+    setTimeout(() => playZoleBotTurns(io, game), ZOLE_TRICK_HOLD_SERVER_MS);
+  } else {
+    setImmediate(() => playZoleBotTurns(io, game));
+  }
+}
 
 function scheduleZoleVsBotNextHand(io, game) {
   if (!game?.vsBot || game.zoleMode !== "vs_bot" || !game.zole) return;
@@ -1215,7 +1237,7 @@ function playZoleBotTurns(io, game) {
     turn: game.zole.turn,
     zoleMode: game.zoleMode,
   });
-  setImmediate(() => playZoleBotTurns(io, game));
+  scheduleNextZoleBotTurn(io, game);
 }
 
 const BOARD_ELO_DEFAULT = 1000;
@@ -12393,7 +12415,7 @@ io.on("connection", (socket) => {
         turn: game.zole.turn,
         zoleMode: game.zoleMode,
       });
-      setImmediate(() => playZoleBotTurns(io, game));
+      scheduleNextZoleBotTurn(io, game);
       return;
     }
 
@@ -12575,7 +12597,7 @@ io.on("connection", (socket) => {
         turn: game.zole.turn,
         zoleMode: game.zoleMode,
       });
-      setImmediate(() => playZoleBotTurns(io, game));
+      scheduleNextZoleBotTurn(io, game);
     }
   });
 

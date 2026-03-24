@@ -4,8 +4,8 @@
 (function (global) {
   "use strict";
 
-  /** Pēc pabeigta stiķa kārtis paliek uz galda, tad pazūd (ms). */
-  const ZOLE_TRICK_HOLD_MS = 2400;
+  /** Pēc pabeigta stiķa kārtis paliek uz galda, tad pazūd (ms). Jāsaskan ar server.js ZOLE_TRICK_HOLD_SERVER_MS. */
+  const ZOLE_TRICK_HOLD_MS = 2600;
   let zoleTrickHoldTimer = null;
   let zoleTrickHoldSig = null;
   let zoleTrickHoldUntil = 0;
