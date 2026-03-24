@@ -5973,6 +5973,14 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.9));
   z-index: 80 !important;
 }
+/* Norakšana: bez palielināšanas — izvēlētā kārts nepārklāj kaimiņu */
+.vz-zole-hand-overlap--discard {
+  padding-top: 28px;
+}
+.vz-zole-hand-overlap--discard .vz-zole-card-btn.vz-zole-card--selected {
+  transform: translateY(-8px) scale(1);
+  filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.75));
+}
 .vz-zole-hand-title {
   font-size: 11px;
   font-weight: 700;
@@ -6036,10 +6044,24 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     transform: translateY(-14px) scale(1.05);
     z-index: 70 !important;
   }
+  .vz-zole-hand-overlap--discard .vz-zole-card-btn:not(:disabled):hover {
+    transform: translateY(-5px) scale(1);
+  }
+  .vz-zole-hand-overlap--discard
+    .vz-zole-card-btn.vz-zole-card--selected:not(:disabled):hover {
+    transform: translateY(-8px) scale(1);
+  }
 }
 .vz-zole-card-btn:not(:disabled):active {
   transform: translateY(-12px) scale(1.04);
   z-index: 70 !important;
+}
+.vz-zole-hand-overlap--discard .vz-zole-card-btn:not(:disabled):active {
+  transform: translateY(-4px) scale(1);
+}
+.vz-zole-hand-overlap--discard
+  .vz-zole-card-btn.vz-zole-card--selected:not(:disabled):active {
+  transform: translateY(-8px) scale(1);
 }
 .vz-zole-note {
   margin: 10px 0 0;

@@ -662,6 +662,7 @@
 
     const btnRow = document.createElement("div");
     btnRow.className = "vz-zole-hand-btns vz-zole-hand-overlap";
+    if (isDiscardMe) btnRow.classList.add("vz-zole-hand-overlap--discard");
 
     const hand = sortZoleHandClient(zole.myHand || []);
     let legalSet = null;
@@ -713,6 +714,7 @@
           }
           if (discardConfirmBtn)
             discardConfirmBtn.disabled = discardSel.length !== 2;
+          requestAnimationFrame(() => fitZoleHandOverlap());
         });
       } else {
         can =
@@ -769,6 +771,10 @@
         pull = Math.max(14, Math.min(w - 4, pull));
       } else {
         pull = Math.min(22, Math.max(10, w * 0.34));
+      }
+      /* Norakšana: divas jāizvēlas — mazāka pārklāšanās, lai kaimiņu kārtis paliek uzspiežamas. */
+      if (btnRow.classList.contains("vz-zole-hand-overlap--discard")) {
+        pull = Math.min(pull, Math.max(8, w * 0.22));
       }
       btnRow.style.setProperty(
         "--vz-hand-pull",
