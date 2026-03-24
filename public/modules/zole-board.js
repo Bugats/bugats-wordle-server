@@ -1002,8 +1002,8 @@
           }
         } else if (lr.kind === "maza_zole") {
           txt = lr.win
-            ? "Mazā zole uzvarēta (6 p. no katra)."
-            : "Mazā zole zaudēta (6 p. katram).";
+            ? "Mazā zole uzvarēta (+12 · −6 katram mazajam)."
+            : "Mazā zole zaudēta (−14 · +7 katram mazajam).";
         }
         det.textContent = txt;
         resBox.appendChild(det);

@@ -107,4 +107,30 @@ describe("zoleComputeTableDeltas", () => {
     expect(zoleGaldsLoserIdx([40, 50, 10], [2, 2, 4])).toBe(2);
     expect(zoleGaldsLoserIdx([10, 50, 30], [2, 2, 2])).toBe(1);
   });
+
+  it("maza_zole: uzvara +12 lielajam, −6 katram mazajam", () => {
+    const { delta, summary } = zoleComputeTableDeltas(
+      "maza_zole",
+      0,
+      [65, 10, 15],
+      [5, 2, 1]
+    );
+    expect(summary.win).toBe(true);
+    expect(delta[0]).toBe(12);
+    expect(delta[1]).toBe(-6);
+    expect(delta[2]).toBe(-6);
+  });
+
+  it("maza_zole: zaudējums −14 lielajam, +7 katram mazajam", () => {
+    const { delta, summary } = zoleComputeTableDeltas(
+      "maza_zole",
+      0,
+      [40, 30, 30],
+      [2, 3, 3]
+    );
+    expect(summary.win).toBe(false);
+    expect(delta[0]).toBe(-14);
+    expect(delta[1]).toBe(7);
+    expect(delta[2]).toBe(7);
+  });
 });
