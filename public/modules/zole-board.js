@@ -653,6 +653,11 @@
       opts && typeof opts.myIdx === "number" && opts.myIdx >= 0
         ? opts.myIdx
         : 0;
+    const isDiscardMe =
+      zole.phase === "discard" &&
+      zole.contract === "big" &&
+      myIdx === zole.contractorIdx;
+
     const handEl = document.createElement("div");
     handEl.className = "vz-zole-hand";
     const title = document.createElement("div");
@@ -681,11 +686,6 @@
     }
 
     const discardSel = [];
-    const isDiscardMe =
-      zole.phase === "discard" &&
-      zole.contract === "big" &&
-      myIdx === zole.contractorIdx;
-
     let discardConfirmBtn = discardConfirmBtnRef || null;
 
     for (let hi = 0; hi < hand.length; hi++) {
