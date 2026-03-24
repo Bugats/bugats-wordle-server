@@ -5325,6 +5325,85 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   max-width: 100%;
   margin-top: 8px;
 }
+/* Augša: divi pretinieki + vidū liels galds (kā mobilajā „duel” skatā) */
+.vz-zole-arena {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 12px;
+}
+.vz-zole-duel-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 4px 10px;
+  min-height: 108px;
+}
+.vz-zole-duel-opp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 42%;
+  max-width: 46%;
+}
+.vz-zole-duel-opp--left {
+  align-items: flex-start;
+  text-align: left;
+}
+.vz-zole-duel-opp--right {
+  align-items: flex-end;
+  text-align: right;
+}
+.vz-zole-deck-back {
+  width: 36px;
+  height: 48px;
+  border-radius: 5px;
+  background:
+    linear-gradient(145deg, #1e3a8a 0%, #172554 40%, #0f172a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+}
+.vz-zole-duel-opp--right .vz-zole-deck-back {
+  align-self: flex-end;
+}
+.vz-zole-duel-name {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+  line-height: 1.2;
+  max-width: 100%;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.vz-zole-duel-role {
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(196, 181, 253, 0.95);
+  line-height: 1.15;
+  max-width: 100%;
+}
+.vz-zole-duel-eyes {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.55);
+}
+.vz-zole-duel-opp .vz-zole-board-avatar {
+  width: 44px !important;
+  height: 44px !important;
+}
+.vz-zole-arena .vz-zole-table-felt {
+  flex: 1;
+  min-height: min(52vh, 340px);
+  margin-bottom: 0;
+}
 .vz-zole-meta {
   margin-bottom: 10px;
   font-size: 13px;
@@ -5731,7 +5810,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   outline: none;
 }
 .vz-zole-card-btn.vz-zole-card--selected {
-  transform: translateY(-5px);
+  transform: translateY(-5px) rotate(var(--vz-strip-deg, 0deg));
   filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.85));
 }
 .vz-zole-hand-title {
@@ -5747,14 +5826,27 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex-wrap: wrap;
   gap: 8px;
 }
-/* Roka: bez horizontālās ritināšanas — kārtis pārlauž rindās, centrētas */
-.vz-zole-hand-wrap {
-  flex-wrap: wrap;
+/* Roka: viena horizontāla josla, viegls vēdekļa pagrieziens, pārklāšanās + ritināšana */
+.vz-zole-hand-strip {
+  flex-wrap: nowrap;
   justify-content: center;
   align-items: flex-end;
-  gap: 4px 5px;
-  padding: 8px 4px 4px;
+  gap: 0;
+  padding: 14px 16px 10px;
   max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-inline: 20px;
+  scrollbar-width: thin;
+  touch-action: pan-x;
+}
+.vz-zole-hand-strip .vz-zole-card-btn {
+  flex: 0 0 auto;
+  margin-left: -18px;
+}
+.vz-zole-hand-strip .vz-zole-card-btn:first-child {
+  margin-left: 0;
 }
 .vz-zole-card-btn {
   min-width: unset;
@@ -5766,7 +5858,8 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   cursor: pointer;
   touch-action: manipulation;
   transition: transform 0.12s ease, border-color 0.12s ease, filter 0.12s ease;
-  transform: none;
+  transform: rotate(var(--vz-strip-deg, 0deg));
+  transform-origin: 50% 100%;
 }
 .vz-zole-card-btn:disabled {
   opacity: 0.4;
@@ -5775,7 +5868,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 .vz-zole-card-btn:not(:disabled):hover {
   border-color: rgba(251, 191, 36, 0.5);
-  transform: translateY(-3px);
+  transform: translateY(-3px) rotate(var(--vz-strip-deg, 0deg));
 }
 .vz-zole-note {
   margin: 10px 0 0;
