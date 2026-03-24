@@ -5326,8 +5326,8 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   margin-top: 8px;
 }
 .vz-zole-hand {
-  margin-top: -6px;
-  padding-top: 4px;
+  margin-top: -18px;
+  padding-top: 2px;
 }
 /* Augša: divi pretinieki + vidū liels galds (kā mobilajā „duel” skatā) */
 .vz-zole-arena {
@@ -5797,22 +5797,33 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.5);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 .vz-zole-hand-btns {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
-/* Roka: viena horizontāla josla, viegls vēdekļa pagrieziens, pārklāšanās + ritināšana */
-/* Roka: taisnas kārtis, rinda(s) ar atstarpi; pārlauž, ja nepietiek vietas */
-.vz-zole-hand-row {
-  flex-wrap: wrap;
+/* Roka: taisnas, viegli pārklājas pa kreisi → labi (kā klasiskā mobilā zole); ritināms */
+.vz-zole-hand-overlap {
+  flex-wrap: nowrap;
   justify-content: center;
   align-items: flex-end;
-  gap: 6px 8px;
-  padding: 8px 4px 6px;
+  gap: 0;
+  padding: 6px 20px 4px;
   max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-inline: 16px;
+  touch-action: pan-x;
+}
+.vz-zole-hand-overlap .vz-zole-card-btn {
+  flex: 0 0 auto;
+  margin-left: -20px;
+}
+.vz-zole-hand-overlap .vz-zole-card-btn:first-child {
+  margin-left: 0;
 }
 .vz-zole-card-btn {
   min-width: unset;

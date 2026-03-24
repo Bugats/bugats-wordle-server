@@ -439,7 +439,7 @@
     handEl.appendChild(title);
 
     const btnRow = document.createElement("div");
-    btnRow.className = "vz-zole-hand-btns vz-zole-hand-row";
+    btnRow.className = "vz-zole-hand-btns vz-zole-hand-overlap";
 
     const hand = sortZoleHandClient(zole.myHand || []);
     let legalSet = null;
@@ -465,12 +465,14 @@
 
     let discardConfirmBtn = discardConfirmBtnRef || null;
 
-    for (const card of hand) {
+    for (let hi = 0; hi < hand.length; hi++) {
+      const card = hand[hi];
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "vz-zole-card-btn";
       btn.setAttribute("aria-label", cardLabel(card));
       btn.title = cardLabel(card);
+      btn.style.zIndex = String(10 + hi);
       btn.appendChild(createPlayingCardEl(card, { inHand: true }));
       btn.dataset.s = String(card.s);
       btn.dataset.r = String(card.r);
