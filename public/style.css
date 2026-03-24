@@ -4964,7 +4964,8 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9990;
+  /* Virs .vz-bottom-nav (9000) un pilnekrāna apakšējās joslas (1000000) */
+  z-index: 1010000;
   padding: 16px;
   padding-bottom: max(16px, env(safe-area-inset-bottom));
   overflow-y: auto;
@@ -5019,7 +5020,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-result-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10020;
+  z-index: 1010020;
   display: flex;
   align-items: center;
   justify-content: center;

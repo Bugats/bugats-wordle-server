@@ -39,7 +39,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-24-zole-hand-xl" />
+  <link rel="stylesheet" href="style.css?v=2026-03-26-board-modal-layer" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -825,154 +825,6 @@
       </div>
     </div>
 
-    <!-- GALDA SPĒLES (dambrete, šahs) -->
-    <div id="board-games-modal" class="vz-board-modal hidden" role="dialog" aria-label="Galda spēles">
-      <div class="vz-board-modal-inner">
-        <button id="board-modal-close" class="vz-duel-x" type="button" aria-label="Aizvērt">✕</button>
-        <div id="board-games-lobby" class="vz-board-lobby">
-          <h3 class="vz-board-title">Galda spēles</h3>
-          <p class="vz-board-desc">Dambrete, šahs un zole. Uzvaras dod novada un klana punktus!</p>
-          <div id="board-dambrete-mode-wrap" class="vz-board-dambrete-mode" aria-label="Dambretes noteikumi">
-            <span class="vz-board-dambrete-mode-label">Dambretes režīms</span>
-            <div class="vz-board-dambrete-mode-radios">
-              <label class="vz-board-dambrete-mode-opt"
-                ><input type="radio" name="board-dambrete-variant" value="russian" checked />
-                Krievijas šaškas</label
-              >
-              <label class="vz-board-dambrete-mode-opt"
-                ><input type="radio" name="board-dambrete-variant" value="english" /> Angļu dambrete</label
-              >
-            </div>
-          </div>
-          <div id="board-zole-mode-wrap" class="vz-board-dambrete-mode" aria-label="Zoles režīms">
-            <span class="vz-board-dambrete-mode-label">Zoles režīms</span>
-            <div class="vz-board-dambrete-mode-radios">
-              <label class="vz-board-dambrete-mode-opt"
-                ><input type="radio" name="board-zole-mode" value="online_3p" checked />
-                3 cilvēki (bez bota)</label
-              >
-              <label class="vz-board-dambrete-mode-opt"
-                ><input type="radio" name="board-zole-mode" value="online_2p" />
-                2 cilvēki + bots</label
-              >
-              <label class="vz-board-dambrete-mode-opt"
-                ><input type="radio" name="board-zole-mode" value="vs_bot" /> Tikai pret botiem</label
-              >
-            </div>
-          </div>
-          <div class="vz-board-bot-section">
-            <p class="vz-board-bot-label">🤖 Spēlēt vs botu</p>
-            <div class="vz-board-bot-diff">
-              <label><input type="radio" name="board-bot-diff" value="easy" /> Vājš</label>
-              <label><input type="radio" name="board-bot-diff" value="medium" checked /> Vidējs</label>
-              <label><input type="radio" name="board-bot-diff" value="hard" /> Spēcīgs</label>
-            </div>
-            <div class="vz-board-bot-btns">
-              <button id="board-vsbot-dambrete" type="button" class="vz-board-invite-btn">♟️ Dambrete vs bot</button>
-              <button id="board-vsbot-chess" type="button" class="vz-board-invite-btn">♔ Šahs vs bot</button>
-              <button id="board-vsbot-zole" type="button" class="vz-board-invite-btn">🃏 Zole vs bot</button>
-            </div>
-          </div>
-          <p class="vz-board-divider">— vai izacini draugu —</p>
-          <div class="vz-board-invite-form">
-            <label for="board-invite-username" class="vz-board-label">Pretinieka lietotājvārds</label>
-            <input id="board-invite-username" type="text" placeholder="piemēram: spēlētājs123" autocomplete="username" aria-describedby="board-invite-hint" />
-            <span id="board-invite-hint" class="vz-board-hint">Ievadi tieši tā, kā parādās čatā vai TOP sarakstā</span>
-            <div class="vz-board-invite-btns">
-              <button id="board-invite-dambrete" type="button" class="vz-board-invite-btn">♟️ Dambrete</button>
-              <button id="board-invite-chess" type="button" class="vz-board-invite-btn">♔ Šahs</button>
-              <button id="board-invite-zole" type="button" class="vz-board-invite-btn">🃏 Zole</button>
-            </div>
-          </div>
-          <div id="board-invite-pending" class="vz-board-pending hidden">Gaidām atbildi…</div>
-          <div id="board-zole-3p-lobby" class="vz-board-zole-3p-lobby hidden" aria-live="polite">
-            <p id="board-zole-3p-lobby-text" class="vz-board-zole-3p-text"></p>
-            <div id="board-zole-3p-host-actions" class="hidden">
-              <label for="board-zole-3p-third" class="vz-board-label">Trešā spēlētāja vārds</label>
-              <input id="board-zole-3p-third" type="text" placeholder="lietotājvārds" autocomplete="username" />
-              <div class="vz-board-zole-3p-btns">
-                <button id="board-zole-3p-invite-third" type="button" class="vz-board-invite-btn">Uzaicināt trešo</button>
-                <button id="board-zole-3p-cancel-lobby" type="button" class="vz-board-resign">Atcelt</button>
-              </div>
-            </div>
-            <p id="board-zole-3p-guest-hint" class="vz-board-hint hidden">Gaidām, kamēr saimnieks uzaicina trešo spēlētāju…</p>
-          </div>
-          <details class="vz-board-rules">
-            <summary class="vz-board-rules-summary">📖 Īsi noteikumi</summary>
-            <div class="vz-board-rules-content">
-              <p><strong>Dambrete — izvēlies režīmu:</strong> <em>Krievijas šaškas</em> — bārdiņa iet uz priekšu, ķer visos virzienos; dāma slīd un ķer tālu pa diagonāli; promocija var notikt ķeršanas laikā. <em>Angļu dambrete</em> — bārdiņa tikai uz priekšu, ķer tikai uz priekšu; dāma vienu lauciņu visos virzienos.</p>
-              <p><strong>Šahs:</strong> Standarta šaha noteikumi. Uzvar tas, kas izveido matu pretinieka karalim.</p>
-              <p><strong>Zole</strong> (pēc <a href="https://zolei.lv/zoles-noteikumi/" target="_blank" rel="noopener">zolei.lv</a>): spēlē <strong>26 kārtis</strong> — <em>kāravi</em> ♦ no dūža līdz septītniekam; pārējie masti ♣ ♥ ♠ no dūža līdz devītniekam.</p>
-              <p><strong>Kas ir trumpji (lāči):</strong> <em>visas dāmas un visi kalpi</em> jebkurā mastā, un <em>visas pārējās ♦ kāravas kārtis</em> (dūzis, desmitnieks, kungs, 9, 8, 7). Stiķī jebkurš trumpis ir stiprāks par jebkuru <strong>parasto</strong> kārti. Dāmu un kalpu stiprums pēc mastiem: kreicis → pīķis → ercens → kāravs. ♦ „garā” masta kārtu secība: dūzis, desmitnieks, kungs, devītnieks, astotnieks, septītnieks.</p>
-              <p><strong>Kas ir parastās kārtis:</strong> tikai ♣, ♥ un ♠ — <strong>dūzis, desmitnieks, kungs, devītnieks</strong> (šajos mastos nav 8 un 7). Tās <em>nav</em> trumpji. Pēc <strong>vadības masta</strong> (ko izlika pirmais stiķī) parasto kārtu stiprums: dūzis, tad desmitnieks, tad kungs.</p>
-              <p><strong>Sekšana:</strong> <strong>Dāma un kalps vienmēr ir trumpa kārtis</strong>. Kad vada <strong>parasto</strong> mastu (♣/♥/♠ A,10,K,9), vispirms jāspēlē <strong>parastā</strong> kārta <strong>tajā pašā mastā</strong>, ja tāda ir rokā. Ja <strong>parastās</strong> šī masta <strong>nav</strong> — drīkst <strong>atmesties</strong> (jebkuru citu mastu) <strong>vai</strong> pēc izvēles <strong>pārsist ar trumpi</strong> (t.sk. vadības masta dāmu/kalpu). Kad vada <strong>trumpi</strong>, jāliek <strong>trumpis</strong>, kamēr kāds ir rokā; ja <strong>nav neviena trumpja</strong> — tikai <strong>parastā</strong>. Stiķī jebkurš trumpis pārspēj parasto.</p>
-              <p><strong>Acis:</strong> dūzis 11, desmitnieks 10, kungs 4, dāma 3, kalps 2; devītnieks, astotnieks, septītnieks — 0.</p>
-              <p><strong>Lielais</strong> ņem 2 vidus kārtis, <strong>norok 2</strong> — to acis pieskaita viņa stiķiem; uzvara ar <strong>61+</strong> acīm pret abiem mazajiem (acis kopā). <strong>Zole</strong> — bez pirkuma; vidus kārtu acis mazo pusē. <strong>Mazā zole</strong> — uzvara: +12 lielajam, −6 katram mazajam; zaudējums: −14 lielajam, +7 katram mazajam. Pārējā tabula (lielais/zole) kā klasiskajos noteikumos (t.sk. mazajiem &lt;30 acu, bezstiķis, visi stiķi, 91+ zolei).</p>
-              <p><strong>Likšana šeit (3 spēlētāji):</strong> 1. kārtā vari pieteikt <em>Galdiņu</em> (visi pa sevi; zaudē ar <strong>visvairāk acu</strong> stiķos) vai Lielais/Zole/Mazā zole. Ja visi pasē — 2. kārta <em>bez</em> galdiņa; ja <strong>atkal</strong> visi pasē — <em>Galdiņš</em> (tas pats režīms kā pieteikts pirmajā kārtā). <em>Galds</em> (zaudē ar visvairāk stiķu; ja vienādi — pēc acīm) šeit nav atsevišķs režīms. Pilnajā noteikumu tekstā pēc pasēšanām bieži seko <strong>pule</strong> — <strong>šeit pules nav</strong>. Pret botiem: vairākas partijas pēc kārtas, uzkrātā tabula. Likšanas sākums katrā partijā rotē pulksteņrādītāja virzienā. Stratēģija — skat. zolei.lv.</p>
-              <p><strong>Tiešsaiste:</strong> <em>3 cilvēki</em> — uzaicini vienu, tad saimnieks uzaicina trešo; vai 2+boti / tikai pret botiem.</p>
-            </div>
-          </details>
-          <div class="vz-board-leaderboards">
-            <details class="vz-board-lb">
-              <summary>🏆 Dambretes TOP</summary>
-              <div id="board-lb-dambrete" class="vz-board-lb-list"></div>
-            </details>
-            <details class="vz-board-lb">
-              <summary>🏆 Šaha TOP</summary>
-              <div id="board-lb-chess" class="vz-board-lb-list"></div>
-            </details>
-            <details class="vz-board-lb">
-              <summary>🏆 Zoles uzvaras</summary>
-              <div id="board-lb-zole" class="vz-board-lb-list"></div>
-            </details>
-          </div>
-        </div>
-        <div id="board-games-invite" class="vz-board-invite hidden">
-          <p class="vz-board-invite-text">
-            <span id="board-invite-from"></span> aicina uz <span id="board-invite-type"></span>
-            <span id="board-invite-dambrete-variant" class="hidden"></span>
-          </p>
-          <p class="vz-board-invite-sub">Uzvaras dod novada un klana punktus</p>
-          <div class="vz-board-invite-actions">
-            <button id="board-invite-accept" type="button">Pieņemt</button>
-            <button id="board-invite-decline" type="button">Noraidīt</button>
-          </div>
-        </div>
-        <div id="board-game-area" class="vz-board-game-area hidden">
-          <div class="vz-board-game-header">
-            <div class="vz-board-game-meta">
-              <span id="board-game-type" class="vz-board-game-type"></span>
-              <span id="board-game-turn" class="vz-board-game-turn" aria-live="polite"></span>
-            </div>
-            <button id="board-resign-btn" type="button" class="vz-board-resign" title="Beigt spēli un zaudēt">Padoties</button>
-          </div>
-          <p id="board-game-hint" class="vz-board-game-hint">Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt</p>
-          <div id="board-dambrete-container" class="vz-board-container hidden"></div>
-          <div id="board-chess-container" class="vz-board-container hidden"></div>
-          <div id="board-zole-container" class="vz-board-container hidden"></div>
-        </div>
-      </div>
-    </div>
-
-    <div
-      id="board-result-overlay"
-      class="vz-board-result-overlay hidden"
-      role="alertdialog"
-      aria-modal="true"
-      aria-labelledby="board-result-title"
-      aria-describedby="board-result-detail"
-    >
-      <div class="vz-board-result-card">
-        <p id="board-result-eyebrow" class="vz-board-result-eyebrow"></p>
-        <p id="board-result-title" class="vz-board-result-title"></p>
-        <p id="board-result-detail" class="vz-board-result-detail"></p>
-        <p id="board-result-coins" class="vz-board-result-coins hidden"></p>
-        <button type="button" id="board-result-close" class="vz-board-result-btn">
-          Sapratu
-        </button>
-      </div>
-    </div>
-
     <!-- NOVADA IZVĒLE -->
     <div id="region-modal" class="vz-region-modal hidden">
       <div class="vz-region-modal-inner">
@@ -1298,6 +1150,154 @@
         setInterval(fetchSeasonAndHof, 60 * 1000);
       })();
     </script>
+
+    <!-- GALDA SPĒLES: body beigās, lai z-index būtu virs apakšējās nav un pilnekrāna joslām -->
+    <div id="board-games-modal" class="vz-board-modal hidden" role="dialog" aria-label="Galda spēles">
+      <div class="vz-board-modal-inner">
+        <button id="board-modal-close" class="vz-duel-x" type="button" aria-label="Aizvērt">✕</button>
+        <div id="board-games-lobby" class="vz-board-lobby">
+          <h3 class="vz-board-title">Galda spēles</h3>
+          <p class="vz-board-desc">Dambrete, šahs un zole. Uzvaras dod novada un klana punktus!</p>
+          <div id="board-dambrete-mode-wrap" class="vz-board-dambrete-mode" aria-label="Dambretes noteikumi">
+            <span class="vz-board-dambrete-mode-label">Dambretes režīms</span>
+            <div class="vz-board-dambrete-mode-radios">
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-dambrete-variant" value="russian" checked />
+                Krievijas šaškas</label
+              >
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-dambrete-variant" value="english" /> Angļu dambrete</label
+              >
+            </div>
+          </div>
+          <div id="board-zole-mode-wrap" class="vz-board-dambrete-mode" aria-label="Zoles režīms">
+            <span class="vz-board-dambrete-mode-label">Zoles režīms</span>
+            <div class="vz-board-dambrete-mode-radios">
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-zole-mode" value="online_3p" checked />
+                3 cilvēki (bez bota)</label
+              >
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-zole-mode" value="online_2p" />
+                2 cilvēki + bots</label
+              >
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-zole-mode" value="vs_bot" /> Tikai pret botiem</label
+              >
+            </div>
+          </div>
+          <div class="vz-board-bot-section">
+            <p class="vz-board-bot-label">🤖 Spēlēt vs botu</p>
+            <div class="vz-board-bot-diff">
+              <label><input type="radio" name="board-bot-diff" value="easy" /> Vājš</label>
+              <label><input type="radio" name="board-bot-diff" value="medium" checked /> Vidējs</label>
+              <label><input type="radio" name="board-bot-diff" value="hard" /> Spēcīgs</label>
+            </div>
+            <div class="vz-board-bot-btns">
+              <button id="board-vsbot-dambrete" type="button" class="vz-board-invite-btn">♟️ Dambrete vs bot</button>
+              <button id="board-vsbot-chess" type="button" class="vz-board-invite-btn">♔ Šahs vs bot</button>
+              <button id="board-vsbot-zole" type="button" class="vz-board-invite-btn">🃏 Zole vs bot</button>
+            </div>
+          </div>
+          <p class="vz-board-divider">— vai izacini draugu —</p>
+          <div class="vz-board-invite-form">
+            <label for="board-invite-username" class="vz-board-label">Pretinieka lietotājvārds</label>
+            <input id="board-invite-username" type="text" placeholder="piemēram: spēlētājs123" autocomplete="username" aria-describedby="board-invite-hint" />
+            <span id="board-invite-hint" class="vz-board-hint">Ievadi tieši tā, kā parādās čatā vai TOP sarakstā</span>
+            <div class="vz-board-invite-btns">
+              <button id="board-invite-dambrete" type="button" class="vz-board-invite-btn">♟️ Dambrete</button>
+              <button id="board-invite-chess" type="button" class="vz-board-invite-btn">♔ Šahs</button>
+              <button id="board-invite-zole" type="button" class="vz-board-invite-btn">🃏 Zole</button>
+            </div>
+          </div>
+          <div id="board-invite-pending" class="vz-board-pending hidden">Gaidām atbildi…</div>
+          <div id="board-zole-3p-lobby" class="vz-board-zole-3p-lobby hidden" aria-live="polite">
+            <p id="board-zole-3p-lobby-text" class="vz-board-zole-3p-text"></p>
+            <div id="board-zole-3p-host-actions" class="hidden">
+              <label for="board-zole-3p-third" class="vz-board-label">Trešā spēlētāja vārds</label>
+              <input id="board-zole-3p-third" type="text" placeholder="lietotājvārds" autocomplete="username" />
+              <div class="vz-board-zole-3p-btns">
+                <button id="board-zole-3p-invite-third" type="button" class="vz-board-invite-btn">Uzaicināt trešo</button>
+                <button id="board-zole-3p-cancel-lobby" type="button" class="vz-board-resign">Atcelt</button>
+              </div>
+            </div>
+            <p id="board-zole-3p-guest-hint" class="vz-board-hint hidden">Gaidām, kamēr saimnieks uzaicina trešo spēlētāju…</p>
+          </div>
+          <details class="vz-board-rules">
+            <summary class="vz-board-rules-summary">📖 Īsi noteikumi</summary>
+            <div class="vz-board-rules-content">
+              <p><strong>Dambrete — izvēlies režīmu:</strong> <em>Krievijas šaškas</em> — bārdiņa iet uz priekšu, ķer visos virzienos; dāma slīd un ķer tālu pa diagonāli; promocija var notikt ķeršanas laikā. <em>Angļu dambrete</em> — bārdiņa tikai uz priekšu, ķer tikai uz priekšu; dāma vienu lauciņu visos virzienos.</p>
+              <p><strong>Šahs:</strong> Standarta šaha noteikumi. Uzvar tas, kas izveido matu pretinieka karalim.</p>
+              <p><strong>Zole</strong> (pēc <a href="https://zolei.lv/zoles-noteikumi/" target="_blank" rel="noopener">zolei.lv</a>): spēlē <strong>26 kārtis</strong> — <em>kāravi</em> ♦ no dūža līdz septītniekam; pārējie masti ♣ ♥ ♠ no dūža līdz devītniekam.</p>
+              <p><strong>Kas ir trumpji (lāči):</strong> <em>visas dāmas un visi kalpi</em> jebkurā mastā, un <em>visas pārējās ♦ kāravas kārtis</em> (dūzis, desmitnieks, kungs, 9, 8, 7). Stiķī jebkurš trumpis ir stiprāks par jebkuru <strong>parasto</strong> kārti. Dāmu un kalpu stiprums pēc mastiem: kreicis → pīķis → ercens → kāravs. ♦ „garā” masta kārtu secība: dūzis, desmitnieks, kungs, devītnieks, astotnieks, septītnieks.</p>
+              <p><strong>Kas ir parastās kārtis:</strong> tikai ♣, ♥ un ♠ — <strong>dūzis, desmitnieks, kungs, devītnieks</strong> (šajos mastos nav 8 un 7). Tās <em>nav</em> trumpji. Pēc <strong>vadības masta</strong> (ko izlika pirmais stiķī) parasto kārtu stiprums: dūzis, tad desmitnieks, tad kungs.</p>
+              <p><strong>Sekšana:</strong> <strong>Dāma un kalps vienmēr ir trumpa kārtis</strong>. Kad vada <strong>parasto</strong> mastu (♣/♥/♠ A,10,K,9), vispirms jāspēlē <strong>parastā</strong> kārta <strong>tajā pašā mastā</strong>, ja tāda ir rokā. Ja <strong>parastās</strong> šī masta <strong>nav</strong> — drīkst <strong>atmesties</strong> (jebkuru citu mastu) <strong>vai</strong> pēc izvēles <strong>pārsist ar trumpi</strong> (t.sk. vadības masta dāmu/kalpu). Kad vada <strong>trumpi</strong>, jāliek <strong>trumpis</strong>, kamēr kāds ir rokā; ja <strong>nav neviena trumpja</strong> — tikai <strong>parastā</strong>. Stiķī jebkurš trumpis pārspēj parasto.</p>
+              <p><strong>Acis:</strong> dūzis 11, desmitnieks 10, kungs 4, dāma 3, kalps 2; devītnieks, astotnieks, septītnieks — 0.</p>
+              <p><strong>Lielais</strong> ņem 2 vidus kārtis, <strong>norok 2</strong> — to acis pieskaita viņa stiķiem; uzvara ar <strong>61+</strong> acīm pret abiem mazajiem (acis kopā). <strong>Zole</strong> — bez pirkuma; vidus kārtu acis mazo pusē. <strong>Mazā zole</strong> — uzvara: +12 lielajam, −6 katram mazajam; zaudējums: −14 lielajam, +7 katram mazajam. Pārējā tabula (lielais/zole) kā klasiskajos noteikumos (t.sk. mazajiem &lt;30 acu, bezstiķis, visi stiķi, 91+ zolei).</p>
+              <p><strong>Likšana šeit (3 spēlētāji):</strong> 1. kārtā vari pieteikt <em>Galdiņu</em> (visi pa sevi; zaudē ar <strong>visvairāk acu</strong> stiķos) vai Lielais/Zole/Mazā zole. Ja visi pasē — 2. kārta <em>bez</em> galdiņa; ja <strong>atkal</strong> visi pasē — <em>Galdiņš</em> (tas pats režīms kā pieteikts pirmajā kārtā). <em>Galds</em> (zaudē ar visvairāk stiķu; ja vienādi — pēc acīm) šeit nav atsevišķs režīms. Pilnajā noteikumu tekstā pēc pasēšanām bieži seko <strong>pule</strong> — <strong>šeit pules nav</strong>. Pret botiem: vairākas partijas pēc kārtas, uzkrātā tabula. Likšanas sākums katrā partijā rotē pulksteņrādītāja virzienā. Stratēģija — skat. zolei.lv.</p>
+              <p><strong>Tiešsaiste:</strong> <em>3 cilvēki</em> — uzaicini vienu, tad saimnieks uzaicina trešo; vai 2+boti / tikai pret botiem.</p>
+            </div>
+          </details>
+          <div class="vz-board-leaderboards">
+            <details class="vz-board-lb">
+              <summary>🏆 Dambretes TOP</summary>
+              <div id="board-lb-dambrete" class="vz-board-lb-list"></div>
+            </details>
+            <details class="vz-board-lb">
+              <summary>🏆 Šaha TOP</summary>
+              <div id="board-lb-chess" class="vz-board-lb-list"></div>
+            </details>
+            <details class="vz-board-lb">
+              <summary>🏆 Zoles uzvaras</summary>
+              <div id="board-lb-zole" class="vz-board-lb-list"></div>
+            </details>
+          </div>
+        </div>
+        <div id="board-games-invite" class="vz-board-invite hidden">
+          <p class="vz-board-invite-text">
+            <span id="board-invite-from"></span> aicina uz <span id="board-invite-type"></span>
+            <span id="board-invite-dambrete-variant" class="hidden"></span>
+          </p>
+          <p class="vz-board-invite-sub">Uzvaras dod novada un klana punktus</p>
+          <div class="vz-board-invite-actions">
+            <button id="board-invite-accept" type="button">Pieņemt</button>
+            <button id="board-invite-decline" type="button">Noraidīt</button>
+          </div>
+        </div>
+        <div id="board-game-area" class="vz-board-game-area hidden">
+          <div class="vz-board-game-header">
+            <div class="vz-board-game-meta">
+              <span id="board-game-type" class="vz-board-game-type"></span>
+              <span id="board-game-turn" class="vz-board-game-turn" aria-live="polite"></span>
+            </div>
+            <button id="board-resign-btn" type="button" class="vz-board-resign" title="Beigt spēli un zaudēt">Padoties</button>
+          </div>
+          <p id="board-game-hint" class="vz-board-game-hint">Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt</p>
+          <div id="board-dambrete-container" class="vz-board-container hidden"></div>
+          <div id="board-chess-container" class="vz-board-container hidden"></div>
+          <div id="board-zole-container" class="vz-board-container hidden"></div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="board-result-overlay"
+      class="vz-board-result-overlay hidden"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="board-result-title"
+      aria-describedby="board-result-detail"
+    >
+      <div class="vz-board-result-card">
+        <p id="board-result-eyebrow" class="vz-board-result-eyebrow"></p>
+        <p id="board-result-title" class="vz-board-result-title"></p>
+        <p id="board-result-detail" class="vz-board-result-detail"></p>
+        <p id="board-result-coins" class="vz-board-result-coins hidden"></p>
+        <button type="button" id="board-result-close" class="vz-board-result-btn">
+          Sapratu
+        </button>
+      </div>
+    </div>
 
   </body>
 </html>
