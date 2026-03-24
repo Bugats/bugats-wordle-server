@@ -939,7 +939,7 @@ function createChessVsBot(humanUsername, difficulty = "medium") {
   return game;
 }
 
-function createZoleVsBotGame(humanUsername) {
+function createZoleVsBotGame(humanUsername, botDifficulty = "medium") {
   const gameId = crypto.randomBytes(8).toString("hex");
   const zole = createZoleVsBotState(humanUsername);
   const game = {
@@ -954,6 +954,10 @@ function createZoleVsBotGame(humanUsername) {
     lastMoveAt: Date.now(),
     vsBot: true,
     zoleMode: "vs_bot",
+    zoleBotDifficulty:
+      botDifficulty === "easy" || botDifficulty === "hard"
+        ? botDifficulty
+        : "medium",
   };
   boardGames.set(gameId, game);
   userToBoardGame.set(humanUsername, gameId);
@@ -975,6 +979,7 @@ function createZoleOnline2pGame(usernameA, usernameB) {
     lastMoveAt: Date.now(),
     vsBot: false,
     zoleMode: "online_2p",
+    zoleBotDifficulty: "medium",
   };
   boardGames.set(gameId, game);
   userToBoardGame.set(usernameA, gameId);
@@ -997,6 +1002,7 @@ function createZoleOnline3pGame(usernameA, usernameB, usernameC) {
     lastMoveAt: Date.now(),
     vsBot: false,
     zoleMode: "online_3p",
+    zoleBotDifficulty: "medium",
   };
   boardGames.set(gameId, game);
   userToBoardGame.set(usernameA, gameId);
@@ -1052,7 +1058,11 @@ function playZoleBotDiscardIfNeeded(io, game) {
   if (!game?.zole || game.zole.phase !== "discard") return;
   const cIdx = game.zole.contractorIdx;
   if (cIdx == null || !isZoleBotUsername(game.players[cIdx])) return;
-  const pair = zolePickBotDiscard(game.zole, cIdx);
+  const pair = zolePickBotDiscard(
+    game.zole,
+    cIdx,
+    game.zoleBotDifficulty || "medium"
+  );
   if (!pair) return;
   const res = zoleApplyDiscard(game.zole, cIdx, pair[0], pair[1]);
   if (!res.ok) return;
@@ -1076,7 +1086,11 @@ function playZoleBotBids(io, game) {
     isZoleBotUsername(game.players[game.zole.bidTurn])
   ) {
     const t = game.zole.bidTurn;
-    const bid = zolePickBotBid(game.zole, t);
+    const bid = zolePickBotBid(
+      game.zole,
+      t,
+      game.zoleBotDifficulty || "medium"
+    );
     const res = zoleProcessBid(game.zole, t, bid);
     if (!res.ok) break;
     game.lastMoveAt = Date.now();
@@ -1189,7 +1203,11 @@ function playZoleBotTurns(io, game) {
   )
     return;
   const t = game.zole.turn;
-  const card = zolePickBotCard(game.zole, t);
+  const card = zolePickBotCard(
+    game.zole,
+    t,
+    game.zoleBotDifficulty || "medium"
+  );
   if (!card) return;
   const res = zolePlayCard(game.zole, t, card);
   if (!res.ok) return;
@@ -12271,7 +12289,7 @@ io.on("connection", (socket) => {
     if (gameType === "chess") {
       game = createChessVsBot(user.username, validDifficulty);
     } else if (gameType === "zole") {
-      game = createZoleVsBotGame(user.username);
+      game = createZoleVsBotGame(user.username, validDifficulty);
       game.zoleMode = "vs_bot";
     } else {
       game = createDambreteVsBot(user.username, validDifficulty, dVar);
