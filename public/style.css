@@ -5030,9 +5030,13 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-modal--fullscreen .vz-zole-fs-toolbar {
   flex-shrink: 0;
 }
+/* Spēle: arena dabīgs augstums + vajadzības gadījumā ritina — ne «izstiepjas» pāri rokai */
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-arena {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
+  max-height: min(58vh, 480px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
 }
@@ -5043,17 +5047,23 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   min-height: 0;
 }
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-table-felt {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   display: flex;
   flex-direction: column;
 }
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-trick-fan {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
   align-content: center;
   align-items: center;
+}
+/* Negatīvais margin velk rokas kārtis zem filca — pilnekrānā noņemam */
+.vz-board-modal--fullscreen .vz-zole-hand {
+  margin-top: 0;
+  padding-top: 6px;
+  position: relative;
+  z-index: 2;
 }
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-hand,
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-bid,
