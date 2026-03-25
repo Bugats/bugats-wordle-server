@@ -5014,6 +5014,16 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-game-area.vz-board-zole-play .vz-board-game-hint {
   display: none;
 }
+/* Rokas negatīvais margin — lai informācija virs filca nebūtu zem kārtīm */
+.vz-zole-wrap--fs-play .vz-zole-meta--play-top,
+.vz-zole-wrap--fs-play .vz-zole-fs-extras {
+  position: relative;
+  z-index: 2;
+}
+.vz-zole-wrap--fs-play .vz-zole-arena {
+  position: relative;
+  z-index: 1;
+}
 .vz-board-modal--fullscreen #board-zole-container:not(.hidden) {
   flex: 1 1 auto;
   min-height: 0;

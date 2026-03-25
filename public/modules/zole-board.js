@@ -900,9 +900,9 @@
       const metaTop = existingWrap.querySelector(".vz-zole-meta--play-top");
       const handEl0 = existingWrap.querySelector(".vz-zole-hand");
       if (arenaEl && metaTop) {
-        existingWrap.appendChild(arenaEl);
-        if (extrasEl) existingWrap.appendChild(extrasEl);
         existingWrap.appendChild(metaTop);
+        if (extrasEl) existingWrap.appendChild(extrasEl);
+        existingWrap.appendChild(arenaEl);
         if (handEl0) existingWrap.appendChild(handEl0);
       }
       const eyes = zole.eyePoints || [0, 0, 0];
@@ -1135,10 +1135,10 @@
     meta.appendChild(turnLine);
 
     if (zole.players && zole.players.length === 3 && zole.phase === "play") {
-      /* Vispirms zaļais galds — tad punkti / līgums; rīkjosla apakšā pirms rokas */
-      appendZoleArena(wrap, zole, myIdx, mountPlayerAvatar);
-      if (metaExtras) wrap.appendChild(metaExtras);
+      /* Punkti / līgums virs galda; zaļais filcs; roka ar negatīvu margin neuzlīst pāri tekstam */
       wrap.appendChild(meta);
+      if (metaExtras) wrap.appendChild(metaExtras);
+      appendZoleArena(wrap, zole, myIdx, mountPlayerAvatar);
     } else {
       wrap.appendChild(meta);
       wrap.appendChild(renderZoleTableFelt(zole, mountPlayerAvatar));
