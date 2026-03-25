@@ -9365,7 +9365,7 @@ function initSocket() {
     } else {
       updateBoardGameBadge(false);
     }
-    syncBoardModalZoleFullscreen();
+    syncBoardModalFullscreen();
   });
   socket.on("board.end", (payload) => {
     if (payload?.gameId !== boardState.gameId) return;
@@ -9430,7 +9430,7 @@ function showBoardModal() {
     if (invite) invite.classList.add("hidden");
     if (gameArea) gameArea.classList.remove("hidden");
     renderBoardGame();
-    syncBoardModalZoleFullscreen();
+    syncBoardModalFullscreen();
   } else {
     if (lobby) lobby.classList.remove("hidden");
     if (invite) invite.classList.add("hidden");
@@ -9438,7 +9438,7 @@ function showBoardModal() {
     if (zole3pLobbySnapshot && !boardState.gameId)
       updateZole3pLobbyUI(zole3pLobbySnapshot);
     loadBoardLeaderboards();
-    syncBoardModalZoleFullscreen();
+    syncBoardModalFullscreen();
   }
   syncBoardDambreteModePanelVisibility();
 }
@@ -9488,7 +9488,7 @@ function hideBoardModal() {
   const modal = document.getElementById("board-games-modal");
   if (modal) {
     modal.classList.add("hidden");
-    modal.classList.remove("vz-board-modal--zole-fullscreen");
+    modal.classList.remove("vz-board-modal--fullscreen");
   }
   syncBoardDambreteModePanelVisibility();
 }
@@ -9543,6 +9543,7 @@ function showBoardInviteModal(from, type, payload) {
       }
     }
   }
+  syncBoardModalFullscreen();
   syncBoardDambreteModePanelVisibility();
 }
 
@@ -9593,24 +9594,19 @@ function startBoardGame(payload) {
   if (lobby) lobby.classList.add("hidden");
   if (modal) modal.classList.remove("hidden");
   renderBoardGame();
-  syncBoardModalZoleFullscreen();
+  syncBoardModalFullscreen();
   syncBoardDambreteModePanelVisibility();
 }
 
-function syncBoardModalZoleFullscreen() {
+function syncBoardModalFullscreen() {
   const modal = document.getElementById("board-games-modal");
-  const gameArea = document.getElementById("board-game-area");
   if (!modal) return;
   if (modal.classList.contains("hidden")) {
-    modal.classList.remove("vz-board-modal--zole-fullscreen");
+    modal.classList.remove("vz-board-modal--fullscreen");
     return;
   }
-  const zoleFs =
-    !!boardState.gameId &&
-    boardState.type === "zole" &&
-    gameArea &&
-    !gameArea.classList.contains("hidden");
-  modal.classList.toggle("vz-board-modal--zole-fullscreen", zoleFs);
+  /* Pilns ekrāns visam Galda logam: lobijs, uzaicinājums, dambrete/šahs/zole. */
+  modal.classList.add("vz-board-modal--fullscreen");
 }
 
 function hideBoardGameArea() {
@@ -9624,7 +9620,7 @@ function hideBoardGameArea() {
   const modal = document.getElementById("board-games-modal");
   if (gameArea) gameArea.classList.add("hidden");
   if (modal) modal.classList.add("hidden");
-  if (modal) modal.classList.remove("vz-board-modal--zole-fullscreen");
+  if (modal) modal.classList.remove("vz-board-modal--fullscreen");
   updateBoardGameBadge(false);
 }
 
@@ -9843,7 +9839,7 @@ function renderBoardGame() {
       );
     }
   }
-  syncBoardModalZoleFullscreen();
+  syncBoardModalFullscreen();
 }
 
 async function handleChessCellClick(r, c, isPiece) {

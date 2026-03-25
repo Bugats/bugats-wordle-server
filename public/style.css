@@ -4973,7 +4973,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 .vz-board-modal.hidden { display: none !important; }
 /* Zole: pilns ekrāns (aktīvā spēle) */
-.vz-board-modal--zole-fullscreen {
+.vz-board-modal--fullscreen {
   align-items: stretch;
   justify-content: stretch;
   padding: 0;
@@ -4981,7 +4981,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding-top: env(safe-area-inset-top);
   overflow: hidden;
 }
-.vz-board-modal--zole-fullscreen .vz-board-modal-inner {
+.vz-board-modal--fullscreen .vz-board-modal-inner {
   max-width: none;
   max-height: none;
   width: 100%;
@@ -4996,7 +4996,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding-left: max(14px, env(safe-area-inset-left));
   padding-right: max(14px, env(safe-area-inset-right));
 }
-.vz-board-modal--zole-fullscreen .vz-board-game-area {
+.vz-board-modal--fullscreen .vz-board-game-area {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
@@ -5004,13 +5004,13 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   margin-top: 0;
   overflow: hidden;
 }
-.vz-board-modal--zole-fullscreen .vz-board-game-header {
+.vz-board-modal--fullscreen .vz-board-game-header {
   flex-shrink: 0;
 }
-.vz-board-modal--zole-fullscreen .vz-board-game-hint {
+.vz-board-modal--fullscreen .vz-board-game-hint {
   flex-shrink: 0;
 }
-.vz-board-modal--zole-fullscreen #board-zole-container:not(.hidden) {
+.vz-board-modal--fullscreen #board-zole-container:not(.hidden) {
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
@@ -5019,7 +5019,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   -webkit-overflow-scrolling: touch;
 }
 /* Jebkura Zoles fāze pilnekrāna modālī: wrap aizpilda laukumu */
-.vz-board-modal--zole-fullscreen #board-zole-container .vz-zole-wrap {
+.vz-board-modal--fullscreen #board-zole-container .vz-zole-wrap {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
@@ -5027,51 +5027,67 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   width: 100%;
   margin-top: 0;
 }
-.vz-board-modal--zole-fullscreen .vz-zole-fs-toolbar {
+.vz-board-modal--fullscreen .vz-zole-fs-toolbar {
   flex-shrink: 0;
 }
-.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-arena {
+.vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-arena {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-duel-row {
+.vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-duel-row {
   flex-shrink: 0;
 }
-.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-arena .vz-zole-table-felt {
+.vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-arena .vz-zole-table-felt {
   min-height: 0;
 }
-.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-table-felt {
+.vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-table-felt {
   flex: 1 1 auto;
   min-height: 0;
   margin-bottom: 8px;
   display: flex;
   flex-direction: column;
 }
-.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-trick-fan {
+.vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-trick-fan {
   flex: 1 1 auto;
   min-height: 0;
   align-content: center;
   align-items: center;
 }
-.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-hand,
-.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-bid,
-.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-discard,
-.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-result {
+.vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-hand,
+.vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-bid,
+.vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-discard,
+.vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-result {
   flex-shrink: 0;
 }
-.vz-board-modal--zole-fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-table-felt {
+.vz-board-modal--fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-table-felt {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-.vz-board-modal--zole-fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-bid,
-.vz-board-modal--zole-fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-discard,
-.vz-board-modal--zole-fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-hand,
-.vz-board-modal--zole-fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-result {
+.vz-board-modal--fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-bid,
+.vz-board-modal--fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-discard,
+.vz-board-modal--fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-hand,
+.vz-board-modal--fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-result {
   flex-shrink: 0;
+}
+/* Lobijs / uzaicinājums — scroll iekš pilna ekrāna */
+.vz-board-modal--fullscreen .vz-board-lobby {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.vz-board-modal--fullscreen .vz-board-invite {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  -webkit-overflow-scrolling: touch;
 }
 /* Spēles beigu ekrāns (virs visa) */
 .vz-board-result-overlay {
@@ -6196,7 +6212,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 
 @media (max-width: 480px) {
   .vz-board-modal-inner { padding: 16px; max-height: 85vh; overflow-y: auto; }
-  .vz-board-modal--zole-fullscreen .vz-board-modal-inner {
+  .vz-board-modal--fullscreen .vz-board-modal-inner {
     max-height: none;
     overflow: hidden;
     padding: 10px 12px 12px;
@@ -6204,7 +6220,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     padding-right: max(12px, env(safe-area-inset-right));
   }
   .vz-board-modal { padding: 8px; align-items: flex-start; }
-  .vz-board-modal--zole-fullscreen {
+  .vz-board-modal--fullscreen {
     padding: 0;
     padding-bottom: env(safe-area-inset-bottom);
     padding-top: env(safe-area-inset-top);
@@ -6221,7 +6237,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 @media (max-width: 360px) {
   .vz-board-modal-inner { padding: 12px; max-width: calc(100vw - 16px); }
-  .vz-board-modal--zole-fullscreen .vz-board-modal-inner {
+  .vz-board-modal--fullscreen .vz-board-modal-inner {
     max-width: none;
   }
   .vz-dambrete-board td { width: 28px; height: 28px; min-width: 28px; min-height: 28px; }
