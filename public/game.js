@@ -706,6 +706,7 @@ function updateZole3pLobbyUI(payload) {
   const textEl = document.getElementById("board-zole-3p-lobby-text");
   const hostAct = document.getElementById("board-zole-3p-host-actions");
   const guestHint = document.getElementById("board-zole-3p-guest-hint");
+  const guestLeave = document.getElementById("board-zole-3p-guest-actions");
   const lobby = document.getElementById("board-games-lobby");
   const pending = document.getElementById("board-invite-pending");
   if (!payload?.zoleLobby) {
@@ -713,7 +714,8 @@ function updateZole3pLobbyUI(payload) {
     if (box) box.classList.add("hidden");
     if (pending) pending.classList.add("hidden");
     if (payload?.cancelled)
-      appendSystemMessage("Zoles 3 spēlētāju istaba atcelta.");
+      appendSystemMessage("Zoles istaba atcelta.");
+    syncBoardDambreteModePanelVisibility();
     return;
   }
   zole3pLobbySnapshot = payload;
@@ -722,6 +724,9 @@ function updateZole3pLobbyUI(payload) {
   const me = String(state.username || "").trim();
   const isHost =
     host && me && host.trim().toLowerCase() === me.toLowerCase();
+  const inLobby = players.some(
+    (p) => me && String(p).trim().toLowerCase() === me.toLowerCase()
+  );
   if (box) box.classList.remove("hidden");
   if (lobby) lobby.classList.remove("hidden");
   const gameArea = document.getElementById("board-game-area");
@@ -730,13 +735,24 @@ function updateZole3pLobbyUI(payload) {
   if (inviteEl) inviteEl.classList.add("hidden");
   if (pending) pending.classList.add("hidden");
   const invited = payload.invitedThird;
+  const n = players.length;
   if (textEl) {
-    textEl.textContent = invited
-      ? `Zole 3 spēlētāji: ${players.join(", ")}. Gaidām: ${invited}.`
-      : `Zole 3 spēlētāji: ${players.join(", ")}. Saimnieks (${host}) uzaicina trešo.`;
+    if (n >= 3) {
+      textEl.textContent = `Istabā 3 spēlētāji — spēle sākas… (${players.join(", ")})`;
+    } else {
+      const wait =
+        invited != null && invited !== ""
+          ? ` Gaidām atbildi: ${invited}.`
+          : "";
+      textEl.textContent = `Zoles istaba · saimnieks: ${host}. Spēlētāji (${n}/3): ${players.join(", ") || "—"}.${wait} Kad būs 3, spēle sākas automātiski.`;
+    }
   }
   if (hostAct) hostAct.classList.toggle("hidden", !isHost);
-  if (guestHint) guestHint.classList.toggle("hidden", isHost);
+  if (guestHint)
+    guestHint.classList.toggle("hidden", isHost || !inLobby || n >= 3);
+  if (guestLeave)
+    guestLeave.classList.toggle("hidden", !inLobby || isHost || n >= 3);
+  syncBoardDambreteModePanelVisibility();
 }
 
 function normalizeDambreteVariantClient(v) {
@@ -769,7 +785,7 @@ function getSelectedBoardZoleMode() {
 function boardZoleModeLabel(mode) {
   if (mode === "vs_bot") return "pret botiem";
   if (mode === "online_2p") return "2 cilvēki + bots";
-  if (mode === "online_3p") return "3 cilvēki bez bota";
+  if (mode === "online_3p") return "3 cilvēki (istaba)";
   return String(mode || "");
 }
 
@@ -9296,6 +9312,7 @@ function initSocket() {
   socket.on("board.start", (payload) => {
     zole3pLobbySnapshot = null;
     document.getElementById("board-zole-3p-lobby")?.classList.add("hidden");
+    syncBoardDambreteModePanelVisibility();
     /* Neaizvērt modāli — startBoardGame atver spēles zonu; citādi Zole paliek aiz hidden. */
     startBoardGame(payload);
     const myIdx = boardGamePlayerIndex(payload?.players || [], state.username);
@@ -9412,10 +9429,16 @@ function initSocket() {
 function syncBoardDambreteModePanelVisibility() {
   const wrap = document.getElementById("board-dambrete-mode-wrap");
   const zoleWrap = document.getElementById("board-zole-mode-wrap");
+  const zoleRoomEntry = document.getElementById("board-zole-3p-lobby-entry");
   const invite = document.getElementById("board-games-invite");
   const inInvite = invite && !invite.classList.contains("hidden");
   if (wrap) wrap.classList.toggle("hidden", !!inInvite);
   if (zoleWrap) zoleWrap.classList.toggle("hidden", !!inInvite);
+  const show3pEntry =
+    !inInvite &&
+    getSelectedBoardZoleMode() === "online_3p" &&
+    !zole3pLobbySnapshot?.zoleLobby;
+  if (zoleRoomEntry) zoleRoomEntry.classList.toggle("hidden", !show3pEntry);
 }
 
 function showBoardModal() {
@@ -9528,6 +9551,9 @@ function showBoardInviteModal(from, type, payload) {
     invite.dataset.zoleMode = zm;
     const z3 = !!(payload && payload.zoleThirdSeat);
     invite.dataset.zoleThirdSeat = z3 ? "1" : "";
+    invite.dataset.zoleLobbyId = z3
+      ? String(payload?.zoleLobbyId || "").trim()
+      : "";
     if (varEl) {
       if (type === "chess") {
         varEl.textContent = "";
@@ -10035,6 +10061,20 @@ function bindBoardGames() {
         );
         return;
       }
+      if (zm === "online_3p") {
+        const snap = zole3pLobbySnapshot;
+        const me = String(state.username || "").trim().toLowerCase();
+        const hostLc = String(snap?.host || "").trim().toLowerCase();
+        const inRoom = (snap?.players || []).some(
+          (p) => String(p).trim().toLowerCase() === me
+        );
+        if (!snap?.zoleLobby || hostLc !== me || !inRoom) {
+          appendSystemMessage(
+            "Zolei ar 3 cilvēkiem vispirms spied «Izveidot zoles istabu», tad uzaicini draugus."
+          );
+          return;
+        }
+      }
       payload.zoleMode = zm;
     }
     state.socket.emit("board.invite", payload);
@@ -10076,6 +10116,7 @@ function bindBoardGames() {
         state.socket.emit("board.zoleAcceptThird", {
           inviteId: String(invite?.dataset?.inviteId || "").trim(),
           from,
+          lobbyId: String(invite?.dataset?.zoleLobbyId || "").trim(),
         });
         hideBoardInviteModal();
         return;
@@ -10123,6 +10164,7 @@ function bindBoardGames() {
       if (state.socket) state.socket.emit("board.zoleCancelLobby");
       zole3pLobbySnapshot = null;
       document.getElementById("board-zole-3p-lobby")?.classList.add("hidden");
+      syncBoardDambreteModePanelVisibility();
     });
   if (resignBtn)
     resignBtn.addEventListener("click", () => {
@@ -10157,14 +10199,25 @@ function bindBoardGames() {
       if (target && state.socket) {
         showBoardModal();
         if (inviteUsername) inviteUsername.value = target;
-        state.socket.emit("board.invite", {
-          target,
-          type: "zole",
-          zoleMode: "online_3p",
-        });
-        document.getElementById("board-invite-pending")?.classList.remove("hidden");
+        appendSystemMessage(
+          "Zolei ar 3 cilvēkiem: spied «Izveidot zoles istabu», tad «Zole» ar šo vārdu formā."
+        );
       }
     });
+  document.querySelectorAll(".js-zole-create-lobby").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (!state.socket) return;
+      state.socket.emit("board.zoleCreateLobby");
+    });
+  });
+  document
+    .getElementById("board-zole-3p-leave-lobby")
+    ?.addEventListener("click", () => {
+      if (state.socket) state.socket.emit("board.zoleLeaveLobby");
+    });
+  document.querySelectorAll('input[name="board-zole-mode"]').forEach((el) => {
+    el.addEventListener("change", () => syncBoardDambreteModePanelVisibility());
+  });
 }
 
 // ==================== ČATS: SŪTĪŠANA + SEZONAS KOMANDA ====================

@@ -699,15 +699,92 @@ function parseZoleModeFromPayload(payload) {
   return "online_2p";
 }
 
-/** Gaida trešo spēlētāju pēc tam, kad divi ir pieņēmuši zoles aicinājumu */
-const zole3pLobbyByKey = new Map();
-/** username -> lobbyKey (challenger\0opponent pēc servera lietotājvārdiem) */
+/** Zoles 3p istaba: id -> { id, host, players[], expiresAt } */
+const zole3pLobbyById = new Map();
+/** username -> lobbyId */
 const userToZole3pLobby = new Map();
-/** Trešā spēlētāja aicinājuma ID -> { lkey, thirdUsername } */
-const zole3pThirdInviteById = new Map();
+/** Aicinājuma ID uz istabas vietu -> { lobbyId, inviteeUsername } */
+const zole3pSeatInviteById = new Map();
 
-function zole3pLobbyKey(challenger, opponent) {
-  return `${String(challenger || "")}\0${String(opponent || "")}`;
+const ZOLE_3P_LOBBY_TTL_MS = 30 * 60 * 1000;
+
+function zole3pLobbyPayload(lobby) {
+  if (!lobby) return null;
+  return {
+    zoleLobby: true,
+    lobbyId: lobby.id,
+    host: lobby.host,
+    players: lobby.players.slice(),
+    needThird: lobby.players.length < 3,
+    invitedThird: lobby.invitedSeat || null,
+  };
+}
+
+function removeUserFromZole3pLobby(lobbyId, username) {
+  const lobby = zole3pLobbyById.get(lobbyId);
+  if (!lobby) return;
+  const u = String(username || "");
+  lobby.players = lobby.players.filter(
+    (p) => String(p).toLowerCase() !== u.toLowerCase()
+  );
+  userToZole3pLobby.delete(u);
+  if (
+    lobby.invitedSeat &&
+    String(lobby.invitedSeat).toLowerCase() === u.toLowerCase()
+  ) {
+    lobby.invitedSeat = null;
+  }
+  const delInv = [];
+  for (const [id, meta] of zole3pSeatInviteById.entries()) {
+    if (meta.lobbyId !== lobbyId) continue;
+    if (
+      String(meta.inviteeUsername || "").toLowerCase() === u.toLowerCase()
+    ) {
+      delInv.push(id);
+    }
+  }
+  for (const id of delInv) zole3pSeatInviteById.delete(id);
+  if (lobby.players.length === 0) {
+    clearZole3pLobby(lobbyId, false);
+    return;
+  }
+  if (
+    lobby.host &&
+    !lobby.players.some(
+      (p) => String(p).toLowerCase() === String(lobby.host).toLowerCase()
+    )
+  ) {
+    lobby.host = lobby.players[0];
+  }
+}
+
+function maybeStartZole3pFromLobby(io, lobby) {
+  if (!lobby || lobby.players.length !== 3) return false;
+  const [p1, p2, p3] = lobby.players;
+  const lid = lobby.id;
+  clearZole3pLobby(lid, false);
+  const game = createZoleOnline3pGame(p1, p2, p3);
+  const room = `board:${game.id}`;
+  for (const p of game.players) {
+    getSocketByUsername(p)?.join(room);
+  }
+  const base = {
+    gameId: game.id,
+    type: "zole",
+    players: game.players,
+    turn: game.turn,
+    status: game.status,
+    vsBot: false,
+    zoleMode: "online_3p",
+  };
+  for (let i = 0; i < game.players.length; i++) {
+    getSocketByUsername(game.players[i])?.emit("board.start", {
+      ...base,
+      zole: zolePublicSnapshot(game.zole, i),
+    });
+  }
+  setImmediate(() => playZoleBotBids(io, game));
+  return true;
 }
 
 function boardInvitePairKey(a, b) {
@@ -1011,33 +1088,61 @@ function createZoleOnline3pGame(usernameA, usernameB, usernameC) {
   return game;
 }
 
-function notifyZole3pLobbyPeers(lkey, event, payload) {
-  const lobby = zole3pLobbyByKey.get(lkey);
+function notifyZole3pLobbyPeers(lobbyId, event, payload) {
+  const lobby = zole3pLobbyById.get(lobbyId);
   if (!lobby) return;
   for (const p of lobby.players || []) {
     getSocketByUsername(p)?.emit(event, payload);
   }
 }
 
-function clearZole3pLobby(lkey, notifyCancel) {
-  const lobby = zole3pLobbyByKey.get(lkey);
+function zole3pClearInvitedSeatIfUser(username) {
+  const u = String(username || "").toLowerCase();
+  if (!u) return;
+  for (const lobby of zole3pLobbyById.values()) {
+    if (
+      lobby.invitedSeat &&
+      String(lobby.invitedSeat).toLowerCase() === u
+    ) {
+      lobby.invitedSeat = null;
+      const toDel = [];
+      for (const [id, meta] of zole3pSeatInviteById.entries()) {
+        if (
+          meta.lobbyId === lobby.id &&
+          String(meta.inviteeUsername || "").toLowerCase() === u
+        ) {
+          toDel.push(id);
+        }
+      }
+      for (const id of toDel) zole3pSeatInviteById.delete(id);
+      notifyZole3pLobbyPeers(
+        lobby.id,
+        "board.zoleLobby",
+        zole3pLobbyPayload(lobby)
+      );
+    }
+  }
+}
+
+function clearZole3pLobby(lobbyId, notifyCancel) {
+  const lobby = zole3pLobbyById.get(lobbyId);
   if (!lobby) return;
   if (notifyCancel) {
-    notifyZole3pLobbyPeers(lkey, "board.zoleLobby", {
+    notifyZole3pLobbyPeers(lobbyId, "board.zoleLobby", {
       zoleLobby: false,
       cancelled: true,
     });
   }
   const toDel = [];
-  for (const [id, meta] of zole3pThirdInviteById.entries()) {
-    if (meta.lkey === lkey) toDel.push(id);
+  for (const [id, meta] of zole3pSeatInviteById.entries()) {
+    if (meta.lobbyId === lobbyId) toDel.push(id);
   }
-  for (const id of toDel) zole3pThirdInviteById.delete(id);
+  for (const id of toDel) zole3pSeatInviteById.delete(id);
   for (const p of lobby.players || []) {
     if (p) userToZole3pLobby.delete(p);
   }
-  if (lobby.invitedThird) userToZole3pLobby.delete(lobby.invitedThird);
-  zole3pLobbyByKey.delete(lkey);
+  if (lobby.invitedSeat) userToZole3pLobby.delete(lobby.invitedSeat);
+  zole3pLobbyById.delete(lobbyId);
 }
 
 function emitZoleToHumans(io, game, event, base) {
@@ -11978,39 +12083,66 @@ io.on("connection", (socket) => {
     });
   });
 
+  socket.on("board.zoleCreateLobby", () => {
+    const fromUser = socket.data.user;
+    if (!fromUser) return;
+    if (userToBoardGame.has(fromUser.username))
+      return socket.emit("board.error", { message: "Tu jau esi spēlē." });
+    const existing = userToZole3pLobby.get(fromUser.username);
+    if (existing) {
+      const lob = zole3pLobbyById.get(existing);
+      if (lob) {
+        socket.emit("board.zoleLobby", zole3pLobbyPayload(lob));
+        return;
+      }
+      userToZole3pLobby.delete(fromUser.username);
+    }
+    const id = crypto.randomBytes(8).toString("hex");
+    const lobby = {
+      id,
+      host: fromUser.username,
+      players: [fromUser.username],
+      invitedSeat: null,
+      expiresAt: Date.now() + ZOLE_3P_LOBBY_TTL_MS,
+    };
+    zole3pLobbyById.set(id, lobby);
+    userToZole3pLobby.set(fromUser.username, id);
+    socket.emit("board.zoleLobby", zole3pLobbyPayload(lobby));
+  });
+
   socket.on("board.zoleInviteThird", (payload) => {
     const fromUser = socket.data.user;
     if (!fromUser) return;
     const targetName = String(
       payload?.target || payload?.username || ""
     ).trim();
-    const lkey = userToZole3pLobby.get(fromUser.username);
-    if (!lkey)
+    const lobbyId = userToZole3pLobby.get(fromUser.username);
+    if (!lobbyId)
       return socket.emit("board.error", {
-        message: "Nav aktīvas 3 spēlētāju zoles istabas.",
+        message: "Nav aktīvas zoles istabas.",
       });
-    const lobby = zole3pLobbyByKey.get(lkey);
-    if (
-      !lobby ||
-      lobby.players[0] !== fromUser.username ||
-      lobby.players.length !== 2
-    )
+    const lobby = zole3pLobbyById.get(lobbyId);
+    if (!lobby || lobby.host !== fromUser.username)
       return socket.emit("board.error", {
-        message: "Tikai istabas saimnieks var uzaicināt trešo spēlētāju.",
+        message: "Tikai istabas saimnieks var uzaicināt spēlētājus.",
+      });
+    if (lobby.players.length >= 3)
+      return socket.emit("board.error", {
+        message: "Istaba jau ir pilna (3 spēlētāji).",
       });
     if (Date.now() > (lobby.expiresAt || 0)) {
-      clearZole3pLobby(lkey, true);
+      clearZole3pLobby(lobbyId, true);
       return socket.emit("board.error", {
-        message: "Zoles istaba ir beigusies. Sāc no jauna.",
+        message: "Zoles istaba ir beigusies. Izveido jaunu.",
       });
     }
-    if (lobby.invitedThird)
+    if (lobby.invitedSeat)
       return socket.emit("board.error", {
-        message: "Trešais spēlētājs jau ir uzaicināts.",
+        message: "Jau gaidām atbildi no uzaicinātā spēlētāja.",
       });
     if (!targetName)
       return socket.emit("board.error", {
-        message: "Nav norādīts trešais spēlētājs.",
+        message: "Nav norādīts spēlētājs.",
       });
     if (
       lobby.players.some(
@@ -12034,12 +12166,12 @@ io.on("connection", (socket) => {
         message: "Spēlētājs jau gaida citā zoles istabā.",
       });
     const inviteId3 = crypto.randomBytes(6).toString("hex");
-    lobby.invitedThird = targetUser.username;
-    zole3pThirdInviteById.set(inviteId3, {
-      lkey,
-      thirdUsername: targetUser.username,
+    lobby.invitedSeat = targetUser.username;
+    zole3pSeatInviteById.set(inviteId3, {
+      lobbyId,
+      inviteeUsername: targetUser.username,
     });
-    const host = lobby.players[0];
+    const host = lobby.host;
     const ts = getSocketByUsername(targetUser.username);
     if (ts) {
       ts.emit("board.invite", {
@@ -12048,19 +12180,14 @@ io.on("connection", (socket) => {
         type: "zole",
         zoleMode: "online_3p",
         zoleThirdSeat: true,
+        zoleLobbyId: lobbyId,
         zoleLobbyPlayers: lobby.players.slice(),
       });
     }
     socket.emit("board.zoleThirdInviteSent", {
       target: targetUser.username,
     });
-    notifyZole3pLobbyPeers(lkey, "board.zoleLobby", {
-      zoleLobby: true,
-      host,
-      players: lobby.players.slice(),
-      needThird: true,
-      invitedThird: targetUser.username,
-    });
+    notifyZole3pLobbyPeers(lobbyId, "board.zoleLobby", zole3pLobbyPayload(lobby));
   });
 
   socket.on("board.zoleAcceptThird", (payload) => {
@@ -12068,63 +12195,73 @@ io.on("connection", (socket) => {
     if (!user) return;
     const inviteId = String(payload?.inviteId || "").trim();
     const fromHost = String(payload?.from || "").trim();
+    const lobbyIdFromClient = String(payload?.lobbyId || "").trim();
     if (!inviteId || !fromHost)
       return socket.emit("board.error", { message: "Nederīgs aicinājums." });
-    const meta = zole3pThirdInviteById.get(inviteId);
+    const meta = zole3pSeatInviteById.get(inviteId);
     if (
       !meta ||
-      String(meta.thirdUsername || "").toLowerCase() !==
+      String(meta.inviteeUsername || "").toLowerCase() !==
         String(user.username).toLowerCase()
     )
       return socket.emit("board.error", {
         message: "Aicinājums nav derīgs.",
       });
-    const lobby = zole3pLobbyByKey.get(meta.lkey);
+    const lobby = zole3pLobbyById.get(meta.lobbyId);
     if (
       !lobby ||
-      lobby.players[0] !== fromHost ||
-      lobby.invitedThird !== user.username
+      lobby.host !== fromHost ||
+      lobby.invitedSeat !== user.username ||
+      (lobbyIdFromClient && lobby.id !== lobbyIdFromClient)
     ) {
-      zole3pThirdInviteById.delete(inviteId);
+      zole3pSeatInviteById.delete(inviteId);
       return socket.emit("board.error", {
         message: "Zoles istaba vairs nav derīga.",
       });
     }
     if (userToBoardGame.has(user.username))
       return socket.emit("board.error", { message: "Tu jau esi spēlē." });
-    zole3pThirdInviteById.delete(inviteId);
-    const [p1, p2] = lobby.players;
-    clearZole3pLobby(meta.lkey);
-    const game = createZoleOnline3pGame(p1, p2, user.username);
-    const room = `board:${game.id}`;
-    for (const p of game.players) {
-      getSocketByUsername(p)?.join(room);
-    }
-    const base = {
-      gameId: game.id,
-      type: "zole",
-      players: game.players,
-      turn: game.turn,
-      status: game.status,
-      vsBot: false,
-      zoleMode: "online_3p",
-    };
-    for (let i = 0; i < game.players.length; i++) {
-      getSocketByUsername(game.players[i])?.emit("board.start", {
-        ...base,
-        zole: zolePublicSnapshot(game.zole, i),
+    if (lobby.players.length >= 3) {
+      zole3pSeatInviteById.delete(inviteId);
+      return socket.emit("board.error", {
+        message: "Istaba jau ir pilna.",
       });
     }
+    zole3pSeatInviteById.delete(inviteId);
+    lobby.invitedSeat = null;
+    lobby.players.push(user.username);
+    userToZole3pLobby.set(user.username, lobby.id);
+    lobby.expiresAt = Date.now() + ZOLE_3P_LOBBY_TTL_MS;
+    notifyZole3pLobbyPeers(lobby.id, "board.zoleLobby", zole3pLobbyPayload(lobby));
+    maybeStartZole3pFromLobby(io, lobby);
   });
 
   socket.on("board.zoleCancelLobby", () => {
     const fromUser = socket.data.user;
     if (!fromUser) return;
-    const lkey = userToZole3pLobby.get(fromUser.username);
-    if (!lkey) return;
-    const lobby = zole3pLobbyByKey.get(lkey);
-    if (!lobby || lobby.players[0] !== fromUser.username) return;
-    clearZole3pLobby(lkey, true);
+    const lobbyId = userToZole3pLobby.get(fromUser.username);
+    if (!lobbyId) return;
+    const lobby = zole3pLobbyById.get(lobbyId);
+    if (!lobby || lobby.host !== fromUser.username) return;
+    clearZole3pLobby(lobbyId, true);
+  });
+
+  socket.on("board.zoleLeaveLobby", () => {
+    const fromUser = socket.data.user;
+    if (!fromUser) return;
+    const lobbyId = userToZole3pLobby.get(fromUser.username);
+    if (!lobbyId) return;
+    const lobby = zole3pLobbyById.get(lobbyId);
+    if (!lobby) return;
+    if (lobby.host === fromUser.username) {
+      clearZole3pLobby(lobbyId, true);
+      return;
+    }
+    removeUserFromZole3pLobby(lobbyId, fromUser.username);
+    const lob2 = zole3pLobbyById.get(lobbyId);
+    if (lob2) {
+      notifyZole3pLobbyPeers(lobbyId, "board.zoleLobby", zole3pLobbyPayload(lob2));
+    }
   });
 
   socket.on("board.zoleDeclineThird", (payload) => {
@@ -12132,26 +12269,19 @@ io.on("connection", (socket) => {
     if (!user) return;
     const inviteId = String(payload?.inviteId || "").trim();
     if (!inviteId) return;
-    const meta = zole3pThirdInviteById.get(inviteId);
+    const meta = zole3pSeatInviteById.get(inviteId);
     if (
       !meta ||
-      String(meta.thirdUsername || "").toLowerCase() !==
+      String(meta.inviteeUsername || "").toLowerCase() !==
         String(user.username).toLowerCase()
     )
       return;
-    zole3pThirdInviteById.delete(inviteId);
-    const lobby = zole3pLobbyByKey.get(meta.lkey);
-    if (lobby && lobby.invitedThird === user.username)
-      lobby.invitedThird = null;
-    const host = lobby?.players?.[0];
+    zole3pSeatInviteById.delete(inviteId);
+    const lobby = zole3pLobbyById.get(meta.lobbyId);
+    if (lobby && lobby.invitedSeat === user.username) lobby.invitedSeat = null;
+    const host = lobby?.host;
     if (lobby && host) {
-      notifyZole3pLobbyPeers(meta.lkey, "board.zoleLobby", {
-        zoleLobby: true,
-        host,
-        players: lobby.players.slice(),
-        needThird: true,
-        invitedThird: null,
-      });
+      notifyZole3pLobbyPeers(meta.lobbyId, "board.zoleLobby", zole3pLobbyPayload(lobby));
     }
   });
 
@@ -12202,23 +12332,38 @@ io.on("connection", (socket) => {
     if (gameType === "zole") {
       const zm = pendingVar?.zoleMode || "online_2p";
       if (zm === "online_3p") {
-        const lkey = zole3pLobbyKey(challengerName, opponentName);
-        zole3pLobbyByKey.set(lkey, {
-          players: [challengerName, opponentName],
-          invitedThird: null,
-          expiresAt: Date.now() + BOARD_GAME_INVITE_TIMEOUT_MS,
+        const lobbyId = userToZole3pLobby.get(challengerName);
+        const lobby = lobbyId ? zole3pLobbyById.get(lobbyId) : null;
+        if (
+          lobby &&
+          lobby.host === challengerName &&
+          lobby.players.length < 3 &&
+          !lobby.players.some(
+            (p) =>
+              String(p).toLowerCase() === String(opponentName).toLowerCase()
+          )
+        ) {
+          if (Date.now() > (lobby.expiresAt || 0)) {
+            clearZole3pLobby(lobbyId, true);
+            return socket.emit("board.error", {
+              message: "Zoles istaba ir beigusies. Lūdzu, izveido jaunu.",
+            });
+          }
+          lobby.players.push(opponentName);
+          userToZole3pLobby.set(opponentName, lobby.id);
+          lobby.expiresAt = Date.now() + ZOLE_3P_LOBBY_TTL_MS;
+          notifyZole3pLobbyPeers(
+            lobby.id,
+            "board.zoleLobby",
+            zole3pLobbyPayload(lobby)
+          );
+          if (maybeStartZole3pFromLobby(io, lobby)) return;
+          return;
+        }
+        return socket.emit("board.error", {
+          message:
+            "Saimniekam vispirms jāizveido zoles istaba (3 spēlētāji). Atver Galdu → Zole → «Izveidot istabu».",
         });
-        userToZole3pLobby.set(challengerName, lkey);
-        userToZole3pLobby.set(opponentName, lkey);
-        const waitPayload = {
-          zoleLobby: true,
-          host: challengerName,
-          players: [challengerName, opponentName],
-          needThird: true,
-        };
-        getSocketByUsername(challengerName)?.emit("board.zoleLobby", waitPayload);
-        getSocketByUsername(opponentName)?.emit("board.zoleLobby", waitPayload);
-        return;
       }
       game = createZoleOnline2pGame(challengerName, opponentName);
     } else if (gameType === "chess") {
@@ -12691,8 +12836,20 @@ io.on("connection", (socket) => {
       const u2 = socket.data.user;
       const uname2 = u2 && u2.username ? u2.username : null;
       if (uname2) {
-        const lk = userToZole3pLobby.get(uname2);
-        if (lk) clearZole3pLobby(lk, true);
+        zole3pClearInvitedSeatIfUser(uname2);
+        const lid = userToZole3pLobby.get(uname2);
+        if (lid) {
+          const lob = zole3pLobbyById.get(lid);
+          if (lob && lob.host === uname2) {
+            clearZole3pLobby(lid, true);
+          } else if (lob) {
+            removeUserFromZole3pLobby(lid, uname2);
+            const lob2 = zole3pLobbyById.get(lid);
+            if (lob2) {
+              notifyZole3pLobbyPeers(lid, "board.zoleLobby", zole3pLobbyPayload(lob2));
+            }
+          }
+        }
       }
     } catch {}
   });

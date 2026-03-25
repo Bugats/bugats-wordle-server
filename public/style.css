@@ -6225,6 +6225,13 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   gap: 8px;
   margin-top: 8px;
 }
+.vz-board-zole-3p-entry {
+  margin: 10px 0 4px;
+}
+.vz-board-zole-3p-entry .vz-board-invite-btn {
+  width: 100%;
+  max-width: 100%;
+}
 
 .vz-profile-board-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 .vz-profile-invite-board {
