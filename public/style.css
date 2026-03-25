@@ -5103,7 +5103,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   margin-top: 0;
   padding-top: 6px;
   position: relative;
-  z-index: 2;
+  z-index: auto;
 }
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-hand,
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-bid,
@@ -5907,6 +5907,17 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   align-items: flex-end;
   gap: 22px 26px;
   perspective: 900px;
+}
+/* Duel skats: taisns stiķis, bez 3D — mazāk «slīps» un pārklāšanās */
+.vz-zole-arena .vz-zole-trick-fan {
+  perspective: none;
+}
+.vz-zole-arena .vz-zole-trick-seat {
+  transform: none;
+  min-width: 96px;
+}
+.vz-zole-arena .vz-zole-trick-card-area .vz-zole-playing-card--table {
+  transform: none;
 }
 .vz-zole-trick-seat {
   display: flex;

@@ -594,7 +594,8 @@
       col.className =
         "vz-zole-trick-seat" + (frozen ? " vz-zole-trick-seat--frozen" : "");
       col.dataset.zoleSeat = String(seat);
-      col.style.setProperty("--seat-tilt", `${(i - 1) * 7}deg`);
+      /* Bez slīpuma — uz maza ekrāna rotācija rada pārklāšanos ar roku */
+      col.style.setProperty("--seat-tilt", "0deg");
       const t = trickRows[i];
       const head = document.createElement("div");
       head.className = "vz-zole-trick-seat-head";
