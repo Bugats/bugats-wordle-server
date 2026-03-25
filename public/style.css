@@ -5488,7 +5488,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 .vz-zole-arena .vz-zole-table-felt {
   flex: 1;
-  min-height: min(52vh, 340px);
+  min-height: min(62vh, 420px);
   margin-bottom: 0;
 }
 .vz-zole-meta {
@@ -5748,24 +5748,26 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 /* Zoles galds (filcs) — kārtis „uz galda” izspēles secībā */
 .vz-zole-table-felt {
   margin: 0 0 16px;
-  padding: 22px 16px 26px;
-  border-radius: 16px;
+  padding: 28px 18px 32px;
+  border-radius: 18px;
   background:
-    radial-gradient(ellipse 120% 80% at 50% 30%, rgba(45, 95, 55, 0.55), transparent 55%),
-    linear-gradient(165deg, #1e4d2b 0%, #0f3d22 45%, #0a2e18 100%);
-  border: 1px solid rgba(0, 0, 0, 0.35);
+    radial-gradient(ellipse 130% 90% at 50% 28%, rgba(72, 145, 85, 0.5), transparent 58%),
+    radial-gradient(ellipse 90% 70% at 70% 85%, rgba(20, 70, 40, 0.45), transparent 50%),
+    linear-gradient(165deg, #247038 0%, #155a2a 38%, #0d4a24 72%, #083a1c 100%);
+  border: 1px solid rgba(0, 0, 0, 0.4);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 4px 14px rgba(0, 0, 0, 0.35);
-  min-height: 280px;
+    inset 0 2px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -8px 24px rgba(0, 0, 0, 0.18),
+    0 6px 22px rgba(0, 0, 0, 0.4);
+  min-height: 320px;
 }
 .vz-zole-table-caption {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.5);
-  margin-bottom: 14px;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 18px;
   text-align: center;
 }
 .vz-zole-table-hint {
@@ -5780,15 +5782,15 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex-wrap: wrap;
   justify-content: center;
   align-items: flex-end;
-  gap: 18px 22px;
+  gap: 22px 26px;
   perspective: 900px;
 }
 .vz-zole-trick-seat {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  min-width: 104px;
+  gap: 12px;
+  min-width: 112px;
   transform: rotate(var(--seat-tilt, 0deg));
   border-radius: 12px;
   padding: 6px 4px 8px;
@@ -5830,9 +5832,9 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 .vz-zole-trick-placeholder {
   box-sizing: border-box;
-  width: 88px;
-  height: 124px;
-  border-radius: 10px;
+  width: 98px;
+  height: 138px;
+  border-radius: 11px;
   border: 2px dashed rgba(255, 255, 255, 0.22);
   background: rgba(0, 0, 0, 0.12);
   display: flex;
@@ -5845,19 +5847,19 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding: 8px;
 }
 .vz-zole-playing-card--table {
-  width: 88px;
-  height: 124px;
-  border-radius: 10px;
-  font-size: 13px;
+  width: 98px;
+  height: 138px;
+  border-radius: 11px;
+  font-size: 14px;
   box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.45),
-    0 1px 0 rgba(255, 255, 255, 0.9) inset;
+    0 3px 10px rgba(0, 0, 0, 0.48),
+    0 1px 0 rgba(255, 255, 255, 0.92) inset;
 }
 .vz-zole-playing-card--table .vz-zole-pc-corner {
-  font-size: 13px;
+  font-size: 14px;
 }
 .vz-zole-playing-card--table .vz-zole-pc-center {
-  font-size: 42px;
+  font-size: 46px;
 }
 .vz-zole-playing-card--table.vz-zole-playing-card--trump {
   box-shadow:
