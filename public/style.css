@@ -5054,13 +5054,6 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-zole-arena--play {
   margin-bottom: 0;
 }
-.vz-zole-arena--play .vz-zole-table-felt {
-  flex: 0 1 auto;
-  min-height: 0;
-  max-height: min(44vh, 300px);
-  margin-bottom: 8px;
-  overflow: hidden;
-}
 @media (max-width: 520px) {
   .vz-zole-play-layout {
     flex-direction: column;
@@ -5074,7 +5067,6 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     max-height: none;
   }
   .vz-zole-arena--play .vz-zole-table-felt {
-    max-height: min(40vh, 260px);
     padding: 14px 10px 16px;
   }
   .vz-zole-arena--play .vz-zole-table-caption {
@@ -5119,9 +5111,6 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   }
   .vz-zole-arena--play .vz-zole-playing-card--table .vz-zole-pc-center {
     font-size: 34px;
-  }
-  .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-arena .vz-zole-table-felt {
-    max-height: min(40vh, 260px);
   }
 }
 .vz-board-modal--fullscreen #board-zole-container:not(.hidden) {
@@ -5203,17 +5192,11 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-duel-row {
   flex-shrink: 0;
 }
-.vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-arena .vz-zole-table-felt {
-  min-height: 0;
-}
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-table-felt {
-  flex: 0 1 auto;
-  min-height: 0;
-  max-height: min(44vh, 300px);
+  flex: 1 1 auto;
   margin-bottom: 8px;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-play-side {
   max-height: min(70vh, 520px);
@@ -5777,7 +5760,8 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   width: 44px !important;
   height: 44px !important;
 }
-.vz-zole-arena .vz-zole-table-felt {
+/* Lielais filcs tikai ārpus «play» arēnas (likšana / norakšana / beigas) */
+.vz-zole-arena:not(.vz-zole-arena--play) .vz-zole-table-felt {
   flex: 1;
   min-height: min(62vh, 420px);
   margin-bottom: 0;
@@ -6051,6 +6035,21 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     inset 0 -8px 24px rgba(0, 0, 0, 0.18),
     0 6px 22px rgba(0, 0, 0, 0.4);
   min-height: 320px;
+}
+/* Kārtu likšana: vienkāršs, konsekvents augstums (bez vecā 62vh vs 300px konflikta) */
+.vz-zole-arena--play .vz-zole-table-felt {
+  flex: 1 1 auto;
+  min-height: clamp(240px, 42vh, 440px);
+  max-height: min(58vh, 520px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 520px) {
+  .vz-zole-arena--play .vz-zole-table-felt {
+    min-height: clamp(200px, 36vh, 380px);
+    max-height: min(52vh, 420px);
+  }
 }
 .vz-zole-table-caption {
   font-size: 14px;
