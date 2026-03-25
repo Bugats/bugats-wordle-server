@@ -902,18 +902,17 @@
         scoresLine.innerHTML =
           `<strong>Lācis</strong> ${esc(zole.trumpLabel)} · <strong>Stiķī tagad</strong> ${esc(String(cte))} acis · <strong>Kopā</strong> ${eyes.map((e) => esc(String(e))).join(" · ")} · <strong>Stiķi</strong> ${tricks.map((t) => esc(String(t))).join(" · ")}`;
       }
+      const extrasPart = existingWrap.querySelector(".vz-zole-fs-extras");
       const metaPart = existingWrap.querySelector(".vz-zole-meta");
+      const ptHost = extrasPart || metaPart;
       const ptExisting = existingWrap.querySelector(".vz-zole-points-table-wrap");
-      if (metaPart) {
+      if (ptHost) {
         if (!ptExisting) {
-          const barEl = metaPart.querySelector(".vz-zole-compact-bar");
+          const barEl = ptHost.querySelector(".vz-zole-compact-bar");
           if (barEl) {
-            metaPart.insertBefore(
-              buildZolePointsTable(zole, myIdx),
-              barEl.nextSibling
-            );
+            ptHost.insertBefore(buildZolePointsTable(zole, myIdx), barEl.nextSibling);
           } else {
-            metaPart.insertBefore(buildZolePointsTable(zole, myIdx), metaPart.firstChild);
+            ptHost.insertBefore(buildZolePointsTable(zole, myIdx), ptHost.firstChild);
           }
         } else {
           syncZolePointsTable(ptExisting, zole, myIdx);
@@ -980,9 +979,14 @@
       wrap.dataset.zoleStableSig = stableSig;
     }
 
+    const isPlayFs = zole.phase === "play";
     const meta = document.createElement("div");
     meta.className =
-      "vz-zole-meta" + (zole.phase === "play" ? " vz-zole-fs-toolbar" : "");
+      "vz-zole-meta" + (isPlayFs ? " vz-zole-fs-toolbar vz-zole-meta--play-top" : "");
+    const metaExtras = isPlayFs ? document.createElement("div") : null;
+    if (metaExtras) {
+      metaExtras.className = "vz-zole-meta vz-zole-fs-extras";
+    }
     const eyes = zole.eyePoints || [0, 0, 0];
     const tricks = zole.tricksWon || [0, 0, 0];
     const cte =
@@ -1005,10 +1009,21 @@
       body.textContent = zole.trumpNote;
       det.appendChild(sum);
       det.appendChild(body);
-      bar.appendChild(det);
+      if (isPlayFs && metaExtras) {
+        const bar2 = document.createElement("div");
+        bar2.className = "vz-zole-compact-bar vz-zole-compact-bar--extras";
+        bar2.appendChild(det);
+        metaExtras.appendChild(bar2);
+      } else {
+        bar.appendChild(det);
+      }
     }
     meta.appendChild(bar);
-    meta.appendChild(buildZolePointsTable(zole, myIdx));
+    if (isPlayFs && metaExtras) {
+      metaExtras.appendChild(buildZolePointsTable(zole, myIdx));
+    } else {
+      meta.appendChild(buildZolePointsTable(zole, myIdx));
+    }
 
     const showClassicAvRow =
       mountPlayerAvatar &&
@@ -1069,7 +1084,8 @@
             : "—";
         cEl.textContent = `Līgums: ${contractLabel(c)} — ${esc(who)}`;
       }
-      meta.appendChild(cEl);
+      if (isPlayFs && metaExtras) metaExtras.appendChild(cEl);
+      else meta.appendChild(cEl);
     }
 
     const turnLine = document.createElement("div");
@@ -1110,6 +1126,7 @@
 
     if (zole.players && zole.players.length === 3 && zole.phase === "play") {
       appendZoleArena(wrap, zole, myIdx, mountPlayerAvatar);
+      if (metaExtras) wrap.appendChild(metaExtras);
     } else {
       wrap.appendChild(renderZoleTableFelt(zole, mountPlayerAvatar));
     }

@@ -9618,7 +9618,10 @@ function hideBoardGameArea() {
   }
   const gameArea = document.getElementById("board-game-area");
   const modal = document.getElementById("board-games-modal");
-  if (gameArea) gameArea.classList.add("hidden");
+  if (gameArea) {
+    gameArea.classList.add("hidden");
+    gameArea.classList.remove("vz-board-zole-play");
+  }
   if (modal) modal.classList.add("hidden");
   if (modal) modal.classList.remove("vz-board-modal--fullscreen");
   updateBoardGameBadge(false);
@@ -9662,6 +9665,12 @@ function renderBoardGame() {
   const dambreteContainer = document.getElementById("board-dambrete-container");
   const chessContainer = document.getElementById("board-chess-container");
   const zoleContainer = document.getElementById("board-zole-container");
+  const gameAreaEl = document.getElementById("board-game-area");
+  if (gameAreaEl) {
+    const zPlay =
+      boardState.type === "zole" && boardState.zole?.phase === "play";
+    gameAreaEl.classList.toggle("vz-board-zole-play", zPlay);
+  }
   if (typeEl) {
     if (boardState.type === "chess") typeEl.textContent = "♔ Šahs";
     else if (boardState.type === "zole") typeEl.textContent = "🃏 Zole";
@@ -9733,6 +9742,9 @@ function renderBoardGame() {
           boardState.zoleMode === "vs_bot"
             ? "Šīs partijas punkti zemāk; «Kopā mačā» — uzkrātā tabula. Drīz sāksies nākamā partija (var pamest ar Atkāpties)."
             : "Skaties tabulas punktus zemāk. Uzvarētājs pēc spēles — labākais +/− šajā partijā.";
+      } else if (boardState.zole?.phase === "play") {
+        hintEl.textContent =
+          "Sekšana un punkti — zem zaļā galda («Sekšana · trumpji», tabula).";
       } else {
         const c = boardState.zole?.contract;
         let galHint = " Uzvara ar 61+ acīm, ja esi lielais / zole.";

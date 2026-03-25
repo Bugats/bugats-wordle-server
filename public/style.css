@@ -5010,6 +5010,14 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-modal--fullscreen .vz-board-game-hint {
   flex-shrink: 0;
 }
+/* Zole spēle: īss padoms augšā — garo tekstu rāda zem galda */
+.vz-board-game-area.vz-board-zole-play .vz-board-game-hint {
+  font-size: 11px;
+  line-height: 1.35;
+  margin: 0 0 6px;
+  max-height: 2.8em;
+  overflow: hidden;
+}
 .vz-board-modal--fullscreen #board-zole-container:not(.hidden) {
   flex: 1 1 auto;
   min-height: 0;
@@ -5030,11 +5038,51 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-modal--fullscreen .vz-zole-fs-toolbar {
   flex-shrink: 0;
 }
+.vz-zole-meta--play-top {
+  margin-bottom: 6px;
+}
+.vz-zole-meta--play-top .vz-zole-compact-bar {
+  margin-bottom: 4px;
+}
+.vz-zole-meta--play-top .vz-zole-turn {
+  margin-top: 2px;
+  margin-bottom: 0;
+  font-size: 12px;
+}
+/* Punkti + līgums + sekšana — zem galda, ne virs */
+.vz-zole-fs-extras {
+  flex-shrink: 0;
+  max-height: min(32vh, 220px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 6px 0 4px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.vz-zole-fs-extras .vz-zole-contract {
+  margin-top: 4px;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+.vz-zole-compact-bar--extras {
+  margin-bottom: 6px;
+}
+.vz-zole-fs-extras .vz-zole-points-table-wrap {
+  margin: 6px 0 8px;
+  padding: 8px 10px;
+}
+.vz-zole-fs-extras .vz-zole-points-table {
+  font-size: 12px;
+}
+.vz-zole-fs-extras .vz-zole-points-table th,
+.vz-zole-fs-extras .vz-zole-points-table td {
+  padding: 5px 6px 5px 0;
+}
 /* Spēle: arena dabīgs augstums + vajadzības gadījumā ritina — ne «izstiepjas» pāri rokai */
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-arena {
   flex: 0 1 auto;
   min-height: 0;
-  max-height: min(58vh, 480px);
+  max-height: min(64vh, 520px);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   display: flex;
