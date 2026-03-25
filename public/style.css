@@ -4972,7 +4972,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   -webkit-overflow-scrolling: touch;
 }
 .vz-board-modal.hidden { display: none !important; }
-/* Zole: pilns ekrāns (aktīvā spēle) */
+/* Zole: pilns ekrāns tikai kārtu likšanas fāzē (game.js pievieno klasi) */
 .vz-board-modal--fullscreen {
   align-items: stretch;
   justify-content: stretch;

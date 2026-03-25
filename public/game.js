@@ -9605,8 +9605,13 @@ function syncBoardModalFullscreen() {
     modal.classList.remove("vz-board-modal--fullscreen");
     return;
   }
-  /* Pilns ekrāns visam Galda logam: lobijs, uzaicinājums, dambrete/šahs/zole. */
-  modal.classList.add("vz-board-modal--fullscreen");
+  /* Pilnekrāns tikai Zoles kārtu likšanai — pārējais (lobijs, likšana, dambrete, šahs) paliek parastajā modālī. */
+  const zolePlay =
+    boardState.gameId &&
+    boardState.type === "zole" &&
+    boardState.zole &&
+    boardState.zole.phase === "play";
+  modal.classList.toggle("vz-board-modal--fullscreen", !!zolePlay);
 }
 
 function hideBoardGameArea() {
