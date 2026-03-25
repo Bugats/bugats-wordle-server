@@ -5004,6 +5004,9 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   margin-top: 0;
   overflow: hidden;
 }
+.vz-board-modal--fullscreen .vz-board-game-area.vz-board-zole-play {
+  min-height: 0;
+}
 .vz-board-modal--fullscreen .vz-board-game-header {
   flex-shrink: 0;
 }
@@ -5052,7 +5055,11 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   margin-bottom: 0;
 }
 .vz-zole-arena--play .vz-zole-table-felt {
-  min-height: min(52vh, 360px);
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(44vh, 300px);
+  margin-bottom: 8px;
+  overflow: hidden;
 }
 @media (max-width: 520px) {
   .vz-zole-play-layout {
@@ -5065,6 +5072,56 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     width: 100%;
     order: -1;
     max-height: none;
+  }
+  .vz-zole-arena--play .vz-zole-table-felt {
+    max-height: min(40vh, 260px);
+    padding: 14px 10px 16px;
+  }
+  .vz-zole-arena--play .vz-zole-table-caption {
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+  .vz-zole-arena--play .vz-zole-trick-fan {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .vz-zole-arena--play .vz-zole-trick-seat {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    padding: 6px 8px;
+  }
+  .vz-zole-arena--play .vz-zole-trick-seat-head {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+  .vz-zole-arena--play .vz-zole-trick-seat-name {
+    max-width: none;
+    text-align: left;
+    font-size: 12px;
+  }
+  .vz-zole-arena--play .vz-zole-trick-placeholder {
+    width: 72px;
+    height: 100px;
+    font-size: 10px;
+  }
+  .vz-zole-arena--play .vz-zole-playing-card--table {
+    width: 72px;
+    height: 100px;
+  }
+  .vz-zole-arena--play .vz-zole-playing-card--table .vz-zole-pc-center {
+    font-size: 34px;
+  }
+  .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-arena .vz-zole-table-felt {
+    max-height: min(40vh, 260px);
   }
 }
 .vz-board-modal--fullscreen #board-zole-container:not(.hidden) {
@@ -5150,11 +5207,13 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   min-height: 0;
 }
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-table-felt {
-  flex: 1 1 auto;
-  min-height: min(32vh, 220px);
-  margin-bottom: 0;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(44vh, 300px);
+  margin-bottom: 8px;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-play-side {
   max-height: min(70vh, 520px);
@@ -5307,6 +5366,16 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   -webkit-overflow-scrolling: touch;
   width: 100%;
   position: relative;
+}
+/* Zole: laukumam stabila kolonna, lai scroll/notek neapaug uz roku */
+.vz-board-modal-inner:has(#board-zole-container:not(.hidden)) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.vz-board-modal-inner:has(#board-zole-container:not(.hidden)) #board-game-area {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .vz-board-modal-inner .vz-duel-x {
   position: absolute;
@@ -5481,6 +5550,23 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-invite-actions button:last-child { background: rgba(255,255,255,0.15); color: #fff; }
 .vz-board-game-area { margin-top: 16px; }
 .vz-board-container { overflow: visible; }
+/* Zole play: laukumam jāvar saritināties — lai roka neuzlīž pāri galdam */
+.vz-board-game-area.vz-board-zole-play {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.vz-board-game-area.vz-board-zole-play #board-zole-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+}
 .vz-board-game-header {
   display: flex;
   align-items: center;
@@ -5564,6 +5650,20 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-zole-hand {
   margin-top: -18px;
   padding-top: 2px;
+}
+/* Kārtu likšana: roka nedrīkst «vilkties» zem filca — novērš pārklāšanos */
+.vz-zole-wrap--fs-play .vz-zole-hand {
+  margin-top: 0;
+  padding-top: 14px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 3;
+  background: linear-gradient(
+    180deg,
+    transparent 0,
+    rgba(12, 10, 22, 0.92) 10px,
+    rgba(12, 10, 22, 0.98) 100%
+  );
 }
 /* Augša: divi pretinieki + vidū liels galds (kā mobilajā „duel” skatā) */
 .vz-zole-arena {
