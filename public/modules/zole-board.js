@@ -894,6 +894,16 @@
       existingWrap.dataset.zoleStableSig === stableSig;
     if (canPartialUpdate) {
       existingWrap.classList.add("vz-zole-wrap--fs-play");
+      const arenaEl = existingWrap.querySelector(".vz-zole-arena");
+      const extrasEl = existingWrap.querySelector(".vz-zole-fs-extras");
+      const metaTop = existingWrap.querySelector(".vz-zole-meta--play-top");
+      const handEl0 = existingWrap.querySelector(".vz-zole-hand");
+      if (arenaEl && metaTop) {
+        existingWrap.appendChild(arenaEl);
+        if (extrasEl) existingWrap.appendChild(extrasEl);
+        existingWrap.appendChild(metaTop);
+        if (handEl0) existingWrap.appendChild(handEl0);
+      }
       const eyes = zole.eyePoints || [0, 0, 0];
       const tricks = zole.tricksWon || [0, 0, 0];
       const cte = zole.currentTrickEyes != null ? zole.currentTrickEyes : 0;
@@ -1122,12 +1132,14 @@
       turnLine.textContent = isMyTurn ? "Tava kārta (kārtis)" : `Kārta: ${esc(tName)}`;
     }
     meta.appendChild(turnLine);
-    wrap.appendChild(meta);
 
     if (zole.players && zole.players.length === 3 && zole.phase === "play") {
+      /* Vispirms zaļais galds — tad punkti / līgums; rīkjosla apakšā pirms rokas */
       appendZoleArena(wrap, zole, myIdx, mountPlayerAvatar);
       if (metaExtras) wrap.appendChild(metaExtras);
+      wrap.appendChild(meta);
     } else {
+      wrap.appendChild(meta);
       wrap.appendChild(renderZoleTableFelt(zole, mountPlayerAvatar));
     }
     syncZoleActiveTurnHighlight(wrap, zole);

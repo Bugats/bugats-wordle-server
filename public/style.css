@@ -5010,21 +5010,18 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-modal--fullscreen .vz-board-game-hint {
   flex-shrink: 0;
 }
-/* Zole spēle: īss padoms augšā — garo tekstu rāda zem galda */
+/* Zole spēle: padoms slēpts — gājiens jau zole-meta; vairāk vietas galdam */
 .vz-board-game-area.vz-board-zole-play .vz-board-game-hint {
-  font-size: 11px;
-  line-height: 1.35;
-  margin: 0 0 6px;
-  max-height: 2.8em;
-  overflow: hidden;
+  display: none;
 }
 .vz-board-modal--fullscreen #board-zole-container:not(.hidden) {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
-  -webkit-overflow-scrolling: touch;
 }
 /* Jebkura Zoles fāze pilnekrāna modālī: wrap aizpilda laukumu */
 .vz-board-modal--fullscreen #board-zole-container .vz-zole-wrap {
@@ -5049,15 +5046,12 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   margin-bottom: 0;
   font-size: 12px;
 }
-/* Punkti + līgums + sekšana — zem galda, ne virs */
+/* Punkti + līgums + sekšana — zem zaļā galda; bez atsevišķas ritināšanas */
 .vz-zole-fs-extras {
   flex-shrink: 0;
-  max-height: min(32vh, 220px);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  margin: 6px 0 4px;
-  padding-top: 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 8px 0 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 .vz-zole-fs-extras .vz-zole-contract {
   margin-top: 4px;
@@ -5078,13 +5072,11 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-zole-fs-extras .vz-zole-points-table td {
   padding: 5px 6px 5px 0;
 }
-/* Spēle: arena dabīgs augstums + vajadzības gadījumā ritina — ne «izstiepjas» pāri rokai */
+/* Arena = galds; ņem brīvo augstumu, bez iekšējās ritināšanas pāri filcam */
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-arena {
-  flex: 0 1 auto;
+  flex: 1 1 0;
   min-height: 0;
-  max-height: min(64vh, 520px);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: visible;
   display: flex;
   flex-direction: column;
 }
@@ -5095,9 +5087,9 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   min-height: 0;
 }
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-table-felt {
-  flex: 0 1 auto;
-  min-height: 0;
-  margin-bottom: 10px;
+  flex: 1 1 auto;
+  min-height: min(38vh, 260px);
+  margin-bottom: 8px;
   display: flex;
   flex-direction: column;
 }
