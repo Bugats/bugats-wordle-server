@@ -12416,7 +12416,11 @@ io.on("connection", (socket) => {
 
   socket.on("board.startVsBot", (payload) => {
     const user = socket.data.user;
-    if (!user) return;
+    if (!user) {
+      return socket.emit("board.error", {
+        message: "Nav pieslēgšanās. Atjauno lapu vai pieslēdzies vēlreiz.",
+      });
+    }
     const gameType = String(payload?.type || "dambrete").toLowerCase();
     const difficulty = String(payload?.difficulty || "medium").toLowerCase();
     const validDifficulty = ["easy", "medium", "hard"].includes(difficulty)

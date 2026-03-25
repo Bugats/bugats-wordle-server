@@ -10025,6 +10025,28 @@ async function handleDambreteCellClick(r, c, isPiece) {
   boardState.selectedCell = null;
 }
 
+function boardGamesEnsureSocketConnected() {
+  if (!state.token) {
+    appendSystemMessage(
+      "Lai spēlētu galda spēles, vispirms pieslēdzies (izraksties un ieej vēlreiz)."
+    );
+    return false;
+  }
+  if (!state.socket) {
+    appendSystemMessage(
+      "Nav servera savienojuma. Gaidi ziņu «Pieslēgts…» vai atsvaidzini lapu."
+    );
+    return false;
+  }
+  if (!state.socket.connected) {
+    appendSystemMessage(
+      "Savienojums vēl nav gatavs. Pagaidi brīdi vai atsvaidzini lapu."
+    );
+    return false;
+  }
+  return true;
+}
+
 function bindBoardGames() {
   const btn = document.getElementById("board-games-btn");
   const closeBtn = document.getElementById("board-modal-close");
@@ -10055,7 +10077,7 @@ function bindBoardGames() {
       appendSystemMessage("Ievadi spēlētāja lietotājvārdu.");
       return;
     }
-    if (!state.socket) return;
+    if (!boardGamesEnsureSocketConnected()) return;
     const payload = { target, type };
     if (type === "dambrete")
       payload.dambreteVariant = getSelectedBoardDambreteVariant();
@@ -10095,7 +10117,7 @@ function bindBoardGames() {
   const vsBotDambrete = document.getElementById("board-vsbot-dambrete");
   const vsBotChess = document.getElementById("board-vsbot-chess");
   const doVsBot = (type) => {
-    if (!state.socket) return;
+    if (!boardGamesEnsureSocketConnected()) return;
     const diffEl = document.querySelector(
       'input[name="board-bot-diff"]:checked'
     );
@@ -10104,6 +10126,11 @@ function bindBoardGames() {
     if (type === "dambrete")
       payload.dambreteVariant = getSelectedBoardDambreteVariant();
     if (type === "zole") payload.zoleMode = "vs_bot";
+    showBoardModal();
+    const gameArea = document.getElementById("board-game-area");
+    const lobby = document.getElementById("board-games-lobby");
+    if (gameArea) gameArea.classList.remove("hidden");
+    if (lobby) lobby.classList.add("hidden");
     state.socket.emit("board.startVsBot", payload);
     document.getElementById("board-invite-pending")?.classList.add("hidden");
   };
