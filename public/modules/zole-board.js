@@ -893,6 +893,7 @@
       existingWrap.dataset.zolePhase === zole.phase &&
       existingWrap.dataset.zoleStableSig === stableSig;
     if (canPartialUpdate) {
+      existingWrap.classList.add("vz-zole-wrap--fs-play");
       const eyes = zole.eyePoints || [0, 0, 0];
       const tricks = zole.tricksWon || [0, 0, 0];
       const cte = zole.currentTrickEyes != null ? zole.currentTrickEyes : 0;
@@ -973,13 +974,15 @@
 
     const wrap = document.createElement("div");
     wrap.className = "vz-zole-wrap";
+    if (zole.phase === "play") wrap.classList.add("vz-zole-wrap--fs-play");
     wrap.dataset.zolePhase = zole.phase || "";
     if (zole.phase === "play" || partialDiscard) {
       wrap.dataset.zoleStableSig = stableSig;
     }
 
     const meta = document.createElement("div");
-    meta.className = "vz-zole-meta";
+    meta.className =
+      "vz-zole-meta" + (zole.phase === "play" ? " vz-zole-fs-toolbar" : "");
     const eyes = zole.eyePoints || [0, 0, 0];
     const tricks = zole.tricksWon || [0, 0, 0];
     const cte =

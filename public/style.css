@@ -5013,8 +5013,65 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-modal--zole-fullscreen #board-zole-container:not(.hidden) {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   -webkit-overflow-scrolling: touch;
+}
+/* Jebkura Zoles fāze pilnekrāna modālī: wrap aizpilda laukumu */
+.vz-board-modal--zole-fullscreen #board-zole-container .vz-zole-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin-top: 0;
+}
+.vz-board-modal--zole-fullscreen .vz-zole-fs-toolbar {
+  flex-shrink: 0;
+}
+.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-arena {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-duel-row {
+  flex-shrink: 0;
+}
+.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-arena .vz-zole-table-felt {
+  min-height: 0;
+}
+.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-table-felt {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+}
+.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-trick-fan {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-content: center;
+  align-items: center;
+}
+.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-hand,
+.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-bid,
+.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-discard,
+.vz-board-modal--zole-fullscreen .vz-zole-wrap--fs-play .vz-zole-result {
+  flex-shrink: 0;
+}
+.vz-board-modal--zole-fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-table-felt {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.vz-board-modal--zole-fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-bid,
+.vz-board-modal--zole-fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-discard,
+.vz-board-modal--zole-fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-hand,
+.vz-board-modal--zole-fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-result {
+  flex-shrink: 0;
 }
 /* Spēles beigu ekrāns (virs visa) */
 .vz-board-result-overlay {
