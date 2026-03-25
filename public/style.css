@@ -5014,15 +5014,58 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-game-area.vz-board-zole-play .vz-board-game-hint {
   display: none;
 }
-/* Rokas negatīvais margin — lai informācija virs filca nebūtu zem kārtīm */
-.vz-zole-wrap--fs-play .vz-zole-meta--play-top,
-.vz-zole-wrap--fs-play .vz-zole-fs-extras {
-  position: relative;
-  z-index: 2;
+/* Kārtu likšana: galds kreisajā kolonnā, punkti / līgums labajā — ne «vienā čupā» */
+.vz-zole-play-layout {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 10px;
 }
-.vz-zole-wrap--fs-play .vz-zole-arena {
-  position: relative;
-  z-index: 1;
+.vz-zole-play-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.vz-zole-play-side {
+  flex: 0 0 min(40%, 210px);
+  max-width: 228px;
+  min-width: 0;
+}
+.vz-zole-play-side .vz-zole-meta--play-top {
+  margin-bottom: 8px;
+}
+.vz-zole-play-side .vz-zole-fs-extras {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+.vz-zole-play-side .vz-zole-compact-scores {
+  font-size: 11px;
+  line-height: 1.35;
+}
+.vz-zole-play-side .vz-zole-meta--play-top .vz-zole-turn {
+  font-size: 11px;
+}
+.vz-zole-arena--play {
+  margin-bottom: 0;
+}
+.vz-zole-arena--play .vz-zole-table-felt {
+  min-height: min(52vh, 360px);
+}
+@media (max-width: 520px) {
+  .vz-zole-play-layout {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .vz-zole-play-side {
+    flex: 1 1 auto;
+    max-width: none;
+    width: 100%;
+    order: -1;
+    max-height: none;
+  }
 }
 .vz-board-modal--fullscreen #board-zole-container:not(.hidden) {
   flex: 1 1 auto;
@@ -5082,7 +5125,17 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-zole-fs-extras .vz-zole-points-table td {
   padding: 5px 6px 5px 0;
 }
-/* Arena = galds; ņem brīvo augstumu, bez iekšējās ritināšanas pāri filcam */
+/* Arena = galds; brīvais augstums caur play-main */
+.vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-play-main {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-play-layout {
+  flex: 1 1 0;
+  min-height: 0;
+}
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-arena {
   flex: 1 1 0;
   min-height: 0;
@@ -5098,10 +5151,15 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-table-felt {
   flex: 1 1 auto;
-  min-height: min(38vh, 260px);
-  margin-bottom: 8px;
+  min-height: min(32vh, 220px);
+  margin-bottom: 0;
   display: flex;
   flex-direction: column;
+}
+.vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-play-side {
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-trick-fan {
   flex: 0 0 auto;

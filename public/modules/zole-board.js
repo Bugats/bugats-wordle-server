@@ -483,69 +483,13 @@
     return parts.join(" · ");
   }
 
-  function buildZoleOpponentCorner(zole, playerIdx, mountPlayerAvatar, eyes) {
-    const cell = document.createElement("div");
-    cell.className = "vz-zole-duel-opp";
-    cell.dataset.zolePi = String(playerIdx);
-    cell.appendChild(createZoleTurnPill());
-    const deck = document.createElement("div");
-    deck.className = "vz-zole-deck-back";
-    deck.setAttribute("aria-hidden", "true");
-    cell.appendChild(deck);
-    const un = (zole.players || [])[playerIdx] || "?";
-    const nameEl = document.createElement("div");
-    nameEl.className = "vz-zole-duel-name";
-    nameEl.textContent = un;
-    cell.appendChild(nameEl);
-    if (mountPlayerAvatar && un && un !== "?") {
-      try {
-        cell.appendChild(mountPlayerAvatar(un));
-      } catch {
-        /* ignore */
-      }
-    }
-    const roleLab = document.createElement("div");
-    roleLab.className = "vz-zole-duel-role";
-    roleLab.dataset.zoleRole = String(playerIdx);
-    roleLab.textContent = zolePlayerRoleLine(zole, playerIdx);
-    cell.appendChild(roleLab);
-    const eyeLab = document.createElement("div");
-    eyeLab.className = "vz-zole-duel-eyes";
-    eyeLab.dataset.zoleEye = String(playerIdx);
-    eyeLab.textContent = `${eyes[playerIdx] ?? 0} acis`;
-    cell.appendChild(eyeLab);
-    return cell;
-  }
-
-  function appendZoleArena(wrap, zole, myIdx, mountPlayerAvatar) {
-    const eyes = zole.eyePoints || [0, 0, 0];
+  function appendZoleArena(parentEl, zole) {
     const arena = document.createElement("div");
-    arena.className = "vz-zole-arena";
-    const duel = document.createElement("div");
-    duel.className = "vz-zole-duel-row";
-    const leftIdx = (myIdx + 1) % 3;
-    const rightIdx = (myIdx + 2) % 3;
-    const left = buildZoleOpponentCorner(
-      zole,
-      leftIdx,
-      mountPlayerAvatar,
-      eyes
-    );
-    left.classList.add("vz-zole-duel-opp--left");
-    const right = buildZoleOpponentCorner(
-      zole,
-      rightIdx,
-      mountPlayerAvatar,
-      eyes
-    );
-    right.classList.add("vz-zole-duel-opp--right");
-    duel.appendChild(left);
-    duel.appendChild(right);
-    arena.appendChild(duel);
+    arena.className = "vz-zole-arena vz-zole-arena--play";
     arena.appendChild(
       renderZoleTableFelt(zole, null, { showTrickSeatAvatars: false })
     );
-    wrap.appendChild(arena);
+    parentEl.appendChild(arena);
   }
 
   function renderZoleTableFelt(zole, mountPlayerAvatar, tableOpts) {
@@ -900,9 +844,33 @@
       const metaTop = existingWrap.querySelector(".vz-zole-meta--play-top");
       const handEl0 = existingWrap.querySelector(".vz-zole-hand");
       if (arenaEl && metaTop) {
-        existingWrap.appendChild(metaTop);
-        if (extrasEl) existingWrap.appendChild(extrasEl);
-        existingWrap.appendChild(arenaEl);
+        let playLayout = existingWrap.querySelector(".vz-zole-play-layout");
+        if (!playLayout) {
+          playLayout = document.createElement("div");
+          playLayout.className = "vz-zole-play-layout";
+          const playMain = document.createElement("div");
+          playMain.className = "vz-zole-play-main";
+          const playSide = document.createElement("div");
+          playSide.className = "vz-zole-play-side";
+          playLayout.appendChild(playMain);
+          playLayout.appendChild(playSide);
+          existingWrap.insertBefore(playLayout, arenaEl);
+          playMain.appendChild(arenaEl);
+          playSide.appendChild(metaTop);
+          if (extrasEl) playSide.appendChild(extrasEl);
+        } else {
+          const playMain = playLayout.querySelector(".vz-zole-play-main");
+          const playSide = playLayout.querySelector(".vz-zole-play-side");
+          if (playMain && arenaEl.parentElement !== playMain) {
+            playMain.appendChild(arenaEl);
+          }
+          if (playSide) {
+            if (metaTop.parentElement !== playSide) playSide.appendChild(metaTop);
+            if (extrasEl && extrasEl.parentElement !== playSide) {
+              playSide.appendChild(extrasEl);
+            }
+          }
+        }
         if (handEl0) existingWrap.appendChild(handEl0);
       }
       const eyes = zole.eyePoints || [0, 0, 0];
@@ -933,7 +901,7 @@
         const el = existingWrap.querySelector(`[data-zole-eye="${pi}"]`);
         if (el) el.textContent = `${eyes[pi] ?? 0} acis`;
         const roleEl = existingWrap.querySelector(
-          `.vz-zole-players-av-role[data-zole-role="${pi}"], .vz-zole-duel-role[data-zole-role="${pi}"]`
+          `.vz-zole-players-av-role[data-zole-role="${pi}"]`
         );
         if (roleEl) roleEl.textContent = zolePlayerRoleLine(zole, pi);
       }
@@ -1135,10 +1103,18 @@
     meta.appendChild(turnLine);
 
     if (zole.players && zole.players.length === 3 && zole.phase === "play") {
-      /* Punkti / līgums virs galda; zaļais filcs; roka ar negatīvu margin neuzlīst pāri tekstam */
-      wrap.appendChild(meta);
-      if (metaExtras) wrap.appendChild(metaExtras);
-      appendZoleArena(wrap, zole, myIdx, mountPlayerAvatar);
+      const playLayout = document.createElement("div");
+      playLayout.className = "vz-zole-play-layout";
+      const playMain = document.createElement("div");
+      playMain.className = "vz-zole-play-main";
+      const playSide = document.createElement("div");
+      playSide.className = "vz-zole-play-side";
+      playSide.appendChild(meta);
+      if (metaExtras) playSide.appendChild(metaExtras);
+      playLayout.appendChild(playMain);
+      playLayout.appendChild(playSide);
+      wrap.appendChild(playLayout);
+      appendZoleArena(playMain, zole);
     } else {
       wrap.appendChild(meta);
       wrap.appendChild(renderZoleTableFelt(zole, mountPlayerAvatar));

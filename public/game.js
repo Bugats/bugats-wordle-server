@@ -9745,6 +9745,12 @@ function renderBoardGame() {
         : "Lielais norok kārtas…";
     } else if (boardState.type === "zole" && boardState.zole?.phase === "end") {
       turnEl.textContent = "Partija beigusies";
+    } else if (
+      boardState.type === "zole" &&
+      boardState.zole?.phase === "play"
+    ) {
+      /* Kārtu fāzē pilns teksts jau zole-laukā — šeit tikai īss statuss */
+      turnEl.textContent = isMyTurn ? "Tava kārta" : turnName;
     } else {
       turnEl.textContent = isMyTurn ? "Tava kārta" : `${turnName} gājienā`;
     }
