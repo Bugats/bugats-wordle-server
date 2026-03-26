@@ -437,15 +437,15 @@
         row.clientWidth ||
         320;
       const budget = Math.max(160, raw - 16);
-      /* Katrai kārtij jāpaliek ~pus kārts platumam redzamam (rangs kreisajā) */
-      const minVisible = Math.max(28, Math.round(cardW * 0.42));
+      /* Nedaudz ciešāka sakļaušana, bet joprojām pietiekami daudz redzams rangs */
+      const minVisible = Math.max(24, Math.round(cardW * 0.36));
       const maxPull = Math.max(10, cardW - minVisible);
       const natural = n * cardW;
       let pull = 0;
       if (natural > budget) {
         pull = Math.ceil((natural - budget) / (n - 1));
       } else if (n >= 8) {
-        pull = Math.round(cardW * 0.26);
+        pull = Math.round(cardW * 0.32);
       }
       pull = Math.min(Math.max(0, pull), maxPull);
       for (let i = 1; i < n; i++) {
