@@ -5123,9 +5123,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-modal--fullscreen
   .vz-board-game-area.vz-board-zole-fs:not(.vz-board-zole-play)
   #board-zole-container:not(.hidden) {
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
 }
 .vz-board-modal--fullscreen
   .vz-board-game-area.vz-board-zole-fs.vz-board-zole-play
@@ -5235,11 +5233,24 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-result {
   flex-shrink: 0;
 }
-.vz-board-modal--fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-table-felt {
-  flex: 1 1 auto;
+.vz-board-modal--fullscreen
+  .vz-zole-wrap:not(.vz-zole-wrap--fs-play)
+  > .vz-zole-arena:not(.vz-zole-arena--play) {
+  flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+.vz-board-modal--fullscreen
+  .vz-zole-wrap:not(.vz-zole-wrap--fs-play)
+  > .vz-zole-arena:not(.vz-zole-arena--play)
+  .vz-zole-table-felt {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
 }
 .vz-board-modal--fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-bid,
 .vz-board-modal--fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-discard,
@@ -5578,11 +5589,9 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   display: flex;
   flex-direction: column;
 }
-/* Kārtu likšanā — atļaut ritināšanu, ja likšana + roka garas */
+/* Likšana / norakšana: viena kolonna — filcs aug, bez konteinera iekšējās ritināšanas */
 .vz-board-game-area.vz-board-zole-fs:not(.vz-board-zole-play) #board-zole-container {
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
 }
 /* Spēles fāzē — viena kolonna bez ritināšanas, lai filcs aizpilda augstumu */
 .vz-board-game-area.vz-board-zole-fs.vz-board-zole-play #board-zole-container {
@@ -5798,11 +5807,18 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   width: 44px !important;
   height: 44px !important;
 }
-/* Lielais filcs tikai ārpus «play» arēnas (likšana / norakšana / beigas) */
+/* Lielais filcs ārpus kārtu fāzes (likšana / norakšana / beigas) — bez max-height / iekšējās ritināšanas */
 .vz-zole-arena:not(.vz-zole-arena--play) .vz-zole-table-felt {
-  flex: 1;
-  min-height: min(62vh, 420px);
+  flex: 1 1 auto;
+  min-height: clamp(300px, 52vh, 620px);
+  max-height: none;
   margin-bottom: 0;
+  overflow: visible;
+}
+@media (max-width: 520px) {
+  .vz-zole-arena:not(.vz-zole-arena--play) .vz-zole-table-felt {
+    min-height: clamp(260px, 46vh, 520px);
+  }
 }
 .vz-zole-meta {
   margin-bottom: 10px;
@@ -6117,11 +6133,21 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 .vz-board-modal--fullscreen
   .vz-board-game-area.vz-board-zole-fs:not(.vz-board-zole-play)
+  .vz-zole-arena:not(.vz-zole-arena--play) {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.vz-board-modal--fullscreen
+  .vz-board-game-area.vz-board-zole-fs:not(.vz-board-zole-play)
+  .vz-zole-arena:not(.vz-zole-arena--play)
   .vz-zole-table-felt {
   flex: 1 1 0;
-  min-height: 180px;
+  min-height: 0;
   max-height: none;
   margin-bottom: 8px;
+  overflow: visible;
 }
 .vz-zole-table-caption {
   font-size: 14px;

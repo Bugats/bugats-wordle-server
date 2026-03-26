@@ -509,12 +509,18 @@
     return parts.join(" · ");
   }
 
-  function appendZoleArena(parentEl, zole) {
+  function appendZoleArena(parentEl, zole, mountPlayerAvatar) {
     const arena = document.createElement("div");
-    arena.className = "vz-zole-arena vz-zole-arena--play";
-    arena.appendChild(
-      renderZoleTableFelt(zole, null, { showTrickSeatAvatars: false })
-    );
+    const isPlay = zole.phase === "play";
+    arena.className = isPlay
+      ? "vz-zole-arena vz-zole-arena--play"
+      : "vz-zole-arena";
+    const avFn =
+      isPlay || !mountPlayerAvatar || typeof mountPlayerAvatar !== "function"
+        ? null
+        : mountPlayerAvatar;
+    const tableOpts = isPlay ? { showTrickSeatAvatars: false } : undefined;
+    arena.appendChild(renderZoleTableFelt(zole, avFn, tableOpts));
     parentEl.appendChild(arena);
   }
 
@@ -1140,10 +1146,10 @@
       playLayout.appendChild(playMain);
       playLayout.appendChild(playSide);
       wrap.appendChild(playLayout);
-      appendZoleArena(playMain, zole);
+      appendZoleArena(playMain, zole, mountPlayerAvatar);
     } else {
       wrap.appendChild(meta);
-      wrap.appendChild(renderZoleTableFelt(zole, mountPlayerAvatar));
+      appendZoleArena(wrap, zole, mountPlayerAvatar);
     }
     syncZoleActiveTurnHighlight(wrap, zole);
 
