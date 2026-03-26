@@ -5719,17 +5719,25 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   height: 78px;
   border-radius: 7px;
 }
-/* Roka — nedaudz lielākas; platumu sakļauj ar JS overlap */
+/* Roka — lielas kārtis, platumu cieši sakļauj ar JS overlap */
 #board-zole-container .vz-zole-card--hand {
-  width: 54px;
-  height: 84px;
-  border-radius: 7px;
+  width: 108px;
+  height: 168px;
+  border-radius: 12px;
 }
 #board-zole-container .vz-zole-card--hand .vz-zole-card__corner {
-  font-size: 9px;
+  font-size: 18px;
 }
 #board-zole-container .vz-zole-card--hand .vz-zole-card__center {
-  font-size: 22px;
+  font-size: 44px;
+}
+#board-zole-container .vz-zole-card--hand .vz-zole-card__corner--tl {
+  top: 8px;
+  left: 6px;
+}
+#board-zole-container .vz-zole-card--hand .vz-zole-card__corner--br {
+  bottom: 8px;
+  right: 6px;
 }
 #board-zole-container .vz-zole-card--red .vz-zole-card__corner,
 #board-zole-container .vz-zole-card--red .vz-zole-card__center {
@@ -5939,7 +5947,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex-wrap: nowrap;
   justify-content: flex-start;
   align-items: flex-end;
-  padding: 8px 2px 4px;
+  padding: 10px 4px 6px;
   width: max-content;
   max-width: none;
   margin: 0 auto;
@@ -5949,9 +5957,9 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   border: none;
   background: transparent;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 14px;
   flex-shrink: 0;
-  min-width: 54px;
+  min-width: 108px;
   transition: transform 0.15s ease;
 }
 #board-zole-container .vz-zole-hand__card--static {

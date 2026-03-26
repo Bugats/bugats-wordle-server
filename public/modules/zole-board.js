@@ -431,7 +431,7 @@
       const rect0 = cards[0].getBoundingClientRect();
       /* Poga var būt 0 platumā pirms layout — neizmantot kā cardW */
       const cardW =
-        rect0.width > 24 ? rect0.width : 54;
+        rect0.width > 40 ? rect0.width : 108;
       const felt = dock.closest(".vz-zole-classic__felt");
       /* dock platums = patiesā rokas josla (filcs var būt platāks) */
       const raw =
@@ -439,16 +439,16 @@
         (felt && felt.clientWidth) ||
         row.clientWidth ||
         320;
-      const budget = Math.max(160, raw - 16);
-      /* Ciešāka ventilatoriņš — pietiekami daudz kreisās malas rangam */
-      const minVisible = Math.max(18, Math.round(cardW * 0.26));
-      const maxPull = Math.max(10, cardW - minVisible);
+      const budget = Math.max(200, raw - 20);
+      /* Lielas kārtis, bet ciešs ventilatoriņš — pietiek kreisajai malai (rangs) */
+      const minVisible = Math.max(22, Math.round(cardW * 0.2));
+      const maxPull = Math.max(12, cardW - minVisible);
       const natural = n * cardW;
       let pull = 0;
       if (natural > budget) {
         pull = Math.ceil((natural - budget) / (n - 1));
-      } else if (n >= 5) {
-        pull = Math.round(cardW * (n >= 8 ? 0.44 : 0.36));
+      } else if (n >= 4) {
+        pull = Math.round(cardW * (n >= 8 ? 0.55 : 0.48));
       }
       pull = Math.min(Math.max(0, pull), maxPull);
       for (let i = 1; i < n; i++) {
