@@ -5931,6 +5931,12 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   overflow-x: hidden;
   max-width: 100%;
 }
+/* Ja pat ar max saplūšanu neietilpst — viegla ritināšana, nevis «0px» kārtis */
+#board-zole-container .vz-zole-hand--overlap.vz-zole-hand--overlap-scroll {
+  justify-content: flex-start;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 #board-zole-container .vz-zole-hand__card {
   padding: 0;
   border: none;
@@ -5938,6 +5944,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   cursor: pointer;
   border-radius: 9px;
   flex-shrink: 0;
+  min-width: 62px;
   transition: transform 0.15s ease;
 }
 #board-zole-container .vz-zole-hand__card--static {
