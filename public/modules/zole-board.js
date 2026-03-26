@@ -437,14 +437,14 @@
         320;
       const budget = Math.max(160, raw - 20);
       /* Katrai kārtij jāpaliek ~pus kārts platumam redzamam (rangs kreisajā) */
-      const minVisible = Math.max(30, Math.round(cardW * 0.48));
-      const maxPull = Math.max(8, cardW - minVisible);
+      const minVisible = Math.max(28, Math.round(cardW * 0.42));
+      const maxPull = Math.max(10, cardW - minVisible);
       const natural = n * cardW;
       let pull = 0;
       if (natural > budget) {
         pull = Math.ceil((natural - budget) / (n - 1));
       } else if (n >= 8) {
-        pull = Math.round(cardW * 0.22);
+        pull = Math.round(cardW * 0.26);
       }
       pull = Math.min(Math.max(0, pull), maxPull);
       const span = cardW + (n - 1) * (cardW - pull);

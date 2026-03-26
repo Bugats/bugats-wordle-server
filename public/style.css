@@ -5384,14 +5384,22 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 #board-zole-container .vz-zole--classic {
   display: flex;
   flex-direction: column;
-  min-height: min(72vh, 620px);
+  flex: 1 1 auto;
+  min-height: min(52dvh, 480px);
+  width: 100%;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 12px;
   line-height: 1.3;
   color: #fff;
-  border-radius: 12px;
+  border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+.vz-board-modal--fullscreen #board-zole-container .vz-zole--classic {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: none;
+  border-radius: 8px;
 }
 #board-zole-container .vz-zole-wood {
   flex-shrink: 0;
@@ -5434,11 +5442,11 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   white-space: nowrap;
 }
 #board-zole-container .vz-zole-classic__felt {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 10px 8px 8px;
+  padding: 10px max(8px, env(safe-area-inset-left, 0px)) 8px max(8px, env(safe-area-inset-right, 0px));
   background:
     radial-gradient(ellipse 100% 70% at 50% 15%, rgba(120, 200, 130, 0.35), transparent 55%),
     radial-gradient(circle at 20% 80%, rgba(0, 0, 0, 0.12), transparent 45%),
@@ -5974,13 +5982,18 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   line-height: 1.4;
   opacity: 0.88;
 }
-/* Pilnekrāns + Zole: vairāk vietas */
+/* Zole: pilns modāļa platums uz mobilā (zaļais filcs līdz malām) */
 .vz-board-modal-inner:has(#board-zole-container:not(.hidden)) {
-  max-width: min(100vw - 24px, 560px);
+  max-width: 100%;
+  width: 100%;
 }
 .vz-board-modal--fullscreen .vz-board-modal-inner:has(#board-zole-container:not(.hidden)) {
   max-width: none;
   width: 100%;
+  padding-left: max(8px, env(safe-area-inset-left));
+  padding-right: max(8px, env(safe-area-inset-right));
+  padding-top: max(8px, env(safe-area-inset-top));
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
 }
 /* Zole: garš #board-game-hint pārklājas ar kompakto zole UI */
 .vz-board-game-area.vz-board-zole-fs .vz-board-game-hint {
@@ -5998,10 +6011,13 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
   max-width: none;
+  width: 100%;
 }
 .vz-board-modal--fullscreen .vz-board-game-area.vz-board-zole-fs #board-zole-container {
-  padding-bottom: 8px;
+  flex: 1 1 0;
 }
 
 /* Zoles 3p istaba (lobijs) — īss, bez vecā zoles galdiņa */
