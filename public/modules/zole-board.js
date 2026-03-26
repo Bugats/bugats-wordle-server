@@ -345,15 +345,37 @@
     return "—";
   }
 
+  /** Stiķa vadītāja indekss (0..2); JSON var atnest virkni. */
+  function zoleTrickLeaderIdx(zole) {
+    const raw =
+      zole && zole.trick && zole.trick.length > 0
+        ? zole.trickLeader
+        : zole?.lastCompletedTrick?.leaderIdx ?? zole?.trickLeader;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return 0;
+    const m = Math.trunc(n) % 3;
+    return m < 0 ? m + 3 : m;
+  }
+
+  /** Kārta konkrētajam spēlētāja vietas indeksam — neatkarīgi no masīva kārtības serverī. */
+  function zoleTrickEntryForSeat(zole, seat) {
+    const { rows } = zoleTrickDisplayRows(zole);
+    for (let i = 0; i < rows.length; i++) {
+      const t = rows[i];
+      if (t && Number(t.playerIdx) === seat) return t;
+    }
+    return null;
+  }
+
   /** Kārtis stiķa kolonnās: aktīvais stiķis; pēc pabeigšanas ~2.4 s pēdējais, tad tukšs. */
   function zoleTrickDisplayRows(zole) {
     const trick = zole.trick || [];
     if (trick.length > 0) {
-      return { rows: trick, leader: zole.trickLeader ?? 0, frozen: false };
+      return { rows: trick, leader: zoleTrickLeaderIdx(zole), frozen: false };
     }
     const lc = zole.lastCompletedTrick;
     if (!lc || !lc.cards || lc.cards.length !== 3 || zoleTrickHoldCleared) {
-      return { rows: [], leader: zole.trickLeader ?? 0, frozen: false };
+      return { rows: [], leader: zoleTrickLeaderIdx(zole), frozen: false };
     }
     const tpNow =
       typeof zole.tricksPlayed === "number" ? zole.tricksPlayed : null;
@@ -362,20 +384,24 @@
       tpNow != null &&
       tpNow !== zoleTrickHoldTricksPlayed
     ) {
-      return { rows: [], leader: zole.trickLeader ?? 0, frozen: false };
+      return { rows: [], leader: zoleTrickLeaderIdx(zole), frozen: false };
     }
     if (zoleTrickHoldUntil > 0 && Date.now() >= zoleTrickHoldUntil) {
       zoleTrickHoldCleared = true;
       clearZoleTrickHoldTimer();
-      return { rows: [], leader: zole.trickLeader ?? 0, frozen: false };
+      return { rows: [], leader: zoleTrickLeaderIdx(zole), frozen: false };
     }
-    const leader =
+    const leaderRaw =
       typeof lc.leaderIdx === "number"
         ? lc.leaderIdx
         : lc.cards[0] && typeof lc.cards[0].playerIdx === "number"
           ? lc.cards[0].playerIdx
           : zole.trickLeader ?? 0;
-    return { rows: lc.cards, leader, frozen: true };
+    const ln = Number(leaderRaw);
+    const leaderNorm = Number.isFinite(ln)
+      ? ((Math.trunc(ln) % 3) + 3) % 3
+      : 0;
+    return { rows: lc.cards, leader: leaderNorm, frozen: true };
   }
 
   function zolePtsCell(n) {
@@ -525,7 +551,7 @@
       return felt;
     }
 
-    const { rows: trickRows, leader, frozen } = zoleTrickDisplayRows(zole);
+    const { leader, frozen } = zoleTrickDisplayRows(zole);
     const fan = document.createElement("div");
     fan.className = "vz-zole-trick-fan";
     const mountAv =
@@ -540,7 +566,7 @@
       col.dataset.zoleSeat = String(seat);
       /* Bez slīpuma — uz maza ekrāna rotācija rada pārklāšanos ar roku */
       col.style.setProperty("--seat-tilt", "0deg");
-      const t = trickRows[i];
+      const t = zoleTrickEntryForSeat(zole, seat);
       const head = document.createElement("div");
       head.className = "vz-zole-trick-seat-head";
       const pname = zole.players[seat] || "?";
@@ -601,13 +627,13 @@
   }
 
   function updateZoleTrickColumns(felt, zole) {
-    const { rows: trickRows, leader, frozen } = zoleTrickDisplayRows(zole);
+    const { leader, frozen } = zoleTrickDisplayRows(zole);
     for (let i = 0; i < 3; i++) {
       const seat = (leader + i) % 3;
       const col = felt.querySelector(`[data-zole-seat="${seat}"]`);
       if (!col) continue;
       col.classList.toggle("vz-zole-trick-seat--frozen", frozen);
-      const t = trickRows[i];
+      const t = zoleTrickEntryForSeat(zole, seat);
       const cardArea = col.querySelector(".vz-zole-trick-card-area");
       const ph = col.querySelector(".vz-zole-trick-placeholder");
       if (cardArea) cardArea.innerHTML = "";
