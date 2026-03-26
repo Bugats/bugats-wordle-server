@@ -5473,6 +5473,11 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-sizing: border-box;
 }
+#board-zole-container .vz-zole-classic__end .vz-zole-classic__match {
+  margin: 0 0 10px;
+  width: 100%;
+  max-width: min(100%, 340px);
+}
 #board-zole-container .vz-zole-match__title {
   font-size: 8px;
   font-weight: 800;

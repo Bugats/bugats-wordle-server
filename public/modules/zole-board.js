@@ -386,7 +386,7 @@
     const wrap = el("div", "vz-zole-classic__match");
     wrap.setAttribute("role", "group");
     wrap.setAttribute("aria-label", "Mača rezultāts");
-    wrap.appendChild(el("div", "vz-zole-match__title", "Mačs"));
+    wrap.appendChild(el("div", "vz-zole-match__title", "Mača rezultāts"));
     const row = el("div", "vz-zole-match__row");
     const cum = zole.cumulativeTableDelta || [0, 0, 0];
     for (let i = 0; i < 3; i++) {
@@ -720,7 +720,6 @@
 
     const felt = el("div", "vz-zole-classic__felt");
     felt.appendChild(buildOpponentsRow(zole, myIdx));
-    felt.appendChild(buildMatchScoreStrip(zole, myIdx));
 
     if (phase === "bid") {
       felt.appendChild(buildBidCenter(zole, myIdx, onBid, zm));
@@ -730,6 +729,7 @@
       );
     } else if (phase === "end") {
       const endBox = el("div", "vz-zole-classic__end");
+      endBox.appendChild(buildMatchScoreStrip(zole, myIdx));
       endBox.appendChild(buildEndCenter(zole, zm));
       if (zole.tableDelta) {
         const parts = [];
