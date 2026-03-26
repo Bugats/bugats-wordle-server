@@ -6169,8 +6169,8 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     0 1px 0 rgba(255, 255, 255, 0.85) inset;
 }
 .vz-zole-trick-seat--frozen .vz-zole-playing-card--table {
-  opacity: 0.92;
-  filter: saturate(1.05);
+  opacity: 1;
+  filter: saturate(1.02);
 }
 .vz-zole-trick-freeze-line {
   display: none;
@@ -6211,8 +6211,8 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   width: 56px;
   height: 80px;
   border-radius: 6px;
-  background: linear-gradient(165deg, #fefefe 0%, #e8e4dc 45%, #d4cfc4 100%);
-  border: 1px solid rgba(0, 0, 0, 0.35);
+  background: linear-gradient(165deg, #fefefe 0%, #ebe6dc 48%, #ddd8ce 100%);
+  border: 1px solid rgba(0, 0, 0, 0.42);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.85) inset,
     0 2px 6px rgba(0, 0, 0, 0.35);
@@ -6237,19 +6237,23 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 .vz-zole-playing-card--red .vz-zole-pc-corner,
 .vz-zole-playing-card--red .vz-zole-pc-center {
-  color: #c41e3a;
+  color: #b01028;
 }
 .vz-zole-playing-card--black .vz-zole-pc-corner,
 .vz-zole-playing-card--black .vz-zole-pc-center {
-  color: #1a1a1a;
+  color: #0d0d0d;
 }
 .vz-zole-pc-corner {
   position: absolute;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
   text-align: center;
   line-height: 1.1;
   letter-spacing: -0.02em;
+  -webkit-font-smoothing: antialiased;
+  text-shadow:
+    0 0 0.5px rgba(255, 255, 255, 0.95),
+    0 1px 0 rgba(255, 255, 255, 0.75);
 }
 .vz-zole-pc-corner--tl {
   top: 5px;
@@ -6267,7 +6271,11 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   transform: translate(-50%, -52%);
   font-size: 28px;
   line-height: 1;
-  opacity: 0.92;
+  opacity: 1;
+  font-weight: 700;
+  text-shadow:
+    0 0 1px rgba(255, 255, 255, 0.9),
+    0 1px 0 rgba(255, 255, 255, 0.65);
 }
 .vz-zole-card--selected {
   outline: none;
@@ -6338,9 +6346,12 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   will-change: transform;
 }
 .vz-zole-card-btn:disabled {
-  opacity: 0.4;
+  opacity: 1;
   cursor: not-allowed;
-  filter: grayscale(0.35);
+  filter: grayscale(0.25) brightness(0.94);
+}
+.vz-zole-card-btn:disabled .vz-zole-playing-card {
+  opacity: 0.78;
 }
 @media (hover: hover) {
   .vz-zole-card-btn:not(:disabled):hover {
