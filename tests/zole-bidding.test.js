@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createZoleOnline3pState, zoleProcessBid } from "../lib/zole.js";
 
-describe("zoleProcessBid — divreiz visi pasējuši → Galdiņš", () => {
+describe("zoleProcessBid — divreiz visi iet garām → Galdiņš", () => {
   it("galdins is not a valid manual bid (only double pass)", () => {
     const s = createZoleOnline3pState("A", "B", "C");
     const res = zoleProcessBid(s, s.bidTurn, "galdins");
