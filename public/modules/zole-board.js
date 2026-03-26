@@ -99,6 +99,16 @@
   });
 
   const ZOLE_SUIT_KARAVS = 1;
+  const RANK_7 = 7;
+  const RANK_8 = 8;
+  const RANK_9 = 9;
+  const RANK_10 = 10;
+  const RANK_J = 11;
+  const RANK_Q = 12;
+  const RANK_K = 13;
+  const RANK_A = 14;
+  /** Kā lib/zole.js — D/J stipruma secība pēc masta */
+  const TRUMP_FACE_ORDER = [0, 3, 2, 1];
   const RANK_LABELS = {
     7: "7",
     8: "8",
@@ -118,10 +128,33 @@
 
   function isZoleTrumpCard(card) {
     if (!card || typeof card.r !== "number") return false;
-    if (card.r === 12 || card.r === 11) return true;
-    if (card.s === ZOLE_SUIT_KARAVS && card.r !== 12 && card.r !== 11)
-      return true;
+    if (card.r === RANK_Q || card.r === RANK_J) return true;
+    if (card.s === ZOLE_SUIT_KARAVS) return true;
     return false;
+  }
+
+  function trumpFaceStrength(suit) {
+    const idx = TRUMP_FACE_ORDER.indexOf(suit);
+    return idx >= 0 ? idx : 9;
+  }
+
+  /** Kā lib/zole.js zoleCardTrickStrength — kārtošanai */
+  function zoleCardTrickStrength(card) {
+    if (!card) return -1;
+    if (card.r === RANK_Q) {
+      return 4000 - trumpFaceStrength(card.s);
+    }
+    if (card.r === RANK_J) {
+      return 3000 - trumpFaceStrength(card.s);
+    }
+    if (card.s === ZOLE_SUIT_KARAVS) {
+      const karRank = [RANK_7, RANK_8, RANK_9, RANK_K, RANK_10, RANK_A].indexOf(
+        card.r
+      );
+      return 2000 + (karRank >= 0 ? karRank : 0);
+    }
+    const plain = [RANK_9, RANK_K, RANK_10, RANK_A].indexOf(card.r);
+    return plain >= 0 ? plain : 0;
   }
 
   function cardLabel(card) {
@@ -136,8 +169,32 @@
     return `${c.s}:${c.r}`;
   }
 
+  /**
+   * Kā lib/zole.js sortZoleHand: ♣ ♠ ♥ parastās (9→K→10→A), tad trumpji vājākās pa kreisi.
+   */
   function sortHand(hand) {
-    return (hand || []).slice().sort((a, b) => a.s - b.s || a.r - b.r);
+    if (!hand || !hand.length) return [];
+    const PLAIN_SUIT_ORDER = [0, 3, 2];
+    function plainSuitKey(s) {
+      const i = PLAIN_SUIT_ORDER.indexOf(s);
+      return i >= 0 ? i : 99;
+    }
+    function plainRankKey(r) {
+      const order = [RANK_9, RANK_K, RANK_10, RANK_A];
+      const i = order.indexOf(r);
+      return i >= 0 ? i : 99;
+    }
+    return hand.slice().sort((a, b) => {
+      const ta = isZoleTrumpCard(a);
+      const tb = isZoleTrumpCard(b);
+      if (ta !== tb) return ta ? 1 : -1;
+      if (!ta) {
+        const ds = plainSuitKey(a.s) - plainSuitKey(b.s);
+        if (ds !== 0) return ds;
+        return plainRankKey(a.r) - plainRankKey(b.r);
+      }
+      return zoleCardTrickStrength(a) - zoleCardTrickStrength(b);
+    });
   }
 
   function esc(s) {
