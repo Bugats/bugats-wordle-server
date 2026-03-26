@@ -9616,7 +9616,9 @@ function syncBoardModalFullscreen() {
     modal.classList.remove("vz-board-modal--fullscreen");
     return;
   }
-  modal.classList.remove("vz-board-modal--fullscreen");
+  const zoleFs =
+    boardState.gameId && boardState.type === "zole";
+  modal.classList.toggle("vz-board-modal--fullscreen", !!zoleFs);
 }
 
 function hideBoardGameArea() {
@@ -9677,7 +9679,14 @@ function renderBoardGame() {
   const zoleContainer = document.getElementById("board-zole-container");
   const gameAreaEl = document.getElementById("board-game-area");
   if (gameAreaEl) {
-    gameAreaEl.classList.remove("vz-board-zole-play", "vz-board-zole-fs");
+    const zPlay =
+      boardState.type === "zole" && boardState.zole?.phase === "play";
+    const zoleGameOn =
+      boardState.gameId &&
+      boardState.type === "zole" &&
+      !!boardState.zole;
+    gameAreaEl.classList.toggle("vz-board-zole-play", zPlay);
+    gameAreaEl.classList.toggle("vz-board-zole-fs", zoleGameOn);
   }
   if (typeEl) {
     if (boardState.type === "chess") typeEl.textContent = "♔ Šahs";
@@ -9758,7 +9767,7 @@ function renderBoardGame() {
             : "Skaties tabulas punktus zemāk. Uzvarētājs pēc spēles — labākais +/− šajā partijā.";
       } else if (boardState.zole?.phase === "play") {
         hintEl.textContent =
-          "Sekšana un punkti — zem zaļā galda («Sekšana · trumpji», tabula).";
+          "Sekšana un pilna tabula — zem galda; trumpji un likumi — sadaļā «Sekšana un trumpji».";
       } else {
         const c = boardState.zole?.contract;
         let galHint = " Uzvara ar 61+ acīm, ja esi lielais / zole.";

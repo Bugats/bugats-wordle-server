@@ -5375,83 +5375,491 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-dambrete-black { background: #1a1a1a; color: #ccc; }
 .vz-dambrete-king { font-size: 14px; }
 
-/* Zole UI — no jauna (sk. modules/zole-board.js + zemāk) */
-#board-zole-container .vz-zole-ui {
-  font-size: 14px;
-  line-height: 1.45;
-  color: rgba(255, 255, 255, 0.92);
+/* ========== Zole (jauns UI) ========== */
+#board-zole-container {
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
 }
-#board-zole-container .vz-zole-ui__title {
-  margin: 0 0 8px;
+#board-zole-container .vz-zole {
+  font-size: 14px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.92);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#board-zole-container .vz-zole__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+#board-zole-container .vz-zole__phase {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #a5f3fc;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(34, 211, 238, 0.12);
+}
+#board-zole-container .vz-zole__contract {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e9d5ff;
+}
+#board-zole-container .vz-zole__trump {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fbbf24;
+  margin-left: auto;
+}
+#board-zole-container .vz-zole-me {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: linear-gradient(
+    135deg,
+    rgba(251, 191, 36, 0.12) 0%,
+    rgba(0, 0, 0, 0.2) 100%
+  );
+  border: 1px solid rgba(251, 191, 36, 0.28);
+}
+#board-zole-container .vz-zole-me__name {
+  font-weight: 700;
   font-size: 15px;
+}
+#board-zole-container .vz-zole-me__name--turn {
+  color: #fde68a;
+}
+#board-zole-container .vz-zole-me__name--turn::after {
+  content: " · tava kārta";
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(253, 230, 138, 0.85);
+  margin-left: 6px;
+}
+#board-zole-container .vz-zole-me__sub {
+  font-size: 12px;
+  opacity: 0.88;
+  margin-top: 2px;
+}
+#board-zole-container .vz-zole-rivals {
+  display: flex;
+  gap: 8px;
+}
+#board-zole-container .vz-zole-rival {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+#board-zole-container .vz-zole-rival--active {
+  border-color: rgba(251, 191, 36, 0.45);
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.2);
+}
+#board-zole-container .vz-zole-rival__name {
+  font-weight: 700;
+  font-size: 13px;
+}
+#board-zole-container .vz-zole-rival__meta {
+  font-size: 11px;
+  opacity: 0.75;
+  margin-top: 2px;
+}
+#board-zole-container .vz-zole-rival__role {
+  font-size: 10px;
+  font-weight: 600;
+  color: #c4b5fd;
+  margin-top: 4px;
+}
+/* Zaļais galds */
+#board-zole-container .vz-zole-felt {
+  border-radius: 16px;
+  padding: 14px 12px 12px;
+  background:
+    radial-gradient(ellipse 120% 80% at 50% 0%, rgba(86, 170, 98, 0.45), transparent 55%),
+    linear-gradient(168deg, #1e6b3a 0%, #145a2e 42%, #0c3d22 100%);
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 8px 24px rgba(0, 0, 0, 0.35);
+}
+#board-zole-container .vz-zole-felt__title {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 10px;
+}
+#board-zole-container .vz-zole-felt__idle {
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  padding: 28px 12px;
+}
+#board-zole-container .vz-zole-felt__trick {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+}
+#board-zole-container .vz-zole-felt__seat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 88px;
+}
+#board-zole-container .vz-zole-felt__seat--turn .vz-zole-felt__who {
+  color: #fef08a;
+  font-weight: 800;
+}
+#board-zole-container .vz-zole-felt__seat--frozen {
+  opacity: 0.92;
+}
+#board-zole-container .vz-zole-felt__who {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.78);
+  text-align: center;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#board-zole-container .vz-zole-felt__cardSlot {
+  min-height: 112px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#board-zole-container .vz-zole-felt__placeholder {
+  width: 72px;
+  height: 100px;
+  border-radius: 8px;
+  border: 2px dashed rgba(255, 255, 255, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.4);
+  padding: 6px;
+  line-height: 1.2;
+}
+#board-zole-container .vz-zole-felt__sub {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.72);
+  margin-top: 10px;
+  min-height: 1.2em;
+}
+/* Kārtis (sejas) */
+#board-zole-container .vz-zole-card {
+  position: relative;
+  box-sizing: border-box;
+  width: 72px;
+  height: 100px;
+  border-radius: 8px;
+  background: linear-gradient(165deg, #fefefe 0%, #ebe6dc 50%, #ddd8ce 100%);
+  border: 1px solid rgba(0, 0, 0, 0.38);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  font-family: Georgia, "Times New Roman", serif;
+  flex-shrink: 0;
+}
+#board-zole-container .vz-zole-card--sm {
+  width: 52px;
+  height: 78px;
+  border-radius: 7px;
+}
+#board-zole-container .vz-zole-card--red .vz-zole-card__corner,
+#board-zole-container .vz-zole-card--red .vz-zole-card__center {
+  color: #b01028;
+}
+#board-zole-container .vz-zole-card--black .vz-zole-card__corner,
+#board-zole-container .vz-zole-card--black .vz-zole-card__center {
+  color: #111;
+}
+#board-zole-container .vz-zole-card--trump {
+  box-shadow:
+    0 0 0 2px rgba(251, 191, 36, 0.95),
+    0 2px 10px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+#board-zole-container .vz-zole-card__corner {
+  position: absolute;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.05;
+  text-align: center;
+}
+#board-zole-container .vz-zole-card--sm .vz-zole-card__corner {
+  font-size: 8px;
+}
+#board-zole-container .vz-zole-card__corner--tl {
+  top: 4px;
+  left: 3px;
+}
+#board-zole-container .vz-zole-card__corner--br {
+  bottom: 4px;
+  right: 3px;
+  transform: rotate(180deg);
+}
+#board-zole-container .vz-zole-card__center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -52%);
+  font-size: 30px;
+  line-height: 1;
   font-weight: 700;
 }
-#board-zole-container .vz-zole-ui__pre {
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: min(40vh, 280px);
-  overflow: auto;
+#board-zole-container .vz-zole-card--sm .vz-zole-card__center {
+  font-size: 22px;
 }
-#board-zole-container .vz-zole-ui__row {
+/* Punktu tabula */
+#board-zole-container .vz-zole__mid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#board-zole-container .vz-zole-pt {
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(196, 181, 253, 0.15);
+}
+#board-zole-container .vz-zole-pt__cap {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fbbf24;
+  margin-bottom: 6px;
+}
+#board-zole-container .vz-zole-pt__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+#board-zole-container .vz-zole-pt__table th {
+  text-align: left;
+  padding: 4px 4px 6px 0;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+#board-zole-container .vz-zole-pt__table th:nth-child(n + 3),
+#board-zole-container .vz-zole-pt__table td:nth-child(n + 3) {
+  text-align: right;
+}
+#board-zole-container .vz-zole-pt__table td {
+  padding: 5px 4px 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  vertical-align: top;
+}
+#board-zole-container .vz-zole-pt__table tr:last-child td {
+  border-bottom: none;
+}
+#board-zole-container .vz-zole-pt__name {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+#board-zole-container .vz-zole-pt__player {
+  font-weight: 700;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#board-zole-container .vz-zole-pt__role {
+  font-size: 9px;
+  font-weight: 600;
+  color: #c4b5fd;
+}
+#board-zole-container .vz-zole-pt__num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+#board-zole-container .vz-zole-pt__me .vz-zole-pt__player {
+  color: #a5f3fc;
+}
+#board-zole-container .vz-zole-pt__active td {
+  background: rgba(251, 191, 36, 0.07);
+}
+#board-zole-container .vz-zole-sek {
+  font-size: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.15);
+  padding: 0 10px;
+}
+#board-zole-container .vz-zole-sek__sum {
+  cursor: pointer;
+  list-style: none;
+  padding: 8px 0;
+  font-weight: 600;
+  color: #c4b5fd;
+}
+#board-zole-container .vz-zole-sek__sum::-webkit-details-marker {
+  display: none;
+}
+#board-zole-container .vz-zole-sek__body {
+  padding: 0 0 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  opacity: 0.88;
+  color: rgba(255, 255, 255, 0.85);
+}
+/* Paneļi, roka, pogas */
+#board-zole-container .vz-zole-panel {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(15, 18, 28, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+#board-zole-container .vz-zole-panel__h {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 6px;
+}
+#board-zole-container .vz-zole-panel__hint {
+  font-size: 12px;
+  line-height: 1.4;
+  opacity: 0.82;
+  margin-bottom: 10px;
+}
+#board-zole-container .vz-zole-panel__wait {
+  font-size: 13px;
+  opacity: 0.85;
+  padding: 8px 0;
+}
+#board-zole-container .vz-zole-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 10px;
 }
-#board-zole-container .vz-zole-ui__btn {
-  padding: 8px 14px;
+#board-zole-container .vz-zole-btn {
+  padding: 10px 14px;
   font-size: 13px;
-  font-weight: 600;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.1);
+  font-weight: 700;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
   color: #fff;
   cursor: pointer;
   touch-action: manipulation;
 }
-#board-zole-container .vz-zole-ui__btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+#board-zole-container .vz-zole-btn--primary {
+  border-color: rgba(34, 197, 94, 0.45);
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.35) 0%, rgba(22, 120, 60, 0.25) 100%);
 }
-#board-zole-container .vz-zole-ui__btn--primary {
-  border-color: rgba(34, 197, 94, 0.55);
-  background: rgba(34, 197, 94, 0.22);
+#board-zole-container .vz-zole-btn--accent {
+  border-color: rgba(251, 191, 36, 0.55);
+  background: linear-gradient(180deg, rgba(251, 191, 36, 0.28) 0%, rgba(180, 120, 20, 0.2) 100%);
+  color: #fffbeb;
 }
-#board-zole-container .vz-zole-ui__hand {
+#board-zole-container .vz-zole-hand {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 6px;
-  margin-top: 8px;
+  padding: 6px 0;
 }
-#board-zole-container .vz-zole-ui__card {
-  min-width: 44px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.92);
-  color: #111;
-  font-size: 12px;
-  font-weight: 700;
+#board-zole-container .vz-zole-hand--fan {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  justify-content: flex-start;
+  padding-bottom: 8px;
+  gap: 4px;
+}
+#board-zole-container .vz-zole-hand__card {
+  padding: 0;
+  border: none;
+  background: transparent;
   cursor: pointer;
-  touch-action: manipulation;
+  border-radius: 9px;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
 }
-#board-zole-container .vz-zole-ui__card:disabled {
-  opacity: 0.5;
+#board-zole-container .vz-zole-hand__card:disabled {
+  opacity: 0.38;
   cursor: not-allowed;
+  filter: grayscale(0.15);
 }
-#board-zole-container .vz-zole-ui__card--sel {
-  outline: 2px solid #fbbf24;
-  outline-offset: 1px;
+#board-zole-container .vz-zole-hand__card:not(:disabled):active {
+  transform: translateY(-4px);
 }
-#board-zole-container .vz-zole-ui__card--trump {
-  border-color: #f59e0b;
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.5);
+#board-zole-container .vz-zole-hand__card--sel {
+  outline: 3px solid #fbbf24;
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+#board-zole-container .vz-zole-panel--end .vz-zole-end__delta {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+#board-zole-container .vz-zole-panel--end .vz-zole-end__story {
+  font-size: 13px;
+  line-height: 1.45;
+  opacity: 0.9;
+}
+/* Pilnekrāns + Zole: vairāk vietas */
+.vz-board-modal-inner:has(#board-zole-container:not(.hidden)) {
+  max-width: min(100vw - 24px, 560px);
+}
+.vz-board-modal--fullscreen .vz-board-modal-inner:has(#board-zole-container:not(.hidden)) {
+  max-width: none;
+  width: 100%;
+}
+/* Kārtu fāzē garš padoms jau zole-panelī */
+.vz-board-game-area.vz-board-zole-play .vz-board-game-hint {
+  display: none;
+}
+.vz-board-game-area.vz-board-zole-fs {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.vz-board-game-area.vz-board-zole-fs #board-zole-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: none;
+}
+.vz-board-modal--fullscreen .vz-board-game-area.vz-board-zole-fs #board-zole-container {
+  padding-bottom: 8px;
 }
 
 /* Zoles 3p istaba (lobijs) — īss, bez vecā zoles galdiņa */
