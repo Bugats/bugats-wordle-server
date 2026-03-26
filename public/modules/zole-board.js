@@ -418,6 +418,47 @@
     return c;
   }
 
+  function fitZoleHandOverlap(dock) {
+    const row = dock.querySelector(".vz-zole-hand--overlap");
+    if (!row) return;
+    const cards = row.querySelectorAll(".vz-zole-hand__card");
+    const n = cards.length;
+    if (n <= 1) return;
+    const measure = () => {
+      const rect0 = cards[0].getBoundingClientRect();
+      const cardW = rect0.width > 4 ? rect0.width : 62;
+      const felt = dock.closest(".vz-zole-classic__felt");
+      const raw =
+        (felt && felt.clientWidth) ||
+        dock.clientWidth ||
+        row.clientWidth ||
+        320;
+      const budget = Math.max(130, raw - 24);
+      const natural = n * cardW;
+      let pull = 0;
+      if (natural > budget) {
+        pull = Math.ceil((natural - budget) / (n - 1));
+      } else if (n >= 8) {
+        pull = Math.round(cardW * 0.18);
+      }
+      const maxPull = Math.max(12, cardW - 20);
+      pull = Math.min(Math.max(0, pull), maxPull);
+      for (let i = 1; i < n; i++) {
+        cards[i].style.marginLeft = pull > 0 ? `-${pull}px` : "";
+      }
+    };
+    measure();
+    global.requestAnimationFrame(() => {
+      measure();
+      global.requestAnimationFrame(measure);
+    });
+    const felt = dock.closest(".vz-zole-classic__felt");
+    if (felt && typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(() => measure());
+      ro.observe(felt);
+    }
+  }
+
   function buildHandDock(zole, opts) {
     const o = opts || {};
     const hand = sortHand(zole.myHand || []);
@@ -425,9 +466,6 @@
     const dock = el("div", "vz-zole-classic__dock");
     const row = el("div", "vz-zole-hand vz-zole-hand--overlap");
     const mode = o.mode || "readonly";
-    const n = hand.length;
-    const pull =
-      n <= 1 ? 0 : Math.min(28, Math.max(14, Math.round(220 / n)));
 
     for (let hi = 0; hi < hand.length; hi++) {
       const card = hand[hi];
@@ -455,10 +493,10 @@
       }
       if (isZoleTrumpCard(card)) wrap.classList.add("vz-zole-hand__card--trump");
       wrap.style.zIndex = String(10 + hi);
-      if (hi > 0 && pull > 0) wrap.style.marginLeft = `-${pull}px`;
       row.appendChild(wrap);
     }
     dock.appendChild(row);
+    fitZoleHandOverlap(dock);
     return dock;
   }
 

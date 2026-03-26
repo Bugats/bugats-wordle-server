@@ -5583,6 +5583,8 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex-shrink: 0;
   padding: 10px 6px 4px;
   margin-top: auto;
+  overflow-x: hidden;
+  max-width: 100%;
 }
 #board-zole-container .vz-zole-classic__discardBar {
   display: flex;
@@ -5705,17 +5707,17 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   height: 78px;
   border-radius: 7px;
 }
-/* Roka — lielākas kārtis kā piemērā */
+/* Roka — nedaudz lielākas; platumu sakļauj ar JS overlap */
 #board-zole-container .vz-zole-card--hand {
-  width: 56px;
-  height: 86px;
-  border-radius: 7px;
+  width: 60px;
+  height: 92px;
+  border-radius: 8px;
 }
 #board-zole-container .vz-zole-card--hand .vz-zole-card__corner {
-  font-size: 9px;
+  font-size: 10px;
 }
 #board-zole-container .vz-zole-card--hand .vz-zole-card__center {
-  font-size: 24px;
+  font-size: 26px;
 }
 #board-zole-container .vz-zole-card--red .vz-zole-card__corner,
 #board-zole-container .vz-zole-card--red .vz-zole-card__center {
@@ -5925,9 +5927,9 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex-wrap: nowrap;
   justify-content: center;
   align-items: flex-end;
-  padding: 8px 4px 4px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  padding: 8px 6px 4px;
+  overflow-x: hidden;
+  max-width: 100%;
 }
 #board-zole-container .vz-zole-hand__card {
   padding: 0;
