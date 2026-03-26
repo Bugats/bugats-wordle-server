@@ -2151,21 +2151,6 @@ function fetchAvatarForUser(username, imgEl, initialsEl) {
   return p;
 }
 
-/** Zoles galdam — mazs aplis ar profila bildi (vai iniciāli) */
-function createZoleBoardPlayerAvatar(username) {
-  const wrap = document.createElement("div");
-  wrap.className = "vz-avatar-circle vz-zole-board-avatar";
-  const img = document.createElement("img");
-  img.alt = "";
-  img.decoding = "async";
-  const ini = document.createElement("span");
-  ini.className = "vz-online-avatar-initials";
-  wrap.appendChild(img);
-  wrap.appendChild(ini);
-  applyMiniAvatar(username, img, ini);
-  return wrap;
-}
-
 // ==================== PROFILA STATI + MEDAĻAS ====================
 function renderPlayerMedals(medals, container, full = false) {
   const strip = container || playerMedalsStripEl;
@@ -9631,11 +9616,7 @@ function syncBoardModalFullscreen() {
     modal.classList.remove("vz-board-modal--fullscreen");
     return;
   }
-  /* Pilnekrāns visai aktīvajai Zolei (likšana, norakšana, spēle, beigas) — lielāks zaļais galds.
-     Neuzkaršojam no boardState.zole: snapšots var īslaicīgi trūkt, tad modālis paliek šaurs (440px) ar scroll. */
-  const zoleFs =
-    boardState.gameId && boardState.type === "zole";
-  modal.classList.toggle("vz-board-modal--fullscreen", !!zoleFs);
+  modal.classList.remove("vz-board-modal--fullscreen");
 }
 
 function hideBoardGameArea() {
@@ -9696,14 +9677,7 @@ function renderBoardGame() {
   const zoleContainer = document.getElementById("board-zole-container");
   const gameAreaEl = document.getElementById("board-game-area");
   if (gameAreaEl) {
-    const zPlay =
-      boardState.type === "zole" && boardState.zole?.phase === "play";
-    const zoleGameOn =
-      boardState.gameId &&
-      boardState.type === "zole" &&
-      !!boardState.zole;
-    gameAreaEl.classList.toggle("vz-board-zole-play", zPlay);
-    gameAreaEl.classList.toggle("vz-board-zole-fs", zoleGameOn);
+    gameAreaEl.classList.remove("vz-board-zole-play", "vz-board-zole-fs");
   }
   if (typeEl) {
     if (boardState.type === "chess") typeEl.textContent = "♔ Šahs";
@@ -9835,7 +9809,6 @@ function renderBoardGame() {
         {
           zoleMode: boardState.zoleMode,
           myIdx,
-          mountPlayerAvatar: createZoleBoardPlayerAvatar,
           onBid: (bid) => {
             if (!state.socket || !boardState.gameId) return;
             state.socket.emit("board.move", {
