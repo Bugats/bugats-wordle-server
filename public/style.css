@@ -5123,7 +5123,10 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-modal--fullscreen
   .vz-board-game-area.vz-board-zole-fs:not(.vz-board-zole-play)
   #board-zole-container:not(.hidden) {
-  overflow: hidden;
+  /* Ja meta + liels filcs + roka nepietiek augstumā — ritina kolonnu, nevis samazina filcu */
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .vz-board-modal--fullscreen
   .vz-board-game-area.vz-board-zole-fs.vz-board-zole-play
@@ -5246,7 +5249,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   > .vz-zole-arena:not(.vz-zole-arena--play)
   .vz-zole-table-felt {
   flex: 1 1 0;
-  min-height: 0;
+  min-height: clamp(260px, 48vh, min(72vh, 620px));
   max-height: none;
   display: flex;
   flex-direction: column;
@@ -5257,6 +5260,16 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-modal--fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-hand,
 .vz-board-modal--fullscreen .vz-zole-wrap:not(.vz-zole-wrap--fs-play) > .vz-zole-result {
   flex-shrink: 0;
+}
+/* Likšana / norakšana: augšējā meta (tabula + 3 avatāri) nedrīkst «apēst» zaļo galdu */
+.vz-board-modal--fullscreen
+  .vz-zole-wrap:not(.vz-zole-wrap--fs-play)
+  > .vz-zole-meta {
+  flex-shrink: 0;
+  max-height: min(38vh, 320px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 /* Lobijs / uzaicinājums — scroll iekš pilna ekrāna */
 .vz-board-modal--fullscreen .vz-board-lobby {
@@ -5596,9 +5609,11 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   display: flex;
   flex-direction: column;
 }
-/* Likšana / norakšana: viena kolonna — filcs aug, bez konteinera iekšējās ritināšanas */
+/* Likšana / norakšana: kolonna var ritināties, ja saturs garš; filcam ir min-height (sk. pilnekrāna noteikumus) */
 .vz-board-game-area.vz-board-zole-fs:not(.vz-board-zole-play) #board-zole-container {
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 /* Spēles fāzē — viena kolonna bez ritināšanas, lai filcs aizpilda augstumu */
 .vz-board-game-area.vz-board-zole-fs.vz-board-zole-play #board-zole-container {
@@ -5817,14 +5832,14 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 /* Lielais filcs ārpus kārtu fāzes (likšana / norakšana / beigas) — bez max-height / iekšējās ritināšanas */
 .vz-zole-arena:not(.vz-zole-arena--play) .vz-zole-table-felt {
   flex: 1 1 auto;
-  min-height: clamp(300px, 52vh, 620px);
+  min-height: clamp(340px, 58vh, min(78vh, 720px));
   max-height: none;
   margin-bottom: 0;
   overflow: visible;
 }
 @media (max-width: 520px) {
   .vz-zole-arena:not(.vz-zole-arena--play) .vz-zole-table-felt {
-    min-height: clamp(260px, 46vh, 520px);
+    min-height: clamp(300px, 50vh, 620px);
   }
 }
 .vz-zole-meta {
@@ -6114,7 +6129,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 /* Pilnekrāna Zole play: filcs aizpilda atlikušo augstumu — bez globālā max-height */
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-arena--play .vz-zole-table-felt {
-  min-height: 0;
+  min-height: clamp(220px, 32vh, min(56vh, 520px));
   max-height: none;
   flex: 1 1 0;
   overflow: hidden;
@@ -6151,7 +6166,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   .vz-zole-arena:not(.vz-zole-arena--play)
   .vz-zole-table-felt {
   flex: 1 1 0;
-  min-height: 0;
+  min-height: clamp(260px, 48vh, min(72vh, 620px));
   max-height: none;
   margin-bottom: 8px;
   overflow: visible;
