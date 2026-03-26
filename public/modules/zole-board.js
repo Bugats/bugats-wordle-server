@@ -251,12 +251,13 @@
     const wrap = el("div", "vz-zole-pt");
     const ph = zole.phase || "";
     const showPart = ph === "end";
+    const showEyes = showPart;
     const table = el("table", "vz-zole-pt__table");
     const thead = el("thead");
     const hr = el("tr");
     const heads = showPart
       ? ["", "P.", "K.", "A", "S"]
-      : ["", "K.", "A", "S"];
+      : ["", "K.", "S"];
     for (const h of heads) {
       hr.appendChild(el("th", null, h));
     }
@@ -283,7 +284,9 @@
         );
       }
       tr.appendChild(el("td", "vz-zole-pt__num", formatPts(cum[i])));
-      tr.appendChild(el("td", "vz-zole-pt__num", String(eyes[i] ?? 0)));
+      if (showEyes) {
+        tr.appendChild(el("td", "vz-zole-pt__num", String(eyes[i] ?? 0)));
+      }
       tr.appendChild(el("td", "vz-zole-pt__num", String(tricks[i] ?? 0)));
       tbody.appendChild(tr);
     }
@@ -366,10 +369,10 @@
 
     const sub = el("div", "vz-zole-felt__sub");
     if (trick.length > 0) {
-      sub.textContent = `${zole.currentTrickEyes ?? 0} acis`;
+      sub.textContent = "\u00a0";
     } else if (frozen && lc) {
       const wn = zole.players?.[lc.winnerIdx] || "?";
-      sub.textContent = `${wn} · ${lc.trickEyes ?? 0}`;
+      sub.textContent = `${wn} ņēma stiķi`;
     } else {
       sub.textContent = "\u00a0";
     }
@@ -512,12 +515,20 @@
       if (lr.tie) return "Galdiņš: trīs vienādi — bez izmaksām.";
       const bs =
         lr.loserNoTricks === true ? " Bezstiķis — maksā pa 3 p." : "";
-      return `Galdiņš: zaudē ${zole.players?.[lr.loserIdx] || "?"}, maksā katram uzvarētājam ${lr.payEach} p.${bs}`;
+      const li = lr.loserIdx;
+      const le =
+        Array.isArray(lr.eyes) && li != null ? lr.eyes[li] : null;
+      const ac = le != null ? ` (${le} acis)` : "";
+      return `Galdiņš: zaudē ${zole.players?.[li] || "?"}${ac}, maksā katram uzvarētājam ${lr.payEach} p.${bs}`;
     }
     if (lr.kind === "galds") {
       const bs =
         lr.loserNoTricks === true ? " Bezstiķis — maksā pa 3 p." : "";
-      return `Galds: zaudē ${zole.players?.[lr.loserIdx] || "?"}, maksā katram ${lr.payEach} p.${bs}`;
+      const li = lr.loserIdx;
+      const le =
+        Array.isArray(lr.eyes) && li != null ? lr.eyes[li] : null;
+      const ac = le != null ? ` (${le} acis)` : "";
+      return `Galds: zaudē ${zole.players?.[li] || "?"}${ac}, maksā katram ${lr.payEach} p.${bs}`;
     }
     if (lr.kind === "big") {
       if (lr.win) {
@@ -543,6 +554,19 @@
         : "Mazā zole zaudēta (−14 · +7 katram mazajam).";
     }
     return "";
+  }
+
+  /** Partijas beigās: kurš savācis visvairāk acu (pēc stiķiem). */
+  function endEyesWinnerLine(zole) {
+    const eyes = zole.eyePoints;
+    if (!eyes || eyes.length !== 3) return "";
+    let best = 0;
+    for (let i = 1; i < 3; i++) {
+      if ((eyes[i] ?? 0) > (eyes[best] ?? 0)) best = i;
+    }
+    const e = eyes[best] ?? 0;
+    const nm = zole.players?.[best] || "?";
+    return `${nm} visvairāk acu šajā izspēlē: ${e}`;
   }
 
   function renderZoleBoard(zole, isMyTurn, onPlayCard, opts) {
@@ -607,6 +631,10 @@
       }
       const story = lastResultText(zole);
       if (story) endBox.appendChild(el("div", "vz-zole-end__story", story));
+      const eyesLine = endEyesWinnerLine(zole);
+      if (eyesLine) {
+        endBox.appendChild(el("div", "vz-zole-end__eyes", eyesLine));
+      }
       felt.appendChild(endBox);
     } else {
       felt.appendChild(buildTrickCenter(zole));
