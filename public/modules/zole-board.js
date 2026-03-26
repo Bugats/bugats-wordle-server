@@ -421,49 +421,75 @@
     return c;
   }
 
+  const ZOLE_HAND_DESIGN_W = 108;
+  const ZOLE_HAND_MIN_SCALE = 0.28;
+
   function fitZoleHandOverlap(dock) {
     const row = dock.querySelector(".vz-zole-hand--overlap");
     if (!row) return;
     const cards = row.querySelectorAll(".vz-zole-hand__card");
     const n = cards.length;
-    if (n <= 1) return;
-    const measure = () => {
-      const rect0 = cards[0].getBoundingClientRect();
-      /* Poga var būt 0 platumā pirms layout — neizmantot kā cardW */
-      const cardW =
-        rect0.width > 40 ? rect0.width : 108;
-      const felt = dock.closest(".vz-zole-classic__felt");
-      /* dock platums = patiesā rokas josla (filcs var būt platāks) */
-      const raw =
-        (dock.clientWidth > 40 ? dock.clientWidth : 0) ||
-        (felt && felt.clientWidth) ||
-        row.clientWidth ||
-        320;
-      const budget = Math.max(200, raw - 20);
-      /* Lielas kārtis, bet ciešs ventilatoriņš — pietiek kreisajai malai (rangs) */
-      const minVisible = Math.max(22, Math.round(cardW * 0.2));
-      const maxPull = Math.max(12, cardW - minVisible);
+    if (n <= 1) {
+      dock.style.setProperty("--vz-hand-scale", "1");
+      return;
+    }
+
+    /** Platums ar maksimālo pārklājumu (vismaz minVisible no katra bloka). */
+    function minWidthAtScale(s, bdg) {
+      const cardW = ZOLE_HAND_DESIGN_W * s;
+      const minVisible = Math.max(12, Math.round(cardW * 0.16));
+      const w = cardW + (n - 1) * minVisible;
+      return { cardW, minVisible, w, fits: w <= bdg + 0.5 };
+    }
+
+    function pullForScale(s, bdg) {
+      const cardW = ZOLE_HAND_DESIGN_W * s;
+      const minVisible = Math.max(12, Math.round(cardW * 0.16));
+      const maxPull = Math.max(8, cardW - minVisible);
       const natural = n * cardW;
       let pull = 0;
-      if (natural > budget) {
-        pull = Math.ceil((natural - budget) / (n - 1));
+      if (natural > bdg) {
+        pull = Math.ceil((natural - bdg) / (n - 1));
       } else if (n >= 4) {
-        pull = Math.round(cardW * (n >= 8 ? 0.55 : 0.48));
+        pull = Math.round(cardW * (n >= 8 ? 0.58 : 0.5));
       }
       pull = Math.min(Math.max(0, pull), maxPull);
+      return pull;
+    }
+
+    const measure = () => {
+      const felt = dock.closest(".vz-zole-classic__felt");
+      const raw =
+        (dock.clientWidth > 48 ? dock.clientWidth : 0) ||
+        (felt && felt.clientWidth) ||
+        320;
+      const budget = Math.max(140, raw - 14);
+
+      let lo = ZOLE_HAND_MIN_SCALE;
+      let hi = 1;
+      for (let iter = 0; iter < 18; iter++) {
+        const mid = (lo + hi) / 2;
+        if (minWidthAtScale(mid, budget).fits) lo = mid;
+        else hi = mid;
+      }
+      const s = lo;
+      dock.style.setProperty("--vz-hand-scale", String(s));
+      const pull = pullForScale(s, budget);
       for (let i = 1; i < n; i++) {
         cards[i].style.marginLeft = pull > 0 ? `-${pull}px` : "";
       }
     };
+
     measure();
     global.requestAnimationFrame(() => {
       measure();
       global.requestAnimationFrame(measure);
     });
-    const felt = dock.closest(".vz-zole-classic__felt");
-    if (felt && typeof ResizeObserver !== "undefined") {
+    if (typeof ResizeObserver !== "undefined") {
       const ro = new ResizeObserver(() => measure());
-      ro.observe(felt);
+      ro.observe(dock);
+      const felt = dock.closest(".vz-zole-classic__felt");
+      if (felt) ro.observe(felt);
     }
   }
 

@@ -5592,11 +5592,10 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding: 10px 4px 4px;
   margin-top: auto;
   max-width: 100%;
-  /* auto: pirmā kārta nav nogriezta (center + hidden griež kreisajā malā) */
-  overflow-x: auto;
+  --vz-hand-scale: 1;
+  /* Bez horizontālās ritināšanas — JS: max pārklājums + --vz-hand-scale */
+  overflow-x: hidden;
   overflow-y: visible;
-  -webkit-overflow-scrolling: touch;
-  scroll-padding-inline: 4px;
 }
 #board-zole-container .vz-zole-classic__discardBar {
   display: flex;
@@ -5719,25 +5718,44 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   height: 78px;
   border-radius: 7px;
 }
-/* Roka — lielas kārtis, platumu cieši sakļauj ar JS overlap */
+/* Roka — bāzes izmērs 108×168; dokā JS var samazināt --vz-hand-scale, lai viss ietilpst */
 #board-zole-container .vz-zole-card--hand {
   width: 108px;
   height: 168px;
   border-radius: 12px;
 }
+#board-zole-container .vz-zole-classic__dock .vz-zole-card--hand {
+  width: calc(108px * var(--vz-hand-scale, 1));
+  height: calc(168px * var(--vz-hand-scale, 1));
+  border-radius: calc(12px * var(--vz-hand-scale, 1));
+}
 #board-zole-container .vz-zole-card--hand .vz-zole-card__corner {
   font-size: 18px;
 }
+#board-zole-container .vz-zole-classic__dock .vz-zole-card--hand .vz-zole-card__corner {
+  font-size: calc(18px * var(--vz-hand-scale, 1));
+}
 #board-zole-container .vz-zole-card--hand .vz-zole-card__center {
   font-size: 44px;
+}
+#board-zole-container .vz-zole-classic__dock .vz-zole-card--hand .vz-zole-card__center {
+  font-size: calc(44px * var(--vz-hand-scale, 1));
 }
 #board-zole-container .vz-zole-card--hand .vz-zole-card__corner--tl {
   top: 8px;
   left: 6px;
 }
+#board-zole-container .vz-zole-classic__dock .vz-zole-card--hand .vz-zole-card__corner--tl {
+  top: calc(8px * var(--vz-hand-scale, 1));
+  left: calc(6px * var(--vz-hand-scale, 1));
+}
 #board-zole-container .vz-zole-card--hand .vz-zole-card__corner--br {
   bottom: 8px;
   right: 6px;
+}
+#board-zole-container .vz-zole-classic__dock .vz-zole-card--hand .vz-zole-card__corner--br {
+  bottom: calc(8px * var(--vz-hand-scale, 1));
+  right: calc(6px * var(--vz-hand-scale, 1));
 }
 #board-zole-container .vz-zole-card--red .vz-zole-card__corner,
 #board-zole-container .vz-zole-card--red .vz-zole-card__center {
@@ -5962,6 +5980,10 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   min-width: 108px;
   transition: transform 0.15s ease;
 }
+#board-zole-container .vz-zole-classic__dock .vz-zole-hand__card {
+  min-width: calc(108px * var(--vz-hand-scale, 1));
+  border-radius: calc(14px * var(--vz-hand-scale, 1));
+}
 #board-zole-container .vz-zole-hand__card--static {
   cursor: default;
   pointer-events: none;
@@ -5972,7 +5994,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   filter: grayscale(0.15);
 }
 #board-zole-container .vz-zole-hand__card:not(:disabled):active {
-  transform: translateY(-4px);
+  transform: translateY(-8px);
 }
 #board-zole-container .vz-zole-hand__card--sel {
   outline: 3px solid #fbbf24;
