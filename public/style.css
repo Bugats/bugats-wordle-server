@@ -5711,6 +5711,8 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   align-items: flex-end;
   gap: 10px 14px;
   flex-wrap: wrap;
+  width: 100%;
+  max-width: 100%;
 }
 #board-zole-container .vz-zole-felt__seat {
   display: flex;
@@ -5718,6 +5720,12 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   align-items: center;
   gap: 6px;
   min-width: 88px;
+  flex: 1 1 0;
+  max-width: 34%;
+}
+#board-zole-container .vz-zole-felt__seat--me .vz-zole-felt__who {
+  color: #a5f3fc;
+  font-weight: 700;
 }
 #board-zole-container .vz-zole-felt__seat--turn .vz-zole-felt__who {
   color: #fef08a;

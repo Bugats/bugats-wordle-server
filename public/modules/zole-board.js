@@ -247,18 +247,6 @@
     return String(v);
   }
 
-  function trickPlayOrderSeats(zole) {
-    const trick = zole.trick || [];
-    let leader =
-      typeof zole.trickLeader === "number" ? zole.trickLeader : 0;
-    if (trick.length === 0 && zole.lastCompletedTrick) {
-      const li = zole.lastCompletedTrick.leaderIdx;
-      if (typeof li === "number") leader = li;
-    }
-    leader = ((leader % 3) + 3) % 3;
-    return [leader, (leader + 1) % 3, (leader + 2) % 3];
-  }
-
   function trickCardByPlayer(zole) {
     const map = {};
     const trick = zole.trick || [];
@@ -410,7 +398,7 @@
     return wrap;
   }
 
-  function buildTrickCenter(zole) {
+  function buildTrickCenter(zole, myIdx) {
     const phase = zole.phase || "";
     const wrap = el("div", "vz-zole-classic__trickWrap");
     if (phase !== "play") {
@@ -424,13 +412,20 @@
     const lc = zole.lastCompletedTrick;
     const frozen = trick.length === 0 && lc && lc.cards?.length === 3;
     const byP = trickCardByPlayer(zole);
-    const order = trickPlayOrderSeats(zole);
     const turnSeat =
       !frozen && typeof zole.turn === "number" ? zole.turn : null;
 
+    /* Vietas uz ekrāna kā pretinieku rinda: kreisais → tu → labais */
+    const leftPi = (myIdx + 1) % 3;
+    const rightPi = (myIdx + 2) % 3;
+    const visualOrder = [leftPi, myIdx, rightPi];
+
     const row = el("div", "vz-zole-felt__trick");
-    for (const seat of order) {
+    for (const seat of visualOrder) {
       const col = el("div", "vz-zole-felt__seat");
+      if (seat === leftPi) col.classList.add("vz-zole-felt__seat--left");
+      if (seat === rightPi) col.classList.add("vz-zole-felt__seat--right");
+      if (seat === myIdx) col.classList.add("vz-zole-felt__seat--me");
       if (turnSeat === seat) col.classList.add("vz-zole-felt__seat--turn");
       if (frozen) col.classList.add("vz-zole-felt__seat--frozen");
 
@@ -750,7 +745,7 @@
       }
       felt.appendChild(endBox);
     } else {
-      felt.appendChild(buildTrickCenter(zole));
+      felt.appendChild(buildTrickCenter(zole, myIdx));
     }
 
     let dock = null;
