@@ -9631,11 +9631,10 @@ function syncBoardModalFullscreen() {
     modal.classList.remove("vz-board-modal--fullscreen");
     return;
   }
-  /* Pilnekrāns visai aktīvajai Zolei (likšana, norakšana, spēle, beigas) — lielāks zaļais galds. */
+  /* Pilnekrāns visai aktīvajai Zolei (likšana, norakšana, spēle, beigas) — lielāks zaļais galds.
+     Neuzkaršojam no boardState.zole: snapšots var īslaicīgi trūkt, tad modālis paliek šaurs (440px) ar scroll. */
   const zoleFs =
-    boardState.gameId &&
-    boardState.type === "zole" &&
-    !!boardState.zole;
+    boardState.gameId && boardState.type === "zole";
   modal.classList.toggle("vz-board-modal--fullscreen", !!zoleFs);
 }
 

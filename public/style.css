@@ -5385,6 +5385,13 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex: 1 1 auto;
   min-height: 0;
 }
+/* Ja pilnekrāna klase nav (reti), Zole joprojām platumā kā spēles skats, ne kā šaurā 440px karte */
+.vz-board-modal:not(.vz-board-modal--fullscreen)
+  .vz-board-modal-inner:has(#board-zole-container:not(.hidden)) {
+  max-width: min(100vw - 24px, 560px);
+  max-height: min(92dvh, 900px);
+  overflow: hidden;
+}
 .vz-board-modal-inner .vz-duel-x {
   position: absolute;
   top: 12px;

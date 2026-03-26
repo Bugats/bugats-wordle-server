@@ -870,7 +870,10 @@
       existingWrap.dataset.zolePhase === zole.phase &&
       existingWrap.dataset.zoleStableSig === stableSig;
     if (canPartialUpdate) {
-      existingWrap.classList.add("vz-zole-wrap--fs-play");
+      existingWrap.classList.toggle(
+        "vz-zole-wrap--fs-play",
+        zole.phase === "play"
+      );
       const arenaEl = existingWrap.querySelector(".vz-zole-arena");
       const extrasEl = existingWrap.querySelector(".vz-zole-fs-extras");
       const metaTop = existingWrap.querySelector(".vz-zole-meta--play-top");
