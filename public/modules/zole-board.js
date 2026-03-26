@@ -223,12 +223,14 @@
   function createCardFace(card, opts) {
     const o = opts || {};
     const small = !!o.small;
+    const hand = !!o.hand;
     const meta = SUIT_META[card.s] || SUIT_META[0];
     const rank = RANK_LABELS[card.r] || String(card.r);
     const trump = isZoleTrumpCard(card);
 
     const root = el("div", "vz-zole-card");
     if (small) root.classList.add("vz-zole-card--sm");
+    else if (hand) root.classList.add("vz-zole-card--hand");
     if (meta.red) root.classList.add("vz-zole-card--red");
     else root.classList.add("vz-zole-card--black");
     if (trump) root.classList.add("vz-zole-card--trump");
@@ -290,52 +292,44 @@
     return wrap;
   }
 
-  /** Roka tikai apskatei (likšana u.c.) — visas kārtis neaktīvas */
-  function appendReadonlyHandRow(parent, zole) {
-    const hand = sortHand(zole.myHand || []);
-    if (!hand.length) return;
-    const panel = el("div", "vz-zole-panel vz-zole-panel--hand vz-zole-panel--readonly");
-    const row = el("div", "vz-zole-hand vz-zole-hand--fan");
-    for (const card of hand) {
-      const wrap = el("div", "vz-zole-hand__card vz-zole-hand__card--static");
-      wrap.appendChild(createCardFace(card, { small: true }));
-      if (isZoleTrumpCard(card)) wrap.classList.add("vz-zole-hand__card--trump");
-      row.appendChild(wrap);
-    }
-    panel.appendChild(row);
-    parent.appendChild(panel);
+  function createDeckBackMini() {
+    const d = el("div", "vz-zole-deck-mini");
+    d.setAttribute("aria-hidden", "true");
+    return d;
   }
 
-  function buildPlayersStrip(zole, myIdx) {
-    const strip = el("div", "vz-zole-strip");
-    strip.setAttribute("role", "list");
+  function buildOpponentCorner(zole, pi, activePi) {
+    const corner = el("div", "vz-zole-opp");
+    if (activePi === pi) corner.classList.add("vz-zole-opp--turn");
+    const nm = el("div", "vz-zole-opp__name", zole.players?.[pi] || "?");
+    corner.appendChild(nm);
+    corner.appendChild(createDeckBackMini());
+    const av = el("div", "vz-zole-opp__avatar");
+    const un = String(zole.players?.[pi] || "?").trim();
+    av.textContent = un ? un.charAt(0).toUpperCase() : "?";
+    corner.appendChild(av);
+    return corner;
+  }
+
+  function buildOpponentsRow(zole, myIdx) {
+    const row = el("div", "vz-zole-classic__opps");
     const active = zoleActiveTurnPlayerIndex(zole);
-    const order = [myIdx, (myIdx + 1) % 3, (myIdx + 2) % 3];
-    for (let oi = 0; oi < 3; oi++) {
-      const pi = order[oi];
-      const cell = el("span", "vz-zole-strip__p");
-      cell.setAttribute("role", "listitem");
-      if (pi === myIdx) cell.classList.add("vz-zole-strip__p--me");
-      if (active === pi) cell.classList.add("vz-zole-strip__p--turn");
-      cell.textContent = zole.players?.[pi] || "?";
-      strip.appendChild(cell);
-    }
-    return strip;
+    const leftPi = (myIdx + 1) % 3;
+    const rightPi = (myIdx + 2) % 3;
+    row.appendChild(buildOpponentCorner(zole, leftPi, active));
+    row.appendChild(buildOpponentCorner(zole, rightPi, active));
+    return row;
   }
 
-  function buildTableFelt(zole) {
+  function buildTrickCenter(zole) {
     const phase = zole.phase || "";
-    const outer = el("div", "vz-zole-felt");
-    if (phase === "play") {
-      outer.appendChild(el("div", "vz-zole-felt__title", "Galds"));
+    const wrap = el("div", "vz-zole-classic__trickWrap");
+    if (phase !== "play") {
+      wrap.appendChild(el("div", "vz-zole-classic__trickSpacer"));
+      return wrap;
     }
 
-    if (phase !== "play") {
-      const hint = el("div", "vz-zole-felt__idle");
-      hint.innerHTML = "&nbsp;";
-      outer.appendChild(hint);
-      return outer;
-    }
+    wrap.appendChild(el("div", "vz-zole-felt__title", "Galds"));
 
     const trick = zole.trick || [];
     const lc = zole.lastCompletedTrick;
@@ -362,26 +356,110 @@
       } else {
         const ph = el("div", "vz-zole-felt__placeholder");
         ph.textContent =
-          !frozen && turnSeat === seat ? "Domā…" : frozen ? "" : "Gaida…";
+          !frozen && turnSeat === seat ? "…" : frozen ? "" : "…";
         cardSlot.appendChild(ph);
       }
       col.appendChild(cardSlot);
       row.appendChild(col);
     }
-    outer.appendChild(row);
+    wrap.appendChild(row);
 
     const sub = el("div", "vz-zole-felt__sub");
     if (trick.length > 0) {
-      sub.textContent = `Stiķī: ${zole.currentTrickEyes ?? 0} acis`;
+      sub.textContent = `${zole.currentTrickEyes ?? 0} acis`;
     } else if (frozen && lc) {
       const wn = zole.players?.[lc.winnerIdx] || "?";
-      sub.textContent = `Stiķis · uzvar ${wn} · ${lc.trickEyes ?? 0} acis`;
+      sub.textContent = `${wn} · ${lc.trickEyes ?? 0}`;
     } else {
       sub.textContent = "\u00a0";
     }
-    outer.appendChild(sub);
+    wrap.appendChild(sub);
+    return wrap;
+  }
 
-    return outer;
+  function buildBidCenter(zole, myIdx, onBid, zm) {
+    const center = el("div", "vz-zole-classic__bidCenter");
+    const isMyBid = (zole.bidTurn ?? 0) === myIdx;
+    const stack = el("div", "vz-zole-bid-stack");
+    if (isMyBid && onBid) {
+      const bids = [
+        { key: "maza_zole", label: "Mazā zole" },
+        { key: "zole", label: "Zole" },
+        { key: "big", label: "Lielais" },
+        { key: "pass", label: "Garām" },
+      ];
+      for (const b of bids) {
+        const btn = el("button", "vz-zole-bid-tile", b.label);
+        btn.type = "button";
+        btn.addEventListener("click", () => onBid(b.key));
+        stack.appendChild(btn);
+      }
+    } else {
+      const wait = el("div", "vz-zole-bid-wait", zm === "vs_bot" ? "Gaida…" : "Gaida…");
+      stack.appendChild(wait);
+    }
+    center.appendChild(stack);
+    return center;
+  }
+
+  function buildDiscardCenter(isContractor) {
+    const c = el("div", "vz-zole-classic__msg");
+    c.textContent = isContractor
+      ? "Norok 2 kārtas"
+      : "Gaida norakšanu…";
+    return c;
+  }
+
+  function buildEndCenter(zole, zm) {
+    const c = el("div", "vz-zole-classic__msg");
+    const mh = zole.matchHandsPlayed ?? 0;
+    c.textContent =
+      zm === "vs_bot" ? `Beigas · #${mh}` : "Beigas";
+    return c;
+  }
+
+  function buildHandDock(zole, opts) {
+    const o = opts || {};
+    const hand = sortHand(zole.myHand || []);
+    if (!hand.length) return null;
+    const dock = el("div", "vz-zole-classic__dock");
+    const row = el("div", "vz-zole-hand vz-zole-hand--overlap");
+    const mode = o.mode || "readonly";
+    const n = hand.length;
+    const pull =
+      n <= 1 ? 0 : Math.min(28, Math.max(14, Math.round(220 / n)));
+
+    for (let hi = 0; hi < hand.length; hi++) {
+      const card = hand[hi];
+      const k = cardKey(card);
+      let wrap;
+      if (mode === "readonly") {
+        wrap = el("div", "vz-zole-hand__card vz-zole-hand__card--static");
+        wrap.appendChild(createCardFace(card, { hand: true }));
+      } else {
+        wrap = el("button", "vz-zole-hand__card");
+        wrap.type = "button";
+        wrap.appendChild(createCardFace(card, { hand: true }));
+        if (mode === "play") {
+          const can =
+            o.isMyTurn && (!o.legalSet || o.legalSet.has(k));
+          wrap.disabled = !can;
+          if (can) wrap.addEventListener("click", () => o.onPlayCard(card));
+        } else if (mode === "discard") {
+          if (!o.isContractor || !o.onToggle) {
+            wrap.disabled = true;
+          } else {
+            wrap.addEventListener("click", () => o.onToggle(card, wrap));
+          }
+        }
+      }
+      if (isZoleTrumpCard(card)) wrap.classList.add("vz-zole-hand__card--trump");
+      wrap.style.zIndex = String(10 + hi);
+      if (hi > 0 && pull > 0) wrap.style.marginLeft = `-${pull}px`;
+      row.appendChild(wrap);
+    }
+    dock.appendChild(row);
+    return dock;
   }
 
   function lastResultText(zole) {
@@ -439,158 +517,40 @@
     const zm = opts && String(opts.zoleMode || "").toLowerCase();
 
     container.innerHTML = "";
-    const root = el("div", "vz-zole");
+    const root = el("div", "vz-zole vz-zole--classic");
 
     const phase = zole.phase || "";
 
-    /* Kompakta galvene */
-    const top = el("div", "vz-zole__top");
-    const phaseLab =
-      phase === "bid"
-        ? "Likšana"
-        : phase === "discard"
-          ? "Norakšana"
-          : phase === "play"
-            ? "Spēle"
-            : phase === "end"
-              ? "Beigas"
-              : phase;
-    top.appendChild(el("span", "vz-zole__phase", phaseLab));
+    const woodTop = el("div", "vz-zole-wood vz-zole-wood--top");
+    woodTop.appendChild(el("span", "vz-zole-wood__brand", "ZOLE"));
+    const metaTop = el("span", "vz-zole-wood__meta");
     if (phase === "play" || phase === "discard" || phase === "end") {
-      top.appendChild(
-        el("span", "vz-zole__trump", `${zole.trumpLabel || "—"}`)
-      );
-    }
-    if (zole.contract && phase !== "bid") {
-      let contractTxt = contractLabel(zole.contract);
-      if (zole.contractorIdx != null && zole.players) {
-        contractTxt += ` · ${zole.players[zole.contractorIdx] || "?"}`;
+      metaTop.textContent = `${zole.trumpLabel || "—"}`;
+      if (zole.contract && phase !== "bid") {
+        let c = contractLabel(zole.contract);
+        if (zole.contractorIdx != null && zole.players) {
+          c += ` · ${zole.players[zole.contractorIdx] || "?"}`;
+        }
+        metaTop.textContent += ` · ${c}`;
       }
-      top.appendChild(el("span", "vz-zole__contract", contractTxt));
+    } else {
+      metaTop.textContent = "Likšana";
     }
-    root.appendChild(top);
-    root.appendChild(buildPlayersStrip(zole, myIdx));
+    woodTop.appendChild(metaTop);
+    root.appendChild(woodTop);
 
-    root.appendChild(buildTableFelt(zole));
+    const felt = el("div", "vz-zole-classic__felt");
+    felt.appendChild(buildOpponentsRow(zole, myIdx));
 
-    /* Likšana — vispirms roka, tad pogas */
     if (phase === "bid") {
-      appendReadonlyHandRow(root, zole);
-      const panel = el("div", "vz-zole-panel vz-zole-panel--bid");
-      const row = el("div", "vz-zole-actions");
-      const isMyBid = (zole.bidTurn ?? 0) === myIdx;
-      if (isMyBid && onBid) {
-        const bids = [
-          { key: "pass", label: "Garām", primary: false },
-          { key: "big", label: "Lielais", primary: true },
-          { key: "zole", label: "Zole", primary: true },
-          { key: "maza_zole", label: "M. zole", primary: true },
-        ];
-        for (const b of bids) {
-          const btn = el("button", "vz-zole-btn", b.label);
-          btn.type = "button";
-          if (b.primary) btn.classList.add("vz-zole-btn--primary");
-          btn.addEventListener("click", () => onBid(b.key));
-          row.appendChild(btn);
-        }
-      } else {
-        panel.appendChild(
-          el(
-            "div",
-            "vz-zole-panel__wait",
-            zm === "vs_bot" ? "Gaida botu…" : "Gaida…"
-          )
-        );
-      }
-      if (row.childNodes.length) panel.appendChild(row);
-      root.appendChild(panel);
-    }
-
-    /* Norakšana */
-    if (phase === "discard" && zole.contract === "big") {
-      const isContractor = myIdx === zole.contractorIdx;
-      const panel = el("div", "vz-zole-panel vz-zole-panel--discard");
-      const selected = [];
-      const hand = sortHand(zole.myHand || []);
-      const confirmBtn = el("button", "vz-zole-btn vz-zole-btn--accent", "Norakt");
-      confirmBtn.type = "button";
-      confirmBtn.disabled = true;
-
-      function syncDiscardBtn() {
-        confirmBtn.disabled = selected.length !== 2 || !onDiscard;
-      }
-
-      const handRow = el("div", "vz-zole-hand");
-      for (const card of hand) {
-        const wrap = el("button", "vz-zole-hand__card");
-        wrap.type = "button";
-        wrap.appendChild(createCardFace(card, { small: true }));
-        if (isZoleTrumpCard(card)) wrap.classList.add("vz-zole-hand__card--trump");
-        if (!isContractor || !onDiscard) {
-          wrap.disabled = true;
-        } else {
-          wrap.addEventListener("click", () => {
-            const k = cardKey(card);
-            const ix = selected.findIndex((c) => cardKey(c) === k);
-            if (ix >= 0) {
-              selected.splice(ix, 1);
-              wrap.classList.remove("vz-zole-hand__card--sel");
-            } else if (selected.length < 2) {
-              selected.push(card);
-              wrap.classList.add("vz-zole-hand__card--sel");
-            }
-            syncDiscardBtn();
-          });
-        }
-        handRow.appendChild(wrap);
-      }
-      panel.appendChild(handRow);
-      const ar = el("div", "vz-zole-actions");
-      if (isContractor && onDiscard) {
-        confirmBtn.addEventListener("click", () => {
-          if (selected.length !== 2) return;
-          onDiscard(selected.slice());
-        });
-      }
-      ar.appendChild(confirmBtn);
-      panel.appendChild(ar);
-      root.appendChild(panel);
-    }
-
-    /* Roka — izspēle */
-    if (phase === "play") {
-      let legalSet = null;
-      if (isMyTurn) {
-        if (global.VZZoleLegal) {
-          const legal = global.VZZoleLegal.zoleLegalPlays(
-            zole.myHand || [],
-            zole.trick || []
-          );
-          legalSet = new Set(legal.map((c) => global.VZZoleLegal.zoleCardKey(c)));
-        } else if (zole.legalCardKeys && zole.legalCardKeys.length) {
-          legalSet = new Set(zole.legalCardKeys);
-        }
-      }
-      const panel = el("div", "vz-zole-panel vz-zole-panel--hand");
-      const handRow = el("div", "vz-zole-hand vz-zole-hand--fan");
-      for (const card of sortHand(zole.myHand || [])) {
-        const k = cardKey(card);
-        const can = isMyTurn && (!legalSet || legalSet.has(k));
-        const wrap = el("button", "vz-zole-hand__card");
-        wrap.type = "button";
-        wrap.appendChild(createCardFace(card, { small: true }));
-        if (isZoleTrumpCard(card)) wrap.classList.add("vz-zole-hand__card--trump");
-        wrap.disabled = !can;
-        if (can) wrap.addEventListener("click", () => onPlayCard(card));
-        handRow.appendChild(wrap);
-      }
-      panel.appendChild(handRow);
-      root.appendChild(panel);
-    }
-
-    /* Beigas */
-    if (phase === "end") {
-      const panel = el("div", "vz-zole-panel vz-zole-panel--end");
+      felt.appendChild(buildBidCenter(zole, myIdx, onBid, zm));
+    } else if (phase === "discard" && zole.contract === "big") {
+      felt.appendChild(
+        buildDiscardCenter(myIdx === zole.contractorIdx)
+      );
+    } else if (phase === "end") {
+      const endBox = el("div", "vz-zole-classic__end");
+      endBox.appendChild(buildEndCenter(zole, zm));
       if (zole.tableDelta) {
         const parts = [];
         for (let i = 0; i < 3; i++) {
@@ -598,30 +558,99 @@
           if (!n) continue;
           parts.push(`${zole.players?.[i] || "?"}: ${formatPts(n)}`);
         }
-        panel.appendChild(
+        endBox.appendChild(
           el("div", "vz-zole-end__delta", parts.join(" · ") || "—")
         );
       }
       const story = lastResultText(zole);
-      if (story) panel.appendChild(el("div", "vz-zole-end__story", story));
-      root.appendChild(panel);
+      if (story) endBox.appendChild(el("div", "vz-zole-end__story", story));
+      felt.appendChild(endBox);
+    } else {
+      felt.appendChild(buildTrickCenter(zole));
     }
 
-    /* Zemāk: kompakta tabula + noteikumi (izņemot likšanu) */
-    if (phase !== "bid") {
-      const foot = el("div", "vz-zole__foot");
-      foot.appendChild(buildPointsTable(zole, myIdx));
-      if (zole.trumpNote && (phase === "play" || phase === "discard")) {
-        const det = el("details", "vz-zole-sek");
-        const sum = el("summary", "vz-zole-sek__sum", "Sekšana");
-        const body = el("div", "vz-zole-sek__body");
-        body.textContent = zole.trumpNote;
-        det.appendChild(sum);
-        det.appendChild(body);
-        foot.appendChild(det);
+    let dock = null;
+    if (phase === "bid") {
+      dock = buildHandDock(zole, { mode: "readonly" });
+    } else if (phase === "discard" && zole.contract === "big") {
+      const isContractor = myIdx === zole.contractorIdx;
+      const selected = [];
+      const confirmBtn = el(
+        "button",
+        "vz-zole-bid-tile vz-zole-bid-tile--narrow",
+        "Norakt"
+      );
+      confirmBtn.type = "button";
+      confirmBtn.disabled = true;
+      function syncDiscardBtn() {
+        confirmBtn.disabled = selected.length !== 2 || !onDiscard;
       }
-      root.appendChild(foot);
+      dock = buildHandDock(zole, {
+        mode: "discard",
+        isContractor,
+        onToggle: (card, wrap) => {
+          if (!onDiscard || !isContractor) return;
+          const k = cardKey(card);
+          const ix = selected.findIndex((c) => cardKey(c) === k);
+          if (ix >= 0) {
+            selected.splice(ix, 1);
+            wrap.classList.remove("vz-zole-hand__card--sel");
+          } else if (selected.length < 2) {
+            selected.push(card);
+            wrap.classList.add("vz-zole-hand__card--sel");
+          }
+          syncDiscardBtn();
+        },
+      });
+      if (dock && isContractor && onDiscard) {
+        confirmBtn.addEventListener("click", () => {
+          if (selected.length !== 2) return;
+          onDiscard(selected.slice());
+        });
+        const bar = el("div", "vz-zole-classic__discardBar");
+        bar.appendChild(confirmBtn);
+        dock.appendChild(bar);
+      }
+    } else if (phase === "play") {
+      let legalSet = null;
+      if (isMyTurn) {
+        if (global.VZZoleLegal) {
+          const legal = global.VZZoleLegal.zoleLegalPlays(
+            zole.myHand || [],
+            zole.trick || []
+          );
+          legalSet = new Set(
+            legal.map((c) => global.VZZoleLegal.zoleCardKey(c))
+          );
+        } else if (zole.legalCardKeys && zole.legalCardKeys.length) {
+          legalSet = new Set(zole.legalCardKeys);
+        }
+      }
+      dock = buildHandDock(zole, {
+        mode: "play",
+        isMyTurn,
+        legalSet,
+        onPlayCard,
+      });
     }
+    if (dock) felt.appendChild(dock);
+
+    root.appendChild(felt);
+
+    const woodBot = el("div", "vz-zole-wood vz-zole-wood--bot");
+    const detFoot = el("details", "vz-zole-foot-details");
+    const sumFoot = el("summary", "vz-zole-foot-details__sum", "Punkti · noteikumi");
+    const innerFoot = el("div", "vz-zole-foot-details__body");
+    innerFoot.appendChild(buildPointsTable(zole, myIdx));
+    if (zole.trumpNote) {
+      const p = el("p", "vz-zole-foot-note");
+      p.textContent = zole.trumpNote;
+      innerFoot.appendChild(p);
+    }
+    detFoot.appendChild(sumFoot);
+    detFoot.appendChild(innerFoot);
+    woodBot.appendChild(detFoot);
+    root.appendChild(woodBot);
 
     container.appendChild(root);
   }
