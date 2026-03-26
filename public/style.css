@@ -5004,7 +5004,8 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   margin-top: 0;
   overflow: hidden;
 }
-.vz-board-modal--fullscreen .vz-board-game-area.vz-board-zole-play {
+.vz-board-modal--fullscreen .vz-board-game-area.vz-board-zole-play,
+.vz-board-modal--fullscreen .vz-board-game-area.vz-board-zole-fs {
   min-height: 0;
 }
 .vz-board-modal--fullscreen .vz-board-game-header {
@@ -5116,11 +5117,20 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-modal--fullscreen #board-zole-container:not(.hidden) {
   flex: 1 1 auto;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.vz-board-modal--fullscreen
+  .vz-board-game-area.vz-board-zole-fs:not(.vz-board-zole-play)
+  #board-zole-container:not(.hidden) {
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  display: flex;
-  flex-direction: column;
+}
+.vz-board-modal--fullscreen
+  .vz-board-game-area.vz-board-zole-fs.vz-board-zole-play
+  #board-zole-container:not(.hidden) {
+  overflow: hidden;
 }
 /* Jebkura Zoles fāze pilnekrāna modālī: wrap aizpilda laukumu */
 .vz-board-modal--fullscreen #board-zole-container .vz-zole-wrap {
@@ -5130,6 +5140,12 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex-direction: column;
   width: 100%;
   margin-top: 0;
+}
+.vz-board-modal--fullscreen
+  .vz-board-game-area.vz-board-zole-fs
+  #board-zole-container
+  .vz-zole-wrap {
+  flex: 1 1 0;
 }
 .vz-board-modal--fullscreen .vz-zole-fs-toolbar {
   flex-shrink: 0;
@@ -5193,20 +5209,18 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex-shrink: 0;
 }
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-table-felt {
-  flex: 1 1 auto;
-  margin-bottom: 8px;
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: none;
+  margin-bottom: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-play-side {
-  max-height: min(70vh, 520px);
+  max-height: min(38vh, 320px);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-}
-.vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-trick-fan {
-  flex: 0 0 auto;
-  align-content: center;
-  align-items: center;
 }
 /* Negatīvais margin velk rokas kārtis zem filca — pilnekrānā noņemam */
 .vz-board-modal--fullscreen .vz-zole-hand {
@@ -5549,6 +5563,30 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
+}
+/* Aktīva Zole (visas fāzes): kolonna līdz modāļa apakšai — pilnekrānā filcs var augt */
+.vz-board-game-area.vz-board-zole-fs {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.vz-board-game-area.vz-board-zole-fs #board-zole-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Kārtu likšanā — atļaut ritināšanu, ja likšana + roka garas */
+.vz-board-game-area.vz-board-zole-fs:not(.vz-board-zole-play) #board-zole-container {
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+/* Spēles fāzē — viena kolonna bez ritināšanas, lai filcs aizpilda augstumu */
+.vz-board-game-area.vz-board-zole-fs.vz-board-zole-play #board-zole-container {
+  overflow: hidden;
 }
 .vz-board-game-header {
   display: flex;
@@ -6050,6 +6088,40 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     min-height: clamp(200px, 36vh, 380px);
     max-height: min(52vh, 420px);
   }
+}
+/* Pilnekrāna Zole play: filcs aizpilda atlikušo augstumu — bez globālā max-height */
+.vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-arena--play .vz-zole-table-felt {
+  min-height: 0;
+  max-height: none;
+  flex: 1 1 0;
+  overflow: hidden;
+}
+.vz-board-modal--fullscreen .vz-zole-wrap--fs-play .vz-zole-trick-fan {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  align-content: center;
+  align-items: center;
+}
+/* Likšana / norakšana pilnekrānā: zaļais filcs aug starp meta un pogām */
+.vz-board-modal--fullscreen
+  .vz-board-game-area.vz-board-zole-fs:not(.vz-board-zole-play)
+  #board-zole-container
+  .vz-zole-wrap {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-top: 0;
+}
+.vz-board-modal--fullscreen
+  .vz-board-game-area.vz-board-zole-fs:not(.vz-board-zole-play)
+  .vz-zole-table-felt {
+  flex: 1 1 0;
+  min-height: 180px;
+  max-height: none;
+  margin-bottom: 8px;
 }
 .vz-zole-table-caption {
   font-size: 14px;

@@ -9631,13 +9631,12 @@ function syncBoardModalFullscreen() {
     modal.classList.remove("vz-board-modal--fullscreen");
     return;
   }
-  /* Pilnekrāns tikai Zoles kārtu likšanai — pārējais (lobijs, likšana, dambrete, šahs) paliek parastajā modālī. */
-  const zolePlay =
+  /* Pilnekrāns visai aktīvajai Zolei (likšana, norakšana, spēle, beigas) — lielāks zaļais galds. */
+  const zoleFs =
     boardState.gameId &&
     boardState.type === "zole" &&
-    boardState.zole &&
-    boardState.zole.phase === "play";
-  modal.classList.toggle("vz-board-modal--fullscreen", !!zolePlay);
+    !!boardState.zole;
+  modal.classList.toggle("vz-board-modal--fullscreen", !!zoleFs);
 }
 
 function hideBoardGameArea() {
@@ -9651,7 +9650,7 @@ function hideBoardGameArea() {
   const modal = document.getElementById("board-games-modal");
   if (gameArea) {
     gameArea.classList.add("hidden");
-    gameArea.classList.remove("vz-board-zole-play");
+    gameArea.classList.remove("vz-board-zole-play", "vz-board-zole-fs");
   }
   if (modal) modal.classList.add("hidden");
   if (modal) modal.classList.remove("vz-board-modal--fullscreen");
@@ -9700,7 +9699,12 @@ function renderBoardGame() {
   if (gameAreaEl) {
     const zPlay =
       boardState.type === "zole" && boardState.zole?.phase === "play";
+    const zoleGameOn =
+      boardState.gameId &&
+      boardState.type === "zole" &&
+      !!boardState.zole;
     gameAreaEl.classList.toggle("vz-board-zole-play", zPlay);
+    gameAreaEl.classList.toggle("vz-board-zole-fs", zoleGameOn);
   }
   if (typeEl) {
     if (boardState.type === "chess") typeEl.textContent = "♔ Šahs";
