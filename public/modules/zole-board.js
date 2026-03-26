@@ -430,12 +430,13 @@
       const cardW =
         rect0.width > 24 ? rect0.width : 60;
       const felt = dock.closest(".vz-zole-classic__felt");
+      /* dock platums = patiesā rokas josla (filcs var būt platāks) */
       const raw =
+        (dock.clientWidth > 40 ? dock.clientWidth : 0) ||
         (felt && felt.clientWidth) ||
-        dock.clientWidth ||
         row.clientWidth ||
         320;
-      const budget = Math.max(160, raw - 20);
+      const budget = Math.max(160, raw - 16);
       /* Katrai kārtij jāpaliek ~pus kārts platumam redzamam (rangs kreisajā) */
       const minVisible = Math.max(28, Math.round(cardW * 0.42));
       const maxPull = Math.max(10, cardW - minVisible);
@@ -447,8 +448,6 @@
         pull = Math.round(cardW * 0.26);
       }
       pull = Math.min(Math.max(0, pull), maxPull);
-      const span = cardW + (n - 1) * (cardW - pull);
-      row.classList.toggle("vz-zole-hand--overlap-scroll", span > budget + 8);
       for (let i = 1; i < n; i++) {
         cards[i].style.marginLeft = pull > 0 ? `-${pull}px` : "";
       }

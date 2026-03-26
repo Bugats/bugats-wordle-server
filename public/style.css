@@ -5589,10 +5589,14 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 #board-zole-container .vz-zole-classic__dock {
   flex-shrink: 0;
-  padding: 10px 6px 4px;
+  padding: 10px 4px 4px;
   margin-top: auto;
-  overflow-x: hidden;
   max-width: 100%;
+  /* auto: pirmā kārta nav nogriezta (center + hidden griež kreisajā malā) */
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-inline: 4px;
 }
 #board-zole-container .vz-zole-classic__discardBar {
   display: flex;
@@ -5933,17 +5937,12 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 #board-zole-container .vz-zole-hand--overlap {
   flex-wrap: nowrap;
-  justify-content: center;
-  align-items: flex-end;
-  padding: 8px 6px 4px;
-  overflow-x: hidden;
-  max-width: 100%;
-}
-/* Ja pat ar max saplūšanu neietilpst — viegla ritināšana, nevis «0px» kārtis */
-#board-zole-container .vz-zole-hand--overlap.vz-zole-hand--overlap-scroll {
   justify-content: flex-start;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  align-items: flex-end;
+  padding: 8px 2px 4px;
+  width: max-content;
+  max-width: none;
+  margin: 0 auto;
 }
 #board-zole-container .vz-zole-hand__card {
   padding: 0;
