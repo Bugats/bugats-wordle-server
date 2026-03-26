@@ -182,23 +182,6 @@
     return null;
   }
 
-  function zolePlayerRoleLine(zole, playerIdx) {
-    const ph = zole.phase || "";
-    const c = zole.contract;
-    if (ph === "bid" || !c) return "—";
-    if (c === "galdins") return "Galdiņš";
-    if (c === "galds") return "Galds";
-    const ci = zole.contractorIdx;
-    if (ci == null || ci < 0) return "—";
-    const isContractor = playerIdx === ci;
-    if (c === "big") return isContractor ? "Lielais" : "Mazais";
-    if (c === "zole")
-      return isContractor ? "Zole · lielais" : "Zole · mazais";
-    if (c === "maza_zole")
-      return isContractor ? "Mazā zole · lielais" : "Mazā zole · mazais";
-    return "—";
-  }
-
   function formatPts(n) {
     if (n == null || n === "") return "—";
     const v = Number(n);
@@ -264,14 +247,16 @@
 
   function buildPointsTable(zole, myIdx) {
     const wrap = el("div", "vz-zole-pt");
-    const cap = el("div", "vz-zole-pt__cap", "Punkti");
-    wrap.appendChild(cap);
+    const ph = zole.phase || "";
+    const showPart = ph === "end";
     const table = el("table", "vz-zole-pt__table");
     const thead = el("thead");
     const hr = el("tr");
-    for (const h of ["", "Partija", "Kopā", "Acis", "Stiķi"]) {
-      const th = el("th", null, h);
-      hr.appendChild(th);
+    const heads = showPart
+      ? ["", "P.", "K.", "A", "S"]
+      : ["", "K.", "A", "S"];
+    for (const h of heads) {
+      hr.appendChild(el("th", null, h));
     }
     thead.appendChild(hr);
     table.appendChild(thead);
@@ -280,7 +265,6 @@
     const tricks = zole.tricksWon || [0, 0, 0];
     const tdArr = zole.tableDelta || [0, 0, 0];
     const cum = zole.cumulativeTableDelta || [0, 0, 0];
-    const showHand = (zole.phase || "") === "end";
     const activePi = zoleActiveTurnPlayerIndex(zole);
 
     for (let i = 0; i < 3; i++) {
@@ -290,17 +274,15 @@
       const nameCell = el("td", "vz-zole-pt__name");
       const nm = el("span", "vz-zole-pt__player", zole.players?.[i] || "?");
       nameCell.appendChild(nm);
-      const role = el("span", "vz-zole-pt__role", zolePlayerRoleLine(zole, i));
-      nameCell.appendChild(role);
       tr.appendChild(nameCell);
-      const p1 = el("td", "vz-zole-pt__num", showHand ? formatPts(tdArr[i]) : "—");
-      const p2 = el("td", "vz-zole-pt__num", formatPts(cum[i]));
-      const p3 = el("td", "vz-zole-pt__num", String(eyes[i] ?? 0));
-      const p4 = el("td", "vz-zole-pt__num", String(tricks[i] ?? 0));
-      tr.appendChild(p1);
-      tr.appendChild(p2);
-      tr.appendChild(p3);
-      tr.appendChild(p4);
+      if (showPart) {
+        tr.appendChild(
+          el("td", "vz-zole-pt__num", formatPts(tdArr[i]))
+        );
+      }
+      tr.appendChild(el("td", "vz-zole-pt__num", formatPts(cum[i])));
+      tr.appendChild(el("td", "vz-zole-pt__num", String(eyes[i] ?? 0)));
+      tr.appendChild(el("td", "vz-zole-pt__num", String(tricks[i] ?? 0)));
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
@@ -308,19 +290,49 @@
     return wrap;
   }
 
+  /** Roka tikai apskatei (likšana u.c.) — visas kārtis neaktīvas */
+  function appendReadonlyHandRow(parent, zole) {
+    const hand = sortHand(zole.myHand || []);
+    if (!hand.length) return;
+    const panel = el("div", "vz-zole-panel vz-zole-panel--hand vz-zole-panel--readonly");
+    const row = el("div", "vz-zole-hand vz-zole-hand--fan");
+    for (const card of hand) {
+      const wrap = el("div", "vz-zole-hand__card vz-zole-hand__card--static");
+      wrap.appendChild(createCardFace(card, { small: true }));
+      if (isZoleTrumpCard(card)) wrap.classList.add("vz-zole-hand__card--trump");
+      row.appendChild(wrap);
+    }
+    panel.appendChild(row);
+    parent.appendChild(panel);
+  }
+
+  function buildPlayersStrip(zole, myIdx) {
+    const strip = el("div", "vz-zole-strip");
+    strip.setAttribute("role", "list");
+    const active = zoleActiveTurnPlayerIndex(zole);
+    const order = [myIdx, (myIdx + 1) % 3, (myIdx + 2) % 3];
+    for (let oi = 0; oi < 3; oi++) {
+      const pi = order[oi];
+      const cell = el("span", "vz-zole-strip__p");
+      cell.setAttribute("role", "listitem");
+      if (pi === myIdx) cell.classList.add("vz-zole-strip__p--me");
+      if (active === pi) cell.classList.add("vz-zole-strip__p--turn");
+      cell.textContent = zole.players?.[pi] || "?";
+      strip.appendChild(cell);
+    }
+    return strip;
+  }
+
   function buildTableFelt(zole) {
     const phase = zole.phase || "";
     const outer = el("div", "vz-zole-felt");
-    const cap = el("div", "vz-zole-felt__title", "Galds");
-    outer.appendChild(cap);
+    if (phase === "play") {
+      outer.appendChild(el("div", "vz-zole-felt__title", "Galds"));
+    }
 
     if (phase !== "play") {
       const hint = el("div", "vz-zole-felt__idle");
-      if (phase === "bid") hint.textContent = "Pēc likšanas šeit būs stiķa kārtis.";
-      else if (phase === "discard")
-        hint.textContent = "Gaida norakšanu… tad sāksies izspēle.";
-      else if (phase === "end") hint.textContent = "Partijas beigas.";
-      else hint.textContent = "—";
+      hint.innerHTML = "&nbsp;";
       outer.appendChild(hint);
       return outer;
     }
@@ -370,27 +382,6 @@
     outer.appendChild(sub);
 
     return outer;
-  }
-
-  function buildRivalsRow(zole, myIdx) {
-    const row = el("div", "vz-zole-rivals");
-    const active = zoleActiveTurnPlayerIndex(zole);
-    for (let k = 1; k <= 2; k++) {
-      const pi = (myIdx + k) % 3;
-      const chip = el("div", "vz-zole-rival");
-      if (active === pi) chip.classList.add("vz-zole-rival--active");
-      const name = el("div", "vz-zole-rival__name", zole.players?.[pi] || "?");
-      const meta = el("div", "vz-zole-rival__meta");
-      const eyes = zole.eyePoints?.[pi] ?? 0;
-      const tr = zole.tricksWon?.[pi] ?? 0;
-      meta.textContent = `${eyes} acis · ${tr} stiķi`;
-      chip.appendChild(name);
-      chip.appendChild(meta);
-      const role = el("div", "vz-zole-rival__role", zolePlayerRoleLine(zole, pi));
-      chip.appendChild(role);
-      row.appendChild(chip);
-    }
-    return row;
   }
 
   function lastResultText(zole) {
@@ -450,76 +441,42 @@
     container.innerHTML = "";
     const root = el("div", "vz-zole");
 
-    /* Augšējā josla */
-    const top = el("div", "vz-zole__top");
     const phase = zole.phase || "";
+
+    /* Kompakta galvene */
+    const top = el("div", "vz-zole__top");
     const phaseLab =
       phase === "bid"
         ? "Likšana"
         : phase === "discard"
           ? "Norakšana"
           : phase === "play"
-            ? "Izspēle"
+            ? "Spēle"
             : phase === "end"
               ? "Beigas"
               : phase;
     top.appendChild(el("span", "vz-zole__phase", phaseLab));
-    if (zole.contract) {
+    if (phase === "play" || phase === "discard" || phase === "end") {
+      top.appendChild(
+        el("span", "vz-zole__trump", `${zole.trumpLabel || "—"}`)
+      );
+    }
+    if (zole.contract && phase !== "bid") {
       let contractTxt = contractLabel(zole.contract);
       if (zole.contractorIdx != null && zole.players) {
         contractTxt += ` · ${zole.players[zole.contractorIdx] || "?"}`;
       }
       top.appendChild(el("span", "vz-zole__contract", contractTxt));
     }
-    top.appendChild(
-      el("span", "vz-zole__trump", `Lācis: ${zole.trumpLabel || "—"}`)
-    );
     root.appendChild(top);
+    root.appendChild(buildPlayersStrip(zole, myIdx));
 
-    /* Tu */
-    const meBar = el("div", "vz-zole-me");
-    const meName = el("div", "vz-zole-me__name", zole.players?.[myIdx] || "Tu");
-    if (zoleActiveTurnPlayerIndex(zole) === myIdx)
-      meName.classList.add("vz-zole-me__name--turn");
-    meBar.appendChild(meName);
-    const meSub = el("div", "vz-zole-me__sub");
-    const e0 = zole.eyePoints?.[myIdx] ?? 0;
-    const t0 = zole.tricksWon?.[myIdx] ?? 0;
-    meSub.textContent = `${e0} acis · ${t0} stiķi · ${zolePlayerRoleLine(zole, myIdx)}`;
-    meBar.appendChild(meSub);
-    root.appendChild(meBar);
-
-    root.appendChild(buildRivalsRow(zole, myIdx));
     root.appendChild(buildTableFelt(zole));
 
-    /* Tabula + sekšana */
-    const mid = el("div", "vz-zole__mid");
-    mid.appendChild(buildPointsTable(zole, myIdx));
-    if (zole.trumpNote) {
-      const det = el("details", "vz-zole-sek");
-      const sum = el("summary", "vz-zole-sek__sum", "Sekšana un trumpji");
-      const body = el("div", "vz-zole-sek__body");
-      body.textContent = zole.trumpNote;
-      det.appendChild(sum);
-      det.appendChild(body);
-      mid.appendChild(det);
-    }
-    root.appendChild(mid);
-
-    /* Likšana */
+    /* Likšana — vispirms roka, tad pogas */
     if (phase === "bid") {
-      const panel = el("div", "vz-zole-panel");
-      const h = el("div", "vz-zole-panel__h", "Likšana");
-      panel.appendChild(h);
-      const br = zole.bidRound === 2 ? 2 : 1;
-      const hint = el(
-        "div",
-        "vz-zole-panel__hint",
-        br === 1
-          ? "1. kārta — Lielais, Zole, Mazā zole vai garām."
-          : "2. kārta — tās pašas iespējas. Ja visi garām → Galdiņš."
-      );
-      panel.appendChild(hint);
+      appendReadonlyHandRow(root, zole);
+      const panel = el("div", "vz-zole-panel vz-zole-panel--bid");
       const row = el("div", "vz-zole-actions");
       const isMyBid = (zole.bidTurn ?? 0) === myIdx;
       if (isMyBid && onBid) {
@@ -527,7 +484,7 @@
           { key: "pass", label: "Garām", primary: false },
           { key: "big", label: "Lielais", primary: true },
           { key: "zole", label: "Zole", primary: true },
-          { key: "maza_zole", label: "Mazā zole", primary: true },
+          { key: "maza_zole", label: "M. zole", primary: true },
         ];
         for (const b of bids) {
           const btn = el("button", "vz-zole-btn", b.label);
@@ -537,14 +494,13 @@
           row.appendChild(btn);
         }
       } else {
-        const wait = el(
-          "div",
-          "vz-zole-panel__wait",
-          zm === "vs_bot" && !isMyBid
-            ? "Gaida bota likšanu…"
-            : "Gaida citu spēlētāju likšanu…"
+        panel.appendChild(
+          el(
+            "div",
+            "vz-zole-panel__wait",
+            zm === "vs_bot" ? "Gaida botu…" : "Gaida…"
+          )
         );
-        panel.appendChild(wait);
       }
       if (row.childNodes.length) panel.appendChild(row);
       root.appendChild(panel);
@@ -553,17 +509,7 @@
     /* Norakšana */
     if (phase === "discard" && zole.contract === "big") {
       const isContractor = myIdx === zole.contractorIdx;
-      const panel = el("div", "vz-zole-panel");
-      panel.appendChild(el("div", "vz-zole-panel__h", "Norakšana"));
-      panel.appendChild(
-        el(
-          "div",
-          "vz-zole-panel__hint",
-          isContractor
-            ? "Izvēlies divas kārtas zemāk, tad spied «Norakt»."
-            : "Lielais izvēlas 2 kārtas, ko norakt."
-        )
-      );
+      const panel = el("div", "vz-zole-panel vz-zole-panel--discard");
       const selected = [];
       const hand = sortHand(zole.myHand || []);
       const confirmBtn = el("button", "vz-zole-btn vz-zole-btn--accent", "Norakt");
@@ -626,32 +572,6 @@
         }
       }
       const panel = el("div", "vz-zole-panel vz-zole-panel--hand");
-      panel.appendChild(
-        el(
-          "div",
-          "vz-zole-panel__h",
-          isMyTurn ? "Tava kārta — izvēlies kārti" : "Tava roka"
-        )
-      );
-      if (!isMyTurn) {
-        panel.appendChild(
-          el(
-            "div",
-            "vz-zole-panel__hint",
-            zm === "vs_bot"
-              ? "Gaida bota vai citu spēlētāju gājienu…"
-              : "Gaida citu spēlētāju gājienu…"
-          )
-        );
-      } else {
-        panel.appendChild(
-          el(
-            "div",
-            "vz-zole-panel__hint",
-            "Pelēkās kārtis šajā brīdī nav atļautas (sekšana). Zelta rāmītis = trumpis."
-          )
-        );
-      }
       const handRow = el("div", "vz-zole-hand vz-zole-hand--fan");
       for (const card of sortHand(zole.myHand || [])) {
         const k = cardKey(card);
@@ -671,16 +591,6 @@
     /* Beigas */
     if (phase === "end") {
       const panel = el("div", "vz-zole-panel vz-zole-panel--end");
-      const mh = zole.matchHandsPlayed ?? 0;
-      panel.appendChild(
-        el(
-          "div",
-          "vz-zole-panel__h",
-          zm === "vs_bot"
-            ? `Partija beigusies (${mh})`
-            : "Partija beigusies"
-        )
-      );
       if (zole.tableDelta) {
         const parts = [];
         for (let i = 0; i < 3; i++) {
@@ -694,16 +604,23 @@
       }
       const story = lastResultText(zole);
       if (story) panel.appendChild(el("div", "vz-zole-end__story", story));
-      if (zm === "vs_bot") {
-        panel.appendChild(
-          el(
-            "div",
-            "vz-zole-panel__hint",
-            "Drīz sāksies nākamā partija; tabula uzkrājas."
-          )
-        );
-      }
       root.appendChild(panel);
+    }
+
+    /* Zemāk: kompakta tabula + noteikumi (izņemot likšanu) */
+    if (phase !== "bid") {
+      const foot = el("div", "vz-zole__foot");
+      foot.appendChild(buildPointsTable(zole, myIdx));
+      if (zole.trumpNote && (phase === "play" || phase === "discard")) {
+        const det = el("details", "vz-zole-sek");
+        const sum = el("summary", "vz-zole-sek__sum", "Sekšana");
+        const body = el("div", "vz-zole-sek__body");
+        body.textContent = zole.trumpNote;
+        det.appendChild(sum);
+        det.appendChild(body);
+        foot.appendChild(det);
+      }
+      root.appendChild(foot);
     }
 
     container.appendChild(root);

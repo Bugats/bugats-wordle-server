@@ -5378,136 +5378,107 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 /* ========== Zole (jauns UI) ========== */
 #board-zole-container {
   width: 100%;
-  max-width: 520px;
+  max-width: 100%;
   margin: 0 auto;
 }
 #board-zole-container .vz-zole {
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 1.35;
   color: rgba(255, 255, 255, 0.92);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 #board-zole-container .vz-zole__top {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
-  padding: 8px 10px;
-  border-radius: 10px;
+  gap: 6px 10px;
+  padding: 5px 8px;
+  border-radius: 8px;
   background: rgba(0, 0, 0, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 #board-zole-container .vz-zole__phase {
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: #a5f3fc;
-  padding: 3px 8px;
+  padding: 2px 6px;
   border-radius: 999px;
   background: rgba(34, 211, 238, 0.12);
 }
 #board-zole-container .vz-zole__contract {
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 600;
   color: #e9d5ff;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 #board-zole-container .vz-zole__trump {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 800;
   color: #fbbf24;
   margin-left: auto;
 }
-#board-zole-container .vz-zole-me {
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: linear-gradient(
-    135deg,
-    rgba(251, 191, 36, 0.12) 0%,
-    rgba(0, 0, 0, 0.2) 100%
-  );
-  border: 1px solid rgba(251, 191, 36, 0.28);
-}
-#board-zole-container .vz-zole-me__name {
-  font-weight: 700;
-  font-size: 15px;
-}
-#board-zole-container .vz-zole-me__name--turn {
-  color: #fde68a;
-}
-#board-zole-container .vz-zole-me__name--turn::after {
-  content: " · tava kārta";
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: rgba(253, 230, 138, 0.85);
-  margin-left: 6px;
-}
-#board-zole-container .vz-zole-me__sub {
-  font-size: 12px;
-  opacity: 0.88;
-  margin-top: 2px;
-}
-#board-zole-container .vz-zole-rivals {
+#board-zole-container .vz-zole-strip {
   display: flex;
-  gap: 8px;
-}
-#board-zole-container .vz-zole-rival {
-  flex: 1;
-  min-width: 0;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-#board-zole-container .vz-zole-rival--active {
-  border-color: rgba(251, 191, 36, 0.45);
-  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.2);
-}
-#board-zole-container .vz-zole-rival__name {
-  font-weight: 700;
-  font-size: 13px;
-}
-#board-zole-container .vz-zole-rival__meta {
-  font-size: 11px;
-  opacity: 0.75;
-  margin-top: 2px;
-}
-#board-zole-container .vz-zole-rival__role {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 10px;
+  padding: 2px 4px 4px;
   font-size: 10px;
-  font-weight: 600;
-  color: #c4b5fd;
-  margin-top: 4px;
 }
-/* Zaļais galds */
+#board-zole-container .vz-zole-strip__p {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 600;
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#board-zole-container .vz-zole-strip__p--me {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fef9c3;
+}
+#board-zole-container .vz-zole-strip__p--turn {
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.65);
+}
+/* Zaļais galds — galvenais fokuss */
 #board-zole-container .vz-zole-felt {
-  border-radius: 16px;
-  padding: 14px 12px 12px;
+  border-radius: 14px;
+  padding: 12px 10px 10px;
+  min-height: clamp(140px, 28vh, 260px);
+  flex: 0 0 auto;
   background:
-    radial-gradient(ellipse 120% 80% at 50% 0%, rgba(86, 170, 98, 0.45), transparent 55%),
-    linear-gradient(168deg, #1e6b3a 0%, #145a2e 42%, #0c3d22 100%);
+    radial-gradient(ellipse 120% 85% at 50% 0%, rgba(96, 190, 110, 0.5), transparent 58%),
+    linear-gradient(168deg, #1a7a42 0%, #135d32 40%, #0a3d22 100%);
   border: 1px solid rgba(0, 0, 0, 0.35);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 8px 24px rgba(0, 0, 0, 0.35);
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 10px 28px rgba(0, 0, 0, 0.38);
 }
 #board-zole-container .vz-zole-felt__title {
   text-align: center;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.45);
-  margin-bottom: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 8px;
 }
 #board-zole-container .vz-zole-felt__idle {
-  text-align: center;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.55);
-  padding: 28px 12px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
 }
 #board-zole-container .vz-zole-felt__trick {
   display: flex;
@@ -5532,50 +5503,50 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   opacity: 0.92;
 }
 #board-zole-container .vz-zole-felt__who {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.78);
   text-align: center;
-  max-width: 100px;
+  max-width: 92px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 #board-zole-container .vz-zole-felt__cardSlot {
-  min-height: 112px;
+  min-height: 108px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 #board-zole-container .vz-zole-felt__placeholder {
-  width: 72px;
-  height: 100px;
+  width: 64px;
+  height: 90px;
   border-radius: 8px;
-  border: 2px dashed rgba(255, 255, 255, 0.22);
+  border: 2px dashed rgba(255, 255, 255, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.4);
-  padding: 6px;
-  line-height: 1.2;
+  color: rgba(255, 255, 255, 0.35);
+  padding: 4px;
+  line-height: 1.15;
 }
 #board-zole-container .vz-zole-felt__sub {
   text-align: center;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.72);
-  margin-top: 10px;
-  min-height: 1.2em;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 8px;
+  min-height: 1.15em;
 }
 /* Kārtis (sejas) */
 #board-zole-container .vz-zole-card {
   position: relative;
   box-sizing: border-box;
-  width: 72px;
-  height: 100px;
+  width: 64px;
+  height: 90px;
   border-radius: 8px;
   background: linear-gradient(165deg, #fefefe 0%, #ebe6dc 50%, #ddd8ce 100%);
   border: 1px solid rgba(0, 0, 0, 0.38);
@@ -5628,77 +5599,62 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   left: 50%;
   top: 50%;
   transform: translate(-50%, -52%);
-  font-size: 30px;
+  font-size: 26px;
   line-height: 1;
   font-weight: 700;
 }
 #board-zole-container .vz-zole-card--sm .vz-zole-card__center {
-  font-size: 22px;
+  font-size: 20px;
 }
-/* Punktu tabula */
-#board-zole-container .vz-zole__mid {
+/* Kompakta tabula — zem galda */
+#board-zole-container .vz-zole__foot {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 #board-zole-container .vz-zole-pt {
-  border-radius: 10px;
-  padding: 8px 10px;
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid rgba(196, 181, 253, 0.15);
-}
-#board-zole-container .vz-zole-pt__cap {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #fbbf24;
-  margin-bottom: 6px;
+  border-radius: 8px;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 #board-zole-container .vz-zole-pt__table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: 9px;
 }
 #board-zole-container .vz-zole-pt__table th {
   text-align: left;
-  padding: 4px 4px 6px 0;
+  padding: 2px 3px 3px 0;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.45);
-  font-size: 9px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 8px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
-#board-zole-container .vz-zole-pt__table th:nth-child(n + 3),
-#board-zole-container .vz-zole-pt__table td:nth-child(n + 3) {
+#board-zole-container .vz-zole-pt__table th:nth-child(n + 2),
+#board-zole-container .vz-zole-pt__table td:nth-child(n + 2) {
   text-align: right;
 }
 #board-zole-container .vz-zole-pt__table td {
-  padding: 5px 4px 5px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  vertical-align: top;
+  padding: 3px 3px 3px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  vertical-align: middle;
 }
 #board-zole-container .vz-zole-pt__table tr:last-child td {
   border-bottom: none;
 }
 #board-zole-container .vz-zole-pt__name {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
   min-width: 0;
+  text-align: left;
 }
 #board-zole-container .vz-zole-pt__player {
   font-weight: 700;
-  font-size: 12px;
+  font-size: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-#board-zole-container .vz-zole-pt__role {
-  font-size: 9px;
-  font-weight: 600;
-  color: #c4b5fd;
 }
 #board-zole-container .vz-zole-pt__num {
   font-variant-numeric: tabular-nums;
@@ -5711,63 +5667,74 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   background: rgba(251, 191, 36, 0.07);
 }
 #board-zole-container .vz-zole-sek {
-  font-size: 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.15);
-  padding: 0 10px;
+  font-size: 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.12);
+  padding: 0 8px;
 }
 #board-zole-container .vz-zole-sek__sum {
   cursor: pointer;
   list-style: none;
-  padding: 8px 0;
+  padding: 5px 0;
   font-weight: 600;
-  color: #c4b5fd;
+  color: rgba(196, 181, 253, 0.85);
+  font-size: 10px;
 }
 #board-zole-container .vz-zole-sek__sum::-webkit-details-marker {
   display: none;
 }
 #board-zole-container .vz-zole-sek__body {
-  padding: 0 0 10px;
-  font-size: 11px;
-  line-height: 1.45;
-  opacity: 0.88;
-  color: rgba(255, 255, 255, 0.85);
+  padding: 0 0 8px;
+  font-size: 10px;
+  line-height: 1.4;
+  opacity: 0.85;
+  color: rgba(255, 255, 255, 0.82);
 }
 /* Paneļi, roka, pogas */
 #board-zole-container .vz-zole-panel {
-  padding: 12px;
-  border-radius: 12px;
-  background: rgba(15, 18, 28, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(15, 18, 28, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+#board-zole-container .vz-zole-panel--bid {
+  padding-top: 6px;
+}
+#board-zole-container .vz-zole-panel--readonly {
+  background: transparent;
+  border: none;
+  padding: 4px 0 0;
 }
 #board-zole-container .vz-zole-panel__h {
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.55);
-  margin-bottom: 6px;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 4px;
 }
 #board-zole-container .vz-zole-panel__hint {
-  font-size: 12px;
-  line-height: 1.4;
-  opacity: 0.82;
-  margin-bottom: 10px;
+  font-size: 11px;
+  line-height: 1.35;
+  opacity: 0.78;
+  margin-bottom: 8px;
 }
 #board-zole-container .vz-zole-panel__wait {
-  font-size: 13px;
-  opacity: 0.85;
-  padding: 8px 0;
+  font-size: 11px;
+  opacity: 0.75;
+  padding: 4px 0;
+  text-align: center;
 }
 #board-zole-container .vz-zole-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
+  justify-content: center;
 }
 #board-zole-container .vz-zole-btn {
-  padding: 10px 14px;
-  font-size: 13px;
+  padding: 8px 12px;
+  font-size: 12px;
   font-weight: 700;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -5809,6 +5776,10 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex-shrink: 0;
   transition: transform 0.15s ease;
 }
+#board-zole-container .vz-zole-hand__card--static {
+  cursor: default;
+  pointer-events: none;
+}
 #board-zole-container .vz-zole-hand__card:disabled {
   opacity: 0.38;
   cursor: not-allowed;
@@ -5823,14 +5794,14 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   border-radius: 10px;
 }
 #board-zole-container .vz-zole-panel--end .vz-zole-end__delta {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 #board-zole-container .vz-zole-panel--end .vz-zole-end__story {
-  font-size: 13px;
-  line-height: 1.45;
-  opacity: 0.9;
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.88;
 }
 /* Pilnekrāns + Zole: vairāk vietas */
 .vz-board-modal-inner:has(#board-zole-container:not(.hidden)) {
@@ -5840,8 +5811,8 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   max-width: none;
   width: 100%;
 }
-/* Kārtu fāzē garš padoms jau zole-panelī */
-.vz-board-game-area.vz-board-zole-play .vz-board-game-hint {
+/* Zole: garš #board-game-hint pārklājas ar kompakto zole UI */
+.vz-board-game-area.vz-board-zole-fs .vz-board-game-hint {
   display: none;
 }
 .vz-board-game-area.vz-board-zole-fs {
