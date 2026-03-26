@@ -5459,8 +5459,70 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   justify-content: space-between;
   align-items: flex-start;
   gap: 8px;
-  padding: 0 4px 8px;
+  padding: 0 4px 4px;
   flex-shrink: 0;
+}
+#board-zole-container .vz-zole-classic__match {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 100%;
+  padding: 6px 8px 8px;
+  margin: 0 4px 6px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-sizing: border-box;
+}
+#board-zole-container .vz-zole-match__title {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  text-align: center;
+  margin-bottom: 4px;
+}
+#board-zole-container .vz-zole-match__row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 6px;
+}
+#board-zole-container .vz-zole-match__cell {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 2px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+#board-zole-container .vz-zole-match__cell--me {
+  background: rgba(34, 197, 94, 0.12);
+  outline: 1px solid rgba(34, 197, 94, 0.28);
+}
+#board-zole-container .vz-zole-match__name {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.82);
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#board-zole-container .vz-zole-match__cell--me .vz-zole-match__name {
+  color: #a7f3d0;
+}
+#board-zole-container .vz-zole-match__pts {
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #fef9c3;
+  line-height: 1.1;
 }
 #board-zole-container .vz-zole-opp {
   max-width: 42%;

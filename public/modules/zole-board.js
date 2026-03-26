@@ -381,6 +381,35 @@
     return row;
   }
 
+  /** Kopējie mača punkti (tabula) — kompakti pa vidu zem pretiniekiem. */
+  function buildMatchScoreStrip(zole, myIdx) {
+    const wrap = el("div", "vz-zole-classic__match");
+    wrap.setAttribute("role", "group");
+    wrap.setAttribute("aria-label", "Mača rezultāts");
+    wrap.appendChild(el("div", "vz-zole-match__title", "Mačs"));
+    const row = el("div", "vz-zole-match__row");
+    const cum = zole.cumulativeTableDelta || [0, 0, 0];
+    for (let i = 0; i < 3; i++) {
+      const cell = el("div", "vz-zole-match__cell");
+      if (i === myIdx) cell.classList.add("vz-zole-match__cell--me");
+      const nm = el(
+        "span",
+        "vz-zole-match__name",
+        zole.players?.[i] || "?"
+      );
+      const pts = el(
+        "span",
+        "vz-zole-match__pts",
+        formatPts(cum[i] ?? 0)
+      );
+      cell.appendChild(nm);
+      cell.appendChild(pts);
+      row.appendChild(cell);
+    }
+    wrap.appendChild(row);
+    return wrap;
+  }
+
   function buildTrickCenter(zole) {
     const phase = zole.phase || "";
     const wrap = el("div", "vz-zole-classic__trickWrap");
@@ -691,6 +720,7 @@
 
     const felt = el("div", "vz-zole-classic__felt");
     felt.appendChild(buildOpponentsRow(zole, myIdx));
+    felt.appendChild(buildMatchScoreStrip(zole, myIdx));
 
     if (phase === "bid") {
       felt.appendChild(buildBidCenter(zole, myIdx, onBid, zm));
