@@ -239,6 +239,47 @@
     return null;
   }
 
+  /** Skaidra rindiņa: kurš gājiens / kas notiek. */
+  function zoleTurnBannerText(zole, myIdx) {
+    const ph = zole.phase || "";
+    const names = zole.players || ["?", "?", "?"];
+    if (ph === "bid") {
+      const bt = zole.bidTurn;
+      if (typeof bt !== "number" || bt < 0 || bt > 2) return "";
+      if (bt === myIdx) {
+        return "Tava likšana — izvēlies spēli vai «Garām».";
+      }
+      return `Gaida: ${names[bt] || "?"} likā.`;
+    }
+    if (ph === "discard" && zole.contract === "big") {
+      const c = zole.contractorIdx;
+      if (typeof c !== "number" || c < 0 || c > 2) return "";
+      if (c === myIdx) {
+        return "Tavs gājiens — norok 2 kārtas un spied «Norakt».";
+      }
+      return `Gaida: ${names[c] || "?"} norok kārtas.`;
+    }
+    if (ph === "play") {
+      const t = zole.turn;
+      if (typeof t !== "number" || t < 0 || t > 2) return "";
+      if (t === myIdx) {
+        return "Tavs gājiens — izvēlies kārtu no rokas.";
+      }
+      return `Gaida: ${names[t] || "?"} met kārti uz galda.`;
+    }
+    return "";
+  }
+
+  function buildTurnBanner(zole, myIdx) {
+    const text = zoleTurnBannerText(zole, myIdx);
+    if (!text) return null;
+    const bar = el("div", "vz-zole-turn-banner");
+    bar.setAttribute("role", "status");
+    bar.setAttribute("aria-live", "polite");
+    bar.textContent = text;
+    return bar;
+  }
+
   function formatPts(n) {
     if (n == null || n === "") return "—";
     const v = Number(n);
@@ -351,6 +392,9 @@
     if (activePi === pi) corner.classList.add("vz-zole-opp--turn");
     const nm = el("div", "vz-zole-opp__name", zole.players?.[pi] || "?");
     corner.appendChild(nm);
+    if (activePi === pi) {
+      corner.appendChild(el("div", "vz-zole-opp__badge", "Kārta"));
+    }
     corner.appendChild(createDeckBackMini());
     const av = el("div", "vz-zole-opp__avatar");
     const un = String(zole.players?.[pi] || "?").trim();
@@ -450,18 +494,46 @@
 
     const sub = el("div", "vz-zole-felt__sub");
     if (trick.length > 0) {
-      sub.textContent = "\u00a0";
+      const t = typeof zole.turn === "number" ? zole.turn : null;
+      if (t != null) {
+        const nm = zole.players?.[t] || "?";
+        sub.textContent =
+          t === myIdx
+            ? "Tava kārta — izvēlies kārti."
+            : `Gaida: ${nm} met kārti.`;
+      } else {
+        sub.textContent = "\u00a0";
+      }
     } else if (frozen && lc) {
       const wn = zole.players?.[lc.winnerIdx] || "?";
-      sub.textContent = `${wn} ņēma stiķi`;
+      const nextL =
+        typeof zole.trickLeader === "number" ? zole.trickLeader : null;
+      const nextN =
+        nextL != null ? zole.players?.[nextL] || "?" : "";
+      sub.textContent =
+        nextN && nextL === myIdx
+          ? `${wn} ņēma stiķi. Tu vadi — met pirmo kārti.`
+          : nextN
+            ? `${wn} ņēma stiķi. Nākamais stiķis — vada ${nextN}.`
+            : `${wn} ņēma stiķi.`;
     } else {
-      sub.textContent = "\u00a0";
+      const tl =
+        typeof zole.trickLeader === "number" ? zole.trickLeader : null;
+      if (tl != null) {
+        const nm = zole.players?.[tl] || "?";
+        sub.textContent =
+          tl === myIdx
+            ? "Tu vadi šo stiķi — met pirmo kārti."
+            : `Vada ${nm} — gaida pirmo kārti.`;
+      } else {
+        sub.textContent = "\u00a0";
+      }
     }
     wrap.appendChild(sub);
     return wrap;
   }
 
-  function buildBidCenter(zole, myIdx, onBid, zm) {
+  function buildBidCenter(zole, myIdx, onBid, _zm) {
     const center = el("div", "vz-zole-classic__bidCenter");
     const isMyBid = (zole.bidTurn ?? 0) === myIdx;
     const stack = el("div", "vz-zole-bid-stack");
@@ -479,18 +551,25 @@
         stack.appendChild(btn);
       }
     } else {
-      const wait = el("div", "vz-zole-bid-wait", zm === "vs_bot" ? "Gaida…" : "Gaida…");
+      const bt = zole.bidTurn;
+      const nm =
+        typeof bt === "number" ? zole.players?.[bt] || "?" : "?";
+      const wait = el(
+        "div",
+        "vz-zole-bid-wait",
+        `Gaida: ${nm} likā`
+      );
       stack.appendChild(wait);
     }
     center.appendChild(stack);
     return center;
   }
 
-  function buildDiscardCenter(isContractor) {
+  function buildDiscardCenter(isContractor, waitingName) {
     const c = el("div", "vz-zole-classic__msg");
     c.textContent = isContractor
-      ? "Norok 2 kārtas"
-      : "Gaida norakšanu…";
+      ? "Norok 2 kārtas un spied «Norakt»."
+      : `Gaida: ${waitingName || "?"} norok kārtas.`;
     return c;
   }
 
@@ -712,6 +791,8 @@
     }
     woodTop.appendChild(metaTop);
     root.appendChild(woodTop);
+    const turnBanner = buildTurnBanner(zole, myIdx);
+    if (turnBanner) root.appendChild(turnBanner);
 
     const felt = el("div", "vz-zole-classic__felt");
     felt.appendChild(buildOpponentsRow(zole, myIdx));
@@ -719,8 +800,11 @@
     if (phase === "bid") {
       felt.appendChild(buildBidCenter(zole, myIdx, onBid, zm));
     } else if (phase === "discard" && zole.contract === "big") {
+      const cidx = zole.contractorIdx;
+      const waitNm =
+        typeof cidx === "number" ? zole.players?.[cidx] || "?" : "?";
       felt.appendChild(
-        buildDiscardCenter(myIdx === zole.contractorIdx)
+        buildDiscardCenter(myIdx === zole.contractorIdx, waitNm)
       );
     } else if (phase === "end") {
       const endBox = el("div", "vz-zole-classic__end");
@@ -812,7 +896,12 @@
         onPlayCard,
       });
     }
-    if (dock) felt.appendChild(dock);
+    if (dock) {
+      if (phase === "play" && isMyTurn) {
+        dock.classList.add("vz-zole-classic__dock--my-turn");
+      }
+      felt.appendChild(dock);
+    }
 
     root.appendChild(felt);
 
