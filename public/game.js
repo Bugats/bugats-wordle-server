@@ -690,6 +690,8 @@ let boardState = {
   fen: null,
   zole: null,
   zoleMode: null,
+  /** Zole pret botiem: pēc partijas gaida izvēli — nākamā partija vai pēdējā (atcelt auto). */
+  zoleVsBotNextHandPending: false,
   vsBot: false,
   dambreteVariant: null,
   selectedCell: null,
@@ -9320,13 +9322,22 @@ function initSocket() {
     if (boardState.type === "zole" && payload?.zole) {
       boardState.zole = payload.zole;
     }
+    if (boardState.type === "zole" && boardState.vsBot) {
+      if (payload?.zoleSeriesNewHand) {
+        boardState.zoleVsBotNextHandPending = false;
+      }
+      if (payload?.zoleVsBotNextHandCancelled) {
+        boardState.zoleVsBotNextHandPending = false;
+      }
+    }
     if (
       boardState.type === "zole" &&
       boardState.zoleMode === "vs_bot" &&
       payload?.zoleSeriesHandEnd
     ) {
+      boardState.zoleVsBotNextHandPending = true;
       appendSystemMessage(
-        "🃏 Partija beigusies — tabula atjaunināta. Drīz sāksies nākamā partija."
+        "🃏 Partija beigusies — tabula atjaunināta. Izvēlies «Nākamā partija» vai «Pēdējā partija»."
       );
     }
     if (boardState.type === "zole" && payload?.zoleMode != null) {
@@ -9591,6 +9602,8 @@ function startBoardGame(payload) {
           })()
         : null,
     vsBot: !!payload?.vsBot,
+    zoleVsBotNextHandPending:
+      payload?.type === "zole" && !!payload?.vsBot,
     dambreteVariant:
       payload?.type === "dambrete"
         ? normalizeDambreteVariantClient(payload?.dambreteVariant)
@@ -9763,7 +9776,9 @@ function renderBoardGame() {
       } else if (boardState.zole?.phase === "end") {
         hintEl.textContent =
           boardState.zoleMode === "vs_bot"
-            ? "Šīs partijas punkti zemāk; «Kopā mačā» — uzkrātā tabula. Drīz sāksies nākamā partija (var pamest ar Atkāpties)."
+            ? boardState.zoleVsBotNextHandPending
+              ? "Spied «Nākamā partija», lai turpinātu maču, vai «Pēdējā partija», lai paliktu šeit (bez auto nākamās). Atkāpties — pamest visu spēli."
+              : "Šī bija pēdējā partija šajā mačā. Vari sākt jaunu spēli no lobija vai aizvērt modāli."
             : "Skaties tabulas punktus zemāk. Uzvarētājs pēc spēles — labākais +/− šajā partijā.";
       } else if (boardState.zole?.phase === "play") {
         hintEl.textContent =
@@ -9818,6 +9833,22 @@ function renderBoardGame() {
         {
           zoleMode: boardState.zoleMode,
           myIdx,
+          vsBotEndPending:
+            boardState.zoleMode === "vs_bot" &&
+            boardState.zole?.phase === "end" &&
+            boardState.zoleVsBotNextHandPending,
+          onZoleVsBotLastHand: () => {
+            if (!state.socket || !boardState.gameId) return;
+            state.socket.emit("board.zoleVsBotCancelNextHand", {
+              gameId: boardState.gameId,
+            });
+          },
+          onZoleVsBotNextHand: () => {
+            if (!state.socket || !boardState.gameId) return;
+            state.socket.emit("board.zoleVsBotNextHand", {
+              gameId: boardState.gameId,
+            });
+          },
           onBid: (bid) => {
             if (!state.socket || !boardState.gameId) return;
             state.socket.emit("board.move", {

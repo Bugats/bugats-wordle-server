@@ -1258,10 +1258,22 @@ function scheduleNextZoleBotTurn(io, game) {
   }
 }
 
+function clearZoleVsBotNextHandTimer(game) {
+  if (!game?.zoleVsBotNextHandTimer) return;
+  try {
+    clearTimeout(game.zoleVsBotNextHandTimer);
+  } catch {
+    /* ignore */
+  }
+  game.zoleVsBotNextHandTimer = null;
+}
+
 function scheduleZoleVsBotNextHand(io, game) {
   if (!game?.vsBot || game.zoleMode !== "vs_bot" || !game.zole) return;
+  clearZoleVsBotNextHandTimer(game);
   const gameId = game.id;
-  setTimeout(() => {
+  game.zoleVsBotNextHandTimer = setTimeout(() => {
+    game.zoleVsBotNextHandTimer = null;
     const g = boardGames.get(gameId);
     if (!g || g.status !== "active" || g.type !== "zole" || !g.zole) return;
     if (!g.vsBot || g.zoleMode !== "vs_bot") return;
@@ -1394,6 +1406,9 @@ function applyBoardElo(winner, loser, type) {
 
 function finishBoardGame(game, winnerUsername, reason) {
   if (!game || game.status === "finished") return;
+  if (game.type === "zole" && game.vsBot && game.zoleMode === "vs_bot") {
+    clearZoleVsBotNextHandTimer(game);
+  }
   game.status = "finished";
   game.winner = winnerUsername || null;
   game.finishedReason = reason || "finished";
@@ -12766,6 +12781,65 @@ io.on("connection", (socket) => {
       });
       scheduleNextZoleBotTurn(io, game);
     }
+  });
+
+  socket.on("board.zoleVsBotCancelNextHand", (payload) => {
+    const user = socket.data.user;
+    if (!user) return;
+    const gameId = payload?.gameId;
+    const game = gameId ? boardGames.get(gameId) : null;
+    if (!game || game.status !== "active") return;
+    if (game.type !== "zole" || !game.vsBot || game.zoleMode !== "vs_bot")
+      return;
+    if (!game.players.includes(user.username)) return;
+    if (game.zole?.phase !== "end")
+      return socket.emit("board.error", {
+        message: "Nav partijas beigu fāzes.",
+      });
+    clearZoleVsBotNextHandTimer(game);
+    emitZoleToHumans(io, game, "board.move", {
+      gameId,
+      type: "zole",
+      turn: game.turn,
+      zoleMode: game.zoleMode,
+      zoleVsBotNextHandCancelled: true,
+    });
+  });
+
+  socket.on("board.zoleVsBotNextHand", (payload) => {
+    const user = socket.data.user;
+    if (!user) return;
+    const gameId = payload?.gameId;
+    const game = gameId ? boardGames.get(gameId) : null;
+    if (!game || game.status !== "active") return;
+    if (game.type !== "zole" || !game.vsBot || game.zoleMode !== "vs_bot")
+      return;
+    if (!game.players.includes(user.username)) return;
+    if (game.zole?.phase !== "end")
+      return socket.emit("board.error", {
+        message: "Nav partijas beigu fāzes.",
+      });
+    clearZoleVsBotNextHandTimer(game);
+    const res = zoleStartNextHand(game.zole);
+    if (!res.ok)
+      return socket.emit("board.error", {
+        message: res.error || "Neizdevās sākt nākamo partiju.",
+      });
+    game.turn =
+      game.zole.phase === "bid"
+        ? game.zole.bidTurn
+        : game.zole.phase === "discard"
+          ? game.zole.contractorIdx
+          : game.zole.turn;
+    game.lastMoveAt = Date.now();
+    emitZoleToHumans(io, game, "board.move", {
+      gameId,
+      type: "zole",
+      turn: game.turn,
+      zoleMode: game.zoleMode,
+      zoleSeriesNewHand: true,
+    });
+    setImmediate(() => playZoleBotBids(io, game));
   });
 
   socket.on("board.resign", (payload) => {

@@ -5670,6 +5670,40 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding: 12px;
   text-align: center;
 }
+#board-zole-container .vz-zole-end__vs-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 320px;
+  margin-top: 10px;
+}
+#board-zole-container .vz-zole-end-btn {
+  flex: 1 1 120px;
+  min-width: 0;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 800;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+#board-zole-container .vz-zole-end-btn--primary {
+  color: #fff;
+  background: linear-gradient(180deg, #15803d 0%, #166534 100%);
+  border-color: rgba(74, 222, 128, 0.55);
+}
+#board-zole-container .vz-zole-end-btn--secondary {
+  color: #fffbeb;
+  background: linear-gradient(180deg, #57534e 0%, #44403c 100%);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+#board-zole-container .vz-zole-end-btn:active {
+  transform: translateY(1px);
+}
 #board-zole-container .vz-zole-classic__trickWrap {
   flex: 1 1 auto;
   display: flex;

@@ -827,6 +827,34 @@
       if (eyesLine) {
         endBox.appendChild(el("div", "vz-zole-end__eyes", eyesLine));
       }
+      const vsEnd =
+        opts &&
+        zm === "vs_bot" &&
+        opts.vsBotEndPending &&
+        typeof opts.onZoleVsBotLastHand === "function" &&
+        typeof opts.onZoleVsBotNextHand === "function";
+      if (vsEnd) {
+        const row = el("div", "vz-zole-end__vs-actions");
+        const lastBtn = el(
+          "button",
+          "vz-zole-end-btn vz-zole-end-btn--secondary",
+          "Pēdējā partija"
+        );
+        lastBtn.type = "button";
+        lastBtn.title =
+          "Atcelt automātisko nākamo partiju — paliec pie šī rezultāta.";
+        lastBtn.addEventListener("click", () => opts.onZoleVsBotLastHand());
+        const nextBtn = el(
+          "button",
+          "vz-zole-end-btn vz-zole-end-btn--primary",
+          "Nākamā partija"
+        );
+        nextBtn.type = "button";
+        nextBtn.addEventListener("click", () => opts.onZoleVsBotNextHand());
+        row.appendChild(lastBtn);
+        row.appendChild(nextBtn);
+        endBox.appendChild(row);
+      }
       felt.appendChild(endBox);
     } else {
       felt.appendChild(buildTrickCenter(zole, myIdx));
