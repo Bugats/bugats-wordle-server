@@ -674,9 +674,46 @@ function getDuelOpponent(duel, username) {
 const BOARD_GAME_INVITE_TIMEOUT_MS = 60 * 1000; // 60s
 const BOARD_GAME_MOVE_TIMEOUT_MS = 5 * 60 * 1000; // 5 min per move (resign if exceeded)
 const BOARD_GAME_REWARD_XP = 3;
-const BOARD_GAME_REWARD_COINS = 12;
-const BOARD_GAME_LOSE_COINS = 5;
+/** Coins tikai PvP (ne pret botu); 2 spēlētāji — mazāks risks, 3P zole — nedaudz lielāka izmaksa. */
+const BOARD_GAME_REWARD_COINS_2P = 8;
+const BOARD_GAME_LOSE_COINS_2P = 3;
+const BOARD_GAME_REWARD_COINS_ZOLE_3P = 10;
+const BOARD_GAME_LOSE_COINS_ZOLE_3P = 4;
 const BOARD_GAME_REGION_POINTS = 1;
+
+function boardGameCoinsWin(game) {
+  if (!game || game.vsBot) return 0;
+  if (game.type === "zole" && game.players?.length === 3)
+    return BOARD_GAME_REWARD_COINS_ZOLE_3P;
+  return BOARD_GAME_REWARD_COINS_2P;
+}
+
+function boardGameCoinsLoss(game) {
+  if (!game || game.vsBot) return 0;
+  if (game.type === "zole" && game.players?.length === 3)
+    return BOARD_GAME_LOSE_COINS_ZOLE_3P;
+  return BOARD_GAME_LOSE_COINS_2P;
+}
+
+/** board.end coinsGain / coinsLoss vienam cilvēkam (PvP; pret botu — 0). */
+function boardEndCoinsForPlayer(game, winnerUsername, playerUsername) {
+  if (!game || game.vsBot) return { coinsGain: 0, coinsLoss: 0 };
+  const w = winnerUsername;
+  const h = playerUsername;
+  if (!w || !h) return { coinsGain: 0, coinsLoss: 0 };
+  const winAmt = boardGameCoinsWin(game);
+  const lossAmt = boardGameCoinsLoss(game);
+  if (isZoleBotUsername(w)) {
+    return {
+      coinsGain: 0,
+      coinsLoss: lossAmt,
+    };
+  }
+  if (String(w).toLowerCase() === String(h).toLowerCase()) {
+    return { coinsGain: winAmt, coinsLoss: 0 };
+  }
+  return { coinsGain: 0, coinsLoss: lossAmt };
+}
 
 const boardGames = new Map(); // gameId -> { type, players, board, turn, status, ... }
 const userToBoardGame = new Map(); // username -> gameId
@@ -837,8 +874,8 @@ function playBoardBotMove(io, game) {
         winner,
         reason: "win",
         board: newBoard,
-        coinsGain: winner === humanUsername ? BOARD_GAME_REWARD_COINS : 0,
-        coinsLoss: winner !== humanUsername ? BOARD_GAME_LOSE_COINS : 0,
+        coinsGain: 0,
+        coinsLoss: 0,
       });
       io.emit("board:leaderboard", { type: "dambrete" });
     } else {
@@ -873,9 +910,8 @@ function playBoardBotMove(io, game) {
         winner,
         reason: chess.isCheckmate() ? "checkmate" : "draw",
         fen: game.fen,
-        coinsGain: winner === humanUsername ? BOARD_GAME_REWARD_COINS : 0,
-        coinsLoss:
-          winner && winner !== humanUsername ? BOARD_GAME_LOSE_COINS : 0,
+        coinsGain: 0,
+        coinsLoss: 0,
       });
       io.emit("board:leaderboard", { type: "chess" });
     } else {
@@ -1343,14 +1379,7 @@ function playZoleBotTurns(io, game) {
       const idx = game.players.indexOf(h);
       const sock = getSocketByUsername(h);
       if (!sock) continue;
-      const coinsGain =
-        w && String(w).toLowerCase() === String(h).toLowerCase()
-          ? BOARD_GAME_REWARD_COINS
-          : 0;
-      const coinsLoss =
-        w && String(w).toLowerCase() !== String(h).toLowerCase()
-          ? BOARD_GAME_LOSE_COINS
-          : 0;
+      const { coinsGain, coinsLoss } = boardEndCoinsForPlayer(game, w, h);
       sock.emit("board.end", {
         gameId: game.id,
         type: "zole",
@@ -1453,9 +1482,14 @@ function finishBoardGame(game, winnerUsername, reason) {
     loser = loserKey ? USERS[findUserKeyCaseInsensitive(loserKey)] : null;
   }
 
+  const pvpCoinWin = boardGameCoinsWin(game);
+  const pvpCoinLoss = boardGameCoinsLoss(game);
+
   if (winner) {
     winner.xp = (winner.xp || 0) + BOARD_GAME_REWARD_XP;
-    winner.coins = (winner.coins || 0) + BOARD_GAME_REWARD_COINS;
+    if (pvpCoinWin > 0) {
+      winner.coins = (winner.coins || 0) + pvpCoinWin;
+    }
     if (REGION_POINTS_PER_WIN > 0) {
       let rp = BOARD_GAME_REGION_POINTS;
       if (isRegionBonusActive()) rp *= REGION_BONUS_MULTIPLIER;
@@ -1470,13 +1504,14 @@ function finishBoardGame(game, winnerUsername, reason) {
     else if (game.type === "chess") winner.chessWins++;
     else if (game.type === "zole") winner.zoleWins++;
   }
-  if (loser) {
+  if (loser && pvpCoinLoss > 0) {
     const currentCoins = Math.max(0, Math.floor(loser.coins || 0));
-    loser.coins = Math.max(0, currentCoins - BOARD_GAME_LOSE_COINS);
+    loser.coins = Math.max(0, currentCoins - pvpCoinLoss);
   }
   for (const lz of zoleLosers) {
+    if (pvpCoinLoss <= 0) break;
     const currentCoins = Math.max(0, Math.floor(lz.coins || 0));
-    lz.coins = Math.max(0, currentCoins - BOARD_GAME_LOSE_COINS);
+    lz.coins = Math.max(0, currentCoins - pvpCoinLoss);
   }
   if (
     winner &&
@@ -12519,14 +12554,7 @@ io.on("connection", (socket) => {
           const idx = boardGameSeatIndex(game, h);
           const sock = getSocketByUsername(h);
           if (!sock) continue;
-          const coinsGain =
-            w && String(w).toLowerCase() === String(h).toLowerCase()
-              ? BOARD_GAME_REWARD_COINS
-              : 0;
-          const coinsLoss =
-            w && String(w).toLowerCase() !== String(h).toLowerCase()
-              ? BOARD_GAME_LOSE_COINS
-              : 0;
+          const { coinsGain, coinsLoss } = boardEndCoinsForPlayer(game, w, h);
           sock.emit("board.end", {
             gameId,
             type: "zole",
@@ -12635,7 +12663,7 @@ io.on("connection", (socket) => {
         const winner =
           result.winner === WHITE ? game.players[0] : game.players[1];
         finishBoardGame(game, winner, "win");
-        emitCh("board.end", {
+        const endBase = {
           gameId,
           type: game.type,
           players: game.players,
@@ -12644,19 +12672,27 @@ io.on("connection", (socket) => {
           winner,
           reason: "win",
           board: newBoard,
-          coinsGain:
-            game.vsBot && winner !== BOARD_BOT_USERNAME
-              ? BOARD_GAME_REWARD_COINS
-              : winner
-                ? BOARD_GAME_REWARD_COINS
-                : 0,
-          coinsLoss:
-            game.vsBot && winner === BOARD_BOT_USERNAME
-              ? BOARD_GAME_LOSE_COINS
-              : winner
-                ? BOARD_GAME_LOSE_COINS
-                : 0,
-        });
+        };
+        if (game.vsBot) {
+          const human = game.players[0];
+          const { coinsGain, coinsLoss } = boardEndCoinsForPlayer(
+            game,
+            winner,
+            human
+          );
+          emitCh("board.end", { ...endBase, coinsGain, coinsLoss });
+        } else {
+          for (const p of game.players) {
+            const sock = getSocketByUsername(p);
+            if (!sock) continue;
+            const { coinsGain, coinsLoss } = boardEndCoinsForPlayer(
+              game,
+              winner,
+              p
+            );
+            sock.emit("board.end", { ...endBase, coinsGain, coinsLoss });
+          }
+        }
       } else {
         emitCh("board.move", {
           gameId,
@@ -12691,7 +12727,7 @@ io.on("connection", (socket) => {
           winner,
           chess.isCheckmate() ? "checkmate" : "draw"
         );
-        chessEmit("board.end", {
+        const chessEndBase = {
           gameId,
           type: game.type,
           players: game.players,
@@ -12700,17 +12736,27 @@ io.on("connection", (socket) => {
           winner,
           reason: chess.isCheckmate() ? "checkmate" : "draw",
           fen: game.fen,
-          coinsGain:
-            game.vsBot && winner !== BOARD_BOT_USERNAME
-              ? BOARD_GAME_REWARD_COINS
-              : winner
-                ? BOARD_GAME_REWARD_COINS
-                : 0,
-          coinsLoss:
-            game.vsBot && winner === BOARD_BOT_USERNAME
-              ? BOARD_GAME_LOSE_COINS
-              : 0,
-        });
+        };
+        if (game.vsBot) {
+          const human = game.players[0];
+          const { coinsGain, coinsLoss } = boardEndCoinsForPlayer(
+            game,
+            winner,
+            human
+          );
+          chessEmit("board.end", { ...chessEndBase, coinsGain, coinsLoss });
+        } else {
+          for (const p of game.players) {
+            const sock = getSocketByUsername(p);
+            if (!sock) continue;
+            const { coinsGain, coinsLoss } = boardEndCoinsForPlayer(
+              game,
+              winner,
+              p
+            );
+            sock.emit("board.end", { ...chessEndBase, coinsGain, coinsLoss });
+          }
+        }
       } else {
         chessEmit("board.move", {
           gameId,
@@ -12750,14 +12796,7 @@ io.on("connection", (socket) => {
           const idx = boardGameSeatIndex(game, h);
           const sock = getSocketByUsername(h);
           if (!sock) continue;
-          const coinsGain =
-            w && String(w).toLowerCase() === String(h).toLowerCase()
-              ? BOARD_GAME_REWARD_COINS
-              : 0;
-          const coinsLoss =
-            w && String(w).toLowerCase() !== String(h).toLowerCase()
-              ? BOARD_GAME_LOSE_COINS
-              : 0;
+          const { coinsGain, coinsLoss } = boardEndCoinsForPlayer(game, w, h);
           sock.emit("board.end", {
             gameId,
             type: "zole",
@@ -12857,6 +12896,11 @@ io.on("connection", (socket) => {
         const idx = boardGameSeatIndex(game, h);
         const sock = getSocketByUsername(h);
         if (!sock) continue;
+        const { coinsGain, coinsLoss } = boardEndCoinsForPlayer(
+          game,
+          winner,
+          h
+        );
         sock.emit("board.end", {
           gameId,
           type: "zole",
@@ -12866,13 +12910,13 @@ io.on("connection", (socket) => {
           winner,
           reason: "resign",
           resignedBy: user.username,
-          coinsGain: 0,
-          coinsLoss: winner ? BOARD_GAME_LOSE_COINS : 0,
+          coinsGain,
+          coinsLoss,
           zoleMode: game.zoleMode,
         });
       }
     } else {
-      const endPayload = {
+      const endBase = {
         gameId,
         type: game.type,
         players: game.players,
@@ -12881,13 +12925,30 @@ io.on("connection", (socket) => {
         winner,
         reason: "resign",
         resignedBy: user.username,
-        coinsGain: 0,
-        coinsLoss: winner ? BOARD_GAME_LOSE_COINS : 0,
       };
       if (game.vsBot) {
-        getSocketByUsername(game.players[0])?.emit("board.end", endPayload);
+        const human = game.players[0];
+        const { coinsGain, coinsLoss } = boardEndCoinsForPlayer(
+          game,
+          winner,
+          human
+        );
+        getSocketByUsername(human)?.emit("board.end", {
+          ...endBase,
+          coinsGain,
+          coinsLoss,
+        });
       } else {
-        io.to(`board:${gameId}`).emit("board.end", endPayload);
+        for (const p of game.players) {
+          const sock = getSocketByUsername(p);
+          if (!sock) continue;
+          const { coinsGain, coinsLoss } = boardEndCoinsForPlayer(
+            game,
+            winner,
+            p
+          );
+          sock.emit("board.end", { ...endBase, coinsGain, coinsLoss });
+        }
       }
     }
   });

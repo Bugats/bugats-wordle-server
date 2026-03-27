@@ -952,7 +952,10 @@ function showBoardGameResult(payload) {
   detailEl.textContent = detail;
 
   if (coinsEl) {
-    if (iWon && coinsGain > 0) {
+    if (vsBot) {
+      coinsEl.textContent = "Pret botiem coins nemainās.";
+      coinsEl.classList.remove("hidden");
+    } else if (iWon && coinsGain > 0) {
       coinsEl.textContent = `+${coinsGain} coins`;
       coinsEl.classList.remove("hidden");
     } else if (iLost && coinsLoss > 0) {
