@@ -175,6 +175,9 @@
       missionBonus: null,
       loopPrimaryAction: null,
       loopPrimaryActionKey: "",
+
+      stripeCoinsEnabled: false,
+      stripeCoinPacks: [],
     };
   }
 

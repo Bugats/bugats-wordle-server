@@ -546,6 +546,14 @@ const playerScoreEl = $("#player-score");
 const playerStreakEl = $("#player-streak");
 const playerBestStreakEl = $("#player-best-streak");
 const playerCoinsEl = $("#player-coins");
+const stripeCoinsBuyEl = document.getElementById("vz-stripe-coins-buy");
+const stripeCoinsPackListEl = document.getElementById(
+  "vz-stripe-coins-pack-list"
+);
+const ppStripeCoinsBuyEl = document.getElementById("pp-stripe-coins-buy");
+const ppStripeCoinsPackListEl = document.getElementById(
+  "pp-stripe-coins-pack-list"
+);
 const playerTokensEl = $("#player-tokens");
 const playerMedalsStripEl = $("#player-medals");
 
@@ -1383,6 +1391,55 @@ async function apiPost(path, body) {
     body: JSON.stringify(body || {}),
   });
 }
+
+async function startStripeCoinCheckout(packId) {
+  const id = String(packId || "").trim();
+  if (!id) return;
+  const data = await apiPost("/api/stripe/create-checkout-session", {
+    packId: id,
+  });
+  const url = data && data.url;
+  if (url && typeof url === "string") {
+    window.location.href = url;
+  }
+}
+
+function fillStripeCoinPackList(container) {
+  if (!container) return;
+  const packs = state.stripeCoinPacks || [];
+  container.innerHTML = "";
+  for (const p of packs) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "vz-stripe-coins__btn";
+    btn.textContent = p.label || `${p.coins} coins`;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        await startStripeCoinCheckout(p.id);
+      } catch (e) {
+        appendSystemMessage(
+          (e && e.message) || "Neizdevās atvērt maksājumu. Pamēģini vēlāk."
+        );
+        btn.disabled = false;
+      }
+    });
+    container.appendChild(btn);
+  }
+}
+
+function syncStripeCoinsBuyUi() {
+  const on = !!state.stripeCoinsEnabled && (state.stripeCoinPacks || []).length;
+  if (stripeCoinsBuyEl) {
+    stripeCoinsBuyEl.classList.toggle("hidden", !on);
+    if (on) fillStripeCoinPackList(stripeCoinsPackListEl);
+  }
+  if (ppStripeCoinsBuyEl) {
+    ppStripeCoinsBuyEl.classList.toggle("hidden", !on);
+    if (on) fillStripeCoinPackList(ppStripeCoinsPackListEl);
+  }
+}
+
 
 async function apiGet(path) {
   return apiRequest(path, {});
@@ -2619,6 +2676,12 @@ function updatePlayerCard(me) {
     state.lastCoins = me.coins;
     playerCoinsEl.textContent = me.coins;
   }
+
+  state.stripeCoinsEnabled = !!me.stripeCoinsEnabled;
+  state.stripeCoinPacks = Array.isArray(me.stripeCoinPacks)
+    ? me.stripeCoinPacks
+    : [];
+  syncStripeCoinsBuyUi();
 
   if (playerTokensEl) playerTokensEl.textContent = me.tokens;
   updateVipUi(me);
@@ -8744,6 +8807,17 @@ function initSocket() {
     if (_socketEverConnected) appendSystemMessage("Savienojums atjaunots.");
     else appendSystemMessage("Pieslēgts VĀRDU ZONAS serverim.");
     _socketEverConnected = true;
+  });
+
+  socket.on("coins:purchased", async (payload) => {
+    const added = Math.max(0, Number(payload?.added) || 0);
+    if (added) {
+      appendSystemMessage(`💰 +${added} coins — pateicamies par pirkumu!`);
+    }
+    try {
+      const me2 = await apiGet("/me");
+      updatePlayerCard(me2);
+    } catch {}
   });
 
   socket.on("connect_error", (err) => {

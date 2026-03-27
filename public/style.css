@@ -1011,6 +1011,53 @@ summary:focus-visible {
   margin: 8px 0;
 }
 
+.vz-stripe-coins {
+  margin: 8px 0 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.vz-stripe-coins--popup {
+  margin: 6px 0 10px;
+}
+.vz-stripe-coins__label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(253, 230, 138, 0.95);
+  margin-bottom: 6px;
+}
+.vz-stripe-coins__packs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.vz-stripe-coins__btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 8px;
+  border: 1px solid rgba(99, 102, 241, 0.55);
+  background: linear-gradient(180deg, rgba(79, 70, 229, 0.35) 0%, rgba(49, 46, 129, 0.45) 100%);
+  color: #eef2ff;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.vz-stripe-coins__btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+.vz-stripe-coins__note {
+  margin: 6px 0 0;
+  font-size: 10px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.55);
+}
+
 /* Rank aura (ESOŠĀS — backward compatible) */
 .vz-player-card.vz-rank-low {
   border-color: rgba(0, 188, 212, 0.7);

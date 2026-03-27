@@ -55,12 +55,25 @@ import {
   ZOLE_BOT_1,
   isZoleBotUsername,
 } from "./lib/zole.js";
+import Stripe from "stripe";
+import {
+  isStripeCoinsConfigured,
+  getCoinPacksPublicList,
+  findPackById,
+  grantCoinsForCheckoutSession,
+} from "./lib/stripe-coins.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ======== Konstantes ========
 const PORT = process.env.PORT || 10080;
+const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || "").trim();
+const STRIPE_WEBHOOK_SECRET = String(
+  process.env.STRIPE_WEBHOOK_SECRET || ""
+).trim();
+const stripeClient = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
+
 const JWT_SECRET = (() => {
   const configured = String(process.env.JWT_SECRET || "").trim();
   if (configured) return configured;
@@ -5808,6 +5821,10 @@ async function buildMePayload(u) {
     blockedUsers: listBlocks(u),
     referralLink: `${String(process.env.BASE_URL || "https://bugats-wordle-server.onrender.com").replace(/\/$/, "")}/index.html?ref=${encodeURIComponent(u.username || "")}`,
     referredCount: Math.max(0, Number(u.referredCount) || 0),
+    stripeCoinsEnabled: isStripeCoinsConfigured(),
+    stripeCoinPacks: isStripeCoinsConfigured()
+      ? getCoinPacksPublicList()
+      : [],
     pendingDuelInvites: buildPendingDuelInvitesPayload(u),
     clanId: u.clanId || null,
     clan: u.clanId ? buildClanPayload(getClanById(u.clanId), u) : null,
@@ -5897,6 +5914,7 @@ app.use(
           "'self'",
           "https://bugats-wordle-server.onrender.com",
           "wss://bugats-wordle-server.onrender.com",
+          "https://api.stripe.com",
           "https://cdn.onesignal.com",
           "https://onesignal.com",
           "https://*.onesignal.com",
@@ -5952,12 +5970,73 @@ const guessRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: "Pārāk daudz minējumu īsā laikā." },
 });
+const stripeCheckoutRateLimiter = rateLimit({
+  windowMs: Number(process.env.STRIPE_CHECKOUT_RATE_WINDOW_MS || 60_000),
+  limit: Number(process.env.STRIPE_CHECKOUT_RATE_MAX || 8),
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { message: "Pārāk daudz pirkumu pieprasījumu. Pamēģini vēlāk." },
+});
 app.use((req, res, next) => {
   if (req.path.startsWith("/socket.io")) return next();
   return globalRateLimiter(req, res, next);
 });
 
 app.use(cors(corsOptions));
+
+app.post(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    if (!stripeClient || !STRIPE_WEBHOOK_SECRET) {
+      return res.status(503).json({ message: "Stripe nav konfigurēts." });
+    }
+    const sig = req.headers["stripe-signature"];
+    if (!sig) return res.status(400).send("missing signature");
+    let event;
+    try {
+      event = stripeClient.webhooks.constructEvent(
+        req.body,
+        sig,
+        STRIPE_WEBHOOK_SECRET
+      );
+    } catch (err) {
+      logger.warn({ err: String(err?.message || err) }, "stripe webhook verify");
+      return res.status(400).send("webhook error");
+    }
+    try {
+      if (event.type === "checkout.session.completed") {
+        const session = event.data.object;
+        const uname = String(session?.metadata?.username || "").trim();
+        if (!uname) {
+          return res.json({ received: true });
+        }
+        const key = findUserKeyCaseInsensitive(uname);
+        const user = key ? USERS[key] : null;
+        if (!user) {
+          logger.warn({ uname }, "stripe webhook: user not found");
+          return res.json({ received: true });
+        }
+        const result = grantCoinsForCheckoutSession(user, session);
+        if (result.ok && !result.already && result.coinsAdded) {
+          await saveUsersImmediate(USERS);
+        }
+        if (result.ok && !result.already && result.coinsAdded) {
+          const sock = getSocketByUsername(user.username);
+          sock?.emit("coins:purchased", {
+            coins: user.coins,
+            added: result.coinsAdded,
+          });
+        }
+      }
+    } catch (e) {
+      logger.error({ err: String(e?.message || e) }, "stripe webhook handler");
+      return res.status(500).json({ message: "webhook handler error" });
+    }
+    return res.json({ received: true });
+  }
+);
+
 app.use(express.json({ limit: BODY_JSON_LIMIT }));
 app.use(express.urlencoded({ extended: true, limit: BODY_URLENC_LIMIT }));
 
@@ -7753,6 +7832,69 @@ app.post(
       ok: true,
       message: `Parole lietotājam ${USERS[key].username} nomainīta.`,
     });
+  }
+);
+
+// ======== Stripe — coins (Checkout + webhook) ========
+app.get("/api/stripe/coin-packs", (_req, res) => {
+  if (!isStripeCoinsConfigured()) {
+    return res.json({ enabled: false, packs: [] });
+  }
+  res.json({ enabled: true, packs: getCoinPacksPublicList() });
+});
+
+app.post(
+  "/api/stripe/create-checkout-session",
+  authMiddleware,
+  stripeCheckoutRateLimiter,
+  async (req, res) => {
+    if (!stripeClient || !isStripeCoinsConfigured()) {
+      return res.status(503).json({
+        message: "Monētu pirkšana nav pieejama (Stripe nav konfigurēts).",
+      });
+    }
+    const user = req.user;
+    const packId = String(req.body?.packId || "").trim();
+    const pack = findPackById(packId);
+    if (!pack) {
+      return res.status(400).json({ message: "Nederīgs paka ID." });
+    }
+    const baseUrl = String(
+      process.env.BASE_URL || "https://bugats-wordle-server.onrender.com"
+    ).replace(/\/$/, "");
+    const successUrl = String(
+      process.env.STRIPE_SUCCESS_URL || `${baseUrl}/game.html?coins=ok`
+    );
+    const cancelUrl = String(
+      process.env.STRIPE_CANCEL_URL || `${baseUrl}/game.html?coins=cancel`
+    );
+    try {
+      const session = await stripeClient.checkout.sessions.create({
+        mode: "payment",
+        line_items: [{ price: pack.priceId, quantity: 1 }],
+        success_url: successUrl.includes("{CHECKOUT_SESSION_ID}")
+          ? successUrl
+          : `${successUrl}${successUrl.includes("?") ? "&" : "?"}session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: cancelUrl,
+        client_reference_id: user.username,
+        metadata: {
+          username: user.username,
+          packId: pack.id,
+          coins: String(pack.coins),
+        },
+        payment_intent_data: {
+          metadata: {
+            username: user.username,
+            packId: pack.id,
+            coins: String(pack.coins),
+          },
+        },
+      });
+      return res.json({ url: session.url, sessionId: session.id });
+    } catch (e) {
+      logger.error({ err: String(e?.message || e) }, "stripe checkout create");
+      return res.status(500).json({ message: "Neizdevās izveidot maksājumu." });
+    }
   }
 );
 
