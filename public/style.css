@@ -5411,6 +5411,27 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex-wrap: wrap;
   gap: 8px;
 }
+.vz-board-game-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.vz-board-fs-browser {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid rgba(147, 197, 253, 0.45);
+  background: rgba(59, 130, 246, 0.2);
+  color: #bfdbfe;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.vz-board-fs-browser:active {
+  transform: translateY(1px);
+}
 .vz-board-game-meta {
   display: flex;
   flex-direction: column;

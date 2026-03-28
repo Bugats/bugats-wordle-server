@@ -2,7 +2,9 @@
 <html lang="lv">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
     <meta http-equiv="Pragma" content="no-cache" />
     <title>VĀRDU ZONA – spēle</title>
@@ -11,6 +13,8 @@
     <meta name="color-scheme" content="dark light" />
     <meta name="format-detection" content="telephone=no" />
     <link rel="manifest" href="manifest.json" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <meta
       name="description"
@@ -988,7 +992,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-28-zole-copy-foot"></script>
+    <script defer src="game.js?v=2026-03-28-board-browser-fs"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1308,7 +1312,17 @@
               <span id="board-game-type" class="vz-board-game-type"></span>
               <span id="board-game-turn" class="vz-board-game-turn" aria-live="polite"></span>
             </div>
-            <button id="board-resign-btn" type="button" class="vz-board-resign" title="Beigt spēli un zaudēt">Padoties</button>
+            <div class="vz-board-game-header-actions">
+              <button
+                id="board-browser-fs-btn"
+                type="button"
+                class="vz-board-fs-browser hidden"
+                aria-pressed="false"
+                title="Paslēpj pārlūka adreses joslu (ja pārlūks atļauj). iPhone: pievieno sākumekrānam vai izmanto «Pilnekrāna spēle» galvenajā izvēlnē.">
+                Pilnekrāns
+              </button>
+              <button id="board-resign-btn" type="button" class="vz-board-resign" title="Beigt spēli un zaudēt">Padoties</button>
+            </div>
           </div>
           <p id="board-game-hint" class="vz-board-game-hint">Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt</p>
           <div id="board-dambrete-container" class="vz-board-container hidden"></div>

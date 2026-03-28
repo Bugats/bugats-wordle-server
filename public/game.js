@@ -9606,13 +9606,56 @@ async function loadBoardLeaderboards() {
   } catch {}
 }
 
+async function exitBoardBrowserFullscreenIfActive() {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+  } catch {}
+}
+
+function syncBoardBrowserFullscreenUi() {
+  const btn = document.getElementById("board-browser-fs-btn");
+  const modal = document.getElementById("board-games-modal");
+  if (!btn || !modal) return;
+  const zoleOn =
+    !!boardState.gameId &&
+    boardState.type === "zole" &&
+    modal.classList.contains("vz-board-modal--fullscreen") &&
+    !modal.classList.contains("hidden");
+  const inFs = document.fullscreenElement === modal;
+  const hideForPwa = isTwa();
+  btn.classList.toggle("hidden", !zoleOn || hideForPwa);
+  btn.setAttribute("aria-pressed", inFs ? "true" : "false");
+  btn.textContent = inFs ? "Pārlūks" : "Pilnekrāns";
+  btn.title = hideForPwa
+    ? ""
+    : inFs
+      ? "Atgriezties pie parastā pārlūka skata (adrese redzama)."
+      : "Paslēpt pārlūka adreses joslu un izmantot visu ekrānu. Ja nedarbojas — iPhone: pievieno spēli sākumekrānam; Android: «Pilnekrāna spēle» galvenajā izvēlnē.";
+}
+
+function syncBoardModalFullscreen() {
+  const modal = document.getElementById("board-games-modal");
+  if (!modal) return;
+  if (modal.classList.contains("hidden")) {
+    modal.classList.remove("vz-board-modal--fullscreen");
+    syncBoardBrowserFullscreenUi();
+    return;
+  }
+  const zoleFs =
+    boardState.gameId && boardState.type === "zole";
+  modal.classList.toggle("vz-board-modal--fullscreen", !!zoleFs);
+  syncBoardBrowserFullscreenUi();
+}
+
 function hideBoardModal() {
   hideBoardResultOverlay();
+  void exitBoardBrowserFullscreenIfActive();
   const modal = document.getElementById("board-games-modal");
   if (modal) {
     modal.classList.add("hidden");
     modal.classList.remove("vz-board-modal--fullscreen");
   }
+  syncBoardBrowserFullscreenUi();
   syncBoardDambreteModePanelVisibility();
 }
 
@@ -9726,18 +9769,6 @@ function startBoardGame(payload) {
   syncBoardDambreteModePanelVisibility();
 }
 
-function syncBoardModalFullscreen() {
-  const modal = document.getElementById("board-games-modal");
-  if (!modal) return;
-  if (modal.classList.contains("hidden")) {
-    modal.classList.remove("vz-board-modal--fullscreen");
-    return;
-  }
-  const zoleFs =
-    boardState.gameId && boardState.type === "zole";
-  modal.classList.toggle("vz-board-modal--fullscreen", !!zoleFs);
-}
-
 function hideBoardGameArea() {
   if (window.VZZoleBoardTrickHold?.reset) {
     window.VZZoleBoardTrickHold.reset();
@@ -9745,6 +9776,7 @@ function hideBoardGameArea() {
   if (window.VZBoardGames?.resetDambreteTable) {
     window.VZBoardGames.resetDambreteTable();
   }
+  void exitBoardBrowserFullscreenIfActive();
   const gameArea = document.getElementById("board-game-area");
   const modal = document.getElementById("board-games-modal");
   if (gameArea) {
@@ -9753,6 +9785,7 @@ function hideBoardGameArea() {
   }
   if (modal) modal.classList.add("hidden");
   if (modal) modal.classList.remove("vz-board-modal--fullscreen");
+  syncBoardBrowserFullscreenUi();
   updateBoardGameBadge(false);
 }
 
@@ -10007,6 +10040,7 @@ function renderBoardGame() {
     }
   }
   syncBoardModalFullscreen();
+  syncBoardBrowserFullscreenUi();
 }
 
 async function handleChessCellClick(r, c, isPiece) {
@@ -10322,6 +10356,31 @@ function bindBoardGames() {
       if (boardState.gameId && state.socket)
         state.socket.emit("board.resign", { gameId: boardState.gameId });
     });
+  const boardFsBtn = document.getElementById("board-browser-fs-btn");
+  if (boardFsBtn) {
+    boardFsBtn.addEventListener("click", async () => {
+      const modal = document.getElementById("board-games-modal");
+      if (!modal || modal.classList.contains("hidden")) return;
+      try {
+        if (document.fullscreenElement === modal) {
+          await document.exitFullscreen();
+        } else if (modal.requestFullscreen) {
+          await modal.requestFullscreen();
+        } else {
+          appendSystemMessage(
+            "Šis pārlūks neatbalsta pilnekrānu. iPhone: pievieno spēli sākumekrānam. Android: izmanto «Pilnekrāna spēle» galvenajā izvēlnē."
+          );
+        }
+      } catch {
+        appendSystemMessage(
+          "Pilnekrānu nevarēja ieslēgt. Mēģini citu pārlūku vai pievieno spēli sākumekrānam."
+        );
+      }
+    });
+  }
+  document.addEventListener("fullscreenchange", () => {
+    syncBoardBrowserFullscreenUi();
+  });
   if (ppInviteDambrete)
     ppInviteDambrete.addEventListener("click", () => {
       const target = currentProfileName?.trim();
