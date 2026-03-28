@@ -6742,13 +6742,42 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex: 1 1 0;
 }
 
+/* Zoles 3p: skaidra vieta istabai (izveide + gaidīšana) */
+.vz-board-zole-room-zone {
+  margin: 14px 0 16px;
+  padding: 14px 16px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(167, 139, 250, 0.45);
+  background:
+    linear-gradient(165deg, rgba(49, 46, 129, 0.35) 0%, rgba(30, 27, 50, 0.65) 100%);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.25),
+    0 8px 24px rgba(0, 0, 0, 0.25);
+}
+.vz-board-zole-room-zone__title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #e9d5ff;
+}
+.vz-board-zole-room-zone__intro {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(244, 244, 245, 0.82);
+}
+.vz-board-zole-room-zone .vz-board-zole-3p-entry {
+  margin-top: 0;
+  margin-bottom: 0;
+}
 /* Zoles 3p istaba (lobijs) — īss, bez vecā zoles galdiņa */
 .vz-board-zole-3p-lobby {
-  margin: 12px 0;
+  margin: 12px 0 0;
   padding: 12px 14px;
   border-radius: 8px;
   border: 1px solid rgba(196, 181, 253, 0.3);
-  background: rgba(30, 27, 50, 0.45);
+  background: rgba(15, 23, 42, 0.4);
 }
 .vz-board-zole-3p-text {
   margin: 0 0 10px;

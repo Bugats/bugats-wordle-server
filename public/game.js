@@ -9588,17 +9588,29 @@ function syncBoardModalContext() {
     el.textContent = phaseLv ? `${label} · ${phaseLv}` : `${label} · spēle`;
     return;
   }
+  if (zole3pLobbySnapshot?.zoleLobby && !boardState.gameId) {
+    const h = zole3pLobbySnapshot.host || "?";
+    const n = (zole3pLobbySnapshot.players || []).length;
+    el.textContent = `Zoles istaba · ${n}/3 · saimnieks: ${h}`;
+    return;
+  }
   el.textContent = "Izvēlies spēli vai uzaicini draugu.";
 }
 
 function syncBoardDambreteModePanelVisibility() {
   const wrap = document.getElementById("board-dambrete-mode-wrap");
   const zoleWrap = document.getElementById("board-zole-mode-wrap");
+  const zoleRoomZone = document.getElementById("board-zole-room-zone");
   const zoleRoomEntry = document.getElementById("board-zole-3p-lobby-entry");
   const invite = document.getElementById("board-games-invite");
   const inInvite = invite && !invite.classList.contains("hidden");
   if (wrap) wrap.classList.toggle("hidden", !!inInvite);
   if (zoleWrap) zoleWrap.classList.toggle("hidden", !!inInvite);
+  const inZoleRoomFlow =
+    getSelectedBoardZoleMode() === "online_3p" ||
+    !!zole3pLobbySnapshot?.zoleLobby;
+  const showRoomZone = !inInvite && inZoleRoomFlow;
+  if (zoleRoomZone) zoleRoomZone.classList.toggle("hidden", !showRoomZone);
   const show3pEntry =
     !inInvite &&
     getSelectedBoardZoleMode() === "online_3p" &&

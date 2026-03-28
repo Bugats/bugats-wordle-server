@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-28-dambrete-jump-ring" />
+  <link rel="stylesheet" href="style.css?v=2026-03-28-zole-room-zone" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1004,7 +1004,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-28-region-boost-board"></script>
+    <script defer src="game.js?v=2026-03-28-zole-room-zone"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1242,10 +1242,33 @@
               >
             </div>
           </div>
-          <div id="board-zole-3p-lobby-entry" class="vz-board-zole-3p-entry hidden">
-            <button type="button" class="vz-board-invite-btn js-zole-create-lobby">
-              Izveidot zoles istabu (gaida 3 spēlētājus)
-            </button>
+          <div id="board-zole-room-zone" class="vz-board-zole-room-zone hidden" aria-labelledby="board-zole-room-zone-title">
+            <h4 id="board-zole-room-zone-title" class="vz-board-zole-room-zone__title">
+              🃏 Zoles istaba — 3 spēlētāji
+            </h4>
+            <p class="vz-board-zole-room-zone__intro">
+              Šeit top tava privātā istaba: spied «Izveidot», tad uzaicini divus spēlētājus zemāk vai ar «Zole» uzaicinājumu. Kad vietas aizpildītas, spēle sākas automātiski.
+            </p>
+            <div id="board-zole-3p-lobby-entry" class="vz-board-zole-3p-entry hidden">
+              <button type="button" class="vz-board-invite-btn js-zole-create-lobby">
+                Izveidot zoles istabu (gaida 3 spēlētājus)
+              </button>
+            </div>
+            <div id="board-zole-3p-lobby" class="vz-board-zole-3p-lobby hidden" aria-live="polite">
+              <p id="board-zole-3p-lobby-text" class="vz-board-zole-3p-text"></p>
+              <div id="board-zole-3p-host-actions" class="hidden">
+                <label for="board-zole-3p-third" class="vz-board-label">Spēlētāja lietotājvārds</label>
+                <input id="board-zole-3p-third" type="text" placeholder="uzaicināt uz istabu" autocomplete="username" />
+                <div class="vz-board-zole-3p-btns">
+                  <button id="board-zole-3p-invite-third" type="button" class="vz-board-invite-btn">Uzaicināt</button>
+                  <button id="board-zole-3p-cancel-lobby" type="button" class="vz-board-resign">Atcelt istabu</button>
+                </div>
+              </div>
+              <p id="board-zole-3p-guest-hint" class="vz-board-hint hidden">Gaidām saimnieku vai citus spēlētājus…</p>
+              <div id="board-zole-3p-guest-actions" class="hidden">
+                <button id="board-zole-3p-leave-lobby" type="button" class="vz-board-resign">Pamest istabu</button>
+              </div>
+            </div>
           </div>
           <div class="vz-board-bot-section">
             <p class="vz-board-bot-label">🤖 Spēlēt vs botu</p>
@@ -1272,21 +1295,6 @@
             </div>
           </div>
           <div id="board-invite-pending" class="vz-board-pending hidden">Gaidām atbildi…</div>
-          <div id="board-zole-3p-lobby" class="vz-board-zole-3p-lobby hidden" aria-live="polite">
-            <p id="board-zole-3p-lobby-text" class="vz-board-zole-3p-text"></p>
-            <div id="board-zole-3p-host-actions" class="hidden">
-              <label for="board-zole-3p-third" class="vz-board-label">Spēlētāja lietotājvārds</label>
-              <input id="board-zole-3p-third" type="text" placeholder="uzaicināt uz istabu" autocomplete="username" />
-              <div class="vz-board-zole-3p-btns">
-                <button id="board-zole-3p-invite-third" type="button" class="vz-board-invite-btn">Uzaicināt</button>
-                <button id="board-zole-3p-cancel-lobby" type="button" class="vz-board-resign">Atcelt istabu</button>
-              </div>
-            </div>
-            <p id="board-zole-3p-guest-hint" class="vz-board-hint hidden">Gaidām saimnieku vai citus spēlētājus…</p>
-            <div id="board-zole-3p-guest-actions" class="hidden">
-              <button id="board-zole-3p-leave-lobby" type="button" class="vz-board-resign">Pamest istabu</button>
-            </div>
-          </div>
           <details class="vz-board-rules">
             <summary class="vz-board-rules-summary">📖 Īsi noteikumi</summary>
             <div class="vz-board-rules-content">
