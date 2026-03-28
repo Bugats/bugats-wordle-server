@@ -5417,8 +5417,11 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  flex-shrink: 0;
+  max-width: 100%;
 }
 .vz-board-fs-browser {
+  flex-shrink: 0;
   padding: 6px 10px;
   font-size: 12px;
   font-weight: 600;

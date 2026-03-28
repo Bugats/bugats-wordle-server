@@ -1609,11 +1609,11 @@ function setOfflineOverlay(show) {
   else offlineOverlayEl.classList.add("hidden");
 }
 
+/** Īsts PWA / «pievienots sākumekrānam» — ne jau parasts pārlūks fullscreen režīmā. */
 function isTwa() {
   if (typeof window === "undefined") return false;
   try {
     if (window.matchMedia("(display-mode: standalone)").matches) return true;
-    if (window.matchMedia("(display-mode: fullscreen)").matches) return true;
     if (navigator.standalone === true) return true;
     return false;
   } catch {
