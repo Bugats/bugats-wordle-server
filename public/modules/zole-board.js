@@ -170,7 +170,7 @@
   }
 
   /**
-   * Kā lib/zole.js sortZoleHand: ♣ ♠ ♥ parastās stiprākās pa kreisi (A→10→K→9), trumpji dilstoši.
+   * Kā lib/zole.js sortZoleHand: trumpji pa kreisi stiprākā→vājākā, tad ♣ ♠ ♥ parastās A→10→K→9.
    */
   function sortHand(hand) {
     if (!hand || !hand.length) return [];
@@ -187,13 +187,13 @@
     return hand.slice().sort((a, b) => {
       const ta = isZoleTrumpCard(a);
       const tb = isZoleTrumpCard(b);
-      if (ta !== tb) return ta ? 1 : -1;
-      if (!ta) {
-        const ds = plainSuitKey(a.s) - plainSuitKey(b.s);
-        if (ds !== 0) return ds;
-        return plainRankKeyStrongLeft(a.r) - plainRankKeyStrongLeft(b.r);
+      if (ta !== tb) return ta ? -1 : 1;
+      if (ta) {
+        return zoleCardTrickStrength(b) - zoleCardTrickStrength(a);
       }
-      return zoleCardTrickStrength(b) - zoleCardTrickStrength(a);
+      const ds = plainSuitKey(a.s) - plainSuitKey(b.s);
+      if (ds !== 0) return ds;
+      return plainRankKeyStrongLeft(a.r) - plainRankKeyStrongLeft(b.r);
     });
   }
 
