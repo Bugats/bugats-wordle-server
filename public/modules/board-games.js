@@ -388,6 +388,23 @@
     return moves.find((m) => m.from === fromSq && m.to === toSq);
   }
 
+  function chessPieceLabel(ch) {
+    const p = CHESS_PIECES[ch];
+    if (!p) return "";
+    const isW = p.color === "white";
+    const names = {
+      p: "bandinieks",
+      n: "zirgs",
+      b: "laidnis",
+      r: "tornis",
+      q: "dāma",
+      k: "karalis",
+    };
+    const key = String(ch).toLowerCase();
+    const n = names[key] || "figūra";
+    return (isW ? "Balts " : "Melns ") + n;
+  }
+
   function renderChessBoard(
     fen,
     turnIdx,
@@ -402,13 +419,59 @@
     container.innerHTML = "";
     container.classList.remove("hidden");
     const board = parseFenToBoard(fen);
+    const flipped = myPlayerIdx === 1;
+    const wrap = document.createElement("div");
+    wrap.className = "vz-chess-board-wrap";
     const table = document.createElement("table");
     table.className = "vz-chess-board";
     table.setAttribute("role", "grid");
     const canMove = isMyTurn && myPlayerIdx === turnIdx;
-    for (let r = 0; r < 8; r++) {
+
+    function dataRC(viewR, viewC) {
+      if (!flipped) return [viewR, viewC];
+      return [7 - viewR, 7 - viewC];
+    }
+
+    function fileCharForViewCol(viewC) {
+      const dc = flipped ? 7 - viewC : viewC;
+      return String.fromCharCode(97 + dc);
+    }
+
+    function rankDigitForViewRow(viewR) {
+      const dr = flipped ? 7 - viewR : viewR;
+      return String(8 - dr);
+    }
+
+    function appendFileRow(tr) {
+      const cornerL = document.createElement("td");
+      cornerL.className = "vz-chess-co vz-chess-co--corner";
+      cornerL.setAttribute("aria-hidden", "true");
+      tr.appendChild(cornerL);
+      for (let vc = 0; vc < 8; vc++) {
+        const td = document.createElement("td");
+        td.className = "vz-chess-co vz-chess-co--file";
+        td.textContent = fileCharForViewCol(vc);
+        tr.appendChild(td);
+      }
+      const cornerR = document.createElement("td");
+      cornerR.className = "vz-chess-co vz-chess-co--corner";
+      cornerR.setAttribute("aria-hidden", "true");
+      tr.appendChild(cornerR);
+    }
+
+    const topTr = document.createElement("tr");
+    appendFileRow(topTr);
+    table.appendChild(topTr);
+
+    for (let vr = 0; vr < 8; vr++) {
       const tr = document.createElement("tr");
-      for (let c = 0; c < 8; c++) {
+      const rankTd = document.createElement("td");
+      rankTd.className = "vz-chess-co vz-chess-co--rank";
+      rankTd.textContent = rankDigitForViewRow(vr);
+      tr.appendChild(rankTd);
+
+      for (let vc = 0; vc < 8; vc++) {
+        const [r, c] = dataRC(vr, vc);
         const td = document.createElement("td");
         td.dataset.row = String(r);
         td.dataset.col = String(c);
@@ -419,6 +482,8 @@
           span.className =
             "vz-chess-piece vz-chess-" + CHESS_PIECES[piece].color;
           span.textContent = CHESS_PIECES[piece].symbol;
+          span.setAttribute("role", "img");
+          span.setAttribute("aria-label", chessPieceLabel(piece));
           td.appendChild(span);
         }
         const isSelected =
@@ -440,8 +505,18 @@
         );
         tr.appendChild(td);
       }
+
+      const rankTdR = document.createElement("td");
+      rankTdR.className = "vz-chess-co vz-chess-co--rank";
+      rankTdR.textContent = rankDigitForViewRow(vr);
+      tr.appendChild(rankTdR);
       table.appendChild(tr);
     }
+
+    const botTr = document.createElement("tr");
+    appendFileRow(botTr);
+    table.appendChild(botTr);
+
     function handleChessCellEvent(e) {
       const td =
         e.target && e.target.closest
@@ -463,7 +538,8 @@
       else if (selectedCell) onCellClick(r, c, false);
     }
     bindBoardCellInput(table, handleChessCellEvent);
-    container.appendChild(table);
+    wrap.appendChild(table);
+    container.appendChild(wrap);
   }
 
   function resetDambreteTable() {

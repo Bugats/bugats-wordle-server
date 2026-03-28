@@ -6759,8 +6759,15 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   cursor: pointer;
 }
 .vz-chess-placeholder { font-size: 12px; opacity: 0.8; }
+.vz-chess-board-wrap {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin: 4px 0 0;
+}
 .vz-chess-board {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   margin: 0 auto;
   background: #14161c;
   border-radius: 8px;
@@ -6772,7 +6779,49 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
 }
-.vz-chess-board td {
+.vz-chess-board .vz-chess-co {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  min-height: 18px;
+  padding: 0 1px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: rgba(228, 228, 231, 0.58);
+  text-align: center;
+  vertical-align: middle;
+  background: #14161c;
+  user-select: none;
+  pointer-events: none;
+  line-height: 1;
+}
+.vz-chess-board .vz-chess-co--file {
+  width: 48px;
+  min-width: 48px;
+  height: 18px;
+  min-height: 18px;
+  padding-bottom: 2px;
+  vertical-align: bottom;
+}
+.vz-chess-board tr:last-child .vz-chess-co--file {
+  vertical-align: top;
+  padding-top: 2px;
+  padding-bottom: 0;
+}
+.vz-chess-board .vz-chess-co--rank {
+  width: 20px;
+  min-width: 20px;
+  height: 48px;
+  min-height: 48px;
+  padding: 0 2px;
+  font-size: 11px;
+}
+.vz-chess-board .vz-chess-co--corner {
+  width: 20px;
+  min-width: 20px;
+}
+.vz-chess-board td:not(.vz-chess-co) {
   width: 48px;
   height: 48px;
   min-width: 48px;
@@ -6803,12 +6852,34 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     inset 0 0 0 6px rgba(34, 197, 94, 0.85),
     0 0 0 2px rgba(34, 197, 94, 0.65);
 }
-.vz-chess-valid {
+/* Skaidri zaļi mērķa lauki (atbilst tekstam «zaļo lauciņu») */
+.vz-chess-light.vz-chess-valid {
+  background:
+    linear-gradient(
+      165deg,
+      rgba(74, 222, 128, 0.88) 0%,
+      rgba(34, 197, 94, 0.82) 45%,
+      rgba(21, 128, 61, 0.78) 100%
+    ) !important;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.95),
+    0 0 0 3px rgba(34, 197, 94, 0.95),
+    0 0 18px rgba(34, 197, 94, 0.55);
+  filter: none;
+}
+.vz-chess-dark.vz-chess-valid {
+  background:
+    linear-gradient(
+      165deg,
+      rgba(52, 211, 153, 0.82) 0%,
+      rgba(16, 185, 129, 0.78) 50%,
+      rgba(5, 150, 105, 0.85) 100%
+    ) !important;
   box-shadow:
     inset 0 0 0 2px rgba(255, 255, 255, 0.9),
-    0 0 0 2px rgba(34, 197, 94, 0.9),
-    0 0 14px rgba(34, 197, 94, 0.4);
-  filter: saturate(1.12);
+    0 0 0 3px rgba(34, 197, 94, 0.95),
+    0 0 18px rgba(34, 197, 94, 0.5);
+  filter: none;
 }
 .vz-chess-piece {
   display: inline-flex;
@@ -6882,10 +6953,18 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   }
   .vz-dambrete-piece { width: 34px; height: 34px; }
   .vz-dambrete-piece.vz-dambrete-king { font-size: 15px; }
-  .vz-chess-board td {
+  .vz-chess-board td:not(.vz-chess-co) {
     width: 44px;
     height: 44px;
     min-width: 44px;
+    min-height: 44px;
+  }
+  .vz-chess-board .vz-chess-co--file {
+    width: 44px;
+    min-width: 44px;
+  }
+  .vz-chess-board .vz-chess-co--rank {
+    height: 44px;
     min-height: 44px;
   }
   .vz-chess-piece {
@@ -6909,10 +6988,18 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   }
   .vz-dambrete-piece { width: 30px; height: 30px; }
   .vz-dambrete-piece.vz-dambrete-king { font-size: 14px; }
-  .vz-chess-board td {
+  .vz-chess-board td:not(.vz-chess-co) {
     width: 40px;
     height: 40px;
     min-width: 40px;
+    min-height: 40px;
+  }
+  .vz-chess-board .vz-chess-co--file {
+    width: 40px;
+    min-width: 40px;
+  }
+  .vz-chess-board .vz-chess-co--rank {
+    height: 40px;
     min-height: 40px;
   }
   .vz-chess-piece {
