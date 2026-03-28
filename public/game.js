@@ -10000,6 +10000,9 @@ function renderBoardGame() {
           },
         }
       );
+      if (window.VZZoleBoard?.syncOpponentAvatars && zoleContainer) {
+        window.VZZoleBoard.syncOpponentAvatars(zoleContainer, applyMiniAvatar);
+      }
     }
   } else if (boardState.type === "dambrete" && boardState.board) {
     if (zoleContainer) {

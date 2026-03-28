@@ -385,36 +385,45 @@
     return wrap;
   }
 
-  function createDeckBackMini() {
-    const d = el("div", "vz-zole-deck-mini");
-    d.setAttribute("aria-hidden", "true");
-    return d;
-  }
-
-  function buildOpponentCorner(zole, pi, activePi) {
-    const corner = el("div", "vz-zole-opp");
-    if (activePi === pi) corner.classList.add("vz-zole-opp--turn");
-    const nm = el("div", "vz-zole-opp__name", zole.players?.[pi] || "?");
+  /**
+   * Pretinieku «profila» stūri — absolūti pret filcu; img+initials sinhronizē game.js (applyMiniAvatar).
+   */
+  function buildOpponentCorner(zole, pi, activePi, cornerCls) {
+    const corner = el("div", `vz-zole-opp-corner ${cornerCls || ""}`);
+    if (activePi === pi) corner.classList.add("vz-zole-opp-corner--turn");
+    const un = String(zole.players?.[pi] || "?").trim();
+    corner.dataset.zolePlayer = un;
+    const avWrap = el("div", "vz-zole-opp__avatar-wrap");
+    const img = document.createElement("img");
+    img.className = "vz-zole-opp__avatar-img";
+    img.alt = "";
+    img.decoding = "async";
+    const initials = el("span", "vz-zole-opp__avatar-initials");
+    initials.textContent = un ? un.charAt(0).toUpperCase() : "?";
+    avWrap.appendChild(img);
+    avWrap.appendChild(initials);
+    corner.appendChild(avWrap);
+    const nm = el("div", "vz-zole-opp__tag", un || "?");
     corner.appendChild(nm);
     if (activePi === pi) {
-      corner.appendChild(el("div", "vz-zole-opp__badge", "Kārta"));
+      corner.appendChild(el("div", "vz-zole-opp__badge vz-zole-opp__badge--corner", "Kārta"));
     }
-    corner.appendChild(createDeckBackMini());
-    const av = el("div", "vz-zole-opp__avatar");
-    const un = String(zole.players?.[pi] || "?").trim();
-    av.textContent = un ? un.charAt(0).toUpperCase() : "?";
-    corner.appendChild(av);
     return corner;
   }
 
-  function buildOpponentsRow(zole, myIdx) {
-    const row = el("div", "vz-zole-classic__opps");
+  function buildOpponentsLayer(zole, myIdx) {
+    const layer = el("div", "vz-zole-classic__opps-layer");
+    layer.setAttribute("aria-hidden", "true");
     const active = zoleActiveTurnPlayerIndex(zole);
     const leftPi = (myIdx + 1) % 3;
     const rightPi = (myIdx + 2) % 3;
-    row.appendChild(buildOpponentCorner(zole, leftPi, active));
-    row.appendChild(buildOpponentCorner(zole, rightPi, active));
-    return row;
+    layer.appendChild(
+      buildOpponentCorner(zole, leftPi, active, "vz-zole-opp-corner--tl")
+    );
+    layer.appendChild(
+      buildOpponentCorner(zole, rightPi, active, "vz-zole-opp-corner--tr")
+    );
+    return layer;
   }
 
   /** Kopējie mača punkti (tabula) — kompakti pa vidu zem pretiniekiem. */
@@ -450,7 +459,9 @@
     const phase = zole.phase || "";
     const wrap = el("div", "vz-zole-classic__trickWrap");
     if (phase !== "play") {
-      wrap.appendChild(el("div", "vz-zole-classic__trickSpacer"));
+      const sp = el("div", "vz-zole-classic__trickSpacer");
+      sp.classList.add("vz-zole-classic__trickSpacer--tight");
+      wrap.appendChild(sp);
       return wrap;
     }
 
@@ -847,11 +858,13 @@
     const turnBanner = buildTurnBanner(zole, myIdx);
     if (turnBanner) root.appendChild(turnBanner);
 
-    const felt = el("div", "vz-zole-classic__felt");
-    felt.appendChild(buildOpponentsRow(zole, myIdx));
+    const felt = el("div", "vz-zole-classic__felt vz-zole-classic__felt--table");
+    felt.appendChild(buildOpponentsLayer(zole, myIdx));
+
+    const feltCenter = el("div", "vz-zole-classic__felt-center");
 
     if (phase === "bid") {
-      felt.appendChild(buildBidCenter(zole, myIdx, onBid, zm));
+      feltCenter.appendChild(buildBidCenter(zole, myIdx, onBid, zm));
     } else if (phase === "discard" && zole.contract === "big") {
       const cidx = zole.contractorIdx;
       const waitNm =
@@ -860,7 +873,7 @@
         myIdx === zole.contractorIdx,
         waitNm
       );
-      if (discardMsg) felt.appendChild(discardMsg);
+      if (discardMsg) feltCenter.appendChild(discardMsg);
     } else if (phase === "end") {
       const endBox = el("div", "vz-zole-classic__end");
       endBox.appendChild(buildMatchScoreStrip(zole, myIdx));
@@ -910,10 +923,11 @@
         row.appendChild(nextBtn);
         endBox.appendChild(row);
       }
-      felt.appendChild(endBox);
+      feltCenter.appendChild(endBox);
     } else {
-      felt.appendChild(buildTrickCenter(zole, myIdx));
+      feltCenter.appendChild(buildTrickCenter(zole, myIdx));
     }
+    felt.appendChild(feltCenter);
 
     let dock = null;
     if (phase === "bid") {
@@ -1029,8 +1043,24 @@
     container.appendChild(root);
   }
 
+  function syncOpponentAvatars(container, applyMiniAvatar) {
+    if (!container || typeof applyMiniAvatar !== "function") return;
+    const nodes = container.querySelectorAll(
+      ".vz-zole-opp-corner[data-zole-player]"
+    );
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      const u = n.getAttribute("data-zole-player");
+      if (!u) continue;
+      const img = n.querySelector(".vz-zole-opp__avatar-img");
+      const ini = n.querySelector(".vz-zole-opp__avatar-initials");
+      if (img && ini) applyMiniAvatar(u, img, ini);
+    }
+  }
+
   global.VZZoleBoard = Object.freeze({
     renderZoleBoard,
+    syncOpponentAvatars,
     cardLabel,
     cardKey,
     isZoleTrumpCard,
