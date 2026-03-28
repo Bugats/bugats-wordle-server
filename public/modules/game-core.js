@@ -78,6 +78,7 @@
       email: "",
       region: "",
       regionPoints: 0,
+      regionBoost: 0,
       regionAttackTarget: "",
       regionAttackRegion: "",
       regionAttackLimit: null,

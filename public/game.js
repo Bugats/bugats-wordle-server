@@ -2380,6 +2380,7 @@ function renderRegionRules(rules) {
     : [];
   const fallback = [
     "Par uzvarām iegūsti novada punktus.",
+    "Duelis un galda spēles pret cilvēkiem arī stiprina novadu tabulā.",
     "Ar +1 palīdzi savam novadam.",
     "Ar -1 samazini izvēlēto pretinieku.",
   ];
@@ -2619,6 +2620,7 @@ function updatePlayerCard(me) {
     playerTitleEl.textContent = title || "—";
     playerTitleEl.classList.toggle("vz-title-empty", !title);
   }
+  state.regionBoost = Math.max(0, Math.floor(me.regionBoost || 0));
   updateRegionPointsUi(me.regionPoints || 0, me.region || "");
   if (Array.isArray(me.blockedUsers)) {
     dmSetBlockedUsers(me.blockedUsers);
@@ -9329,6 +9331,7 @@ function initSocket() {
     try {
       const me = await apiGet("/me");
       updatePlayerCard(me);
+      await refreshRegionStats();
     } catch {}
 
     if (youWin || winner || isDraw) {
@@ -9533,7 +9536,10 @@ function initSocket() {
     hideBoardGameArea();
     updateBoardGameBadge(false);
     apiGet("/me")
-      .then(updatePlayerCard)
+      .then((me) => {
+        updatePlayerCard(me);
+        return refreshRegionStats();
+      })
       .catch(() => {});
   });
   socket.on("board:leaderboard", () => {

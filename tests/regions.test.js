@@ -92,4 +92,33 @@ describe("Regions API", () => {
       "limits"
     );
   });
+
+  it("competitive win grant increases regionBoost for tabula", async () => {
+    const username = `regb${Date.now().toString().slice(-8)}`;
+    const token = await ensureUserToken({
+      username,
+      password: "Test12345",
+      email: `${username}@example.com`,
+      region: "Kurzeme",
+    });
+
+    const before = await request(app)
+      .get("/me")
+      .set("Authorization", `Bearer ${token}`);
+    expect(before.status).toBe(200);
+    const boost0 = Math.max(0, Math.floor(before.body?.regionBoost || 0));
+
+    const ok = __testHooks.grantRegionRewardForCompetitiveWinForTestOnly(
+      username,
+      2
+    );
+    expect(ok).toBe(true);
+
+    const after = await request(app)
+      .get("/me")
+      .set("Authorization", `Bearer ${token}`);
+    expect(after.status).toBe(200);
+    const boost1 = Math.max(0, Math.floor(after.body?.regionBoost || 0));
+    expect(boost1).toBeGreaterThanOrEqual(boost0 + 2);
+  });
 });

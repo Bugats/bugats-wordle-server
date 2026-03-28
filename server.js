@@ -694,6 +694,20 @@ const BOARD_GAME_REWARD_COINS_ZOLE_3P = 10;
 const BOARD_GAME_LOSE_COINS_ZOLE_3P = 4;
 const BOARD_GAME_REGION_POINTS = 1;
 
+/** PvP galda uzvara: +regionBoost novadu tabulai; +regionPoints tikai ja REGION_POINTS_PER_WIN > 0. */
+function grantRegionRewardForCompetitiveWin(user, basePoints) {
+  if (!user || !user.username) return;
+  const region = normalizeRegion(user.region);
+  if (!region) return;
+  let pts = Math.max(0, Math.floor(Number(basePoints) || 0));
+  if (pts <= 0) return;
+  if (isRegionBonusActive()) pts *= REGION_BONUS_MULTIPLIER;
+  user.regionBoost = Math.max(0, Math.floor(user.regionBoost || 0)) + pts;
+  if (REGION_POINTS_PER_WIN > 0) {
+    user.regionPoints = Math.max(0, Math.floor(user.regionPoints || 0)) + pts;
+  }
+}
+
 function boardGameCoinsWin(game) {
   if (!game || game.vsBot) return 0;
   if (game.type === "zole" && game.players?.length === 3)
@@ -1540,11 +1554,8 @@ function finishBoardGame(game, winnerUsername, reason) {
     if (pvpCoinWin > 0) {
       winner.coins = (winner.coins || 0) + pvpCoinWin;
     }
-    if (REGION_POINTS_PER_WIN > 0) {
-      let rp = BOARD_GAME_REGION_POINTS;
-      if (isRegionBonusActive()) rp *= REGION_BONUS_MULTIPLIER;
-      winner.regionPoints =
-        Math.max(0, Math.floor(winner.regionPoints || 0)) + rp;
+    if (!game.vsBot) {
+      grantRegionRewardForCompetitiveWin(winner, BOARD_GAME_REGION_POINTS);
     }
     ensureRankFields(winner);
     if (winner.dambreteWins == null) winner.dambreteWins = 0;
@@ -4704,6 +4715,7 @@ function getRegionAttackLimitStatus(user, now = new Date()) {
 function buildRegionRulesPayload(attackLimit, bonusStatus) {
   const out = [
     "Par katru uzvarētu raundu iegūsti novada punktus.",
+    "Uzvara duelī vai PvP galda spēlē (dambrete, šahs, zole pret cilvēkiem) tieši stiprina tavu novadu tabulā.",
     "'+1 savam novadam' paceļ tava novada rezultātu.",
     "'-1 pretiniekam' samazina izvēlētā novada rezultātu.",
   ];
@@ -5818,6 +5830,7 @@ async function buildMePayload(u) {
     title: u.title || "",
     region: u.region || "",
     regionPoints: Math.max(0, Math.floor(u.regionPoints || 0)),
+    regionBoost: Math.max(0, Math.floor(u.regionBoost || 0)),
     xp,
     score: u.score || 0,
     coins: u.coins || 0,
@@ -10580,12 +10593,7 @@ app.post("/guess", guessRateLimiter, authMiddleware, (req, res) => {
     user.weeklyWins = (user.weeklyWins || 0) + 1;
     user.weeklyScore = (user.weeklyScore || 0) + SCORE_PER_WIN;
     user.weeklyXp = (user.weeklyXp || 0) + xpGain;
-    if (REGION_POINTS_PER_WIN > 0) {
-      let regionPointsGain = REGION_POINTS_PER_WIN;
-      if (isRegionBonusActive()) regionPointsGain *= REGION_BONUS_MULTIPLIER;
-      user.regionPoints =
-        Math.max(0, Math.floor(user.regionPoints || 0)) + regionPointsGain;
-    }
+    grantRegionRewardForCompetitiveWin(user, REGION_POINTS_PER_WIN);
 
     user.bestStreak = Math.max(user.bestStreak || 0, user.streak || 0);
 
@@ -10835,6 +10843,7 @@ function finishDuel(duel, winnerName, reason) {
       winner.duelsWon = (winner.duelsWon || 0) + 1;
       winner.xp = (winner.xp || 0) + DUEL_REWARD_XP;
       winner.coins = (winner.coins || 0) + DUEL_REWARD_COINS;
+      grantRegionRewardForCompetitiveWin(winner, REGION_POINTS_PER_WIN);
       updateMissionsOnDuelWin(winner);
       ensureRankFields(winner);
     }
@@ -13282,6 +13291,14 @@ if (process.env.NODE_ENV !== "test") {
 const __testHooks = {
   setRegionStateForTestOnly,
   getCurrentRoundWordForTestOnly,
+  grantRegionRewardForCompetitiveWinForTestOnly(username, basePoints) {
+    if (process.env.NODE_ENV !== "test") return false;
+    const u = getUserByNameForTestOnly(username);
+    if (!u) return false;
+    grantRegionRewardForCompetitiveWin(u, basePoints);
+    saveUsers(USERS);
+    return true;
+  },
 };
 
 export { app, httpServer, io, logger, startServer, __testHooks };
