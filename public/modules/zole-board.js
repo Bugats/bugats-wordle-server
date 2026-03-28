@@ -568,11 +568,13 @@
     return center;
   }
 
+  /**
+   * Norakšana: pilna instrukcija ir zilajā joslā — centrā tikai gaidīšanas teksts.
+   */
   function buildDiscardCenter(isContractor, waitingName) {
+    if (isContractor) return null;
     const c = el("div", "vz-zole-classic__msg");
-    c.textContent = isContractor
-      ? "Norok 2 kārtas un spied «Norakt»."
-      : `Gaida: ${waitingName || "?"} norok kārtas.`;
+    c.textContent = `Gaida: ${waitingName || "?"} norok kārtas.`;
     return c;
   }
 
@@ -847,9 +849,11 @@
       const cidx = zole.contractorIdx;
       const waitNm =
         typeof cidx === "number" ? zole.players?.[cidx] || "?" : "?";
-      felt.appendChild(
-        buildDiscardCenter(myIdx === zole.contractorIdx, waitNm)
+      const discardMsg = buildDiscardCenter(
+        myIdx === zole.contractorIdx,
+        waitNm
       );
+      if (discardMsg) felt.appendChild(discardMsg);
     } else if (phase === "end") {
       const endBox = el("div", "vz-zole-classic__end");
       endBox.appendChild(buildMatchScoreStrip(zole, myIdx));
@@ -982,10 +986,33 @@
     const sumFoot = el("summary", "vz-zole-foot-details__sum", "Punkti · noteikumi");
     const innerFoot = el("div", "vz-zole-foot-details__body");
     innerFoot.appendChild(buildPointsTable(zole, myIdx));
-    if (zole.trumpNote) {
-      const p = el("p", "vz-zole-foot-note");
-      p.textContent = zole.trumpNote;
-      innerFoot.appendChild(p);
+    const noteShort = zole.trumpNoteShort;
+    const noteDetail = zole.trumpNoteDetail || zole.trumpNote;
+    if (noteShort || noteDetail) {
+      const wrap = el("div", "vz-zole-foot-trump");
+      if (noteShort) {
+        wrap.appendChild(
+          el("p", "vz-zole-foot-note vz-zole-foot-note--short", noteShort)
+        );
+      }
+      if (noteDetail && noteDetail !== noteShort) {
+        const more = el("details", "vz-zole-foot-trump__more");
+        const sumMore = el(
+          "summary",
+          "vz-zole-foot-trump__sum",
+          noteShort
+            ? "Pilnāka instrukcija (sekšana, komanda…)"
+            : "Trumpji un sekšana (pilni)"
+        );
+        const bodyMore = el("div", "vz-zole-foot-trump__body");
+        bodyMore.appendChild(
+          el("p", "vz-zole-foot-note vz-zole-foot-note--detail", noteDetail)
+        );
+        more.appendChild(sumMore);
+        more.appendChild(bodyMore);
+        wrap.appendChild(more);
+      }
+      innerFoot.appendChild(wrap);
     }
     detFoot.appendChild(sumFoot);
     detFoot.appendChild(innerFoot);

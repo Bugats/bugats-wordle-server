@@ -5870,6 +5870,44 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   line-height: 1.4;
   color: rgba(255, 255, 255, 0.75);
 }
+#board-zole-container .vz-zole-foot-trump {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+#board-zole-container .vz-zole-foot-note--short {
+  margin: 0 0 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(255, 251, 235, 0.92);
+}
+#board-zole-container .vz-zole-foot-trump__more {
+  margin: 0;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+#board-zole-container .vz-zole-foot-trump__sum {
+  cursor: pointer;
+  list-style: none;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(253, 230, 138, 0.95);
+  padding: 8px 10px;
+}
+#board-zole-container .vz-zole-foot-trump__sum::-webkit-details-marker {
+  display: none;
+}
+#board-zole-container .vz-zole-foot-trump__body {
+  padding: 0 10px 10px;
+}
+#board-zole-container .vz-zole-foot-note--detail {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.82);
+}
 /* Stiķa zona (iekš filca) */
 #board-zole-container .vz-zole-felt__title {
   text-align: center;

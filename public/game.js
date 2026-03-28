@@ -9843,9 +9843,7 @@ function renderBoardGame() {
       boardState.type === "zole" &&
       boardState.zole?.phase === "discard"
     ) {
-      turnEl.textContent = isMyTurn
-        ? "Tava kārta — norok 2 kārtas"
-        : "Lielais norok kārtas…";
+      turnEl.textContent = isMyTurn ? "Tava kārta" : "Lielais norok…";
     } else if (boardState.type === "zole" && boardState.zole?.phase === "end") {
       turnEl.textContent = "Partija beigusies";
     } else if (
@@ -9875,8 +9873,8 @@ function renderBoardGame() {
         boardState.zole?.contract === "big"
       ) {
         hintEl.textContent = isMyTurn
-          ? "Tu paņēmi pirkumu (10 kārtu rokā). Norok 2 kārtas — to acis pieskaitās tev."
-          : "Gaidām, kamēr lielais norok 2 kārtas…";
+          ? "Pēc norakšanas tās 2 kārtu acis pieskaitās tev."
+          : "Gaida lielais.";
       } else if (boardState.zole?.phase === "end") {
         hintEl.textContent =
           boardState.zoleMode === "vs_bot"
