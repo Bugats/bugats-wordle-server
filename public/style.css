@@ -5706,11 +5706,11 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 #board-zole-container .vz-zole-classic__bidCenter {
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 120px;
   padding: 8px 0;
 }
 #board-zole-container .vz-zole-bid-stack {
@@ -6222,6 +6222,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex-wrap: nowrap;
   justify-content: center;
   align-items: flex-end;
+  gap: 0;
   padding: 10px 2px 6px;
   width: 100%;
   max-width: 100%;
@@ -6235,13 +6236,25 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   background: transparent;
   cursor: pointer;
   border-radius: 14px;
+  flex: 0 0 auto;
   flex-shrink: 0;
-  min-width: 108px;
+  flex-grow: 0;
+  width: auto;
+  min-width: 0;
+  max-width: none;
   transition: transform 0.15s ease;
 }
 #board-zole-container .vz-zole-classic__dock .vz-zole-hand__card {
-  min-width: calc(108px * var(--vz-hand-scale, 1));
+  flex: 0 0 auto;
+  width: calc(108px * var(--vz-hand-scale, 1));
+  min-width: 0;
+  max-width: calc(108px * var(--vz-hand-scale, 1));
   border-radius: calc(14px * var(--vz-hand-scale, 1));
+}
+#board-zole-container .vz-zole-classic__dock .vz-zole-hand__card .vz-zole-card--hand {
+  display: block;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 #board-zole-container .vz-zole-hand__card--static {
   cursor: default;

@@ -585,6 +585,7 @@
   }
 
   const ZOLE_HAND_DESIGN_W = 108;
+  const ZOLE_HAND_DESIGN_H = 168;
   const ZOLE_HAND_MIN_SCALE = 0.28;
 
   function fitZoleHandOverlap(dock) {
@@ -630,13 +631,22 @@
       return Math.min(maxPull, Math.max(pullNeed, pullDecor));
     }
 
+    function applyLayout(s, pull) {
+      dock.style.setProperty("--vz-hand-scale", String(s));
+      for (let i = 1; i < n; i++) {
+        cards[i].style.marginLeft = pull > 0 ? `-${pull}px` : "";
+      }
+    }
+
     const measure = () => {
       const felt = dock.closest(".vz-zole-classic__felt");
+      const classic = dock.closest(".vz-zole--classic");
+      const rowEl = row;
       const raw =
         (dock.clientWidth > 48 ? dock.clientWidth : 0) ||
         (felt && felt.clientWidth) ||
         320;
-      const budget = Math.max(120, raw - 20);
+      const budget = Math.max(120, raw - 24);
 
       let lo = ZOLE_HAND_MIN_SCALE;
       let hi = 1;
@@ -645,11 +655,29 @@
         if (fitsAtScale(mid, budget)) lo = mid;
         else hi = mid;
       }
-      const s = lo;
-      const pull = pullForScale(s, budget);
-      dock.style.setProperty("--vz-hand-scale", String(s));
-      for (let i = 1; i < n; i++) {
-        cards[i].style.marginLeft = pull > 0 ? `-${pull}px` : "";
+      let s = lo;
+      let pull = pullForScale(s, budget);
+      applyLayout(s, pull);
+
+      /* Flex «gap» bija pievienojis platumu ārpus JS modeļa — tagad gap:0; šis noķer noapaļošanu */
+      for (let fix = 0; fix < 20 && rowEl.scrollWidth > dock.clientWidth + 2; fix++) {
+        s = Math.max(ZOLE_HAND_MIN_SCALE, s * 0.965);
+        pull = pullForScale(s, budget);
+        applyLayout(s, pull);
+      }
+
+      /* .vz-zole--classic ir overflow:hidden — ja doka apakša iziet ārpus, samazinām mērogu */
+      if (classic) {
+        for (let v = 0; v < 18; v++) {
+          const cr = classic.getBoundingClientRect();
+          const dr = dock.getBoundingClientRect();
+          if (dr.bottom <= cr.bottom - 1) break;
+          const next = Math.max(ZOLE_HAND_MIN_SCALE, s * 0.94);
+          if (next >= s - 1e-6) break;
+          s = next;
+          pull = pullForScale(s, budget);
+          applyLayout(s, pull);
+        }
       }
     };
 
