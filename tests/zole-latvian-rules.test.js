@@ -91,7 +91,7 @@ describe("Latvian trump / follow suit (♣ kreicis, ♦ kāravs, ♥ ercens, ♠
 });
 
 describe("sortZoleHand", () => {
-  it("groups plain suits ♣ ♠ ♥ then trumps ascending strength", () => {
+  it("groups plain suits ♣ ♠ ♥ (strong left A→10→K→9) then trumps descending strength", () => {
     const hand = [
       { s: 2, r: 14 },
       { s: 0, r: 9 },
@@ -104,17 +104,17 @@ describe("sortZoleHand", () => {
     const sorted = sortZoleHand(hand);
     const keys = sorted.map((c) => `${c.s}:${c.r}`);
     expect(keys).toEqual([
-      "0:9",
       "0:14",
+      "0:9",
       "2:14",
-      "1:7",
-      "1:12",
-      "2:12",
       "3:12",
+      "2:12",
+      "1:12",
+      "1:7",
     ]);
     const trumpPart = sorted.filter(zoleIsTrump);
     for (let i = 1; i < trumpPart.length; i++) {
-      expect(zoleCardTrickStrength(trumpPart[i - 1])).toBeLessThanOrEqual(
+      expect(zoleCardTrickStrength(trumpPart[i - 1])).toBeGreaterThanOrEqual(
         zoleCardTrickStrength(trumpPart[i])
       );
     }

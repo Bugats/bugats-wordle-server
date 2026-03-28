@@ -170,7 +170,7 @@
   }
 
   /**
-   * Kā lib/zole.js sortZoleHand: ♣ ♠ ♥ parastās (9→K→10→A), tad trumpji vājākās pa kreisi.
+   * Kā lib/zole.js sortZoleHand: ♣ ♠ ♥ parastās stiprākās pa kreisi (A→10→K→9), trumpji dilstoši.
    */
   function sortHand(hand) {
     if (!hand || !hand.length) return [];
@@ -179,8 +179,8 @@
       const i = PLAIN_SUIT_ORDER.indexOf(s);
       return i >= 0 ? i : 99;
     }
-    function plainRankKey(r) {
-      const order = [RANK_9, RANK_K, RANK_10, RANK_A];
+    function plainRankKeyStrongLeft(r) {
+      const order = [RANK_A, RANK_10, RANK_K, RANK_9];
       const i = order.indexOf(r);
       return i >= 0 ? i : 99;
     }
@@ -191,9 +191,9 @@
       if (!ta) {
         const ds = plainSuitKey(a.s) - plainSuitKey(b.s);
         if (ds !== 0) return ds;
-        return plainRankKey(a.r) - plainRankKey(b.r);
+        return plainRankKeyStrongLeft(a.r) - plainRankKeyStrongLeft(b.r);
       }
-      return zoleCardTrickStrength(a) - zoleCardTrickStrength(b);
+      return zoleCardTrickStrength(b) - zoleCardTrickStrength(a);
     });
   }
 
