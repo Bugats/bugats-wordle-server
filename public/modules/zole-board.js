@@ -313,6 +313,7 @@
     const o = opts || {};
     const small = !!o.small;
     const hand = !!o.hand;
+    const noTrumpGlow = !!o.noTrumpGlow;
     const meta = SUIT_META[card.s] || SUIT_META[0];
     const rank = RANK_LABELS[card.r] || String(card.r);
     const trump = isZoleTrumpCard(card);
@@ -322,7 +323,7 @@
     else if (hand) root.classList.add("vz-zole-card--hand");
     if (meta.red) root.classList.add("vz-zole-card--red");
     else root.classList.add("vz-zole-card--black");
-    if (trump) root.classList.add("vz-zole-card--trump");
+    if (trump && !noTrumpGlow) root.classList.add("vz-zole-card--trump");
 
     const tl = el("span", "vz-zole-card__corner vz-zole-card__corner--tl");
     tl.innerHTML = esc(rank) + "<br>" + esc(meta.sym);
@@ -708,13 +709,17 @@
       const card = hand[hi];
       const k = cardKey(card);
       let wrap;
+      const faceOpts = {
+        hand: true,
+        noTrumpGlow: mode === "discard",
+      };
       if (mode === "readonly") {
         wrap = el("div", "vz-zole-hand__card vz-zole-hand__card--static");
-        wrap.appendChild(createCardFace(card, { hand: true }));
+        wrap.appendChild(createCardFace(card, faceOpts));
       } else {
         wrap = el("button", "vz-zole-hand__card");
         wrap.type = "button";
-        wrap.appendChild(createCardFace(card, { hand: true }));
+        wrap.appendChild(createCardFace(card, faceOpts));
         if (mode === "play") {
           const can =
             o.isMyTurn && (!o.legalSet || o.legalSet.has(k));
@@ -731,7 +736,9 @@
           }
         }
       }
-      if (isZoleTrumpCard(card)) wrap.classList.add("vz-zole-hand__card--trump");
+      if (mode !== "discard" && isZoleTrumpCard(card)) {
+        wrap.classList.add("vz-zole-hand__card--trump");
+      }
       wrap.style.zIndex = String(10 + hi);
       row.appendChild(wrap);
     }

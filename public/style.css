@@ -6317,10 +6317,12 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 #board-zole-container .vz-zole-hand__card:not(:disabled):active {
   transform: translateY(-8px);
 }
+/* Zila — lai «izvēlēts norakšanai» neatkārtotu trumpju dzelteno (.vz-zole-card--trump) */
 #board-zole-container .vz-zole-hand__card--sel {
-  outline: 3px solid #fbbf24;
+  outline: 3px solid rgba(56, 189, 248, 0.95);
   outline-offset: 2px;
   border-radius: 10px;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.4);
 }
 #board-zole-container .vz-zole-panel--end .vz-zole-end__delta {
   font-size: 12px;
