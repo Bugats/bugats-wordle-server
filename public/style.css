@@ -5238,7 +5238,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
   padding: 24px;
-  max-width: 440px;
+  max-width: 520px;
   max-height: 90vh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -5494,10 +5494,42 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 .vz-board-game-type { font-weight: 600; font-size: 15px; }
 .vz-board-game-turn { font-size: 13px; opacity: 0.9; }
+.vz-board-game-turn--active {
+  color: #86efac;
+  font-weight: 700;
+}
 .vz-board-game-hint {
-  font-size: 12px;
-  opacity: 0.8;
+  font-size: 13px;
+  line-height: 1.45;
   margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(244, 244, 245, 0.95);
+}
+.vz-board-game-hint strong {
+  font-weight: 700;
+}
+.vz-hint-mark {
+  padding: 0 4px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.vz-hint-mark--green {
+  background: rgba(34, 197, 94, 0.25);
+  color: #bbf7d0;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.45);
+}
+.vz-hint-mark--gold {
+  background: rgba(234, 179, 8, 0.2);
+  color: #fde68a;
+  box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.5);
+}
+.vz-hint-mark--cyan {
+  background: rgba(34, 211, 238, 0.15);
+  color: #a5f3fc;
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.4);
 }
 .vz-board-resign {
   padding: 6px 12px;
@@ -5512,40 +5544,64 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-dambrete-board {
   border-collapse: collapse;
   margin: 0 auto;
-  background: #2d2d2d;
+  background: #1a1f1a;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid rgba(15, 25, 15, 0.75);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   /* none: pārlūks negaida scroll žestu — pirksta pieskāriens uzreiz dod pointerdown */
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
 }
 .vz-dambrete-board td {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  min-height: 36px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
   text-align: center;
   vertical-align: middle;
 }
-.vz-dambrete-light { background: #4a4a4a; }
+.vz-dambrete-light {
+  background: linear-gradient(155deg, #5c5c5c 0%, #454545 48%, #383838 100%);
+}
 .vz-dambrete-dark {
-  background: #3d5a3d;
+  background: linear-gradient(155deg, #3f6b42 0%, #2d5230 45%, #244228 100%);
   cursor: pointer;
   touch-action: none;
 }
-.vz-dambrete-dark:hover { background: #4a6a4a; }
-.vz-dambrete-dark:active { background: #4a7a4a; }
-.vz-dambrete-dark.vz-dambrete-selected { background: #22c55e; box-shadow: inset 0 0 0 2px #fff; }
-.vz-dambrete-dark.vz-dambrete-valid { background: #5a8a5a; }
+.vz-dambrete-dark:hover { filter: brightness(1.08); }
+.vz-dambrete-dark:active { filter: brightness(0.95); }
+.vz-dambrete-light:hover { filter: brightness(1.06); }
+.vz-dambrete-light:active { filter: brightness(0.96); }
+.vz-dambrete-dark.vz-dambrete-selected {
+  box-shadow:
+    inset 0 0 0 3px #fff,
+    inset 0 0 0 6px rgba(34, 197, 94, 0.85),
+    0 0 0 2px rgba(34, 197, 94, 0.65);
+}
+.vz-dambrete-dark.vz-dambrete-valid {
+  background: linear-gradient(155deg, #4ade80 0%, #22c55e 40%, #15803d 100%) !important;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.85),
+    0 0 0 2px rgba(34, 197, 94, 0.9),
+    0 0 14px rgba(34, 197, 94, 0.45);
+}
 /* Obligāta ēšana: kauliņi, ar kuriem drīkst sākt lēcienu (pārējie nav klikšķināmi) */
 .vz-dambrete-dark.vz-dambrete-jump-origin:not(.vz-dambrete-selected) {
-  box-shadow: inset 0 0 0 2px rgba(250, 204, 21, 0.9);
+  box-shadow:
+    inset 0 0 0 2px rgba(253, 230, 138, 0.95),
+    0 0 0 3px rgba(234, 179, 8, 0.75),
+    0 0 12px rgba(250, 204, 21, 0.35);
 }
 .vz-dambrete-piece {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   line-height: 1;
   font-size: 0;
@@ -5587,7 +5643,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 /* Dāma: zelta aplis + zvaigzne */
 .vz-dambrete-piece.vz-dambrete-king {
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1;
 }
 .vz-dambrete-piece.vz-dambrete-white.vz-dambrete-king {
@@ -6626,6 +6682,12 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   max-width: 100%;
   width: 100%;
 }
+/* Dambrete / šahs: pilns platums, lai lielāks dēlis */
+.vz-board-modal-inner:has(#board-dambrete-container:not(.hidden)),
+.vz-board-modal-inner:has(#board-chess-container:not(.hidden)) {
+  max-width: 100%;
+  width: 100%;
+}
 .vz-board-modal--fullscreen .vz-board-modal-inner:has(#board-zole-container:not(.hidden)) {
   max-width: none;
   width: 100%;
@@ -6700,35 +6762,62 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-chess-board {
   border-collapse: collapse;
   margin: 0 auto;
-  background: #2d2d2d;
+  background: #14161c;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid rgba(0, 0, 0, 0.45);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
 }
 .vz-chess-board td {
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
-  min-height: 40px;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
   padding: 0;
   text-align: center;
   vertical-align: middle;
   cursor: pointer;
   touch-action: none;
 }
-.vz-chess-light { background: #f0d9b5; }
-.vz-chess-dark { background: #b58863; }
-.vz-chess-light:hover, .vz-chess-dark:hover { opacity: 0.9; }
-.vz-chess-light:active, .vz-chess-dark:active { opacity: 0.95; }
-.vz-chess-selected { box-shadow: inset 0 0 0 3px #22c55e; }
-.vz-chess-valid { box-shadow: inset 0 0 0 2px rgba(34, 197, 94, 0.8); }
+.vz-chess-light {
+  background: linear-gradient(165deg, #f5e6d3 0%, #e8d4b8 45%, #dcc9a8 100%);
+}
+.vz-chess-dark {
+  background: linear-gradient(165deg, #c49a6c 0%, #a67b52 50%, #8f6845 100%);
+}
+.vz-chess-light:hover,
+.vz-chess-dark:hover {
+  filter: brightness(1.04);
+}
+.vz-chess-light:active,
+.vz-chess-dark:active {
+  filter: brightness(0.97);
+}
+.vz-chess-selected {
+  box-shadow:
+    inset 0 0 0 3px #fff,
+    inset 0 0 0 6px rgba(34, 197, 94, 0.85),
+    0 0 0 2px rgba(34, 197, 94, 0.65);
+}
+.vz-chess-valid {
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.9),
+    0 0 0 2px rgba(34, 197, 94, 0.9),
+    0 0 14px rgba(34, 197, 94, 0.4);
+  filter: saturate(1.12);
+}
 .vz-chess-piece {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  font-size: 23px;
+  font-size: 28px;
   line-height: 1;
   user-select: none;
   pointer-events: none;
@@ -6785,14 +6874,24 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   }
   .vz-board-title { font-size: 16px; }
   .vz-board-desc { font-size: 12px; }
-  .vz-dambrete-board td { width: 32px; height: 32px; min-width: 32px; min-height: 32px; }
-  .vz-dambrete-piece { width: 26px; height: 26px; }
-  .vz-dambrete-piece.vz-dambrete-king { font-size: 13px; }
-  .vz-chess-board td { width: 36px; height: 36px; min-width: 36px; min-height: 36px; }
+  .vz-dambrete-board td {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+  .vz-dambrete-piece { width: 34px; height: 34px; }
+  .vz-dambrete-piece.vz-dambrete-king { font-size: 15px; }
+  .vz-chess-board td {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
   .vz-chess-piece {
-    width: 30px;
-    height: 30px;
-    font-size: 21px;
+    width: 36px;
+    height: 36px;
+    font-size: 26px;
   }
   .vz-board-invite-btn { min-width: 80px; padding: 10px 12px; }
   .vz-board-resign { padding: 8px 14px; }
@@ -6802,13 +6901,23 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   .vz-board-modal--fullscreen .vz-board-modal-inner {
     max-width: none;
   }
-  .vz-dambrete-board td { width: 28px; height: 28px; min-width: 28px; min-height: 28px; }
-  .vz-dambrete-piece { width: 22px; height: 22px; }
-  .vz-dambrete-piece.vz-dambrete-king { font-size: 11px; }
-  .vz-chess-board td { width: 32px; height: 32px; min-width: 32px; min-height: 32px; }
+  .vz-dambrete-board td {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+  }
+  .vz-dambrete-piece { width: 30px; height: 30px; }
+  .vz-dambrete-piece.vz-dambrete-king { font-size: 14px; }
+  .vz-chess-board td {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+  }
   .vz-chess-piece {
-    width: 26px;
-    height: 26px;
-    font-size: 18px;
+    width: 32px;
+    height: 32px;
+    font-size: 22px;
   }
 }

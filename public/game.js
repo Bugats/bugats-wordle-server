@@ -9877,6 +9877,52 @@ function dambreteSelectedIsValidJumpOrigin() {
   return false;
 }
 
+/** Viena šūnas apzīmējums kā šahā (a1–h8), der arī dambretes galdiņam. */
+function boardCellAlgebraic(r, c) {
+  if (typeof r !== "number" || typeof c !== "number") return "";
+  if (r < 0 || r > 7 || c < 0 || c > 7) return "";
+  return String.fromCharCode(97 + c) + (8 - r);
+}
+
+function countDambreteValidDestinations(fromR, fromC, legalMoves) {
+  if (!legalMoves) return 0;
+  const set = new Set();
+  for (const m of legalMoves.moves || []) {
+    if (
+      m.from[0] === fromR &&
+      m.from[1] === fromC &&
+      m.to &&
+      m.to.length >= 2
+    )
+      set.add(`${m.to[0]},${m.to[1]}`);
+  }
+  for (const j of legalMoves.jumps || []) {
+    const seq = j.jumps || [];
+    const first = seq[0];
+    const last = seq[seq.length - 1];
+    if (
+      first &&
+      last &&
+      first.from[0] === fromR &&
+      first.from[1] === fromC &&
+      last.to &&
+      last.to.length >= 2
+    )
+      set.add(`${last.to[0]},${last.to[1]}`);
+  }
+  return set.size;
+}
+
+function countChessValidDestinations(fromR, fromC, legalMoves) {
+  if (!legalMoves?.moves?.length) return 0;
+  const fromSq = boardCellAlgebraic(fromR, fromC);
+  let n = 0;
+  for (const m of legalMoves.moves) {
+    if (m.from === fromSq) n++;
+  }
+  return n;
+}
+
 function renderBoardGame() {
   if (
     boardState.type === "zole" &&
@@ -9953,6 +9999,11 @@ function renderBoardGame() {
     } else {
       turnEl.textContent = isMyTurn ? "Tava kārta" : `${turnName} gājienā`;
     }
+    turnEl.classList.toggle(
+      "vz-board-game-turn--active",
+      isMyTurn &&
+        (boardState.type === "dambrete" || boardState.type === "chess")
+    );
   }
   const hintEl = document.getElementById("board-game-hint");
   if (hintEl) {
@@ -10000,13 +10051,44 @@ function renderBoardGame() {
               : "Gaidām otra spēlētāja gājienu…";
       }
     } else if (!isMyTurn) {
-      hintEl.textContent = "Gaidām pretinieka gājienu";
-    } else if (
-      boardState.type === "dambrete" &&
-      (boardState.legalMoves?.jumps || []).length > 0
-    ) {
-      hintEl.textContent =
-        "Obligāti jālēcas. Spied tikai uz kauliņa ar dzeltenu rāmīti — tad parādīsies zaļie lauki. Pārējos savus kauliņus šajā brīdī nevar izvēlēties.";
+      hintEl.textContent = "Gaidām pretinieka gājienu.";
+    } else if (boardState.type === "dambrete") {
+      const jumpsOn = (boardState.legalMoves?.jumps || []).length > 0;
+      const sel = boardState.selectedCell;
+      if (jumpsOn && !sel) {
+        hintEl.innerHTML =
+          "<strong>Jālēkt.</strong> Spied uz sava kauliņa ar <strong class=\"vz-hint-mark vz-hint-mark--gold\">zelta aplīti</strong> — tad parādīsies <strong class=\"vz-hint-mark vz-hint-mark--green\">zaļie</strong> mērķa lauki. Citus savus kauliņus šajā brīdī nevar izvēlēties.";
+      } else if (jumpsOn && sel) {
+        const sq = boardCellAlgebraic(sel[0], sel[1]);
+        const n = countDambreteValidDestinations(sel[0], sel[1], boardState.legalMoves);
+        hintEl.innerHTML =
+          n > 0
+            ? `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Tagad spied <strong class="vz-hint-mark vz-hint-mark--green">zaļo</strong> lauciņu (${n} ${n === 1 ? "iespēja" : "iespējas"}) — lēciena beigas. Citur — citu sākuma kauliņu.`
+            : `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied citu kauliņu ar <strong class="vz-hint-mark vz-hint-mark--gold">zelta aplīti</strong> vai zaļo mērķi.`;
+      } else if (sel) {
+        const sq = boardCellAlgebraic(sel[0], sel[1]);
+        const n = countDambreteValidDestinations(sel[0], sel[1], boardState.legalMoves);
+        hintEl.innerHTML =
+          n > 0
+            ? `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied <strong class="vz-hint-mark vz-hint-mark--green">zaļo</strong> lauciņu (${n} ${n === 1 ? "gājiens" : "gājieni"}). Citur — maini figūru.`
+            : `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Nav derīgu lauku — izvēlies citu savu kauliņu.`;
+      } else {
+        hintEl.innerHTML =
+          "Spied savu kauliņu, tad <strong class=\"vz-hint-mark vz-hint-mark--green\">zaļo</strong> lauciņu. Mainīt izvēli — spied citu savu kauliņu.";
+      }
+    } else if (boardState.type === "chess") {
+      const sel = boardState.selectedCell;
+      if (sel) {
+        const sq = boardCellAlgebraic(sel[0], sel[1]);
+        const n = countChessValidDestinations(sel[0], sel[1], boardState.legalMoves);
+        hintEl.innerHTML =
+          n > 0
+            ? `Izvēlēta figūra <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied <strong class="vz-hint-mark vz-hint-mark--green">zaļo</strong> lauciņu (${n} ${n === 1 ? "gājiens" : "gājieni"}). Citur — atcelt vai citu figūru.`
+            : `Izvēlēta <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Nav derīgu lauku — izvēlies citu savu figūru.`;
+      } else {
+        hintEl.innerHTML =
+          "Spied savu figūru, tad <strong class=\"vz-hint-mark vz-hint-mark--green\">zaļo</strong> lauciņu. Mainīt — spied citu savu figūru.";
+      }
     } else {
       hintEl.textContent =
         "Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt. Lai mainītu figūru — pieskaries citam savam kauliņam.";
