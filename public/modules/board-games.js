@@ -183,7 +183,15 @@
             else if (piece === BLACK) span.classList.add("vz-dambrete-black");
             else if (piece === BLACK_KING)
               span.classList.add("vz-dambrete-black", "vz-dambrete-king");
-            span.textContent = Math.abs(piece) === 2 ? "K" : "●";
+            const isKing = Math.abs(piece) === 2;
+            span.textContent = isKing ? "★" : "";
+            const colorLv =
+              piece === WHITE || piece === WHITE_KING ? "Balts" : "Melns";
+            span.setAttribute(
+              "aria-label",
+              isKing ? `${colorLv} dāma` : `${colorLv} kauliņš`
+            );
+            span.setAttribute("role", "img");
           } else if (span) span.remove();
         }
       }
@@ -223,7 +231,15 @@
           else if (piece === BLACK) span.classList.add("vz-dambrete-black");
           else if (piece === BLACK_KING)
             span.classList.add("vz-dambrete-black", "vz-dambrete-king");
-          span.textContent = Math.abs(piece) === 2 ? "K" : "●";
+          const isKingInit = Math.abs(piece) === 2;
+          span.textContent = isKingInit ? "★" : "";
+          const colorLvInit =
+            piece === WHITE || piece === WHITE_KING ? "Balts" : "Melns";
+          span.setAttribute(
+            "aria-label",
+            isKingInit ? `${colorLvInit} dāma` : `${colorLvInit} kauliņš`
+          );
+          span.setAttribute("role", "img");
           td.appendChild(span);
         }
         const isSelected =
