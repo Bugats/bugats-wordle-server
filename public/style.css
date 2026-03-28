@@ -5824,7 +5824,10 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex-shrink: 0;
   padding: 10px 4px 4px;
   margin-top: auto;
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   --vz-hand-scale: 1;
   /* Bez horizontālās ritināšanas — JS: max pārklājums + --vz-hand-scale */
   overflow-x: hidden;
@@ -5882,17 +5885,20 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex-direction: row;
   justify-content: center;
   align-items: flex-end;
-  gap: 10px 14px;
-  flex-wrap: wrap;
+  gap: 6px 8px;
+  flex-wrap: nowrap;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 #board-zole-container .vz-zole-felt__seat {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  min-width: 88px;
+  min-width: 0;
   flex: 1 1 0;
   max-width: 34%;
 }
@@ -6214,12 +6220,14 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 #board-zole-container .vz-zole-hand--overlap {
   flex-wrap: nowrap;
-  justify-content: flex-start;
+  justify-content: center;
   align-items: flex-end;
-  padding: 10px 4px 6px;
-  width: max-content;
-  max-width: none;
-  margin: 0 auto;
+  padding: 10px 2px 6px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
 }
 #board-zole-container .vz-zole-hand__card {
   padding: 0;
@@ -6240,9 +6248,20 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   pointer-events: none;
 }
 #board-zole-container .vz-zole-hand__card:disabled {
-  opacity: 0.38;
   cursor: not-allowed;
-  filter: grayscale(0.15);
+}
+#board-zole-container .vz-zole-hand__card:disabled:not(.vz-zole-hand__card--illegal) {
+  opacity: 0.52;
+  filter: grayscale(0.25);
+}
+#board-zole-container .vz-zole-hand__card--illegal {
+  opacity: 0.78;
+  filter: grayscale(0.15) brightness(0.94);
+}
+#board-zole-container .vz-zole-hand__card--illegal .vz-zole-card {
+  box-shadow:
+    inset 0 0 0 2px rgba(15, 23, 42, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.3);
 }
 #board-zole-container .vz-zole-hand__card:not(:disabled):active {
   transform: translateY(-8px);

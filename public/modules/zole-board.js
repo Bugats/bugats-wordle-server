@@ -597,27 +597,37 @@
       return;
     }
 
-    /** Platums ar maksimālo pārklājumu (vismaz minVisible no katra bloka). */
-    function minWidthAtScale(s, bdg) {
+    /**
+     * Platums = n*cardW − (n−1)*pull. Maks. pārklājums: maxPull = cardW − minVisible.
+     * Mērogam s der, ja ar kādu pull ∈ [0, maxPull] var sasniegt platums ≤ bdg:
+     * tas ir tad, ja pullNeed = ceil((natural−bdg)/(n−1)) ≤ maxPull.
+     */
+    function fitsAtScale(s, bdg) {
       const cardW = ZOLE_HAND_DESIGN_W * s;
       const minVisible = Math.max(12, Math.round(cardW * 0.16));
-      const w = cardW + (n - 1) * minVisible;
-      return { cardW, minVisible, w, fits: w <= bdg + 0.5 };
+      const maxPull = Math.max(0, cardW - minVisible);
+      const natural = n * cardW;
+      const pullNeed =
+        natural > bdg + 0.5
+          ? Math.ceil((natural - bdg) / (n - 1))
+          : 0;
+      return pullNeed <= maxPull + 0.01;
     }
 
     function pullForScale(s, bdg) {
       const cardW = ZOLE_HAND_DESIGN_W * s;
       const minVisible = Math.max(12, Math.round(cardW * 0.16));
-      const maxPull = Math.max(8, cardW - minVisible);
+      const maxPull = Math.max(0, cardW - minVisible);
       const natural = n * cardW;
-      let pull = 0;
-      if (natural > bdg) {
-        pull = Math.ceil((natural - bdg) / (n - 1));
-      } else if (n >= 4) {
-        pull = Math.round(cardW * (n >= 8 ? 0.58 : 0.5));
+      const pullNeed =
+        natural > bdg + 0.5
+          ? Math.ceil((natural - bdg) / (n - 1))
+          : 0;
+      let pullDecor = 0;
+      if (n >= 4 && natural <= bdg + 0.5) {
+        pullDecor = Math.round(cardW * (n >= 8 ? 0.5 : 0.4));
       }
-      pull = Math.min(Math.max(0, pull), maxPull);
-      return pull;
+      return Math.min(maxPull, Math.max(pullNeed, pullDecor));
     }
 
     const measure = () => {
@@ -626,18 +636,18 @@
         (dock.clientWidth > 48 ? dock.clientWidth : 0) ||
         (felt && felt.clientWidth) ||
         320;
-      const budget = Math.max(140, raw - 14);
+      const budget = Math.max(120, raw - 20);
 
       let lo = ZOLE_HAND_MIN_SCALE;
       let hi = 1;
-      for (let iter = 0; iter < 18; iter++) {
+      for (let iter = 0; iter < 22; iter++) {
         const mid = (lo + hi) / 2;
-        if (minWidthAtScale(mid, budget).fits) lo = mid;
+        if (fitsAtScale(mid, budget)) lo = mid;
         else hi = mid;
       }
       const s = lo;
-      dock.style.setProperty("--vz-hand-scale", String(s));
       const pull = pullForScale(s, budget);
+      dock.style.setProperty("--vz-hand-scale", String(s));
       for (let i = 1; i < n; i++) {
         cards[i].style.marginLeft = pull > 0 ? `-${pull}px` : "";
       }
@@ -679,6 +689,9 @@
           const can =
             o.isMyTurn && (!o.legalSet || o.legalSet.has(k));
           wrap.disabled = !can;
+          if (!can && o.isMyTurn) {
+            wrap.classList.add("vz-zole-hand__card--illegal");
+          }
           if (can) wrap.addEventListener("click", () => o.onPlayCard(card));
         } else if (mode === "discard") {
           if (!o.isContractor || !o.onToggle) {
