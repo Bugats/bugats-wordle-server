@@ -161,10 +161,6 @@
           td.dataset.clickable = String(!!clickable);
           td.classList.toggle("vz-dambrete-selected", !!isSelected);
           td.classList.toggle("vz-dambrete-valid", !!isValidDest);
-          td.classList.toggle(
-            "vz-dambrete-jump-origin",
-            jumpsMandatory && isMyPiece && isJumpOrigin(r, c, legalMoves)
-          );
           let span = td.querySelector(".vz-dambrete-piece");
           if (piece !== 0) {
             if (!span) {
@@ -183,6 +179,12 @@
             else if (piece === BLACK) span.classList.add("vz-dambrete-black");
             else if (piece === BLACK_KING)
               span.classList.add("vz-dambrete-black", "vz-dambrete-king");
+            const jumpRing =
+              jumpsMandatory &&
+              isMyPiece &&
+              isJumpOrigin(r, c, legalMoves) &&
+              !isSelected;
+            span.classList.toggle("vz-dambrete-jump-ring", !!jumpRing);
             const isKing = Math.abs(piece) === 2;
             span.textContent = isKing ? "★" : "";
             const colorLv =
@@ -222,6 +224,15 @@
         }
         td.className = "vz-dambrete-dark";
         const piece = board[r][c];
+        const isSelected =
+          selectedCell && selectedCell[0] === r && selectedCell[1] === c;
+        const isValidDest =
+          piece === 0 && isValidDestination(r, c, selectedCell, legalMoves);
+        const isMyPiece =
+          piece !== 0 &&
+          ((myPlayerIdx === 0 && (piece === WHITE || piece === WHITE_KING)) ||
+            (myPlayerIdx === 1 && (piece === BLACK || piece === BLACK_KING)));
+        const jumpsMandatory = (legalMoves?.jumps || []).length > 0;
         if (piece !== 0) {
           const span = document.createElement("span");
           span.className = "vz-dambrete-piece";
@@ -231,6 +242,12 @@
           else if (piece === BLACK) span.classList.add("vz-dambrete-black");
           else if (piece === BLACK_KING)
             span.classList.add("vz-dambrete-black", "vz-dambrete-king");
+          const jumpRingInit =
+            jumpsMandatory &&
+            isMyPiece &&
+            isJumpOrigin(r, c, legalMoves) &&
+            !isSelected;
+          span.classList.toggle("vz-dambrete-jump-ring", !!jumpRingInit);
           const isKingInit = Math.abs(piece) === 2;
           span.textContent = isKingInit ? "★" : "";
           const colorLvInit =
@@ -242,24 +259,11 @@
           span.setAttribute("role", "img");
           td.appendChild(span);
         }
-        const isSelected =
-          selectedCell && selectedCell[0] === r && selectedCell[1] === c;
-        const isValidDest =
-          piece === 0 && isValidDestination(r, c, selectedCell, legalMoves);
-        const isMyPiece =
-          piece !== 0 &&
-          ((myPlayerIdx === 0 && (piece === WHITE || piece === WHITE_KING)) ||
-            (myPlayerIdx === 1 && (piece === BLACK || piece === BLACK_KING)));
-        const jumpsMandatory = (legalMoves?.jumps || []).length > 0;
         const isMyPieceSelectable =
           isMyPiece &&
           (!jumpsMandatory || isJumpOrigin(r, c, legalMoves));
         if (isSelected) td.classList.add("vz-dambrete-selected");
         if (isValidDest) td.classList.add("vz-dambrete-valid");
-        td.classList.toggle(
-          "vz-dambrete-jump-origin",
-          jumpsMandatory && isMyPiece && isJumpOrigin(r, c, legalMoves)
-        );
         if (canMove) td.tabIndex = 0;
         const clickable =
           canMove &&
