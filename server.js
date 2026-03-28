@@ -692,6 +692,8 @@ const BOARD_GAME_REWARD_COINS_2P = 8;
 const BOARD_GAME_LOSE_COINS_2P = 3;
 const BOARD_GAME_REWARD_COINS_ZOLE_3P = 10;
 const BOARD_GAME_LOSE_COINS_ZOLE_3P = 4;
+/** Zole 3P istaba: maks. coins par vienu tabulas punktu (likmes griesti). */
+const ZOLE_3P_MAX_COINS_PER_POINT = 5;
 const BOARD_GAME_REGION_POINTS = 1;
 
 /** PvP galda uzvara: +regionBoost novadu tabulai; +regionPoints tikai ja REGION_POINTS_PER_WIN > 0. */
@@ -722,12 +724,51 @@ function boardGameCoinsLoss(game) {
   return BOARD_GAME_LOSE_COINS_2P;
 }
 
+function clampZole3pCoinsPerPoint(raw) {
+  const n = Math.floor(Number(raw) || 0);
+  if (n < 0) return 0;
+  if (n > ZOLE_3P_MAX_COINS_PER_POINT) return ZOLE_3P_MAX_COINS_PER_POINT;
+  return n;
+}
+
+/** Pēc partijas: katram cilvēkam coins += tableDelta[i] * cpp (nulles summa tabulā). */
+function applyZole3pTableStakeCoins(game) {
+  if (!game?.zole?.tableDelta || !Array.isArray(game.players)) return;
+  const cpp = clampZole3pCoinsPerPoint(game.zole3pCoinsPerPoint);
+  if (cpp <= 0) return;
+  const d = game.zole.tableDelta;
+  for (let i = 0; i < 3; i++) {
+    const uname = game.players[i];
+    if (!uname || isZoleBotUsername(uname)) continue;
+    const key = findUserKeyCaseInsensitive(uname);
+    const u = key ? USERS[key] : null;
+    if (!u) continue;
+    const net = (Number(d[i]) || 0) * cpp;
+    const cur = Math.max(0, Math.floor(u.coins || 0));
+    u.coins = Math.max(0, cur + net);
+  }
+}
+
 /** board.end coinsGain / coinsLoss vienam cilvēkam (PvP; pret botu — 0). */
 function boardEndCoinsForPlayer(game, winnerUsername, playerUsername) {
   if (!game || game.vsBot) return { coinsGain: 0, coinsLoss: 0 };
   const w = winnerUsername;
   const h = playerUsername;
   if (!w || !h) return { coinsGain: 0, coinsLoss: 0 };
+  const cpp = clampZole3pCoinsPerPoint(game.zole3pCoinsPerPoint);
+  if (
+    game.type === "zole" &&
+    game.players?.length === 3 &&
+    cpp > 0 &&
+    game.zole?.tableDelta
+  ) {
+    const idx = boardGameSeatIndex(game, h);
+    if (idx < 0) return { coinsGain: 0, coinsLoss: 0 };
+    const net = (Number(game.zole.tableDelta[idx]) || 0) * cpp;
+    if (net > 0) return { coinsGain: net, coinsLoss: 0 };
+    if (net < 0) return { coinsGain: 0, coinsLoss: -net };
+    return { coinsGain: 0, coinsLoss: 0 };
+  }
   const winAmt = boardGameCoinsWin(game);
   const lossAmt = boardGameCoinsLoss(game);
   if (isZoleBotUsername(w)) {
@@ -781,6 +822,7 @@ function zole3pLobbyPayload(lobby) {
     players: lobby.players.slice(),
     needThird: lobby.players.length < 3,
     invitedThird: lobby.invitedSeat || null,
+    zole3pCoinsPerPoint: clampZole3pCoinsPerPoint(lobby.zole3pCoinsPerPoint),
   };
 }
 
@@ -828,6 +870,7 @@ function maybeStartZole3pFromLobby(io, lobby) {
   const lid = lobby.id;
   clearZole3pLobby(lid, false);
   const game = createZoleOnline3pGame(p1, p2, p3);
+  game.zole3pCoinsPerPoint = clampZole3pCoinsPerPoint(lobby.zole3pCoinsPerPoint);
   const room = `board:${game.id}`;
   for (const p of game.players) {
     getSocketByUsername(p)?.join(room);
@@ -845,6 +888,7 @@ function maybeStartZole3pFromLobby(io, lobby) {
     getSocketByUsername(game.players[i])?.emit("board.start", {
       ...base,
       zole: zolePublicSnapshot(game.zole, i),
+      zole3pCoinsPerPoint: game.zole3pCoinsPerPoint ?? 0,
     });
   }
   setImmediate(() => playZoleBotBids(io, game));
@@ -1144,6 +1188,7 @@ function createZoleOnline3pGame(usernameA, usernameB, usernameC) {
     vsBot: false,
     zoleMode: "online_3p",
     zoleBotDifficulty: "medium",
+    zole3pCoinsPerPoint: 0,
   };
   boardGames.set(gameId, game);
   userToBoardGame.set(usernameA, gameId);
@@ -1548,10 +1593,19 @@ function finishBoardGame(game, winnerUsername, reason) {
 
   const pvpCoinWin = boardGameCoinsWin(game);
   const pvpCoinLoss = boardGameCoinsLoss(game);
+  const zole3pStake =
+    game.type === "zole" &&
+    game.players?.length === 3 &&
+    !game.vsBot &&
+    clampZole3pCoinsPerPoint(game.zole3pCoinsPerPoint) > 0;
+
+  if (zole3pStake) {
+    applyZole3pTableStakeCoins(game);
+  }
 
   if (winner) {
     winner.xp = (winner.xp || 0) + BOARD_GAME_REWARD_XP;
-    if (pvpCoinWin > 0) {
+    if (pvpCoinWin > 0 && !zole3pStake) {
       winner.coins = (winner.coins || 0) + pvpCoinWin;
     }
     if (!game.vsBot) {
@@ -1565,12 +1619,12 @@ function finishBoardGame(game, winnerUsername, reason) {
     else if (game.type === "chess") winner.chessWins++;
     else if (game.type === "zole") winner.zoleWins++;
   }
-  if (loser && pvpCoinLoss > 0) {
+  if (loser && pvpCoinLoss > 0 && !zole3pStake) {
     const currentCoins = Math.max(0, Math.floor(loser.coins || 0));
     loser.coins = Math.max(0, currentCoins - pvpCoinLoss);
   }
   for (const lz of zoleLosers) {
-    if (pvpCoinLoss <= 0) break;
+    if (pvpCoinLoss <= 0 || zole3pStake) break;
     const currentCoins = Math.max(0, Math.floor(lz.coins || 0));
     lz.coins = Math.max(0, currentCoins - pvpCoinLoss);
   }
@@ -11312,6 +11366,10 @@ io.on("connection", (socket) => {
             : undefined,
         vsBot: boardGame.type === "zole" ? !!boardGame.vsBot : undefined,
         zoleMode: boardGame.type === "zole" ? boardGame.zoleMode : undefined,
+        zole3pCoinsPerPoint:
+          boardGame.type === "zole" && boardGame.zoleMode === "online_3p"
+            ? clampZole3pCoinsPerPoint(boardGame.zole3pCoinsPerPoint)
+            : undefined,
       });
     }
   } catch {}
@@ -12347,7 +12405,7 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("board.zoleCreateLobby", () => {
+  socket.on("board.zoleCreateLobby", (payload) => {
     const fromUser = socket.data.user;
     if (!fromUser) return;
     if (userToBoardGame.has(fromUser.username))
@@ -12362,16 +12420,36 @@ io.on("connection", (socket) => {
       userToZole3pLobby.delete(fromUser.username);
     }
     const id = crypto.randomBytes(8).toString("hex");
+    const stakeRaw =
+      payload?.zole3pCoinsPerPoint ?? payload?.zoleCoinsPerPoint ?? 0;
     const lobby = {
       id,
       host: fromUser.username,
       players: [fromUser.username],
       invitedSeat: null,
       expiresAt: Date.now() + ZOLE_3P_LOBBY_TTL_MS,
+      zole3pCoinsPerPoint: clampZole3pCoinsPerPoint(stakeRaw),
     };
     zole3pLobbyById.set(id, lobby);
     userToZole3pLobby.set(fromUser.username, id);
     socket.emit("board.zoleLobby", zole3pLobbyPayload(lobby));
+  });
+
+  socket.on("board.zoleSetLobbyStake", (payload) => {
+    const fromUser = socket.data.user;
+    if (!fromUser) return;
+    const lobbyId = userToZole3pLobby.get(fromUser.username);
+    if (!lobbyId) return;
+    const lobby = zole3pLobbyById.get(lobbyId);
+    if (!lobby || lobby.host !== fromUser.username) return;
+    if (lobby.players.length >= 3)
+      return socket.emit("board.error", {
+        message: "Istaba jau pilna — likmi vairs nevar mainīt.",
+      });
+    lobby.zole3pCoinsPerPoint = clampZole3pCoinsPerPoint(
+      payload?.zole3pCoinsPerPoint ?? payload?.zoleCoinsPerPoint
+    );
+    notifyZole3pLobbyPeers(lobbyId, "board.zoleLobby", zole3pLobbyPayload(lobby));
   });
 
   socket.on("board.zoleInviteThird", (payload) => {
@@ -12446,6 +12524,7 @@ io.on("connection", (socket) => {
         zoleThirdSeat: true,
         zoleLobbyId: lobbyId,
         zoleLobbyPlayers: lobby.players.slice(),
+        zole3pCoinsPerPoint: clampZole3pCoinsPerPoint(lobby.zole3pCoinsPerPoint),
       });
     }
     socket.emit("board.zoleThirdInviteSent", {

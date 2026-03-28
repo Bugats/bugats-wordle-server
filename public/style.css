@@ -6767,6 +6767,48 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   line-height: 1.45;
   color: rgba(244, 244, 245, 0.82);
 }
+.vz-board-zole-stake-row {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.vz-board-zole-stake-select {
+  width: 100%;
+  max-width: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  font-size: 13px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(15, 23, 42, 0.85);
+  color: #f4f4f5;
+}
+.vz-board-zole-stake-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  opacity: 0.85;
+}
+.vz-board-invite-stake {
+  margin: 8px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fde68a;
+}
+.vz-board-zole-stake-banner {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.35;
+  border-radius: 6px;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(250, 204, 21, 0.35);
+  color: #fef3c7;
+}
+.vz-board-game-area.vz-board-zole-fs .vz-board-zole-stake-banner {
+  flex-shrink: 0;
+}
 .vz-board-zole-room-zone .vz-board-zole-3p-entry {
   margin-top: 0;
   margin-bottom: 0;

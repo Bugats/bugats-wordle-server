@@ -704,12 +704,54 @@ let boardState = {
   dambreteVariant: null,
   selectedCell: null,
   legalMoves: { jumps: [], moves: [] },
+  /** Zole 3P: coins par vienu tabulas punktu (0 = fiksēta uzvara). */
+  zole3pCoinsPerPoint: 0,
 };
 
 const BOARD_BOT_DISPLAY_NAME = "VZBot";
 
 /** Atvērtā 3 spēlētāju zoles istaba (līdz spēles sākumam vai atcelšanai) */
 let zole3pLobbySnapshot = null;
+
+function syncZole3pStakeSelectFromLobby() {
+  const sel = document.getElementById("board-zole-3p-stake");
+  if (!sel) return;
+  if (!zole3pLobbySnapshot?.zoleLobby) {
+    sel.disabled = false;
+    return;
+  }
+  const cpp = Math.max(
+    0,
+    Math.min(5, Math.floor(Number(zole3pLobbySnapshot?.zole3pCoinsPerPoint) || 0))
+  );
+  sel.value = String(cpp);
+  const host = String(zole3pLobbySnapshot?.host || "").trim();
+  const me = String(state.username || "").trim();
+  const isHost =
+    host && me && host.toLowerCase() === me.toLowerCase();
+  const n = (zole3pLobbySnapshot?.players || []).length;
+  sel.disabled = !isHost || n >= 3;
+}
+
+function syncZoleStakeBannerInGameArea() {
+  const el = document.getElementById("board-zole-stake-banner");
+  if (!el) return;
+  const cpp = Math.max(
+    0,
+    Math.min(5, Math.floor(Number(boardState.zole3pCoinsPerPoint) || 0))
+  );
+  const is3p =
+    boardState.type === "zole" &&
+    boardState.zoleMode === "online_3p" &&
+    !boardState.vsBot;
+  if (!is3p || cpp <= 0) {
+    el.classList.add("hidden");
+    el.textContent = "";
+    return;
+  }
+  el.classList.remove("hidden");
+  el.textContent = `Likme šajā spēlē: ${cpp} coins par katru tabulas punktu (+/− pēc partijas tabulas).`;
+}
 
 function updateZole3pLobbyUI(payload) {
   const box = document.getElementById("board-zole-3p-lobby");
@@ -725,10 +767,12 @@ function updateZole3pLobbyUI(payload) {
     if (pending) pending.classList.add("hidden");
     if (payload?.cancelled)
       appendGaldaSystemMessage("Zoles istaba atcelta.");
+    syncZole3pStakeSelectFromLobby();
     syncBoardDambreteModePanelVisibility();
     return;
   }
   zole3pLobbySnapshot = payload;
+  syncZole3pStakeSelectFromLobby();
   const host = payload.host || "";
   const players = payload.players || [];
   const me = String(state.username || "").trim();
@@ -746,6 +790,14 @@ function updateZole3pLobbyUI(payload) {
   if (pending) pending.classList.add("hidden");
   const invited = payload.invitedThird;
   const n = players.length;
+  const cpp = Math.max(
+    0,
+    Math.min(5, Math.floor(Number(payload.zole3pCoinsPerPoint) || 0))
+  );
+  const stakeTxt =
+    cpp > 0
+      ? ` Likme: ${cpp} coins/tabulas punkts.`
+      : " Likme: kā parasti (+10 uzvara, −4 zaudējums).";
   if (textEl) {
     if (n >= 3) {
       textEl.textContent = `Istabā 3 spēlētāji — spēle sākas… (${players.join(", ")})`;
@@ -754,7 +806,7 @@ function updateZole3pLobbyUI(payload) {
         invited != null && invited !== ""
           ? ` Gaidām atbildi: ${invited}.`
           : "";
-      textEl.textContent = `Zoles istaba · saimnieks: ${host}. Spēlētāji (${n}/3): ${players.join(", ") || "—"}.${wait} Kad būs 3, spēle sākas automātiski.`;
+      textEl.textContent = `Zoles istaba · saimnieks: ${host}. Spēlētāji (${n}/3): ${players.join(", ") || "—"}.${wait}${stakeTxt} Kad būs 3, spēle sākas automātiski.`;
     }
   }
   if (hostAct) hostAct.classList.toggle("hidden", !isHost);
@@ -9777,6 +9829,25 @@ function showBoardInviteModal(from, type, payload) {
     invite.dataset.zoleLobbyId = z3
       ? String(payload?.zoleLobbyId || "").trim()
       : "";
+    const stakeEl = document.getElementById("board-invite-zole-stake");
+    if (stakeEl) {
+      if (type === "zole" && z3) {
+        const cpp = Math.max(
+          0,
+          Math.min(5, Math.floor(Number(payload?.zole3pCoinsPerPoint) || 0))
+        );
+        if (cpp > 0) {
+          stakeEl.textContent = `Likme istabā: ${cpp} coins par katru tabulas punktu (+/− pēc partijas).`;
+          stakeEl.classList.remove("hidden");
+        } else {
+          stakeEl.textContent = "";
+          stakeEl.classList.add("hidden");
+        }
+      } else {
+        stakeEl.textContent = "";
+        stakeEl.classList.add("hidden");
+      }
+    }
     if (varEl) {
       if (type === "chess") {
         varEl.textContent = "";
@@ -9800,6 +9871,7 @@ function showBoardInviteModal(from, type, payload) {
 function hideBoardInviteModal() {
   const invite = document.getElementById("board-games-invite");
   if (invite) invite.classList.add("hidden");
+  document.getElementById("board-invite-zole-stake")?.classList.add("hidden");
   showBoardModal();
   syncBoardDambreteModePanelVisibility();
 }
@@ -9838,6 +9910,13 @@ function startBoardGame(payload) {
         : null,
     selectedCell: null,
     legalMoves: { jumps: [], moves: [] },
+    zole3pCoinsPerPoint: (() => {
+      if (payload?.type !== "zole") return 0;
+      const m = String(payload?.zoleMode || "").toLowerCase();
+      if (m !== "online_3p") return 0;
+      const c = Math.floor(Number(payload?.zole3pCoinsPerPoint) || 0);
+      return Math.max(0, Math.min(5, c));
+    })(),
   };
   const gameArea = document.getElementById("board-game-area");
   const lobby = document.getElementById("board-games-lobby");
@@ -9846,6 +9925,7 @@ function startBoardGame(payload) {
   if (lobby) lobby.classList.add("hidden");
   if (modal) modal.classList.remove("hidden");
   renderBoardGame();
+  syncZoleStakeBannerInGameArea();
   syncBoardModalFullscreen();
   syncBoardDambreteModePanelVisibility();
   syncBoardModalContext();
@@ -9869,6 +9949,7 @@ function hideBoardGameArea() {
   if (modal) modal.classList.remove("vz-board-modal--fullscreen");
   syncBoardBrowserFullscreenUi();
   updateBoardGameBadge(false);
+  document.getElementById("board-zole-stake-banner")?.classList.add("hidden");
   syncBoardModalContext();
 }
 
@@ -10207,6 +10288,7 @@ function renderBoardGame() {
       );
     }
   }
+  syncZoleStakeBannerInGameArea();
   syncBoardModalFullscreen();
   syncBoardBrowserFullscreenUi();
   syncBoardModalContext();
@@ -10592,8 +10674,27 @@ function bindBoardGames() {
   document.querySelectorAll(".js-zole-create-lobby").forEach((btn) => {
     btn.addEventListener("click", () => {
       if (!state.socket) return;
-      state.socket.emit("board.zoleCreateLobby");
+      const stakeEl = document.getElementById("board-zole-3p-stake");
+      const cpp = Math.max(
+        0,
+        Math.min(5, Math.floor(Number(stakeEl?.value) || 0))
+      );
+      state.socket.emit("board.zoleCreateLobby", { zole3pCoinsPerPoint: cpp });
     });
+  });
+  document.getElementById("board-zole-3p-stake")?.addEventListener("change", () => {
+    if (!state.socket) return;
+    const snap = zole3pLobbySnapshot;
+    if (!snap?.zoleLobby) return;
+    const me = String(state.username || "").trim();
+    const host = String(snap.host || "").trim();
+    if (!me || !host || me.toLowerCase() !== host.toLowerCase()) return;
+    if ((snap.players || []).length >= 3) return;
+    const cpp = Math.max(
+      0,
+      Math.min(5, Math.floor(Number(document.getElementById("board-zole-3p-stake")?.value) || 0))
+    );
+    state.socket.emit("board.zoleSetLobbyStake", { zole3pCoinsPerPoint: cpp });
   });
   document
     .getElementById("board-zole-3p-leave-lobby")

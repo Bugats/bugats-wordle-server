@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-28-zole-room-zone" />
+  <link rel="stylesheet" href="style.css?v=2026-03-28-zole-lobby-stake" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1004,7 +1004,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-28-zole-room-zone"></script>
+    <script defer src="game.js?v=2026-03-28-zole-lobby-stake"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1249,6 +1249,20 @@
             <p class="vz-board-zole-room-zone__intro">
               Šeit top tava privātā istaba: spied «Izveidot», tad uzaicini divus spēlētājus zemāk vai ar «Zole» uzaicinājumu. Kad vietas aizpildītas, spēle sākas automātiski.
             </p>
+            <div class="vz-board-zole-stake-row">
+              <label for="board-zole-3p-stake" class="vz-board-label">Coins par tabulas punktu</label>
+              <select id="board-zole-3p-stake" class="vz-board-zole-stake-select" title="Pēc partijas: coins mainās proporcionāli tabulas punktiem. 0 = fiksēti +10/−4 kā citur.">
+                <option value="0" selected>0 — kā parasti (+10 uzvara)</option>
+                <option value="1">1 coin / punkts</option>
+                <option value="2">2 coins / punkts</option>
+                <option value="3">3 coins / punkts</option>
+                <option value="4">4 coins / punkts</option>
+                <option value="5">5 coins / punkts (max)</option>
+              </select>
+              <p class="vz-board-hint vz-board-zole-stake-hint">
+                Likme attiecas uz visu istabu. Trešais spēlētājs to redz uzaicinājumā. Mainīt drīkst tikai saimnieks, kamēr nav 3 vietās.
+              </p>
+            </div>
             <div id="board-zole-3p-lobby-entry" class="vz-board-zole-3p-entry hidden">
               <button type="button" class="vz-board-invite-btn js-zole-create-lobby">
                 Izveidot zoles istabu (gaida 3 spēlētājus)
@@ -1307,7 +1321,7 @@
               <p><strong>Acis:</strong> dūzis 11, desmitnieks 10, kungs 4, dāma 3, kalps 2; devītnieks, astotnieks, septītnieks — 0.</p>
               <p><strong>Lielais</strong> ņem 2 vidus kārtis, <strong>norok 2</strong> — to acis pieskaita viņa stiķiem; uzvara ar <strong>61+</strong> acīm pret abiem mazajiem (acis kopā). <strong>Zole</strong> — bez pirkuma; vidus kārtu acis mazo pusē. <strong>Mazā zole</strong> — uzvara: +12 lielajam, −6 katram mazajam; zaudējums: −14 lielajam, +7 katram mazajam. Pārējā tabula (lielais/zole) kā klasiskajos noteikumos (t.sk. mazajiem &lt;30 acu, bezstiķis, visi stiķi, 91+ zolei).</p>
               <p><strong>Likšana šeit (3 spēlētāji):</strong> divas kārtas — katrā vari teikt <strong>garām</strong> vai pieteikt <strong>Lielais / Zole / Mazā zole</strong>. <em>Galdiņu</em> (visi pa sevi; zaudē ar <strong>visvairāk acu</strong>) <strong>neizvēlas ar pogu</strong> — tas sākas <strong>automātiski</strong>, ja <strong>1. un 2. kārtā visi iet garām</strong>. <em>Galds</em> (pēc stiķu skaita) šeit nav. Pilnajā noteikumu tekstā bieži seko <strong>pule</strong> — <strong>šeit pules nav</strong>. Pret botiem: vairākas partijas, uzkrātā tabula. Likšanas sākums rotē. Stratēģija — skat. zolei.lv.</p>
-              <p><strong>Tiešsaiste:</strong> <em>3 cilvēki</em> — spēlētājs izveido istabu, tad uzaicina divus (vai vienu pēc otra); kad trīs vietas aizņemtas, spēle sākas. Vai 2+boti / tikai pret botiem.</p>
+              <p><strong>Tiešsaiste:</strong> <em>3 cilvēki</em> — spēlētājs izveido istabu, izvēlas <strong>coins par tabulas punktu</strong> (vai 0 = fiksēti +10/−4), tad uzaicina divus; kad trīs vietas aizņemtas, spēle sākas. Vai 2+boti / tikai pret botiem.</p>
             </div>
           </details>
           <div class="vz-board-leaderboards">
@@ -1330,6 +1344,7 @@
             <span id="board-invite-from"></span> aicina uz <span id="board-invite-type"></span>
             <span id="board-invite-dambrete-variant" class="hidden"></span>
           </p>
+          <p id="board-invite-zole-stake" class="vz-board-invite-stake hidden"></p>
           <p class="vz-board-invite-sub">Uzvaras dod novada un klana punktus</p>
           <div class="vz-board-invite-actions">
             <button id="board-invite-accept" type="button">Pieņemt</button>
@@ -1354,6 +1369,7 @@
               <button id="board-resign-btn" type="button" class="vz-board-resign" title="Beigt spēli un zaudēt">Padoties</button>
             </div>
           </div>
+          <p id="board-zole-stake-banner" class="vz-board-zole-stake-banner hidden" aria-live="polite"></p>
           <p id="board-game-hint" class="vz-board-game-hint">Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt</p>
           <div id="board-dambrete-container" class="vz-board-container hidden"></div>
           <div id="board-chess-container" class="vz-board-container hidden"></div>
