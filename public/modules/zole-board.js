@@ -906,6 +906,9 @@
     felt.appendChild(buildOpponentsLayer(zole, myIdx));
 
     const feltCenter = el("div", "vz-zole-classic__felt-center");
+    if (phase === "end") {
+      feltCenter.classList.add("vz-zole-classic__felt-center--end");
+    }
 
     if (phase === "bid") {
       feltCenter.appendChild(buildBidCenter(zole, myIdx, onBid, zm));
@@ -920,8 +923,9 @@
       if (discardMsg) feltCenter.appendChild(discardMsg);
     } else if (phase === "end") {
       const endBox = el("div", "vz-zole-classic__end");
-      endBox.appendChild(buildMatchScoreStrip(zole, myIdx));
-      endBox.appendChild(buildEndCenter(zole, zm));
+      const endMain = el("div", "vz-zole-end__main");
+      endMain.appendChild(buildMatchScoreStrip(zole, myIdx));
+      endMain.appendChild(buildEndCenter(zole, zm));
       if (zole.tableDelta) {
         const parts = [];
         for (let i = 0; i < 3; i++) {
@@ -929,16 +933,17 @@
           if (!n) continue;
           parts.push(`${zole.players?.[i] || "?"}: ${formatPts(n)}`);
         }
-        endBox.appendChild(
+        endMain.appendChild(
           el("div", "vz-zole-end__delta", parts.join(" · ") || "—")
         );
       }
       const story = lastResultText(zole);
-      if (story) endBox.appendChild(el("div", "vz-zole-end__story", story));
+      if (story) endMain.appendChild(el("div", "vz-zole-end__story", story));
       const eyesLine = endEyesWinnerLine(zole);
       if (eyesLine) {
-        endBox.appendChild(el("div", "vz-zole-end__eyes", eyesLine));
+        endMain.appendChild(el("div", "vz-zole-end__eyes", eyesLine));
       }
+      endBox.appendChild(endMain);
       const vsEnd =
         opts &&
         zm === "vs_bot" &&
