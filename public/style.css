@@ -1011,6 +1011,47 @@ summary:focus-visible {
   margin: 8px 0;
 }
 
+.vz-profile-zole-hint {
+  margin: 6px 0 4px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.82);
+}
+.vz-profile-zole-hint--popup {
+  margin: 8px 0 10px;
+  text-align: left;
+}
+.vz-profile-zole-hint__sum {
+  cursor: pointer;
+  list-style: none;
+  font-weight: 700;
+  font-size: 11px;
+  color: rgba(253, 230, 138, 0.95);
+  padding: 2px 0;
+}
+.vz-profile-zole-hint__sum::-webkit-details-marker {
+  display: none;
+}
+.vz-profile-zole-hint__body {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.vz-profile-zole-hint__body p {
+  margin: 0 0 6px;
+}
+.vz-profile-zole-hint__body p:last-child {
+  margin-bottom: 0;
+}
+.vz-profile-zole-hint__note {
+  font-size: 10px;
+  opacity: 0.75;
+}
+
 .vz-stripe-coins {
   margin: 8px 0 6px;
   padding: 8px 10px;
