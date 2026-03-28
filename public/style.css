@@ -4005,6 +4005,21 @@ summary:focus-visible {
 .vz-lb-item.vz-lb-self { color: #b3e5fc; text-shadow: 0 0 6px rgba(0, 188, 212, 1), 0 0 10px rgba(0, 0, 0, 0.95); }
 .vz-online-list li.vz-online-self { color: #b3e5fc; font-weight: 600; }
 
+.vz-online-last-hand {
+  margin-left: 6px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fde68a;
+  background: rgba(180, 83, 9, 0.35);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  border-radius: 999px;
+  padding: 2px 6px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 .vz-supporter-tag {
   display: inline-flex;
   align-items: center;

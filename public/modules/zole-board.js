@@ -267,6 +267,9 @@
       }
       return `Gaida: ${names[t] || "?"} met kārti uz galda.`;
     }
+    if (ph === "end" && zole.zoleLastMatchHand) {
+      return "Pēdējā partija šajā mačā — pēc tās atgriežamies pie vārdu spēles.";
+    }
     return "";
   }
 
@@ -842,7 +845,7 @@
         );
         lastBtn.type = "button";
         lastBtn.title =
-          "Atcelt automātisko nākamo partiju — paliec pie šī rezultāta.";
+          "Pēdējā partija: citi redzēs atzīmi tiešsaistē; pēc partijas mačs beigsies un atgriezīsies pie vārdu spēles.";
         lastBtn.addEventListener("click", () => opts.onZoleVsBotLastHand());
         const nextBtn = el(
           "button",

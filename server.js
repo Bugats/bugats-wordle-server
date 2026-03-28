@@ -834,6 +834,7 @@ function maybeStartZole3pFromLobby(io, lobby) {
     });
   }
   setImmediate(() => playZoleBotBids(io, game));
+  broadcastOnlineBoardPresence();
   return true;
 }
 
@@ -1317,6 +1318,41 @@ function clearZoleVsBotNextHandTimer(game) {
   game.zoleVsBotNextHandTimer = null;
 }
 
+function broadcastOnlineBoardPresence() {
+  lastOnlineSig = "";
+  broadcastOnlineList(true);
+}
+
+function zoleVsBotHumanUsername(game) {
+  if (!game?.players) return null;
+  const h = game.players.find((p) => p && !isZoleBotUsername(p));
+  return h || null;
+}
+
+function endZoleVsBotSeries(io, game, reason) {
+  if (!game?.zole || !game.vsBot || game.zoleMode !== "vs_bot") return;
+  const human = zoleVsBotHumanUsername(game);
+  clearZoleVsBotNextHandTimer(game);
+  game.zole.zoleLastMatchHand = false;
+  finishBoardGame(game, null, reason || "zole_vs_bot_series_end");
+  if (!human) return;
+  const idx = boardGameSeatIndex(game, human);
+  const sock = getSocketByUsername(human);
+  if (!sock || idx < 0) return;
+  sock.emit("board.end", {
+    gameId: game.id,
+    type: "zole",
+    players: game.players,
+    vsBot: true,
+    zole: zolePublicSnapshot(game.zole, idx),
+    winner: null,
+    reason: reason || "zole_vs_bot_series_end",
+    coinsGain: 0,
+    coinsLoss: 0,
+    zoleMode: game.zoleMode,
+  });
+}
+
 function scheduleZoleVsBotNextHand(io, game) {
   if (!game?.vsBot || game.zoleMode !== "vs_bot" || !game.zole) return;
   clearZoleVsBotNextHandTimer(game);
@@ -1328,6 +1364,7 @@ function scheduleZoleVsBotNextHand(io, game) {
     if (!g.vsBot || g.zoleMode !== "vs_bot") return;
     const res = zoleStartNextHand(g.zole);
     if (!res.ok) return;
+    g.zole.zoleLastMatchHand = false;
     g.turn =
       g.zole.phase === "bid"
         ? g.zole.bidTurn
@@ -1542,6 +1579,7 @@ function finishBoardGame(game, winnerUsername, reason) {
   } else {
     io.emit("board:leaderboard", { type: game.type });
   }
+  broadcastOnlineBoardPresence();
 }
 
 // ======== ČATS (mini anti-spam) ========
@@ -6252,8 +6290,27 @@ const io = new Server(httpServer, {
 // ======== ONLINE saraksts ========
 const onlineBySocket = new Map(); // socket.id -> username
 
+function onlineBoardStatusForUsername(username) {
+  const un = String(username || "").trim();
+  if (!un) return { inBoardGame: false, zoleVsBotLastHand: false };
+  const gid = userToBoardGame.get(un);
+  if (!gid) return { inBoardGame: false, zoleVsBotLastHand: false };
+  const g = boardGames.get(gid);
+  if (!g || g.status !== "active") {
+    return { inBoardGame: false, zoleVsBotLastHand: false };
+  }
+  const zLast =
+    g.type === "zole" &&
+    g.vsBot &&
+    g.zoleMode === "vs_bot" &&
+    g.zole?.phase === "end" &&
+    !!g.zole.zoleLastMatchHand;
+  return { inBoardGame: true, zoleVsBotLastHand: zLast };
+}
+
 function getMiniUserPayload(username) {
   const u = USERS[username];
+  const board = onlineBoardStatusForUsername(username);
   if (!u) {
     return {
       username,
@@ -6263,6 +6320,8 @@ function getMiniUserPayload(username) {
       rankColor: "#9CA3AF",
       supporter: false,
       region: "",
+      inBoardGame: board.inBoardGame,
+      zoleVsBotLastHand: board.zoleVsBotLastHand,
     };
   }
   const info = ensureRankFields(u);
@@ -6274,6 +6333,8 @@ function getMiniUserPayload(username) {
     rankColor: u.rankColor || info.color || "#9CA3AF",
     supporter: !!u.supporter,
     region: u.region || "",
+    inBoardGame: board.inBoardGame,
+    zoleVsBotLastHand: board.zoleVsBotLastHand,
   };
 }
 
@@ -6291,7 +6352,9 @@ function broadcastOnlineList(force = false) {
       (u) =>
         `${u.username}|${u.avatarUrl || ""}|${u.rankLevel || 0}|${
           u.rankTitle || ""
-        }|${u.supporter ? 1 : 0}|${u.region || ""}`
+        }|${u.supporter ? 1 : 0}|${u.region || ""}|${
+          u.inBoardGame ? 1 : 0
+        }|${u.zoleVsBotLastHand ? 1 : 0}`
     )
     .join(";");
 
@@ -12604,6 +12667,7 @@ io.on("connection", (socket) => {
       };
       io.to(room).emit("board.start", payloadOut);
     }
+    broadcastOnlineBoardPresence();
   });
 
   socket.on("board.startVsBot", (payload) => {
@@ -12649,6 +12713,7 @@ io.on("connection", (socket) => {
       zoleMode: game.type === "zole" ? game.zoleMode : undefined,
     };
     socket.emit("board.start", payloadOut);
+    broadcastOnlineBoardPresence();
     if (game.type === "zole") {
       setImmediate(() => playZoleBotBids(io, game));
     } else if (game.turn === 1) {
@@ -12978,6 +13043,7 @@ io.on("connection", (socket) => {
         message: "Nav partijas beigu fāzes.",
       });
     clearZoleVsBotNextHandTimer(game);
+    game.zole.zoleLastMatchHand = true;
     emitZoleToHumans(io, game, "board.move", {
       gameId,
       type: "zole",
@@ -12985,6 +13051,21 @@ io.on("connection", (socket) => {
       zoleMode: game.zoleMode,
       zoleVsBotNextHandCancelled: true,
     });
+    broadcastOnlineBoardPresence();
+    setTimeout(() => {
+      const g = boardGames.get(gameId);
+      if (
+        g &&
+        g.status === "active" &&
+        g.type === "zole" &&
+        g.vsBot &&
+        g.zoleMode === "vs_bot" &&
+        g.zole?.phase === "end" &&
+        g.zole.zoleLastMatchHand
+      ) {
+        endZoleVsBotSeries(io, g, "zole_vs_bot_last_hand_done");
+      }
+    }, ZOLE_VS_BOT_NEXT_HAND_MS);
   });
 
   socket.on("board.zoleVsBotNextHand", (payload) => {
@@ -13001,6 +13082,7 @@ io.on("connection", (socket) => {
         message: "Nav partijas beigu fāzes.",
       });
     clearZoleVsBotNextHandTimer(game);
+    game.zole.zoleLastMatchHand = false;
     const res = zoleStartNextHand(game.zole);
     if (!res.ok)
       return socket.emit("board.error", {
@@ -13020,6 +13102,7 @@ io.on("connection", (socket) => {
       zoleMode: game.zoleMode,
       zoleSeriesNewHand: true,
     });
+    broadcastOnlineBoardPresence();
     setImmediate(() => playZoleBotBids(io, game));
   });
 
