@@ -724,7 +724,7 @@ function updateZole3pLobbyUI(payload) {
     if (box) box.classList.add("hidden");
     if (pending) pending.classList.add("hidden");
     if (payload?.cancelled)
-      appendSystemMessage("Zoles istaba atcelta.");
+      appendGaldaSystemMessage("Zoles istaba atcelta.");
     syncBoardDambreteModePanelVisibility();
     return;
   }
@@ -7194,6 +7194,13 @@ function appendSystemMessage(text) {
   appendChatMessage({ username: "SYSTEM", text: t, ts: now });
 }
 
+/** Publiskā čata sistēmas ziņas par galda spēlēm — ar [Galds], lai atšķirtu no vārdu spēles. */
+function appendGaldaSystemMessage(text) {
+  const s = String(text ?? "").trim();
+  if (!s) return;
+  appendSystemMessage(`[Galds] ${s}`);
+}
+
 function clearUnreadIfNeeded() {
   if (!chatMessagesEl) return;
   if (!document.hidden && isChatNearBottom()) {
@@ -9377,19 +9384,25 @@ function initSocket() {
     const from = payload?.from || "?";
     const type = payload?.type || "dambrete";
     showBoardInviteModal(from, type, payload);
+    const typeLv =
+      type === "chess" ? "šahu" : type === "zole" ? "zoli" : "dambreti";
+    appendGaldaSystemMessage(
+      `${from} uzaicina uz ${typeLv}. Atver «Galda spēles», lai pieņemtu vai noraidītu.`
+    );
   });
   socket.on("board.inviteSent", () => {
     const pending = document.getElementById("board-invite-pending");
     if (pending) pending.classList.remove("hidden");
+    appendGaldaSystemMessage("Uzaicinājums nosūtīts.");
   });
   socket.on("board.zoleThirdInviteSent", () => {
-    appendSystemMessage("Zoles uzaicinājums trešajam spēlētājam nosūtīts.");
+    appendGaldaSystemMessage("Zoles uzaicinājums trešajam spēlētājam nosūtīts.");
   });
   socket.on("board.zoleLobby", (payload) => {
     updateZole3pLobbyUI(payload);
   });
   socket.on("board.error", (payload) => {
-    appendSystemMessage(payload?.message || "Galda spēles kļūda.");
+    appendGaldaSystemMessage(payload?.message || "Galda spēles kļūda.");
   });
   socket.on("board.start", (payload) => {
     zole3pLobbySnapshot = null;
@@ -9397,12 +9410,17 @@ function initSocket() {
     syncBoardDambreteModePanelVisibility();
     /* Neaizvērt modāli — startBoardGame atver spēles zonu; citādi Zole paliek aiz hidden. */
     startBoardGame(payload);
+    const t = payload?.type || "dambrete";
+    const label =
+      t === "chess" ? "Šahs" : t === "zole" ? "Zole" : "Dambrete";
+    appendGaldaSystemMessage(`${label} — spēle sākusies.`);
     const myIdx = boardGamePlayerIndex(payload?.players || [], state.username);
     const isMyTurn = myIdx === (payload?.turn ?? 0);
     updateBoardGameBadge(isMyTurn);
   });
   socket.on("board.resume", (payload) => {
     startBoardGame(payload);
+    appendGaldaSystemMessage("Spēle atjaunota.");
     const myIdx = boardGamePlayerIndex(payload?.players || [], state.username);
     const isMyTurn = myIdx === (payload?.turn ?? 0);
     updateBoardGameBadge(isMyTurn);
@@ -9431,8 +9449,8 @@ function initSocket() {
       payload?.zoleSeriesHandEnd
     ) {
       boardState.zoleVsBotNextHandPending = true;
-      appendSystemMessage(
-        "🃏 Partija beigusies — tabula atjaunināta. Izvēlies «Nākamā partija» vai «Pēdējā partija»."
+      appendGaldaSystemMessage(
+        "Partija beigusies — tabula atjaunināta. Izvēlies «Nākamā partija» vai «Pēdējā partija»."
       );
     }
     if (
@@ -9440,8 +9458,8 @@ function initSocket() {
       boardState.zoleMode === "vs_bot" &&
       payload?.zoleVsBotNextHandCancelled
     ) {
-      appendSystemMessage(
-        "🃏 Izvēlējies pēdējo partiju — citi tiešsaistē redz atzīmi «pēdējā partija»; pēc tās mačs beigsies."
+      appendGaldaSystemMessage(
+        "Izvēlējies pēdējo partiju — citi tiešsaistē redz atzīmi «pēdējā partija»; pēc tās mačs beigsies."
       );
     }
     if (boardState.type === "zole" && payload?.zoleMode != null) {
@@ -9469,7 +9487,7 @@ function initSocket() {
         ? boardZoleIsHumanTurn(myIdx, boardState.zole)
         : myIdx === boardState.turn;
     if (isMyTurn) {
-      appendSystemMessage("♟️ Tava kārta galda spēlē!");
+      appendGaldaSystemMessage("Tava kārta galda spēlē.");
       const modal = document.getElementById("board-games-modal");
       if (modal && modal.classList.contains("hidden")) {
         const gameArea = document.getElementById("board-game-area");
@@ -9510,7 +9528,7 @@ function initSocket() {
     } else {
       msg = "♟️ Spēle beidzās (neizšķirts).";
     }
-    appendSystemMessage(msg);
+    appendGaldaSystemMessage(msg.replace(/^♟️\s*/, ""));
     showBoardGameResult(payload);
     hideBoardGameArea();
     updateBoardGameBadge(false);
@@ -9526,6 +9544,47 @@ function initSocket() {
   });
 }
 
+function syncBoardModalContext() {
+  const el = document.getElementById("board-modal-context");
+  if (!el) return;
+  const modal = document.getElementById("board-games-modal");
+  if (!modal || modal.classList.contains("hidden")) {
+    el.textContent = "";
+    return;
+  }
+  const invite = document.getElementById("board-games-invite");
+  const gameArea = document.getElementById("board-game-area");
+  const inInvite = invite && !invite.classList.contains("hidden");
+  const inGame = gameArea && !gameArea.classList.contains("hidden");
+  if (inInvite) {
+    const from = invite?.dataset?.from || "?";
+    const type = invite?.dataset?.type || "dambrete";
+    const typeLv =
+      type === "chess" ? "šahu" : type === "zole" ? "zoli" : "dambreti";
+    el.textContent = `Uzaicinājums: ${from} → ${typeLv}`;
+    return;
+  }
+  if (inGame && boardState.gameId) {
+    const t = boardState.type || "dambrete";
+    const label =
+      t === "chess" ? "Šahs" : t === "zole" ? "Zole" : "Dambrete";
+    const ph = boardState.type === "zole" && boardState.zole?.phase;
+    const phaseLv =
+      ph === "bid"
+        ? "likšana"
+        : ph === "discard"
+          ? "norakšana"
+          : ph === "play"
+            ? "spēle"
+            : ph === "end"
+              ? "beigas"
+              : "";
+    el.textContent = phaseLv ? `${label} · ${phaseLv}` : `${label} · spēle`;
+    return;
+  }
+  el.textContent = "Izvēlies spēli vai uzaicini draugu.";
+}
+
 function syncBoardDambreteModePanelVisibility() {
   const wrap = document.getElementById("board-dambrete-mode-wrap");
   const zoleWrap = document.getElementById("board-zole-mode-wrap");
@@ -9539,6 +9598,7 @@ function syncBoardDambreteModePanelVisibility() {
     getSelectedBoardZoleMode() === "online_3p" &&
     !zole3pLobbySnapshot?.zoleLobby;
   if (zoleRoomEntry) zoleRoomEntry.classList.toggle("hidden", !show3pEntry);
+  syncBoardModalContext();
 }
 
 function showBoardModal() {
@@ -9564,6 +9624,7 @@ function showBoardModal() {
     syncBoardModalFullscreen();
   }
   syncBoardDambreteModePanelVisibility();
+  syncBoardModalContext();
 }
 
 async function loadBoardLeaderboards() {
@@ -9657,6 +9718,7 @@ function hideBoardModal() {
   }
   syncBoardBrowserFullscreenUi();
   syncBoardDambreteModePanelVisibility();
+  syncBoardModalContext();
 }
 
 function showBoardInviteModal(from, type, payload) {
@@ -9714,6 +9776,7 @@ function showBoardInviteModal(from, type, payload) {
   }
   syncBoardModalFullscreen();
   syncBoardDambreteModePanelVisibility();
+  syncBoardModalContext();
 }
 
 function hideBoardInviteModal() {
@@ -9767,6 +9830,7 @@ function startBoardGame(payload) {
   renderBoardGame();
   syncBoardModalFullscreen();
   syncBoardDambreteModePanelVisibility();
+  syncBoardModalContext();
 }
 
 function hideBoardGameArea() {
@@ -9787,6 +9851,7 @@ function hideBoardGameArea() {
   if (modal) modal.classList.remove("vz-board-modal--fullscreen");
   syncBoardBrowserFullscreenUi();
   updateBoardGameBadge(false);
+  syncBoardModalContext();
 }
 
 function updateBoardGameBadge(show) {
@@ -10044,6 +10109,7 @@ function renderBoardGame() {
   }
   syncBoardModalFullscreen();
   syncBoardBrowserFullscreenUi();
+  syncBoardModalContext();
 }
 
 async function handleChessCellClick(r, c, isPiece) {
@@ -10182,19 +10248,19 @@ async function handleDambreteCellClick(r, c, isPiece) {
 
 function boardGamesEnsureSocketConnected() {
   if (!state.token) {
-    appendSystemMessage(
-      "Lai spēlētu galda spēles, vispirms pieslēdzies (izraksties un ieej vēlreiz)."
+    appendGaldaSystemMessage(
+      "Lai spēlētu, vispirms pieslēdzies (izraksties un ieej vēlreiz)."
     );
     return false;
   }
   if (!state.socket) {
-    appendSystemMessage(
+    appendGaldaSystemMessage(
       "Nav servera savienojuma. Gaidi ziņu «Pieslēgts…» vai atsvaidzini lapu."
     );
     return false;
   }
   if (!state.socket.connected) {
-    appendSystemMessage(
+    appendGaldaSystemMessage(
       "Savienojums vēl nav gatavs. Pagaidi brīdi vai atsvaidzini lapu."
     );
     return false;
@@ -10217,6 +10283,12 @@ function bindBoardGames() {
 
   if (btn) btn.addEventListener("click", showBoardModal);
   if (closeBtn) closeBtn.addEventListener("click", hideBoardModal);
+  document.getElementById("board-back-words-btn")?.addEventListener("click", () => {
+    hideBoardModal();
+    document
+      .getElementById("vz-section-game")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
   const boardResultClose = document.getElementById("board-result-close");
   const boardResultOverlay = document.getElementById("board-result-overlay");
   if (boardResultClose)
@@ -10229,7 +10301,7 @@ function bindBoardGames() {
   const doInvite = (type) => {
     const target = inviteUsername?.value?.trim() || currentProfileName?.trim();
     if (!target) {
-      appendSystemMessage("Ievadi spēlētāja lietotājvārdu.");
+      appendGaldaSystemMessage("Ievadi spēlētāja lietotājvārdu.");
       return;
     }
     if (!boardGamesEnsureSocketConnected()) return;
@@ -10239,7 +10311,7 @@ function bindBoardGames() {
     if (type === "zole") {
       const zm = getSelectedBoardZoleMode();
       if (zm !== "online_2p" && zm !== "online_3p") {
-        appendSystemMessage(
+        appendGaldaSystemMessage(
           "Drauga zolei izvēlies «3 cilvēki» vai «2 cilvēki + bots»."
         );
         return;
@@ -10252,7 +10324,7 @@ function bindBoardGames() {
           (p) => String(p).trim().toLowerCase() === me
         );
         if (!snap?.zoleLobby || hostLc !== me || !inRoom) {
-          appendSystemMessage(
+          appendGaldaSystemMessage(
             "Zolei ar 3 cilvēkiem vispirms spied «Izveidot zoles istabu», tad uzaicini draugus."
           );
           return;
@@ -10341,7 +10413,7 @@ function bindBoardGames() {
     zole3pInviteThird.addEventListener("click", () => {
       const t = zole3pThirdInput?.value?.trim();
       if (!t) {
-        appendSystemMessage("Ievadi trešā spēlētāja vārdu.");
+        appendGaldaSystemMessage("Ievadi trešā spēlētāja vārdu.");
         return;
       }
       if (!state.socket) return;
@@ -10370,12 +10442,12 @@ function bindBoardGames() {
         } else if (modal.requestFullscreen) {
           await modal.requestFullscreen();
         } else {
-          appendSystemMessage(
+          appendGaldaSystemMessage(
             "Šis pārlūks neatbalsta pilnekrānu. iPhone: pievieno spēli sākumekrānam. Android: izmanto «Pilnekrāna spēle» galvenajā izvēlnē."
           );
         }
       } catch {
-        appendSystemMessage(
+        appendGaldaSystemMessage(
           "Pilnekrānu nevarēja ieslēgt. Mēģini citu pārlūku vai pievieno spēli sākumekrānam."
         );
       }
@@ -10412,7 +10484,7 @@ function bindBoardGames() {
       if (target && state.socket) {
         showBoardModal();
         if (inviteUsername) inviteUsername.value = target;
-        appendSystemMessage(
+        appendGaldaSystemMessage(
           "Zolei ar 3 cilvēkiem: spied «Izveidot zoles istabu», tad «Zole» ar šo vārdu formā."
         );
       }
