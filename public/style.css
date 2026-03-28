@@ -6007,6 +6007,11 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex: 1 1 0;
   max-width: 34%;
 }
+/* Kreisais un labais pretinieks nedaudz augstāk par vidu (stiķa «U» forma) */
+#board-zole-container .vz-zole-felt__seat--left,
+#board-zole-container .vz-zole-felt__seat--right {
+  transform: translateY(-14px);
+}
 #board-zole-container .vz-zole-felt__seat--me .vz-zole-felt__who {
   color: #a5f3fc;
   font-weight: 700;
