@@ -9883,8 +9883,8 @@ function renderBoardGame() {
       boardState.type === "zole" &&
       boardState.zole?.phase === "play"
     ) {
-      /* Kārtu fāzē pilns teksts jau zole-laukā — šeit tikai īss statuss */
-      turnEl.textContent = isMyTurn ? "Tava kārta" : turnName;
+      /* Pilna instrukcija zilajā joslā — šeit tikai pretinieka vārds vai em dash */
+      turnEl.textContent = isMyTurn ? "—" : turnName;
     } else {
       turnEl.textContent = isMyTurn ? "Tava kārta" : `${turnName} gājienā`;
     }

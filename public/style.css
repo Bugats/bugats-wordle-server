@@ -5874,7 +5874,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   min-height: 0;
   padding: 2px 0 4px;
 }
@@ -6029,14 +6029,14 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   white-space: nowrap;
 }
 #board-zole-container .vz-zole-felt__cardSlot {
-  min-height: 108px;
+  min-height: 132px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 #board-zole-container .vz-zole-felt__placeholder {
-  width: 64px;
-  height: 90px;
+  width: 76px;
+  height: 108px;
   border-radius: 8px;
   border: 2px dashed rgba(255, 255, 255, 0.2);
   display: flex;
@@ -6060,6 +6060,9 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   max-width: 100%;
   min-height: 1.3em;
 }
+#board-zole-container .vz-zole-felt__sub:empty {
+  display: none;
+}
 /* Kārtis (sejas) */
 #board-zole-container .vz-zole-card {
   position: relative;
@@ -6079,6 +6082,26 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   width: 52px;
   height: 78px;
   border-radius: 7px;
+}
+/* Stiķis uz galda — lielāks par noklusējumu, mazāks par roku */
+#board-zole-container .vz-zole-card--trick {
+  width: 76px;
+  height: 108px;
+  border-radius: 9px;
+}
+#board-zole-container .vz-zole-card--trick .vz-zole-card__corner {
+  font-size: 11px;
+}
+#board-zole-container .vz-zole-card--trick .vz-zole-card__corner--tl {
+  top: 5px;
+  left: 4px;
+}
+#board-zole-container .vz-zole-card--trick .vz-zole-card__corner--br {
+  bottom: 5px;
+  right: 4px;
+}
+#board-zole-container .vz-zole-card--trick .vz-zole-card__center {
+  font-size: 30px;
 }
 /* Roka — bāzes izmērs 108×168; dokā JS var samazināt --vz-hand-scale, lai viss ietilpst */
 #board-zole-container .vz-zole-card--hand {

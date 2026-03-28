@@ -263,9 +263,9 @@
       const t = zole.turn;
       if (typeof t !== "number" || t < 0 || t > 2) return "";
       if (t === myIdx) {
-        return "Tavs gājiens — izvēlies kārtu no rokas.";
+        return "Izvēlies kārtu no rokas.";
       }
-      return `Gaida: ${names[t] || "?"} met kārti uz galda.`;
+      return `Gaida: ${names[t] || "?"} met kārti.`;
     }
     if (ph === "end" && zole.zoleLastMatchHand) {
       return "Pēdējā partija šajā mačā — pēc tās atgriežamies pie vārdu spēles.";
@@ -321,6 +321,7 @@
     const root = el("div", "vz-zole-card");
     if (small) root.classList.add("vz-zole-card--sm");
     else if (hand) root.classList.add("vz-zole-card--hand");
+    else if (o.trick) root.classList.add("vz-zole-card--trick");
     if (meta.red) root.classList.add("vz-zole-card--red");
     else root.classList.add("vz-zole-card--black");
     if (trump && !noTrumpGlow) root.classList.add("vz-zole-card--trump");
@@ -495,7 +496,7 @@
       const cardSlot = el("div", "vz-zole-felt__cardSlot");
       const c = byP[seat];
       if (c) {
-        cardSlot.appendChild(createCardFace(c, { small: false }));
+        cardSlot.appendChild(createCardFace(c, { trick: true }));
       } else {
         const ph = el("div", "vz-zole-felt__placeholder");
         ph.textContent =
@@ -512,10 +513,7 @@
       const t = typeof zole.turn === "number" ? zole.turn : null;
       if (t != null) {
         const nm = zole.players?.[t] || "?";
-        sub.textContent =
-          t === myIdx
-            ? "Tava kārta — izvēlies kārti."
-            : `Gaida: ${nm} met kārti.`;
+        sub.textContent = t === myIdx ? "" : `Gaida: ${nm}.`;
       } else {
         sub.textContent = "\u00a0";
       }
