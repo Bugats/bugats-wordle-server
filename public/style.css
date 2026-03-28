@@ -5680,6 +5680,16 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+#board-zole-container .vz-zole-opp__role {
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: rgba(253, 230, 138, 0.88);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 #board-zole-container .vz-zole-opp__badge--corner {
   font-size: 7px;
   padding: 1px 5px;
@@ -5887,6 +5897,15 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   min-height: 4px;
   max-height: 16px;
 }
+#board-zole-container .vz-zole-dock__role {
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(253, 230, 138, 0.92);
+  padding: 0 6px 4px;
+  line-height: 1.25;
+}
 #board-zole-container .vz-zole-classic__dock {
   flex-shrink: 0;
   padding: 6px 2px 2px;
@@ -6032,6 +6051,18 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+#board-zole-container .vz-zole-felt__role {
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: rgba(253, 230, 138, 0.9);
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: -2px;
 }
 #board-zole-container .vz-zole-felt__cardSlot {
   min-height: 132px;

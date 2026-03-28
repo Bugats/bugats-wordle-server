@@ -221,6 +221,41 @@
     return c ? String(c) : "—";
   }
 
+  /** Īss spēlētāja lomas teksts visām UI vietām. */
+  function zolePlayerRoleLine(zole, pi) {
+    const ph = zole.phase || "";
+    const c = zole.contract;
+    const ci = zole.contractorIdx;
+    if (ph === "bid") return "";
+    function roleAfterBid() {
+      if (c === "galdins" || c === "galds") return contractLabel(c);
+      if (typeof ci !== "number" || ci < 0 || c == null)
+        return c ? contractLabel(c) : "";
+      if (pi === ci) {
+        if (c === "big") return "Lielais";
+        if (c === "zole") return "Zole";
+        if (c === "maza_zole") return "Mazā zole";
+        return contractLabel(c);
+      }
+      return "Mazais";
+    }
+    if (ph === "discard" && c === "big" && typeof ci === "number") {
+      return pi === ci ? "Lielais · norok" : "Mazais · gaida";
+    }
+    if (ph === "end" || ph === "play") return roleAfterBid();
+    if (ph === "discard") return roleAfterBid();
+    return "";
+  }
+
+  function zoleTrickLeadHint(zole, myIdx) {
+    const ph = zole.phase || "";
+    if (ph !== "play") return "";
+    const tl = zole.trickLeader;
+    if (typeof tl !== "number" || tl < 0 || tl > 2) return "";
+    const nm = zole.players?.[tl] || "?";
+    return tl === myIdx ? "Tu vadi šo stiķi." : `Stiķi vada ${nm}.`;
+  }
+
   function zoleActiveTurnPlayerIndex(zole) {
     if (!zole) return null;
     const ph = zole.phase || "";
@@ -262,10 +297,12 @@
     if (ph === "play") {
       const t = zole.turn;
       if (typeof t !== "number" || t < 0 || t > 2) return "";
+      const lead = zoleTrickLeadHint(zole, myIdx);
+      const leadS = lead ? ` ${lead}` : "";
       if (t === myIdx) {
-        return "Izvēlies kārtu no rokas.";
+        return `Izvēlies kārtu no rokas.${leadS}`;
       }
-      return `Gaida: ${names[t] || "?"} met kārti.`;
+      return `Gaida: ${names[t] || "?"} met kārti.${leadS}`;
     }
     if (ph === "end" && zole.zoleLastMatchHand) {
       return "Pēdējā partija šajā mačā — pēc tās atgriežamies pie vārdu spēles.";
@@ -406,6 +443,8 @@
     corner.appendChild(avWrap);
     const nm = el("div", "vz-zole-opp__tag", un || "?");
     corner.appendChild(nm);
+    const rl = zolePlayerRoleLine(zole, pi);
+    if (rl) corner.appendChild(el("div", "vz-zole-opp__role", rl));
     if (activePi === pi) {
       corner.appendChild(el("div", "vz-zole-opp__badge vz-zole-opp__badge--corner", "Kārta"));
     }
@@ -492,6 +531,8 @@
       const head = el("div", "vz-zole-felt__who");
       head.textContent = zole.players?.[seat] || "?";
       col.appendChild(head);
+      const rl = zolePlayerRoleLine(zole, seat);
+      if (rl) col.appendChild(el("div", "vz-zole-felt__role", rl));
 
       const cardSlot = el("div", "vz-zole-felt__cardSlot");
       const c = byP[seat];
@@ -714,6 +755,11 @@
     const row = el("div", "vz-zole-hand vz-zole-hand--overlap");
     const mode = o.mode || "readonly";
 
+    if (typeof o.myIdx === "number") {
+      const dr = zolePlayerRoleLine(zole, o.myIdx);
+      if (dr) dock.appendChild(el("div", "vz-zole-dock__role", dr));
+    }
+
     for (let hi = 0; hi < hand.length; hi++) {
       const card = hand[hi];
       const k = cardKey(card);
@@ -929,7 +975,7 @@
 
     let dock = null;
     if (phase === "bid") {
-      dock = buildHandDock(zole, { mode: "readonly" });
+      dock = buildHandDock(zole, { mode: "readonly", myIdx });
     } else if (phase === "discard" && zole.contract === "big") {
       const isContractor = myIdx === zole.contractorIdx;
       const selected = [];
@@ -945,6 +991,7 @@
       }
       dock = buildHandDock(zole, {
         mode: "discard",
+        myIdx,
         isContractor,
         onToggle: (card, wrap) => {
           if (!onDiscard || !isContractor) return;
@@ -986,6 +1033,7 @@
       }
       dock = buildHandDock(zole, {
         mode: "play",
+        myIdx,
         isMyTurn,
         legalSet,
         onPlayCard,
