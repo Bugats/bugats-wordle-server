@@ -1126,7 +1126,7 @@ function createChessVsBot(humanUsername, difficulty = "medium") {
 
 function createZoleVsBotGame(humanUsername, botDifficulty = "medium") {
   const gameId = crypto.randomBytes(8).toString("hex");
-  const zole = createZoleVsBotState(humanUsername);
+  const zole = createZoleVsBotState(humanUsername, gameId);
   const game = {
     id: gameId,
     type: "zole",
@@ -1151,7 +1151,7 @@ function createZoleVsBotGame(humanUsername, botDifficulty = "medium") {
 
 function createZoleOnline2pGame(usernameA, usernameB) {
   const gameId = crypto.randomBytes(8).toString("hex");
-  const zole = createZoleOnline2pState(usernameA, usernameB);
+  const zole = createZoleOnline2pState(usernameA, usernameB, gameId);
   const game = {
     id: gameId,
     type: "zole",
@@ -1174,7 +1174,7 @@ function createZoleOnline2pGame(usernameA, usernameB) {
 
 function createZoleOnline3pGame(usernameA, usernameB, usernameC) {
   const gameId = crypto.randomBytes(8).toString("hex");
-  const zole = createZoleOnline3pState(usernameA, usernameB, usernameC);
+  const zole = createZoleOnline3pState(usernameA, usernameB, usernameC, gameId);
   const game = {
     id: gameId,
     type: "zole",
