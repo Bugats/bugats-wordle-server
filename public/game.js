@@ -641,6 +641,25 @@ function boardGamePlayerIndex(players, username) {
   return -1;
 }
 
+/**
+ * Dambrete/šahs: `turn` ir 0 vai 1. Dažreiz no servera/JSON nāk kā virkne (`"0"`) —
+ * tad `myIdx === turn` un `myPlayerIdx === turnIdx` kļūst par false un lauki nav klikšķināmi.
+ */
+function normalizeTwoPlayerTurn(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 0;
+  return n === 1 ? 1 : 0;
+}
+
+function normalizeBoardTurnFromPayload(raw, gameType) {
+  if (gameType === "zole") {
+    const n = Math.floor(Number(raw));
+    if (Number.isFinite(n) && n >= 0 && n <= 2) return n;
+    return 0;
+  }
+  return normalizeTwoPlayerTurn(raw);
+}
+
 /** Zole: `boardState.turn` nav vienīgais indikators (likšana / norakšana / spēle). */
 function boardZoleIsHumanTurn(myIdx, zole) {
   if (myIdx < 0 || !zole) return false;
@@ -9470,14 +9489,18 @@ function initSocket() {
       t === "chess" ? "Šahs" : t === "zole" ? "Zole" : "Dambrete";
     appendGaldaSystemMessage(`${label} — spēle sākusies.`);
     const myIdx = boardGamePlayerIndex(payload?.players || [], state.username);
-    const isMyTurn = myIdx === (payload?.turn ?? 0);
+    const t = payload?.type || "dambrete";
+    const isMyTurn =
+      myIdx === normalizeBoardTurnFromPayload(payload?.turn ?? 0, t);
     updateBoardGameBadge(isMyTurn);
   });
   socket.on("board.resume", (payload) => {
     startBoardGame(payload);
     appendGaldaSystemMessage("Spēle atjaunota.");
     const myIdx = boardGamePlayerIndex(payload?.players || [], state.username);
-    const isMyTurn = myIdx === (payload?.turn ?? 0);
+    const t = payload?.type || "dambrete";
+    const isMyTurn =
+      myIdx === normalizeBoardTurnFromPayload(payload?.turn ?? 0, t);
     updateBoardGameBadge(isMyTurn);
   });
   socket.on("board.move", (payload) => {
@@ -9486,7 +9509,10 @@ function initSocket() {
     boardMovesFetchChain = Promise.resolve();
     boardState.board = payload?.board || boardState.board;
     boardState.fen = payload?.fen || boardState.fen;
-    boardState.turn = payload?.turn ?? boardState.turn;
+    boardState.turn = normalizeBoardTurnFromPayload(
+      payload?.turn != null ? payload.turn : boardState.turn,
+      boardState.type || "dambrete"
+    );
     if (boardState.type === "zole" && payload?.zole) {
       boardState.zole = payload.zole;
     }
@@ -9887,7 +9913,10 @@ function startBoardGame(payload) {
     gameId: payload?.gameId,
     type: payload?.type || "dambrete",
     players: payload?.players || [],
-    turn: payload?.turn ?? 0,
+    turn: normalizeBoardTurnFromPayload(
+      payload?.turn ?? 0,
+      payload?.type || "dambrete"
+    ),
     board: payload?.board ? payload.board.map((r) => r.slice()) : null,
     fen: payload?.fen || null,
     zole: payload?.type === "zole" ? payload?.zole || null : null,

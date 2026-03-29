@@ -32,12 +32,19 @@
    * passive: false, lai preventDefault() darbotos.
    */
   function bindBoardCellInput(table, handleCell) {
+    const hasPointer = typeof window.PointerEvent !== "undefined";
     table.addEventListener(
       "pointerdown",
       function boardPointerDown(e) {
         if (e.button != null && e.button !== 0) return;
         if (e.pointerType === "touch") {
           e.preventDefault();
+          if (hasPointer) {
+            try {
+              table.setPointerCapture(e.pointerId);
+            } catch (_) {}
+            handleCell(e);
+          }
           return;
         }
         e.preventDefault();
@@ -45,17 +52,19 @@
       },
       { capture: true, passive: false }
     );
-    table.addEventListener(
-      "touchend",
-      function boardTouchEnd(e) {
-        const td = cellFromPointerLikeEvent(e);
-        if (!td || !table.contains(td)) return;
-        if (td.dataset.clickable !== "true") return;
-        e.preventDefault();
-        handleCell({ target: td, preventDefault: function () {} });
-      },
-      { capture: true, passive: false }
-    );
+    if (!hasPointer) {
+      table.addEventListener(
+        "touchend",
+        function boardTouchEnd(e) {
+          const td = cellFromPointerLikeEvent(e);
+          if (!td || !table.contains(td)) return;
+          if (td.dataset.clickable !== "true") return;
+          e.preventDefault();
+          handleCell({ target: td, preventDefault: function () {} });
+        },
+        { capture: true, passive: false }
+      );
+    }
   }
 
   function isJumpOrigin(r, c, legalMoves) {
