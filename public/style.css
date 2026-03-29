@@ -2149,6 +2149,20 @@ summary:focus-visible {
   --tile-gap: 6px;
 }
 
+/* Dators / planšete: lielākas rūtiņas, bet ne pāri platumam (īsi vārdi paliek proporcionāli) */
+@media (min-width: 769px) {
+  #grid {
+    --tile-size: clamp(56px, min(5.2vw, 12vh), 80px);
+    --tile-gap: clamp(6px, 0.9vw, 10px);
+  }
+}
+@media (min-width: 1200px) {
+  #grid {
+    --tile-size: clamp(64px, min(4.8vw, 13vh), 88px);
+    --tile-gap: 10px;
+  }
+}
+
 .vz-row,
 .grid-row {
   display: flex;
@@ -4537,6 +4551,14 @@ body.vz-mobile-game-only #grid{
   --kb-key-h: clamp(46px, 7.2vh, 60px);
   --kb-font: clamp(15px, 2.2vh, 19px);
 }
+
+/* Dators: ērtākas burtu pogas (pilnekrānā paliek mobilā clamp augšā) */
+@media (min-width: 769px) {
+  body:not(.vz-mobile-game-only) #keyboard {
+    --kb-key-h: clamp(50px, min(7vh, 56px), 68px);
+    --kb-font: clamp(16px, min(2.1vh, 2.1vw), 21px);
+  }
+}
  
 #keyboard .kb-key{
   height: var(--kb-key-h);
@@ -5245,6 +5267,51 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   width: 100%;
   position: relative;
 }
+
+/* Dators / liels planšete: platāks modālis un lielāks teksts (telefons paliek kā līdz šim) */
+@media (min-width: 900px) {
+  .vz-board-modal {
+    padding: 24px;
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+  }
+  .vz-board-modal-inner {
+    max-width: min(920px, calc(100vw - 48px));
+    padding: 28px 32px 32px;
+    max-height: min(92vh, 900px);
+  }
+  .vz-board-title {
+    font-size: 20px;
+  }
+  .vz-board-desc {
+    font-size: 14px;
+  }
+  .vz-board-game-type {
+    font-size: 17px;
+  }
+  .vz-board-game-turn {
+    font-size: 15px;
+  }
+  .vz-board-game-hint {
+    font-size: 14px;
+    padding: 12px 14px;
+  }
+  .vz-board-modal-context {
+    font-size: 13px;
+  }
+  .vz-board-result-card {
+    max-width: min(440px, 90vw);
+    padding: 32px 28px 28px;
+  }
+  .vz-board-result-title {
+    font-size: 28px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .vz-board-modal-inner {
+    max-width: min(1000px, calc(100vw - 56px));
+  }
+}
 .vz-board-modal-inner .vz-duel-x {
   position: absolute;
   top: 12px;
@@ -5563,6 +5630,35 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding: 0;
   text-align: center;
   vertical-align: middle;
+}
+
+@media (min-width: 769px) {
+  .vz-dambrete-board td {
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+    min-height: 52px;
+  }
+  .vz-dambrete-piece {
+    width: 48px;
+    height: 48px;
+  }
+  .vz-dambrete-piece.vz-dambrete-king {
+    font-size: 17px;
+  }
+}
+
+@media (min-width: 1100px) {
+  .vz-dambrete-board td {
+    width: 56px;
+    height: 56px;
+    min-width: 56px;
+    min-height: 56px;
+  }
+  .vz-dambrete-piece {
+    width: 52px;
+    height: 52px;
+  }
 }
 .vz-dambrete-light {
   background: linear-gradient(155deg, #5c5c5c 0%, #454545 48%, #383838 100%);
@@ -7017,6 +7113,84 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   box-shadow:
     0 2px 5px rgba(0, 0, 0, 0.45),
     0 1px 0 rgba(255, 255, 255, 0.08) inset;
+}
+
+@media (min-width: 769px) {
+  .vz-chess-board .vz-chess-co {
+    width: 22px;
+    min-width: 22px;
+    height: 22px;
+    min-height: 22px;
+    font-size: 11px;
+  }
+  .vz-chess-board .vz-chess-co--file {
+    width: 56px;
+    min-width: 56px;
+    height: 22px;
+    min-height: 22px;
+  }
+  .vz-chess-board .vz-chess-co--rank {
+    width: 22px;
+    min-width: 22px;
+    height: 56px;
+    min-height: 56px;
+    font-size: 12px;
+  }
+  .vz-chess-board .vz-chess-co--corner {
+    width: 22px;
+    min-width: 22px;
+  }
+  .vz-chess-board td:not(.vz-chess-co) {
+    width: 56px;
+    height: 56px;
+    min-width: 56px;
+    min-height: 56px;
+  }
+  .vz-chess-piece {
+    width: 48px;
+    height: 48px;
+    font-size: 32px;
+  }
+}
+
+@media (min-width: 1100px) {
+  .vz-chess-board .vz-chess-co--file {
+    width: 60px;
+    min-width: 60px;
+  }
+  .vz-chess-board .vz-chess-co--rank {
+    height: 60px;
+    min-height: 60px;
+  }
+  .vz-chess-board td:not(.vz-chess-co) {
+    width: 60px;
+    height: 60px;
+    min-width: 60px;
+    min-height: 60px;
+  }
+  .vz-chess-piece {
+    width: 52px;
+    height: 52px;
+    font-size: 34px;
+  }
+}
+
+/* Zole uz datora: nedaudz lielākas kārtis uz galda (roku mērogo JS) */
+@media (min-width: 900px) {
+  #board-zole-container .vz-zole-felt__cardSlot {
+    min-height: 148px;
+  }
+  #board-zole-container .vz-zole-card--trick {
+    width: 86px;
+    height: 122px;
+  }
+  #board-zole-container .vz-zole-card--trick .vz-zole-card__center {
+    font-size: 34px;
+  }
+  #board-zole-container .vz-zole-card--sm {
+    width: 56px;
+    height: 82px;
+  }
 }
 
 @media (max-width: 480px) {

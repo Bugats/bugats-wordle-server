@@ -647,7 +647,9 @@
     const cards = row.querySelectorAll(".vz-zole-hand__card");
     const n = cards.length;
     if (n <= 1) {
-      dock.style.setProperty("--vz-hand-scale", "1");
+      const wb =
+        typeof window !== "undefined" && window.innerWidth >= 900 ? 1.12 : 1;
+      dock.style.setProperty("--vz-hand-scale", String(wb));
       return;
     }
 
@@ -702,7 +704,9 @@
       const budget = Math.max(120, raw - 24);
 
       let lo = ZOLE_HAND_MIN_SCALE;
-      let hi = 1;
+      const wideBoost =
+        typeof window !== "undefined" && window.innerWidth >= 900 ? 1.12 : 1;
+      let hi = wideBoost;
       for (let iter = 0; iter < 22; iter++) {
         const mid = (lo + hi) / 2;
         if (fitsAtScale(mid, budget)) lo = mid;
