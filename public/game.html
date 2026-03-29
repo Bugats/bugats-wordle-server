@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-29-zole-discard-lift" />
+  <link rel="stylesheet" href="style.css?v=2026-03-29-product-guide-a11y" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -206,6 +206,28 @@
 
           <div id="win-ticker" class="vz-win-ticker" aria-live="polite" aria-atomic="true"></div>
           <p id="game-message" class="vz-game-message" role="status" aria-live="polite" aria-atomic="true"></p>
+
+          <section
+            id="vz-product-guide"
+            class="vz-product-guide"
+            aria-labelledby="vz-product-guide-title">
+            <h2 id="vz-product-guide-title" class="vz-product-guide__title">
+              Kā viss saliekas kopā
+            </h2>
+            <ul class="vz-product-guide__list">
+              <li>
+                <strong>Vārdu zona</strong> — minē vārdu, XP, misijas, čats. Svarīgākās ziņas arī zemāk
+                <span class="vz-product-guide__ref">«Ziņojumi»</span>.
+              </li>
+              <li>
+                <strong>Galds</strong> (poga <span class="vz-product-guide__ref">♟️ Galda</span>) — dambrete, šahs, zole.
+                Uzaicinājumi un gājiens: čatā ar <strong>[Galds]</strong> un modāļa augšējā joslā; atpakaļ — <strong>← Vārdu zona</strong>.
+              </li>
+              <li>
+                <strong>Coins un novads</strong> — skat. profilā «Coins» un bloku «Novadu sacīkste»; galda uzvaras pret cilvēkiem dod novada punktus, pret botiem — nē.
+              </li>
+            </ul>
+          </section>
 
           <div id="grid" class="vz-grid">
   <div id="vz-phaser-fx" aria-hidden="true"></div>
@@ -1004,7 +1026,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-29-dambrete-white-pov"></script>
+    <script defer src="game.js?v=2026-03-29-product-guide-a11y"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1198,18 +1220,25 @@
     </script>
 
     <!-- GALDA SPĒLES: body beigās, lai z-index būtu virs apakšējās nav un pilnekrāna joslām -->
-    <div id="board-games-modal" class="vz-board-modal hidden" role="dialog" aria-label="Galda spēles">
-      <div class="vz-board-modal-inner">
-        <button id="board-modal-close" class="vz-duel-x" type="button" aria-label="Aizvērt">✕</button>
+    <div
+      id="board-games-modal"
+      class="vz-board-modal hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="board-modal-title"
+      aria-describedby="board-modal-context">
+      <div class="vz-board-modal-inner" tabindex="-1" id="board-modal-inner">
+        <button id="board-modal-close" class="vz-duel-x" type="button" aria-label="Aizvērt galda logu">✕</button>
+        <h2 id="board-modal-title" class="vz-sr-only">Galda spēles</h2>
         <div class="vz-board-modal-topbar">
           <button
             id="board-back-words-btn"
             type="button"
             class="vz-board-back-words"
-            title="Atgriezties pie vārdu spēles ekrāna. Aktīvā galda spēle turpinās; uzaicinājumi un gājiens arī čatā ar [Galds].">
+            title="Atgriezties pie vārdu spēles ekrāna. Aktīvā galda spēle turpinās; uzaicinājumi un gājiens arī čatā ar [Galds] un zem «Ziņojumi».">
             ← Vārdu zona
           </button>
-          <p id="board-modal-context" class="vz-board-modal-context" aria-live="polite"></p>
+          <p id="board-modal-context" class="vz-board-modal-context" role="status" aria-live="polite" aria-atomic="true"></p>
         </div>
         <div id="board-games-lobby" class="vz-board-lobby">
           <h3 class="vz-board-title">Galda spēles</h3>

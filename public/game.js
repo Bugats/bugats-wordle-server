@@ -502,6 +502,10 @@ let engagementLoopTimer = null;
 let engagementLoopBusy = false;
 let currentProfileName = null; // popupā atvērtais profila vārds
 
+/** Fokusa atgriešanai pēc galda modāļa / rezultāta overlay */
+let _boardModalFocusReturn = null;
+let _boardResultFocusReturn = null;
+
 // kešs citu spēlētāju mini avatāriem (username -> url vai null)
 const avatarCache = new Map();
 // dedupe /profile fetchiem (username -> Promise)
@@ -872,6 +876,16 @@ function boardZoleModeLabel(mode) {
 
 function hideBoardResultOverlay() {
   document.getElementById("board-result-overlay")?.classList.add("hidden");
+  const modal = document.getElementById("board-games-modal");
+  const inner = document.getElementById("board-modal-inner");
+  if (modal && !modal.classList.contains("hidden") && inner) {
+    inner.focus({ preventScroll: true });
+  } else if (_boardResultFocusReturn && typeof _boardResultFocusReturn.focus === "function") {
+    try {
+      _boardResultFocusReturn.focus({ preventScroll: true });
+    } catch (_) {}
+  }
+  _boardResultFocusReturn = null;
 }
 
 function boardGameOpponentName(players, vsBot) {
@@ -1058,6 +1072,8 @@ function showBoardGameResult(payload) {
   }
 
   overlay.classList.remove("hidden");
+  _boardResultFocusReturn = document.activeElement;
+  document.getElementById("board-result-close")?.focus({ preventScroll: true });
 }
 
 // TOP10 + ONLINE
@@ -7271,7 +7287,9 @@ function appendSystemMessage(text) {
 function appendGaldaSystemMessage(text) {
   const s = String(text ?? "").trim();
   if (!s) return;
-  appendSystemMessage(`[Galds] ${s}`);
+  const line = `[Galds] ${s}`;
+  appendSystemMessage(line);
+  if (gameMessageEl) gameMessageEl.textContent = line;
 }
 
 function clearUnreadIfNeeded() {
@@ -9702,6 +9720,11 @@ function showBoardModal() {
   const lobby = document.getElementById("board-games-lobby");
   const invite = document.getElementById("board-games-invite");
   const gameArea = document.getElementById("board-game-area");
+  const inner = document.getElementById("board-modal-inner");
+  const overlay = document.getElementById("board-result-overlay");
+  if (modal && modal.classList.contains("hidden")) {
+    _boardModalFocusReturn = document.activeElement;
+  }
   if (modal) modal.classList.remove("hidden");
   if (boardState.gameId) {
     if (lobby) lobby.classList.add("hidden");
@@ -9720,6 +9743,13 @@ function showBoardModal() {
   }
   syncBoardDambreteModePanelVisibility();
   syncBoardModalContext();
+  if (inner && (!overlay || overlay.classList.contains("hidden"))) {
+    requestAnimationFrame(() => {
+      try {
+        inner.focus({ preventScroll: true });
+      } catch (_) {}
+    });
+  }
 }
 
 async function loadBoardLeaderboards() {
@@ -9814,6 +9844,12 @@ function hideBoardModal() {
   syncBoardBrowserFullscreenUi();
   syncBoardDambreteModePanelVisibility();
   syncBoardModalContext();
+  if (_boardModalFocusReturn && typeof _boardModalFocusReturn.focus === "function") {
+    try {
+      _boardModalFocusReturn.focus({ preventScroll: true });
+    } catch (_) {}
+  }
+  _boardModalFocusReturn = null;
 }
 
 function showBoardInviteModal(from, type, payload) {
@@ -9821,6 +9857,10 @@ function showBoardInviteModal(from, type, payload) {
   const modal = document.getElementById("board-games-modal");
   const lobby = document.getElementById("board-games-lobby");
   const invite = document.getElementById("board-games-invite");
+  const inner = document.getElementById("board-modal-inner");
+  if (modal && modal.classList.contains("hidden")) {
+    _boardModalFocusReturn = document.activeElement;
+  }
   if (modal) modal.classList.remove("hidden");
   if (lobby) lobby.classList.add("hidden");
   if (invite) {
@@ -9891,6 +9931,13 @@ function showBoardInviteModal(from, type, payload) {
   syncBoardModalFullscreen();
   syncBoardDambreteModePanelVisibility();
   syncBoardModalContext();
+  if (inner) {
+    requestAnimationFrame(() => {
+      try {
+        inner.focus({ preventScroll: true });
+      } catch (_) {}
+    });
+  }
 }
 
 function hideBoardInviteModal() {
@@ -10502,6 +10549,15 @@ function bindBoardGames() {
 
   if (btn) btn.addEventListener("click", showBoardModal);
   if (closeBtn) closeBtn.addEventListener("click", hideBoardModal);
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape" || ev.defaultPrevented) return;
+    const modal = document.getElementById("board-games-modal");
+    const res = document.getElementById("board-result-overlay");
+    if (!modal || modal.classList.contains("hidden")) return;
+    if (res && !res.classList.contains("hidden")) return;
+    ev.preventDefault();
+    hideBoardModal();
+  });
   document.getElementById("board-back-words-btn")?.addEventListener("click", () => {
     hideBoardModal();
     document
