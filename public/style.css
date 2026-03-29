@@ -59,43 +59,6 @@ body {
   border: 0;
 }
 
-/* Vienots produkta stāsts: vārdi + galds + ekonomika vienā vietā */
-.vz-product-guide {
-  max-width: 640px;
-  margin: 12px auto 16px;
-  padding: 12px 14px;
-  border-radius: 10px;
-  text-align: left;
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-sizing: border-box;
-}
-.vz-product-guide__title {
-  margin: 0 0 8px;
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: rgba(244, 244, 245, 0.88);
-}
-.vz-product-guide__list {
-  margin: 0;
-  padding-left: 1.15em;
-  font-size: 13px;
-  line-height: 1.45;
-  color: rgba(244, 244, 245, 0.82);
-}
-.vz-product-guide__list li {
-  margin-bottom: 6px;
-}
-.vz-product-guide__list li:last-child {
-  margin-bottom: 0;
-}
-.vz-product-guide__ref {
-  font-weight: 700;
-  color: #fde68a;
-}
-
 .vz-noscript-note {
   padding: 12px;
   margin: 12px;
