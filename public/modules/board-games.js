@@ -15,6 +15,21 @@
     return (r + c) % 2 === 1;
   }
 
+  /**
+   * Baltais (myPlayerIdx 0) skatās galdu no savas puses: savi kauliņi apakšā.
+   * Servera masīvā baltie ir rindās 0–2 (augšā) — apgriežam skatu 180° + apmainām
+   * kolonnas, lai «a» paliek kreisajā pusē (kā šahā melnajam).
+   */
+  function viewRCFromData(r, c, myPlayerIdx) {
+    if (myPlayerIdx !== 0) return [r, c];
+    return [7 - r, 7 - c];
+  }
+
+  function dataRCFromView(vr, vc, myPlayerIdx) {
+    if (myPlayerIdx !== 0) return [vr, vc];
+    return [7 - vr, 7 - vc];
+  }
+
   function cellFromPointerLikeEvent(e) {
     const t = e.changedTouches && e.changedTouches[0];
     if (t) {
@@ -137,23 +152,31 @@
 
     const canMove = isMyTurn && myPlayerIdx === turnIdx;
 
+    const flipBoard = myPlayerIdx === 0;
+
     if (dambreteTable && container.contains(dambreteTable)) {
       dambreteState.board = board;
       dambreteState.selectedCell = selectedCell;
       dambreteState.legalMoves = legalMoves;
       dambreteState.myPlayerIdx = myPlayerIdx;
       dambreteState.onCellClick = onCellClick;
-      for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
+      for (let vr = 0; vr < ROWS; vr++) {
+        for (let vc = 0; vc < COLS; vc++) {
+          const [dr, dc] = flipBoard
+            ? dataRCFromView(vr, vc, myPlayerIdx)
+            : [vr, vc];
           const td = dambreteTable.querySelector(
-            `td[data-row="${r}"][data-col="${c}"]`
+            `td[data-row="${dr}"][data-col="${dc}"]`
           );
-          if (!td || !isDark(r, c)) continue;
-          const piece = board[r][c];
+          if (!td || !isDark(dr, dc)) continue;
+          const piece = board[dr][dc];
           const isSelected =
-            selectedCell && selectedCell[0] === r && selectedCell[1] === c;
+            selectedCell &&
+            selectedCell[0] === dr &&
+            selectedCell[1] === dc;
           const isValidDest =
-            piece === 0 && isValidDestination(r, c, selectedCell, legalMoves);
+            piece === 0 &&
+            isValidDestination(dr, dc, selectedCell, legalMoves);
           const isMyPiece =
             piece !== 0 &&
             ((myPlayerIdx === 0 && (piece === WHITE || piece === WHITE_KING)) ||
@@ -161,7 +184,7 @@
           const jumpsMandatory = (legalMoves?.jumps || []).length > 0;
           const isMyPieceSelectable =
             isMyPiece &&
-            (!jumpsMandatory || isJumpOrigin(r, c, legalMoves));
+            (!jumpsMandatory || isJumpOrigin(dr, dc, legalMoves));
           const clickable =
             canMove &&
             (isMyPieceSelectable ||
@@ -191,7 +214,7 @@
             const jumpRing =
               jumpsMandatory &&
               isMyPiece &&
-              isJumpOrigin(r, c, legalMoves) &&
+              isJumpOrigin(dr, dc, legalMoves) &&
               !isSelected;
             span.classList.toggle("vz-dambrete-jump-ring", !!jumpRing);
             const isKing = Math.abs(piece) === 2;
@@ -220,23 +243,29 @@
     dambreteState.myPlayerIdx = myPlayerIdx;
     dambreteState.onCellClick = onCellClick;
 
-    for (let r = 0; r < ROWS; r++) {
+    for (let vr = 0; vr < ROWS; vr++) {
       const tr = document.createElement("tr");
-      for (let c = 0; c < COLS; c++) {
+      for (let vc = 0; vc < COLS; vc++) {
+        const [dr, dc] = flipBoard
+          ? dataRCFromView(vr, vc, myPlayerIdx)
+          : [vr, vc];
         const td = document.createElement("td");
-        td.dataset.row = String(r);
-        td.dataset.col = String(c);
-        if (!isDark(r, c)) {
+        td.dataset.row = String(dr);
+        td.dataset.col = String(dc);
+        if (!isDark(dr, dc)) {
           td.className = "vz-dambrete-light";
           tr.appendChild(td);
           continue;
         }
         td.className = "vz-dambrete-dark";
-        const piece = board[r][c];
+        const piece = board[dr][dc];
         const isSelected =
-          selectedCell && selectedCell[0] === r && selectedCell[1] === c;
+          selectedCell &&
+          selectedCell[0] === dr &&
+          selectedCell[1] === dc;
         const isValidDest =
-          piece === 0 && isValidDestination(r, c, selectedCell, legalMoves);
+          piece === 0 &&
+          isValidDestination(dr, dc, selectedCell, legalMoves);
         const isMyPiece =
           piece !== 0 &&
           ((myPlayerIdx === 0 && (piece === WHITE || piece === WHITE_KING)) ||
@@ -254,7 +283,7 @@
           const jumpRingInit =
             jumpsMandatory &&
             isMyPiece &&
-            isJumpOrigin(r, c, legalMoves) &&
+            isJumpOrigin(dr, dc, legalMoves) &&
             !isSelected;
           span.classList.toggle("vz-dambrete-jump-ring", !!jumpRingInit);
           const isKingInit = Math.abs(piece) === 2;
@@ -270,7 +299,7 @@
         }
         const isMyPieceSelectable =
           isMyPiece &&
-          (!jumpsMandatory || isJumpOrigin(r, c, legalMoves));
+          (!jumpsMandatory || isJumpOrigin(dr, dc, legalMoves));
         if (isSelected) td.classList.add("vz-dambrete-selected");
         if (isValidDest) td.classList.add("vz-dambrete-valid");
         if (canMove) td.tabIndex = 0;

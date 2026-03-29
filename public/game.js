@@ -10011,6 +10011,15 @@ function boardCellAlgebraic(r, c) {
   return String.fromCharCode(97 + c) + (8 - r);
 }
 
+/** Dambrete: baltais redz apgrieztu galdu — hintā rādam to pašu lauka vārdu kā uz ekrāna. */
+function dambreteHintSquare(r, c) {
+  const myIdx = boardGamePlayerIndex(boardState.players, state.username);
+  if (boardState.type !== "dambrete" || myIdx !== 0) {
+    return boardCellAlgebraic(r, c);
+  }
+  return boardCellAlgebraic(7 - r, 7 - c);
+}
+
 function countDambreteValidDestinations(fromR, fromC, legalMoves) {
   if (!legalMoves) return 0;
   const set = new Set();
@@ -10186,14 +10195,14 @@ function renderBoardGame() {
         hintEl.innerHTML =
           "<strong>Jālēkt.</strong> Spied uz sava kauliņa ar <strong class=\"vz-hint-mark vz-hint-mark--gold\">zelta aplīti</strong> — tad parādīsies <strong class=\"vz-hint-mark vz-hint-mark--green\">zaļie</strong> mērķa lauki. Citus savus kauliņus šajā brīdī nevar izvēlēties.";
       } else if (jumpsOn && sel) {
-        const sq = boardCellAlgebraic(sel[0], sel[1]);
+        const sq = dambreteHintSquare(sel[0], sel[1]);
         const n = countDambreteValidDestinations(sel[0], sel[1], boardState.legalMoves);
         hintEl.innerHTML =
           n > 0
             ? `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Tagad spied <strong class="vz-hint-mark vz-hint-mark--green">zaļo</strong> lauciņu (${n} ${n === 1 ? "iespēja" : "iespējas"}) — lēciena beigas. Citur — citu sākuma kauliņu.`
             : `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied citu kauliņu ar <strong class="vz-hint-mark vz-hint-mark--gold">zelta aplīti</strong> vai zaļo mērķi.`;
       } else if (sel) {
-        const sq = boardCellAlgebraic(sel[0], sel[1]);
+        const sq = dambreteHintSquare(sel[0], sel[1]);
         const n = countDambreteValidDestinations(sel[0], sel[1], boardState.legalMoves);
         hintEl.innerHTML =
           n > 0
