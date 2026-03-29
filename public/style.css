@@ -6737,6 +6737,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   margin: 0;
 }
 #board-zole-container .vz-zole-hand__card {
+  position: relative;
   padding: 0;
   border: none;
   background: transparent;
@@ -6748,7 +6749,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   width: auto;
   min-width: 0;
   max-width: none;
-  transition: transform 0.15s ease;
+  transition: transform 0.18s ease, z-index 0s;
 }
 #board-zole-container .vz-zole-classic__dock .vz-zole-hand__card {
   flex: 0 0 auto;
@@ -6787,10 +6788,21 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 /* Zila — lai «izvēlēts norakšanai» neatkārtotu trumpju dzelteno (.vz-zole-card--trump) */
 #board-zole-container .vz-zole-hand__card--sel {
+  z-index: 48;
+  transform: translateY(
+    calc(-1 * max(22px, 26px * var(--vz-hand-scale, 1)))
+  );
   outline: 3px solid rgba(56, 189, 248, 0.95);
   outline-offset: 2px;
   border-radius: 10px;
-  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.4);
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.4),
+    0 12px 24px rgba(0, 0, 0, 0.35);
+}
+#board-zole-container .vz-zole-hand__card--sel:not(:disabled):active {
+  transform: translateY(
+    calc(-1 * max(28px, 34px * var(--vz-hand-scale, 1)))
+  );
 }
 #board-zole-container .vz-zole-panel--end .vz-zole-end__delta {
   font-size: 12px;
