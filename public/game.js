@@ -9489,7 +9489,6 @@ function initSocket() {
       t === "chess" ? "Šahs" : t === "zole" ? "Zole" : "Dambrete";
     appendGaldaSystemMessage(`${label} — spēle sākusies.`);
     const myIdx = boardGamePlayerIndex(payload?.players || [], state.username);
-    const t = payload?.type || "dambrete";
     const isMyTurn =
       myIdx === normalizeBoardTurnFromPayload(payload?.turn ?? 0, t);
     updateBoardGameBadge(isMyTurn);
