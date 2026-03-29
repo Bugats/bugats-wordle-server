@@ -5611,10 +5611,10 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-dambrete-board {
   border-collapse: collapse;
   margin: 0 auto;
-  background: #1a1f1a;
+  background: #2a1810;
   border-radius: 8px;
   overflow: hidden;
-  border: 2px solid rgba(15, 25, 15, 0.75);
+  border: 2px solid rgba(28, 18, 12, 0.9);
   box-shadow:
     0 10px 28px rgba(0, 0, 0, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -5660,11 +5660,12 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     height: 52px;
   }
 }
+/* Gaišs / tumšs lauks — klasiska filca sajūta, labāks kontrasts nekā pelēks + zaļš */
 .vz-dambrete-light {
-  background: linear-gradient(155deg, #5c5c5c 0%, #454545 48%, #383838 100%);
+  background: linear-gradient(155deg, #faf4eb 0%, #f0e4d4 45%, #e5d5c4 100%);
 }
 .vz-dambrete-dark {
-  background: linear-gradient(155deg, #3f6b42 0%, #2d5230 45%, #244228 100%);
+  background: linear-gradient(155deg, #6b3d2e 0%, #4a2a1f 48%, #351f18 100%);
   cursor: pointer;
   touch-action: none;
 }
@@ -5747,16 +5748,16 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   background:
     radial-gradient(
       circle at 30% 26%,
-      #8a8a8a 0%,
-      #5a5a5a 38%,
-      #383838 72%,
-      #1f1f1f 100%
+      #a1a1aa 0%,
+      #63636f 32%,
+      #3f3f46 65%,
+      #18181b 100%
     );
-  border: 1px solid rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   box-shadow:
-    0 3px 7px rgba(0, 0, 0, 0.55),
-    0 1px 0 rgba(255, 255, 255, 0.22) inset,
-    0 -4px 6px rgba(0, 0, 0, 0.4) inset;
+    0 3px 7px rgba(0, 0, 0, 0.5),
+    0 1px 0 rgba(255, 255, 255, 0.35) inset,
+    0 -4px 6px rgba(0, 0, 0, 0.35) inset;
 }
 /* Dāma: zelta aplis + zvaigzne */
 .vz-dambrete-piece.vz-dambrete-king {
