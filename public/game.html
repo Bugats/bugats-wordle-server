@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-28-zole-lobby-stake" />
+  <link rel="stylesheet" href="style.css?v=2026-03-27-board-resign-modal-opp" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1004,7 +1004,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-28-zole-lobby-stake"></script>
+    <script defer src="game.js?v=2026-03-27-board-resign-modal-opp"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1366,7 +1366,13 @@
                 title="Paslēpj pārlūka adreses joslu (ja pārlūks atļauj). iPhone: pievieno sākumekrānam vai izmanto «Pilnekrāna spēle» galvenajā izvēlnē.">
                 Pilnekrāns
               </button>
-              <button id="board-resign-btn" type="button" class="vz-board-resign" title="Beigt spēli un zaudēt">Padoties</button>
+              <button
+                id="board-resign-btn"
+                type="button"
+                class="vz-board-resign vz-board-resign--ghost"
+                title="Beigt spēli — pretinieks uzvar. Nepieciešams apstiprinājums.">
+                Padoties…
+              </button>
             </div>
           </div>
           <p id="board-zole-stake-banner" class="vz-board-zole-stake-banner hidden" aria-live="polite"></p>

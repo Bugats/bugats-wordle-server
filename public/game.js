@@ -641,6 +641,21 @@ function boardGamePlayerIndex(players, username) {
   return -1;
 }
 
+/** Īss pretinieku saraksts modāļa konteksta joslai (PvP / boti). */
+function boardModalOpponentShort() {
+  const me = String(state.username || "").trim().toLowerCase();
+  const players = boardState.players || [];
+  if (!boardState.gameId || players.length < 2) return "";
+  const others = players.filter(
+    (p) => String(p || "").trim().toLowerCase() !== me
+  );
+  if (!others.length) return "";
+  const labels = [
+    ...new Set(others.map((p) => String(p || "?").trim() || "?")),
+  ];
+  return labels.join(", ");
+}
+
 /** Zole: `boardState.turn` nav vienīgais indikators (likšana / norakšana / spēle). */
 function boardZoleIsHumanTurn(myIdx, zole) {
   if (myIdx < 0 || !zole) return false;
@@ -9637,7 +9652,9 @@ function syncBoardModalContext() {
             : ph === "end"
               ? "beigas"
               : "";
-    el.textContent = phaseLv ? `${label} · ${phaseLv}` : `${label} · spēle`;
+    const base = phaseLv ? `${label} · ${phaseLv}` : `${label} · spēle`;
+    const opp = boardModalOpponentShort();
+    el.textContent = opp ? `${base} · Pret ${opp}` : base;
     return;
   }
   if (zole3pLobbySnapshot?.zoleLobby && !boardState.gameId) {
@@ -10610,8 +10627,13 @@ function bindBoardGames() {
     });
   if (resignBtn)
     resignBtn.addEventListener("click", () => {
-      if (boardState.gameId && state.socket)
-        state.socket.emit("board.resign", { gameId: boardState.gameId });
+      if (!boardState.gameId || !state.socket) return;
+      const opp = boardModalOpponentShort();
+      const msg = opp
+        ? `Vai tiešām padoties? Pret ${opp} tu zaudēsi spēli.`
+        : "Vai tiešām padoties? Pretinieks uzvarēs.";
+      if (!window.confirm(msg)) return;
+      state.socket.emit("board.resign", { gameId: boardState.gameId });
     });
   const boardFsBtn = document.getElementById("board-browser-fs-btn");
   if (boardFsBtn) {

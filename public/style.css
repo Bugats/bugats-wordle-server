@@ -5541,6 +5541,21 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   cursor: pointer;
   touch-action: manipulation;
 }
+/* Mazāk uzkrītoša «Padoties» — viegls sarkanais spoku tonis */
+.vz-board-resign--ghost {
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.08);
+  color: rgba(252, 165, 165, 0.92);
+  font-weight: 500;
+}
+.vz-board-resign--ghost:hover {
+  background: rgba(248, 113, 113, 0.16);
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fecaca;
+}
+.vz-board-resign--ghost:active {
+  background: rgba(248, 113, 113, 0.22);
+}
 .vz-dambrete-board {
   border-collapse: collapse;
   margin: 0 auto;
@@ -5588,6 +5603,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     inset 0 0 0 2px rgba(255, 255, 255, 0.85),
     0 0 0 2px rgba(34, 197, 94, 0.9),
     0 0 14px rgba(34, 197, 94, 0.45);
+  animation: vz-board-move-valid-pulse 1.15s ease-in-out infinite;
 }
 /* Obligāta ēšana: zelta aplis ap disku — klase uz .vz-dambrete-piece (board-games.js) */
 .vz-dambrete-piece.vz-dambrete-jump-ring {
@@ -5615,6 +5631,16 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   50% {
     opacity: 0.88;
     transform: scale(1.03);
+  }
+}
+/* Derīgie gājiena lauki (dambrete + šahs) — viegla pulsācija */
+@keyframes vz-board-move-valid-pulse {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.14);
   }
 }
 .vz-dambrete-piece {
@@ -6957,7 +6983,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     inset 0 0 0 2px rgba(255, 255, 255, 0.95),
     0 0 0 3px rgba(34, 197, 94, 0.95),
     0 0 18px rgba(34, 197, 94, 0.55);
-  filter: none;
+  animation: vz-board-move-valid-pulse 1.15s ease-in-out infinite;
 }
 .vz-chess-dark.vz-chess-valid {
   background:
@@ -6971,7 +6997,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     inset 0 0 0 2px rgba(255, 255, 255, 0.9),
     0 0 0 3px rgba(34, 197, 94, 0.95),
     0 0 18px rgba(34, 197, 94, 0.5);
-  filter: none;
+  animation: vz-board-move-valid-pulse 1.15s ease-in-out infinite;
 }
 .vz-chess-piece {
   display: inline-flex;
