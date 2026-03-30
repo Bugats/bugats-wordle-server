@@ -6015,6 +6015,15 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   bottom: max(4px, env(safe-area-inset-bottom, 0px));
   margin: 0;
 }
+/* Beigas: tabula dokumenta plūsmā virs pogām — nepārklāj tekstu un pogas */
+#board-zole-container .vz-zole-table-hud--end-inline {
+  position: relative;
+  right: auto;
+  bottom: auto;
+  align-self: flex-end;
+  margin: 6px max(4px, env(safe-area-inset-right, 0px)) 8px auto;
+  z-index: auto;
+}
 #board-zole-container .vz-zole-table-hud__title {
   font-size: 6px;
   font-weight: 800;

@@ -1078,6 +1078,9 @@
         endMain.appendChild(el("div", "vz-zole-end__eyes", eyesLine));
       }
       endBox.appendChild(endMain);
+      const hudEnd = buildZoleTableHud(zole, myIdx);
+      hudEnd.classList.add("vz-zole-table-hud--end-inline");
+      endBox.appendChild(hudEnd);
       const vsEnd =
         opts &&
         zm === "vs_bot" &&
@@ -1178,18 +1181,24 @@
         onPlayCard,
       });
     }
-    const tableHud = buildZoleTableHud(zole, myIdx);
-    if (dock) {
-      if (phase === "play" && isMyTurn) {
-        dock.classList.add("vz-zole-classic__dock--my-turn");
+    if (phase !== "end") {
+      const tableHud = buildZoleTableHud(zole, myIdx);
+      if (dock) {
+        if (phase === "play" && isMyTurn) {
+          dock.classList.add("vz-zole-classic__dock--my-turn");
+        }
+        const handStack = el("div", "vz-zole-classic__hand-stack");
+        handStack.appendChild(dock);
+        handStack.appendChild(tableHud);
+        felt.appendChild(handStack);
+      } else {
+        tableHud.classList.add("vz-zole-table-hud--felt-anchor");
+        felt.appendChild(tableHud);
       }
+    } else if (dock) {
       const handStack = el("div", "vz-zole-classic__hand-stack");
       handStack.appendChild(dock);
-      handStack.appendChild(tableHud);
       felt.appendChild(handStack);
-    } else {
-      tableHud.classList.add("vz-zole-table-hud--felt-anchor");
-      felt.appendChild(tableHud);
     }
 
     root.appendChild(felt);
