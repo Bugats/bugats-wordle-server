@@ -221,6 +221,24 @@
     return c ? String(c) : "—";
   }
 
+  /** Rokas joslai: «Mazais» + pret kuru lielo (lai nešķist, ka «mazais» = tu esi mazs). */
+  function zoleDockRoleLine(zole, myIdx) {
+    const base = zolePlayerRoleLine(zole, myIdx);
+    if (!base) return "";
+    const ph = zole.phase || "";
+    const c = zole.contract;
+    const ci = zole.contractorIdx;
+    const hasContractor =
+      typeof ci === "number" && ci >= 0 && ci < 3 && myIdx !== ci;
+    const teamContract =
+      c === "big" || c === "zole" || c === "maza_zole";
+    if (!hasContractor || !teamContract) return base;
+    if (ph !== "play" && ph !== "discard") return base;
+    if (!base.includes("Mazais")) return base;
+    const bigName = String(zole.players?.[ci] || "?").trim() || "?";
+    return `${base} (pret ${bigName})`;
+  }
+
   /** Īss spēlētāja lomas teksts visām UI vietām. */
   function zolePlayerRoleLine(zole, pi) {
     const ph = zole.phase || "";
@@ -245,15 +263,6 @@
     if (ph === "end" || ph === "play") return roleAfterBid();
     if (ph === "discard") return roleAfterBid();
     return "";
-  }
-
-  function zoleTrickLeadHint(zole, myIdx) {
-    const ph = zole.phase || "";
-    if (ph !== "play") return "";
-    const tl = zole.trickLeader;
-    if (typeof tl !== "number" || tl < 0 || tl > 2) return "";
-    const nm = zole.players?.[tl] || "?";
-    return tl === myIdx ? "Tu vadi šo stiķi." : `Stiķi vada ${nm}.`;
   }
 
   function zoleActiveTurnPlayerIndex(zole) {
@@ -297,12 +306,11 @@
     if (ph === "play") {
       const t = zole.turn;
       if (typeof t !== "number" || t < 0 || t > 2) return "";
-      const lead = zoleTrickLeadHint(zole, myIdx);
-      const leadS = lead ? ` ${lead}` : "";
+      /* Stiķa vadība un «met pirmo kārti» ir .vz-zole-felt__sub — šeit tikai īsa kārtas norāde, lai neatkārtotu zilo + zaļo tekstu. */
       if (t === myIdx) {
-        return `Izvēlies kārtu no rokas.${leadS}`;
+        return "Tava kārta — izvēlies kārtu no rokas.";
       }
-      return `Gaida: ${names[t] || "?"} met kārti.${leadS}`;
+      return `Gaida: ${names[t] || "?"} met kārti.`;
     }
     if (ph === "end" && zole.zoleLastMatchHand) {
       return "Pēdējā partija šajā mačā — pēc tās atgriežamies pie vārdu spēles.";
@@ -630,7 +638,7 @@
         nextL != null ? zole.players?.[nextL] || "?" : "";
       sub.textContent =
         nextN && nextL === myIdx
-          ? `${wn} ņēma stiķi. Tu vadi — met pirmo kārti.`
+          ? `${wn} ņēma stiķi. Tu vadi nākamo stiķi — met pirmo kārti.`
           : nextN
             ? `${wn} ņēma stiķi. Nākamais stiķis — vada ${nextN}.`
             : `${wn} ņēma stiķi.`;
@@ -824,7 +832,7 @@
     const mode = o.mode || "readonly";
 
     if (typeof o.myIdx === "number") {
-      const dr = zolePlayerRoleLine(zole, o.myIdx);
+      const dr = zoleDockRoleLine(zole, o.myIdx);
       if (dr) dock.appendChild(el("div", "vz-zole-dock__role", dr));
     }
 
