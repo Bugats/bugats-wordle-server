@@ -1110,7 +1110,6 @@
     } else {
       feltCenter.appendChild(buildTrickCenter(zole, myIdx));
     }
-    feltCenter.appendChild(buildZoleTableHud(zole, myIdx));
     felt.appendChild(feltCenter);
 
     let dock = null;
@@ -1179,11 +1178,18 @@
         onPlayCard,
       });
     }
+    const tableHud = buildZoleTableHud(zole, myIdx);
     if (dock) {
       if (phase === "play" && isMyTurn) {
         dock.classList.add("vz-zole-classic__dock--my-turn");
       }
-      felt.appendChild(dock);
+      const handStack = el("div", "vz-zole-classic__hand-stack");
+      handStack.appendChild(dock);
+      handStack.appendChild(tableHud);
+      felt.appendChild(handStack);
+    } else {
+      tableHud.classList.add("vz-zole-table-hud--felt-anchor");
+      felt.appendChild(tableHud);
     }
 
     root.appendChild(felt);

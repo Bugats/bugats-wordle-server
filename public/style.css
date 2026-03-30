@@ -5981,53 +5981,68 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding-bottom: 6px;
 }
 
-/* Tabula ar kolonnām pa spēlētājiem — labajā apakšā virs rokas */
-#board-zole-container .vz-zole-table-hud {
+/* Roka + tabula: tabula absolūti labajā apakšējā stūrī zem kārtīm */
+#board-zole-container .vz-zole-classic__hand-stack {
+  position: relative;
   flex-shrink: 0;
-  align-self: flex-end;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   margin-top: auto;
-  margin-bottom: 4px;
-  margin-left: auto;
-  max-width: min(96vw, 320px);
-  padding: 6px 8px 6px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.42);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-  z-index: 4;
+  box-sizing: border-box;
+}
+/* Tabula — maza, stūrī pie rokas apakšējās malas (vai felta, ja rokas nav) */
+#board-zole-container .vz-zole-table-hud {
+  position: absolute;
+  right: max(0px, env(safe-area-inset-right, 0px));
+  bottom: max(0px, env(safe-area-inset-bottom, 0px));
+  z-index: 6;
+  width: min(46vw, 188px);
+  max-width: calc(100% - 4px);
+  padding: 4px 5px 4px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
   pointer-events: auto;
 }
+#board-zole-container .vz-zole-table-hud--felt-anchor {
+  position: absolute;
+  right: max(2px, env(safe-area-inset-right, 0px));
+  bottom: max(4px, env(safe-area-inset-bottom, 0px));
+  margin: 0;
+}
 #board-zole-container .vz-zole-table-hud__title {
-  font-size: 8px;
+  font-size: 6px;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: rgba(253, 230, 138, 0.88);
-  margin-bottom: 5px;
+  margin-bottom: 3px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  padding-bottom: 3px;
+  padding-bottom: 2px;
 }
 #board-zole-container .vz-zole-table-hud__grid {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  font-size: 10px;
-  line-height: 1.2;
+  font-size: 8px;
+  line-height: 1.15;
   font-variant-numeric: tabular-nums;
 }
 #board-zole-container .vz-zole-table-hud__corner {
-  width: 22px;
-  padding: 0 4px 4px 0;
+  width: 16px;
+  padding: 0 2px 2px 0;
   border: none;
   vertical-align: bottom;
 }
 #board-zole-container .vz-zole-table-hud__colhead {
-  padding: 0 2px 5px 2px;
+  padding: 0 1px 3px 1px;
   font-weight: 800;
-  font-size: 9px;
+  font-size: 7px;
   text-align: center;
   color: rgba(255, 255, 255, 0.88);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6040,19 +6055,20 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   box-shadow: inset 0 -2px 0 rgba(250, 204, 21, 0.75);
 }
 #board-zole-container .vz-zole-table-hud__rowhead {
-  padding: 4px 5px 4px 0;
+  padding: 2px 3px 2px 0;
   font-weight: 800;
-  font-size: 9px;
+  font-size: 7px;
   text-align: right;
   color: rgba(255, 255, 255, 0.45);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   white-space: nowrap;
-  width: 22px;
+  width: 16px;
 }
 #board-zole-container .vz-zole-table-hud__cell {
-  padding: 4px 2px;
+  padding: 2px 1px;
   text-align: center;
   font-weight: 700;
+  font-size: 8px;
   color: #fef9c3;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
@@ -6065,19 +6081,20 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 #board-zole-container .vz-zole-table-hud__cell--neg {
   color: #fecaca;
   background: rgba(127, 29, 29, 0.35);
-  border-radius: 3px;
+  border-radius: 2px;
 }
 #board-zole-container .vz-zole-table-hud tbody tr:last-child .vz-zole-table-hud__rowhead,
 #board-zole-container .vz-zole-table-hud tbody tr:last-child .vz-zole-table-hud__cell {
   border-bottom: none;
 }
 #board-zole-container .vz-zole-table-hud__foot {
-  padding: 5px 0 0;
-  font-size: 9px;
+  padding: 3px 0 0;
+  font-size: 7px;
   font-weight: 700;
   text-align: center;
-  color: rgba(255, 255, 255, 0.72);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  line-height: 1.2;
 }
 #board-zole-container .vz-zole-opp-corner {
   position: absolute;
