@@ -1876,15 +1876,24 @@ function handleRatePromptFeedback() {
 }
 
 // ==================== TUTORIAL ====================
-const TUTORIAL_STORAGE_KEY = "vz_tutorial_seen";
+const TUTORIAL_STORAGE_KEY = "vz_tutorial_seen_v2";
+const LV_KEYBOARD_HINT_STORAGE = "vz_lv_keyboard_hint_shown";
 const TUTORIAL_STEPS = [
   {
     title: "Laipni lūdzam VĀRDU ZONĀ!",
-    body: "Uzminē vārdu 6 mēģinājumos. Izmanto klaviatūru vai pieskāršanos.",
+    body: "Uzmini vārdu ierobežotā skaitā mēģinājumu. Zem režģa ir tastatūra — vari arī rakstīt uz datora.",
+  },
+  {
+    title: "Pirmie soļi",
+    body: "1) Spēle ir zem logo un sezonas joslas. 2) Pēc ievada spied «Jauns raunds» (ja redzams). 3) Lejā atver «Sacensības un rangi», lai redzētu TOP, misijas un turnīrus.",
+  },
+  {
+    title: "Latviešu tastatūra (QWERTY)",
+    body: "Burti kā uz latviešu QWERTY, tikai bez Q, W, X un Y — latviešu vārdos tie parasti nav. Nospied SHIFT (oranžs), lai iegūtu Ā, Č, Ē, Ģ, Ī, Ķ, Ļ, Ņ, Š, Ū, Ž. Atkārtoti SHIFT — atpakaļ uz parastajiem burtiem.",
   },
   {
     title: "Kā minēt",
-    body: "Raksti burtus un nospied Enter. Vārds ir 6 burti.",
+    body: "Izvēlies burtus, saliec vārdu un nospied ENTER (vai taustiņu Enter). Garums atkarīgs no raunda (bieži 5 vai 6 burti).",
   },
   {
     title: "Zaļš = pareizā vieta",
@@ -1900,7 +1909,7 @@ const TUTORIAL_STEPS = [
     ],
   },
   {
-    title: "Dzeltenš = pareizs burts, nepareiza vieta",
+    title: "Dzeltens = pareizs burts, nepareiza vieta",
     body: "Burts ir vārdā, bet citā ailē. Izmanto to nākamajā minējumā.",
     example: ["A", "B", "C", "D", "E", "F"],
     exampleStatus: [
@@ -1919,6 +1928,13 @@ const TUTORIAL_STEPS = [
     exampleStatus: ["absent", "absent", "absent", "absent", "absent", "absent"],
   },
 ];
+
+function showFirstSessionHintAfterTutorial() {
+  try {
+    if (localStorage.getItem(LV_KEYBOARD_HINT_STORAGE) === "1") return;
+    localStorage.setItem(LV_KEYBOARD_HINT_STORAGE, "pending");
+  } catch {}
+}
 
 function showTutorialIfNeeded() {
   try {
@@ -1971,6 +1987,7 @@ function showTutorial() {
       localStorage.setItem(TUTORIAL_STORAGE_KEY, "1");
     } catch {}
     tutorialOverlayEl.classList.add("hidden");
+    showFirstSessionHintAfterTutorial();
   }
 
   if (tutorialSkipBtn) {
@@ -4572,8 +4589,17 @@ async function startNewRound() {
       state.currentCol = 0;
       skipHintLockedForward();
     }
-    if (gameMessageEl)
-      gameMessageEl.textContent = `Jauns raunds (${len} burti).`;
+    if (gameMessageEl) {
+      let msg = `Jauns raunds (${len} burti).`;
+      try {
+        if (localStorage.getItem(LV_KEYBOARD_HINT_STORAGE) === "pending") {
+          localStorage.setItem(LV_KEYBOARD_HINT_STORAGE, "1");
+          msg +=
+            " Tastatūra: latviešu QWERTY (bez Q, W, X, Y); SHIFT = Ā, Č, Ē… Atkārtoti SHIFT — atpakaļ. Palīdzība: 📖 Tutorial augšā.";
+        }
+      } catch {}
+      gameMessageEl.textContent = msg;
+    }
     state.roundFinished = false;
     renderEngagementLoopCard();
   } catch (err) {
@@ -5316,7 +5342,7 @@ function hideDuelResultOverlay() {
 }
 
 // ==================== EKRĀNA TASTATŪRA ====================
-// Bez Q/W/X/Y
+// Latviešu QWERTY apakškopa: bez Q, W, X, Y (latviešu vārdos reti / nav vajadzīgi)
 const KEYBOARD_LAYOUT = [
   ["E", "R", "T", "U", "I", "O", "P"],
   ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
@@ -5340,7 +5366,14 @@ function buildKeyboard() {
       const btn = createEl("button", "kb-key");
       btn.textContent = key;
 
-      if (key === "SHIFT") btn.classList.add("kb-shift");
+      if (key === "SHIFT") {
+        btn.classList.add("kb-shift");
+        btn.setAttribute(
+          "title",
+          "Latviešu diakritiķi: Ā Č Ē Ģ Ī Ķ Ļ Ņ Š Ū Ž. Nospied vēlreiz, lai atgrieztos pie A–Z."
+        );
+        btn.setAttribute("aria-label", "Pārslēgt latviešu burtus ar strīpiņu");
+      }
       if (key === "ENTER") btn.classList.add("kb-enter");
       if (key === "⌫") btn.classList.add("kb-backspace");
 
