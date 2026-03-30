@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-29-zole-table-hud" />
+  <link rel="stylesheet" href="style.css?v=2026-03-27-zole-compact-top" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1004,7 +1004,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-29-zole-table-hud"></script>
+    <script defer src="game.js?v=2026-03-27-zole-compact-top"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1208,7 +1208,7 @@
       <div class="vz-board-modal-inner" tabindex="-1" id="board-modal-inner">
         <button id="board-modal-close" class="vz-duel-x" type="button" aria-label="Aizvērt galda logu">✕</button>
         <h2 id="board-modal-title" class="vz-sr-only">Galda spēles</h2>
-        <div class="vz-board-modal-topbar">
+        <div id="board-modal-topbar" class="vz-board-modal-topbar">
           <button
             id="board-back-words-btn"
             type="button"
@@ -1360,6 +1360,14 @@
         </div>
         <div id="board-game-area" class="vz-board-game-area hidden">
           <div class="vz-board-game-header">
+            <button
+              id="board-compact-back-words-btn"
+              type="button"
+              class="vz-board-compact-back-words hidden"
+              title="Atgriezties pie vārdu spēles; zole turpinās fonā."
+              aria-label="Atpakaļ pie vārdu spēles">
+              ← Vārdi
+            </button>
             <div class="vz-board-game-meta">
               <span id="board-game-type" class="vz-board-game-type"></span>
               <span id="board-game-turn" class="vz-board-game-turn" aria-live="polite"></span>

@@ -5535,6 +5535,48 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-invite-actions button:last-child { background: rgba(255,255,255,0.15); color: #fff; }
 .vz-board-game-area { margin-top: 16px; }
 .vz-board-container { overflow: visible; }
+/* Zole: mazāk augšējās rindas — bez «Vārdu zona» joslas un bez dublikāta «Zole» */
+.vz-board-compact-back-words {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #e4e4e7;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.vz-board-compact-back-words:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.vz-board-game-area.vz-board-zole-compact-top {
+  margin-top: 6px;
+}
+.vz-board-game-area.vz-board-zole-compact-top .vz-board-game-header {
+  margin-bottom: 4px;
+  gap: 6px;
+}
+.vz-board-game-area.vz-board-zole-compact-top .vz-board-game-meta {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.vz-board-game-area.vz-board-zole-compact-top .vz-board-game-type:empty {
+  display: none;
+}
+.vz-board-game-area.vz-board-zole-header-meta--hide .vz-board-game-meta {
+  display: none;
+}
+.vz-board-modal--fullscreen .vz-board-modal-inner:has(#board-game-area.vz-board-zole-compact-top) {
+  padding-top: max(6px, env(safe-area-inset-top));
+}
 .vz-board-game-header {
   display: flex;
   align-items: center;

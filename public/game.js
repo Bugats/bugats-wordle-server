@@ -10018,8 +10018,15 @@ function hideBoardGameArea() {
   const modal = document.getElementById("board-games-modal");
   if (gameArea) {
     gameArea.classList.add("hidden");
-    gameArea.classList.remove("vz-board-zole-play", "vz-board-zole-fs");
+    gameArea.classList.remove(
+      "vz-board-zole-play",
+      "vz-board-zole-fs",
+      "vz-board-zole-compact-top",
+      "vz-board-zole-header-meta--hide"
+    );
   }
+  document.getElementById("board-modal-topbar")?.classList.remove("hidden");
+  document.getElementById("board-compact-back-words-btn")?.classList.add("hidden");
   if (modal) modal.classList.add("hidden");
   if (modal) modal.classList.remove("vz-board-modal--fullscreen");
   syncBoardBrowserFullscreenUi();
@@ -10122,6 +10129,19 @@ function renderBoardGame() {
   const chessContainer = document.getElementById("board-chess-container");
   const zoleContainer = document.getElementById("board-zole-container");
   const gameAreaEl = document.getElementById("board-game-area");
+  const modalTopbar = document.getElementById("board-modal-topbar");
+  const compactBackBtn = document.getElementById("board-compact-back-words-btn");
+  const zoleCompactTop =
+    boardState.gameId &&
+    boardState.type === "zole" &&
+    boardState.zole &&
+    boardState.zole.phase !== "end";
+  if (modalTopbar) {
+    modalTopbar.classList.toggle("hidden", !!zoleCompactTop);
+  }
+  if (compactBackBtn) {
+    compactBackBtn.classList.toggle("hidden", !zoleCompactTop);
+  }
   if (gameAreaEl) {
     const zPlay =
       boardState.type === "zole" && boardState.zole?.phase === "play";
@@ -10131,10 +10151,11 @@ function renderBoardGame() {
       !!boardState.zole;
     gameAreaEl.classList.toggle("vz-board-zole-play", zPlay);
     gameAreaEl.classList.toggle("vz-board-zole-fs", zoleGameOn);
+    gameAreaEl.classList.toggle("vz-board-zole-compact-top", !!zoleCompactTop);
   }
   if (typeEl) {
     if (boardState.type === "chess") typeEl.textContent = "♔ Šahs";
-    else if (boardState.type === "zole") typeEl.textContent = "🃏 Zole";
+    else if (boardState.type === "zole") typeEl.textContent = "";
     else
       typeEl.textContent = `♟️ Dambrete (${boardDambreteModeLabel(boardState.dambreteVariant)})`;
   }
@@ -10177,8 +10198,8 @@ function renderBoardGame() {
       boardState.type === "zole" &&
       boardState.zole?.phase === "play"
     ) {
-      /* Pilna instrukcija zilajā joslā — šeit tikai pretinieka vārds vai em dash */
-      turnEl.textContent = isMyTurn ? "—" : turnName;
+      /* Spēles laikā gājienu rāda zilā josla + zaļais apakšteksts; šeit tikai pretinieka vārds. */
+      turnEl.textContent = isMyTurn ? "" : turnName;
     } else {
       turnEl.textContent = isMyTurn ? "Tava kārta" : `${turnName} gājienā`;
     }
@@ -10187,6 +10208,13 @@ function renderBoardGame() {
       isMyTurn &&
         (boardState.type === "dambrete" || boardState.type === "chess")
     );
+  }
+  if (gameAreaEl && boardState.type === "zole" && zoleCompactTop) {
+    const hideMetaRow =
+      boardState.zole?.phase === "play" && isMyTurn;
+    gameAreaEl.classList.toggle("vz-board-zole-header-meta--hide", hideMetaRow);
+  } else if (gameAreaEl) {
+    gameAreaEl.classList.remove("vz-board-zole-header-meta--hide");
   }
   const hintEl = document.getElementById("board-game-hint");
   if (hintEl) {
@@ -10558,12 +10586,14 @@ function bindBoardGames() {
     ev.preventDefault();
     hideBoardModal();
   });
-  document.getElementById("board-back-words-btn")?.addEventListener("click", () => {
+  const backToWords = () => {
     hideBoardModal();
     document
       .getElementById("vz-section-game")
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
+  };
+  document.getElementById("board-back-words-btn")?.addEventListener("click", backToWords);
+  document.getElementById("board-compact-back-words-btn")?.addEventListener("click", backToWords);
   const boardResultClose = document.getElementById("board-result-close");
   const boardResultOverlay = document.getElementById("board-result-overlay");
   if (boardResultClose)
