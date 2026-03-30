@@ -491,6 +491,58 @@
                       </button>
                     </div>
 
+                    <details id="vip-quick-tournament-panel" class="vz-vip-room-panel hidden">
+                      <summary class="vz-vip-room-summary">VIP ātrs turnīrs (bracket uzreiz)</summary>
+                      <div id="vip-quick-tournament-help" class="vz-support-text">
+                        Ar aktīvu VIP vari uzreiz izveidot turnīru ar dalībnieku sarakstu (bez istabas gaidīšanas).
+                        Izslēgšanai jābūt 2, 4, 8 vai 16 spēlētājiem. Tu vari būt sarakstā vai nē — ja nav, tavs
+                        vārds tiks pievienots automātiski.
+                      </div>
+                      <label class="vz-tournament-score-field">
+                        <span>Turnīra nosaukums</span>
+                        <input
+                          id="vip-quick-tournament-name"
+                          type="text"
+                          maxlength="64"
+                          placeholder="piem., Klana kauss"
+                          autocomplete="off" />
+                      </label>
+                      <div class="vz-vip-room-form-grid">
+                        <label class="vz-tournament-score-field">
+                          <span>Turnīra režīms</span>
+                          <select id="vip-quick-tournament-type">
+                            <option value="single_elimination">Izslēgšanas turnīrs</option>
+                            <option value="double_elimination">Dubultā izslēgšana</option>
+                            <option value="round_robin">Apļa turnīrs</option>
+                          </select>
+                        </label>
+                        <label class="vz-tournament-score-field">
+                          <span>Spēles mods</span>
+                          <select id="vip-quick-tournament-play-mode">
+                            <option value="classic">Classic</option>
+                            <option value="speed">Speed</option>
+                            <option value="accuracy">Accuracy</option>
+                            <option value="survival">Survival</option>
+                            <option value="dambrete">♟️ Dambrete</option>
+                            <option value="chess">♔ Šahs</option>
+                            <option value="zole">🃏 Zole</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label class="vz-tournament-score-field">
+                        <span>Dalībnieki (vārdi, katrs jaunā rindā vai ar komatu)</span>
+                        <textarea
+                          id="vip-quick-tournament-seeding"
+                          rows="5"
+                          maxlength="2000"
+                          placeholder="Anna&#10;Bērziņš&#10;Čalis"></textarea>
+                      </label>
+                      <button id="vip-quick-tournament-create-btn" class="mission-claim-btn" type="button">
+                        Izveidot turnīru
+                      </button>
+                      <div id="vip-quick-tournament-create-status" class="mission-status"></div>
+                    </details>
+
                     <details id="vip-room-panel" class="vz-vip-room-panel hidden">
                       <summary class="vz-vip-room-summary">VIP istabas (papildus režīms)</summary>
                       <div id="vip-room-help" class="vz-support-text">
@@ -518,6 +570,7 @@
                             <option value="survival">Survival</option>
                             <option value="dambrete">♟️ Dambrete</option>
                             <option value="chess">♔ Šahs</option>
+                            <option value="zole">🃏 Zole</option>
                           </select>
                         </label>
                         <label class="vz-tournament-score-field">
@@ -1004,7 +1057,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-27-zole-compact-top"></script>
+    <script defer src="game.js?v=2026-03-27-vip-quick-tournament"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>

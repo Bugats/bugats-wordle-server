@@ -1130,6 +1130,14 @@ const tournamentScheduleSlotsEl = $("#tournament-schedule-slots");
 const tournamentWeeklyJoinBtnEl = $("#tournament-weekly-join-btn");
 const tournamentWeeklyJoinStatusEl = $("#tournament-weekly-join-status");
 const tournamentRulesListEl = $("#tournament-rules-list");
+const vipQuickTournamentPanelEl = $("#vip-quick-tournament-panel");
+const vipQuickTournamentHelpEl = $("#vip-quick-tournament-help");
+const vipQuickTournamentNameEl = $("#vip-quick-tournament-name");
+const vipQuickTournamentTypeEl = $("#vip-quick-tournament-type");
+const vipQuickTournamentPlayModeEl = $("#vip-quick-tournament-play-mode");
+const vipQuickTournamentSeedingEl = $("#vip-quick-tournament-seeding");
+const vipQuickTournamentCreateBtnEl = $("#vip-quick-tournament-create-btn");
+const vipQuickTournamentCreateStatusEl = $("#vip-quick-tournament-create-status");
 const vipRoomPanelEl = $("#vip-room-panel");
 const vipRoomHelpEl = $("#vip-room-help");
 const vipRoomNameEl = $("#vip-room-name");
@@ -2635,7 +2643,7 @@ function updateVipUi(me) {
     } else if (active) {
       vipStatusEl.textContent = `VIP aktīvs līdz ${formatVipUntil(
         until
-      )} · vari veidot turnīru.`;
+      )} · sadaļā «Turnīri» vari veidot ātru turnīru vai VIP istabu.`;
     } else {
       vipStatusEl.textContent = "VIP nav aktīvs.";
     }
@@ -6079,10 +6087,137 @@ function renderVipRoomList() {
   });
 }
 
+const VIP_TOURNAMENT_SEEDING_MAX = 16;
+
+function parseVipQuickTournamentSeeding(raw) {
+  const text = String(raw || "");
+  const parts = text
+    .split(/[\n,;]+/)
+    .map((s) => String(s || "").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const seen = new Set();
+  const out = [];
+  for (const p of parts) {
+    const slice = p.slice(0, 30);
+    const key = slice.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(slice);
+    if (out.length >= VIP_TOURNAMENT_SEEDING_MAX) break;
+  }
+  const me = String(state.username || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (me) {
+    const mk = me.toLowerCase();
+    if (!out.some((n) => String(n).toLowerCase() === mk)) {
+      out.unshift(me.slice(0, 30));
+    }
+  }
+  return out;
+}
+
+function isPowerOfTwo(n) {
+  const v = Math.floor(Number(n) || 0);
+  return v > 0 && (v & (v - 1)) === 0;
+}
+
+function setVipQuickTournamentCreateStatus(message, kind = "") {
+  if (!vipQuickTournamentCreateStatusEl) return;
+  vipQuickTournamentCreateStatusEl.textContent = String(message || "");
+  vipQuickTournamentCreateStatusEl.classList.remove("vz-ok", "vz-error");
+  if (kind === "ok") vipQuickTournamentCreateStatusEl.classList.add("vz-ok");
+  if (kind === "error") vipQuickTournamentCreateStatusEl.classList.add("vz-error");
+}
+
+function renderVipQuickTournamentPanel() {
+  if (!vipQuickTournamentPanelEl) return;
+  const canCreate = !!state.canCreateTournament;
+  vipQuickTournamentPanelEl.classList.toggle("hidden", !canCreate);
+  if (vipQuickTournamentHelpEl)
+    vipQuickTournamentHelpEl.classList.toggle("hidden", !canCreate);
+  const toggleField = (el, hidden) => {
+    if (!el) return;
+    const field = el.closest(".vz-tournament-score-field");
+    if (field) field.classList.toggle("hidden", hidden);
+    else el.classList.toggle("hidden", hidden);
+  };
+  toggleField(vipQuickTournamentNameEl, !canCreate);
+  toggleField(vipQuickTournamentTypeEl, !canCreate);
+  toggleField(vipQuickTournamentPlayModeEl, !canCreate);
+  toggleField(vipQuickTournamentSeedingEl, !canCreate);
+  if (vipQuickTournamentCreateBtnEl)
+    vipQuickTournamentCreateBtnEl.classList.toggle("hidden", !canCreate);
+  if (vipQuickTournamentCreateStatusEl)
+    vipQuickTournamentCreateStatusEl.classList.toggle("hidden", !canCreate);
+  if (!canCreate) setVipQuickTournamentCreateStatus("");
+}
+
+async function handleVipQuickTournamentCreate() {
+  if (!state.token || !state.canCreateTournament) return;
+  const name = String(vipQuickTournamentNameEl?.value || "").trim();
+  if (!name) {
+    setVipQuickTournamentCreateStatus("Norādi turnīra nosaukumu.", "error");
+    return;
+  }
+  const type = String(vipQuickTournamentTypeEl?.value || "single_elimination");
+  const playMode = String(vipQuickTournamentPlayModeEl?.value || "classic");
+  const seeding = parseVipQuickTournamentSeeding(
+    vipQuickTournamentSeedingEl?.value || ""
+  );
+  if (seeding.length < 2) {
+    setVipQuickTournamentCreateStatus(
+      "Vajag vismaz 2 dalībniekus (vārdi tekstā vai tu tiksi pievienots automātiski).",
+      "error"
+    );
+    return;
+  }
+  if (type === "single_elimination" && !isPowerOfTwo(seeding.length)) {
+    setVipQuickTournamentCreateStatus(
+      "Izslēgšanas turnīram jābūt 2, 4, 8 vai 16 dalībniekiem.",
+      "error"
+    );
+    return;
+  }
+  try {
+    if (vipQuickTournamentCreateBtnEl) vipQuickTournamentCreateBtnEl.disabled = true;
+    const autoReportOnly =
+      playMode === "dambrete" || playMode === "chess" || playMode === "zole"
+        ? false
+        : true;
+    const resp = await apiPost("/tournaments", {
+      name,
+      type,
+      playMode,
+      seeding,
+      autoReportOnly,
+    });
+    const tid = resp?.tournament?.id;
+    setVipQuickTournamentCreateStatus(
+      tid != null
+        ? `Turnīrs #${tid} izveidots.`
+        : "Turnīrs izveidots.",
+      "ok"
+    );
+    if (vipQuickTournamentNameEl) vipQuickTournamentNameEl.value = "";
+    if (vipQuickTournamentSeedingEl) vipQuickTournamentSeedingEl.value = "";
+    await refreshTournamentCard(true);
+  } catch (err) {
+    setVipQuickTournamentCreateStatus(
+      err.message || "Neizdevās izveidot turnīru.",
+      "error"
+    );
+  } finally {
+    if (vipQuickTournamentCreateBtnEl)
+      vipQuickTournamentCreateBtnEl.disabled = false;
+  }
+}
+
 function renderVipRoomPanel() {
   if (!vipRoomPanelEl) return;
   const hasRooms = Array.isArray(state.vipRooms) && state.vipRooms.length > 0;
   const canCreate = !!state.canCreateTournament;
+  renderVipQuickTournamentPanel();
   vipRoomPanelEl.classList.toggle("hidden", !canCreate && !hasRooms);
   if (!canCreate && !hasRooms) return;
 
@@ -11963,6 +12098,12 @@ async function initGame() {
   }
   if (vipRoomCreateBtnEl) {
     vipRoomCreateBtnEl.addEventListener("click", handleVipRoomCreate);
+  }
+  if (vipQuickTournamentCreateBtnEl) {
+    vipQuickTournamentCreateBtnEl.addEventListener(
+      "click",
+      handleVipQuickTournamentCreate
+    );
   }
   if (tournamentScore1InputEl) {
     tournamentScore1InputEl.addEventListener("keydown", (e) => {
