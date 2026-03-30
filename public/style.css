@@ -5981,22 +5981,21 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding-bottom: 6px;
 }
 
-/* Kompakta tabula — labajā apakšā virs rokas, visās fāzēs */
+/* Tabula ar kolonnām pa spēlētājiem — labajā apakšā virs rokas */
 #board-zole-container .vz-zole-table-hud {
   flex-shrink: 0;
   align-self: flex-end;
   margin-top: auto;
   margin-bottom: 4px;
   margin-left: auto;
-  max-width: min(92vw, 200px);
-  padding: 6px 8px 5px;
+  max-width: min(96vw, 320px);
+  padding: 6px 8px 6px;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.42);
   border: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
   z-index: 4;
   pointer-events: auto;
-  text-align: right;
 }
 #board-zole-container .vz-zole-table-hud__title {
   font-size: 8px;
@@ -6004,65 +6003,81 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: rgba(253, 230, 138, 0.88);
-  margin-bottom: 4px;
+  margin-bottom: 5px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   padding-bottom: 3px;
 }
-#board-zole-container .vz-zole-table-hud__rows {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-#board-zole-container .vz-zole-table-hud__row {
-  display: flex;
-  align-items: baseline;
-  justify-content: flex-end;
-  gap: 6px;
+#board-zole-container .vz-zole-table-hud__grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
   font-size: 10px;
   line-height: 1.2;
-  color: rgba(255, 255, 255, 0.9);
+  font-variant-numeric: tabular-nums;
 }
-#board-zole-container .vz-zole-table-hud__row--me .vz-zole-table-hud__name {
-  color: #bbf7d0;
+#board-zole-container .vz-zole-table-hud__corner {
+  width: 22px;
+  padding: 0 4px 4px 0;
+  border: none;
+  vertical-align: bottom;
+}
+#board-zole-container .vz-zole-table-hud__colhead {
+  padding: 0 2px 5px 2px;
   font-weight: 800;
-}
-#board-zole-container .vz-zole-table-hud__row--active .vz-zole-table-hud__nums {
-  outline: 1px solid rgba(250, 204, 21, 0.55);
-  outline-offset: 1px;
-  border-radius: 3px;
-}
-#board-zole-container .vz-zole-table-hud__name {
-  flex: 0 0 auto;
-  max-width: 72px;
+  font-size: 9px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.88);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-decoration: none;
-  border-bottom: none;
   cursor: help;
-  color: rgba(255, 255, 255, 0.82);
-  font-weight: 600;
 }
-#board-zole-container .vz-zole-table-hud__nums {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 3px 5px;
-  font-variant-numeric: tabular-nums;
+#board-zole-container .vz-zole-table-hud__colhead--me {
+  color: #bbf7d0;
 }
-#board-zole-container .vz-zole-table-hud__bit {
+#board-zole-container .vz-zole-table-hud__colhead--active {
+  box-shadow: inset 0 -2px 0 rgba(250, 204, 21, 0.75);
+}
+#board-zole-container .vz-zole-table-hud__rowhead {
+  padding: 4px 5px 4px 0;
+  font-weight: 800;
+  font-size: 9px;
+  text-align: right;
+  color: rgba(255, 255, 255, 0.45);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+  width: 22px;
+}
+#board-zole-container .vz-zole-table-hud__cell {
+  padding: 4px 2px;
+  text-align: center;
   font-weight: 700;
   color: #fef9c3;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
-#board-zole-container .vz-zole-table-hud__bit--k {
-  color: #fde68a;
+#board-zole-container .vz-zole-table-hud__cell--me {
+  color: #e0f2fe;
 }
-#board-zole-container .vz-zole-table-hud__legend {
-  margin-top: 4px;
-  font-size: 7px;
+#board-zole-container .vz-zole-table-hud__cell--active {
+  background: rgba(251, 191, 36, 0.08);
+}
+#board-zole-container .vz-zole-table-hud__cell--neg {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.35);
+  border-radius: 3px;
+}
+#board-zole-container .vz-zole-table-hud tbody tr:last-child .vz-zole-table-hud__rowhead,
+#board-zole-container .vz-zole-table-hud tbody tr:last-child .vz-zole-table-hud__cell {
+  border-bottom: none;
+}
+#board-zole-container .vz-zole-table-hud__foot {
+  padding: 5px 0 0;
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  color: rgba(255, 255, 255, 0.45);
+  text-align: center;
+  color: rgba(255, 255, 255, 0.72);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 #board-zole-container .vz-zole-opp-corner {
   position: absolute;

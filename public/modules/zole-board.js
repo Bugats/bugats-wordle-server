@@ -336,22 +336,35 @@
     return String(v);
   }
 
-  const ZOLE_HUD_NAME_MAX = 7;
-
-  function shortPlayerLabel(un) {
+  /** Kolonnu virsrakstam: pirmais vārds / īss segvārds (kā klasiskajā horizontālajā tabulā). */
+  function zoleHudColumnTitle(un) {
     const s = String(un || "?").trim() || "?";
-    if (s.length <= ZOLE_HUD_NAME_MAX) return s;
-    return `${s.slice(0, ZOLE_HUD_NAME_MAX - 1)}…`;
+    const first = s.split(/\s+/)[0] || s;
+    const t = first.length > 12 ? `${first.slice(0, 11)}…` : first;
+    return t;
   }
 
-  /** Kompakta tabula — vienmēr redzama (kopējie punkti; partijas/beigu kolonnas pēc fāzes). */
+  function zoleHudContractFooter(zole) {
+    const ph = zole.phase || "";
+    if (ph === "bid") return "";
+    const c = zole.contract;
+    const ci = zole.contractorIdx;
+    if (c == null) return "";
+    if (c === "galdins" || c === "galds") return contractLabel(c);
+    if (typeof ci !== "number" || ci < 0 || ci > 2) return contractLabel(c);
+    const nm = String(zole.players?.[ci] || "?").trim() || "?";
+    if (c === "big") return `Lielais · ${nm}`;
+    if (c === "zole") return `Zole · ${nm}`;
+    if (c === "maza_zole") return `Mazā zole · ${nm}`;
+    return `${contractLabel(c)} · ${nm}`;
+  }
+
+  /** Tabula ar kolonnām pa spēlētājiem (kā mobilajā ZOLE) + rindas P / K / A / S. */
   function buildZoleTableHud(zole, myIdx) {
     const hud = el("div", "vz-zole-table-hud");
     hud.setAttribute("role", "region");
     hud.setAttribute("aria-label", "Zoles tabula");
-    hud.appendChild(
-      el("div", "vz-zole-table-hud__title", "Tabula")
-    );
+    hud.appendChild(el("div", "vz-zole-table-hud__title", "Tabula"));
     const ph = zole.phase || "";
     const showPart = ph === "end";
     const showEyes = showPart;
@@ -360,43 +373,88 @@
     const tdArr = zole.tableDelta || [0, 0, 0];
     const cum = zole.cumulativeTableDelta || [0, 0, 0];
     const activePi = zoleActiveTurnPlayerIndex(zole);
-    const rows = el("div", "vz-zole-table-hud__rows");
+
+    const table = el("table", "vz-zole-table-hud__grid");
+    table.setAttribute("role", "grid");
+
+    const thead = document.createElement("thead");
+    const htr = document.createElement("tr");
+    const corner = document.createElement("th");
+    corner.className = "vz-zole-table-hud__corner";
+    corner.setAttribute("scope", "col");
+    corner.textContent = "";
+    htr.appendChild(corner);
     for (let i = 0; i < 3; i++) {
-      const row = el("div", "vz-zole-table-hud__row");
-      if (i === myIdx) row.classList.add("vz-zole-table-hud__row--me");
-      if (activePi === i) row.classList.add("vz-zole-table-hud__row--active");
-      const full = String(zole.players?.[i] || "?").trim();
-      const lab = el("abbr", "vz-zole-table-hud__name", shortPlayerLabel(full));
-      lab.setAttribute("title", full);
-      row.appendChild(lab);
-      const nums = el("span", "vz-zole-table-hud__nums");
-      if (showPart) {
-        const pSpan = el("span", "vz-zole-table-hud__bit", formatPts(tdArr[i]));
-        pSpan.title = "Partija (P.)";
-        nums.appendChild(pSpan);
-      }
-      const kSpan = el("span", "vz-zole-table-hud__bit vz-zole-table-hud__bit--k", formatPts(cum[i]));
-      kSpan.title = "Kopā (K.)";
-      nums.appendChild(kSpan);
-      if (showEyes) {
-        const aSpan = el("span", "vz-zole-table-hud__bit", String(eyes[i] ?? 0));
-        aSpan.title = "Acis (A)";
-        nums.appendChild(aSpan);
-      }
-      const sSpan = el("span", "vz-zole-table-hud__bit", `${tricks[i] ?? 0}S`);
-      sSpan.title = "Stiķi (S)";
-      nums.appendChild(sSpan);
-      row.appendChild(nums);
-      rows.appendChild(row);
+      const full = String(zole.players?.[i] || "?").trim() || "?";
+      const th = document.createElement("th");
+      th.setAttribute("scope", "col");
+      th.className = "vz-zole-table-hud__colhead";
+      if (i === myIdx) th.classList.add("vz-zole-table-hud__colhead--me");
+      if (activePi === i) th.classList.add("vz-zole-table-hud__colhead--active");
+      th.textContent = zoleHudColumnTitle(full);
+      th.setAttribute("title", full);
+      htr.appendChild(th);
     }
-    hud.appendChild(rows);
-    const leg = el("div", "vz-zole-table-hud__legend");
+    thead.appendChild(htr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+
+    function dataRow(rowLabel, title, values, fmt) {
+      const tr = document.createElement("tr");
+      const rh = document.createElement("th");
+      rh.setAttribute("scope", "row");
+      rh.className = "vz-zole-table-hud__rowhead";
+      rh.textContent = rowLabel;
+      rh.setAttribute("title", title);
+      tr.appendChild(rh);
+      for (let i = 0; i < 3; i++) {
+        const raw = values[i];
+        const t = fmt ? fmt(raw, i) : formatPts(raw);
+        const n = Number(raw);
+        const neg = Number.isFinite(n) && n < 0;
+        const td = document.createElement("td");
+        td.className = "vz-zole-table-hud__cell";
+        if (i === myIdx) td.classList.add("vz-zole-table-hud__cell--me");
+        if (activePi === i) td.classList.add("vz-zole-table-hud__cell--active");
+        td.textContent = t;
+        if (neg) td.classList.add("vz-zole-table-hud__cell--neg");
+        td.setAttribute("title", title);
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+
     if (showPart) {
-      leg.textContent = showEyes ? "P · K · A · S" : "P · K · S";
-    } else {
-      leg.textContent = "K · S";
+      dataRow("P.", "Partijas punkti tabulā", tdArr, (v) => formatPts(v));
     }
-    hud.appendChild(leg);
+    dataRow("K.", "Kopā tabulā", cum, (v) => formatPts(v));
+    if (showEyes) {
+      dataRow("A.", "Acis šajā izspēlē", eyes, (v) => String(v ?? 0));
+    }
+    dataRow(
+      "S.",
+      "Stiķi šajā izspēlē",
+      tricks,
+      (v) => `${v ?? 0}`
+    );
+
+    table.appendChild(tbody);
+
+    const footText = zoleHudContractFooter(zole);
+    if (footText) {
+      const tfoot = document.createElement("tfoot");
+      const ftr = document.createElement("tr");
+      const ftd = document.createElement("td");
+      ftd.colSpan = 4;
+      ftd.className = "vz-zole-table-hud__foot";
+      ftd.textContent = footText;
+      ftr.appendChild(ftd);
+      tfoot.appendChild(ftr);
+      table.appendChild(tfoot);
+    }
+
+    hud.appendChild(table);
     return hud;
   }
 
