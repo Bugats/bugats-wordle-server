@@ -5996,7 +5996,8 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   position: absolute;
   right: max(0px, env(safe-area-inset-right, 0px));
   bottom: max(0px, env(safe-area-inset-bottom, 0px));
-  z-index: 6;
+  /* Virs rokas kārtīm (tām ir z-index 10–48); noklikšķināšana iet cauri uz kārtīm */
+  z-index: 60;
   width: min(46vw, 188px);
   max-width: calc(100% - 4px);
   padding: 4px 5px 4px;
@@ -6004,7 +6005,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   background: rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
-  pointer-events: auto;
+  pointer-events: none;
 }
 #board-zole-container .vz-zole-table-hud--felt-anchor {
   position: absolute;
