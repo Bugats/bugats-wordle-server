@@ -10216,7 +10216,7 @@ function renderBoardGame() {
             : "Skaties tabulas punktus zemāk. Uzvarētājs pēc spēles — labākais +/− šajā partijā.";
       } else if (boardState.zole?.phase === "play") {
         hintEl.textContent =
-          "Sekšana un pilna tabula — zem galda; trumpji un likumi — sadaļā «Sekšana un trumpji».";
+          "Sekšana — labajā apakšā kompakta tabula; pilna tabula un noteikumi — «Punkti · noteikumi» zemāk. Trumpji — «Sekšana un trumpji».";
       } else {
         const c = boardState.zole?.contract;
         let galHint = " Uzvara ar 61+ acīm, ja esi lielais / zole.";

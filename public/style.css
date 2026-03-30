@@ -5938,6 +5938,90 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding-top: 44px;
   padding-bottom: 6px;
 }
+
+/* Kompakta tabula — labajā apakšā virs rokas, visās fāzēs */
+#board-zole-container .vz-zole-table-hud {
+  flex-shrink: 0;
+  align-self: flex-end;
+  margin-top: auto;
+  margin-bottom: 4px;
+  margin-left: auto;
+  max-width: min(92vw, 200px);
+  padding: 6px 8px 5px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  z-index: 4;
+  pointer-events: auto;
+  text-align: right;
+}
+#board-zole-container .vz-zole-table-hud__title {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(253, 230, 138, 0.88);
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 3px;
+}
+#board-zole-container .vz-zole-table-hud__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+#board-zole-container .vz-zole-table-hud__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 6px;
+  font-size: 10px;
+  line-height: 1.2;
+  color: rgba(255, 255, 255, 0.9);
+}
+#board-zole-container .vz-zole-table-hud__row--me .vz-zole-table-hud__name {
+  color: #bbf7d0;
+  font-weight: 800;
+}
+#board-zole-container .vz-zole-table-hud__row--active .vz-zole-table-hud__nums {
+  outline: 1px solid rgba(250, 204, 21, 0.55);
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+#board-zole-container .vz-zole-table-hud__name {
+  flex: 0 0 auto;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+  border-bottom: none;
+  cursor: help;
+  color: rgba(255, 255, 255, 0.82);
+  font-weight: 600;
+}
+#board-zole-container .vz-zole-table-hud__nums {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 3px 5px;
+  font-variant-numeric: tabular-nums;
+}
+#board-zole-container .vz-zole-table-hud__bit {
+  font-weight: 700;
+  color: #fef9c3;
+}
+#board-zole-container .vz-zole-table-hud__bit--k {
+  color: #fde68a;
+}
+#board-zole-container .vz-zole-table-hud__legend {
+  margin-top: 4px;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.45);
+}
 #board-zole-container .vz-zole-opp-corner {
   position: absolute;
   top: 2px;

@@ -328,6 +328,70 @@
     return String(v);
   }
 
+  const ZOLE_HUD_NAME_MAX = 7;
+
+  function shortPlayerLabel(un) {
+    const s = String(un || "?").trim() || "?";
+    if (s.length <= ZOLE_HUD_NAME_MAX) return s;
+    return `${s.slice(0, ZOLE_HUD_NAME_MAX - 1)}…`;
+  }
+
+  /** Kompakta tabula — vienmēr redzama (kopējie punkti; partijas/beigu kolonnas pēc fāzes). */
+  function buildZoleTableHud(zole, myIdx) {
+    const hud = el("div", "vz-zole-table-hud");
+    hud.setAttribute("role", "region");
+    hud.setAttribute("aria-label", "Zoles tabula");
+    hud.appendChild(
+      el("div", "vz-zole-table-hud__title", "Tabula")
+    );
+    const ph = zole.phase || "";
+    const showPart = ph === "end";
+    const showEyes = showPart;
+    const eyes = zole.eyePoints || [0, 0, 0];
+    const tricks = zole.tricksWon || [0, 0, 0];
+    const tdArr = zole.tableDelta || [0, 0, 0];
+    const cum = zole.cumulativeTableDelta || [0, 0, 0];
+    const activePi = zoleActiveTurnPlayerIndex(zole);
+    const rows = el("div", "vz-zole-table-hud__rows");
+    for (let i = 0; i < 3; i++) {
+      const row = el("div", "vz-zole-table-hud__row");
+      if (i === myIdx) row.classList.add("vz-zole-table-hud__row--me");
+      if (activePi === i) row.classList.add("vz-zole-table-hud__row--active");
+      const full = String(zole.players?.[i] || "?").trim();
+      const lab = el("abbr", "vz-zole-table-hud__name", shortPlayerLabel(full));
+      lab.setAttribute("title", full);
+      row.appendChild(lab);
+      const nums = el("span", "vz-zole-table-hud__nums");
+      if (showPart) {
+        const pSpan = el("span", "vz-zole-table-hud__bit", formatPts(tdArr[i]));
+        pSpan.title = "Partija (P.)";
+        nums.appendChild(pSpan);
+      }
+      const kSpan = el("span", "vz-zole-table-hud__bit vz-zole-table-hud__bit--k", formatPts(cum[i]));
+      kSpan.title = "Kopā (K.)";
+      nums.appendChild(kSpan);
+      if (showEyes) {
+        const aSpan = el("span", "vz-zole-table-hud__bit", String(eyes[i] ?? 0));
+        aSpan.title = "Acis (A)";
+        nums.appendChild(aSpan);
+      }
+      const sSpan = el("span", "vz-zole-table-hud__bit", `${tricks[i] ?? 0}S`);
+      sSpan.title = "Stiķi (S)";
+      nums.appendChild(sSpan);
+      row.appendChild(nums);
+      rows.appendChild(row);
+    }
+    hud.appendChild(rows);
+    const leg = el("div", "vz-zole-table-hud__legend");
+    if (showPart) {
+      leg.textContent = showEyes ? "P · K · A · S" : "P · K · S";
+    } else {
+      leg.textContent = "K · S";
+    }
+    hud.appendChild(leg);
+    return hud;
+  }
+
   function trickCardByPlayer(zole) {
     const map = {};
     const trick = zole.trick || [];
@@ -980,6 +1044,7 @@
     } else {
       feltCenter.appendChild(buildTrickCenter(zole, myIdx));
     }
+    feltCenter.appendChild(buildZoleTableHud(zole, myIdx));
     felt.appendChild(feltCenter);
 
     let dock = null;
