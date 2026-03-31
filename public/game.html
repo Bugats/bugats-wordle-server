@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-27-zole-open-lobbies" />
+  <link rel="stylesheet" href="style.css?v=2026-03-27-chess-clock" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1072,7 +1072,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-27-zole-open-lobbies"></script>
+    <script defer src="game.js?v=2026-03-27-chess-clock"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1480,6 +1480,20 @@
             </div>
           </div>
           <p id="board-zole-stake-banner" class="vz-board-zole-stake-banner hidden" aria-live="polite"></p>
+          <div
+            id="board-chess-clocks"
+            class="vz-board-chess-clocks hidden"
+            role="group"
+            aria-label="Šaha laika kontrole">
+            <div class="vz-board-chess-clock">
+              <span id="board-chess-clock-0-label" class="vz-board-chess-clock__who"></span>
+              <span id="board-chess-clock-0" class="vz-board-chess-clock__time" aria-live="polite">—</span>
+            </div>
+            <div class="vz-board-chess-clock">
+              <span id="board-chess-clock-1-label" class="vz-board-chess-clock__who"></span>
+              <span id="board-chess-clock-1" class="vz-board-chess-clock__time" aria-live="polite">—</span>
+            </div>
+          </div>
           <p id="board-game-hint" class="vz-board-game-hint">Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt</p>
           <div id="board-dambrete-container" class="vz-board-container hidden"></div>
           <div id="board-chess-container" class="vz-board-container hidden"></div>

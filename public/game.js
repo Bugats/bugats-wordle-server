@@ -729,9 +729,115 @@ let boardState = {
   legalMoves: { jumps: [], moves: [] },
   /** Zole 3P: coins par vienu tabulas punktu (0 = fiksēta uzvara). */
   zole3pCoinsPerPoint: 0,
+  /** Šahs: servera pulksteņa momentuzņēmums + lokāla ekstrapolācija */
+  chessClock: null,
 };
 
 const BOARD_BOT_DISPLAY_NAME = "VZBot";
+
+let _chessClockRaf = null;
+
+function stopChessClockTick() {
+  if (_chessClockRaf != null) {
+    cancelAnimationFrame(_chessClockRaf);
+    _chessClockRaf = null;
+  }
+}
+
+function scheduleChessClockTick() {
+  if (_chessClockRaf != null) return;
+  _chessClockRaf = requestAnimationFrame(function tick() {
+    _chessClockRaf = null;
+    if (
+      boardState.type !== "chess" ||
+      !boardState.gameId ||
+      !boardState.chessClock
+    ) {
+      return;
+    }
+    syncChessClockDomCore();
+    _chessClockRaf = requestAnimationFrame(tick);
+  });
+}
+
+function ingestChessClockPayload(payload) {
+  const c = payload?.chessClock;
+  if (!c || !Array.isArray(c.remainingMs) || c.remainingMs.length < 2) {
+    boardState.chessClock = null;
+    return;
+  }
+  const now = Date.now();
+  boardState.chessClock = {
+    remainingMs: [
+      Math.max(0, Math.floor(Number(c.remainingMs[0]) || 0)),
+      Math.max(0, Math.floor(Number(c.remainingMs[1]) || 0)),
+    ],
+    lastServerNow: Number(c.serverNow) || now,
+    clientReceivedAt: now,
+  };
+}
+
+function formatChessClockMs(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, "0")}`;
+}
+
+function syncChessClockDomCore() {
+  const wrap = document.getElementById("board-chess-clocks");
+  const t0 = document.getElementById("board-chess-clock-0");
+  const t1 = document.getElementById("board-chess-clock-1");
+  const l0 = document.getElementById("board-chess-clock-0-label");
+  const l1 = document.getElementById("board-chess-clock-1-label");
+  const clk = boardState.chessClock;
+  const cells = wrap?.querySelectorAll(".vz-board-chess-clock");
+  if (!wrap || !t0 || !t1 || !clk) return;
+  const skew = clk.clientReceivedAt - clk.lastServerNow;
+  const serverNowEst = Date.now() - skew;
+  const sinceSnap = Math.max(0, serverNowEst - clk.lastServerNow);
+  const turn = boardState.turn;
+  let w = clk.remainingMs[0] - (turn === 0 ? sinceSnap : 0);
+  let b = clk.remainingMs[1] - (turn === 1 ? sinceSnap : 0);
+  w = Math.max(0, w);
+  b = Math.max(0, b);
+  const p0 = boardState.players[0] || "?";
+  const p1 = boardState.players[1] || "?";
+  const bot0 = String(p0).trim() === BOARD_BOT_DISPLAY_NAME;
+  const bot1 = String(p1).trim() === BOARD_BOT_DISPLAY_NAME;
+  if (l0) l0.textContent = bot0 ? "Bots (baltais)" : `${p0} (baltais)`;
+  if (l1) l1.textContent = bot1 ? "Bots (melnais)" : `${p1} (melnais)`;
+  t0.textContent = bot0 && boardState.vsBot ? "∞" : formatChessClockMs(w);
+  t1.textContent = bot1 && boardState.vsBot ? "∞" : formatChessClockMs(b);
+  if (cells && cells.length >= 2) {
+    cells[0].classList.toggle("vz-board-chess-clock--active", turn === 0);
+    cells[1].classList.toggle("vz-board-chess-clock--active", turn === 1);
+    cells[0].classList.toggle("vz-board-chess-clock--low", w > 0 && w <= 30_000);
+    cells[1].classList.toggle("vz-board-chess-clock--low", b > 0 && b <= 30_000);
+  }
+}
+
+function syncChessClockDom() {
+  const wrap = document.getElementById("board-chess-clocks");
+  const cells = wrap?.querySelectorAll(".vz-board-chess-clock");
+  if (
+    !wrap ||
+    boardState.type !== "chess" ||
+    !boardState.gameId ||
+    !boardState.chessClock
+  ) {
+    stopChessClockTick();
+    if (wrap) wrap.classList.add("hidden");
+    if (cells) {
+      cells[0]?.classList.remove("vz-board-chess-clock--active", "vz-board-chess-clock--low");
+      cells[1]?.classList.remove("vz-board-chess-clock--active", "vz-board-chess-clock--low");
+    }
+    return;
+  }
+  wrap.classList.remove("hidden");
+  syncChessClockDomCore();
+  scheduleChessClockTick();
+}
 
 /** Atvērtā 3 spēlētāju zoles istaba (līdz spēles sākumam vai atcelšanai) */
 let zole3pLobbySnapshot = null;
@@ -1081,7 +1187,14 @@ function showBoardGameResult(payload) {
   const iLost = winner && me && !iWon;
 
   if (!winner) {
-    if (
+    if (gameType === "chess" && reason === "timeout") {
+      title = "Laiks beidzies";
+      const to = payload?.timedOutPlayer;
+      detail = to
+        ? `${to} neizdarīja gājienu laikā — neizšķirts tabulā (nav mata).`
+        : "Kādam beidzās laiks — spēle beigusies bez uzvarētāja.";
+      overlay.classList.add("vz-board-result--draw");
+    } else if (
       gameType === "zole" &&
       vsBot &&
       reason === "zole_vs_bot_last_hand_done"
@@ -1100,7 +1213,9 @@ function showBoardGameResult(payload) {
     }
   } else if (iWon) {
     title = "Uzvara";
-    if (reason === "resign") {
+    if (reason === "timeout") {
+      detail = `Tu uzvarēji — pretiniekam beidzās laiks${oppName ? ` (${oppName})` : ""}.`;
+    } else if (reason === "resign") {
       detail =
         resignedBy && String(resignedBy).trim().toLowerCase() !== String(me).trim().toLowerCase()
           ? `Tu uzvarēji — ${oppName} padodas.`
@@ -1132,7 +1247,9 @@ function showBoardGameResult(payload) {
     overlay.classList.add("vz-board-result--win");
   } else {
     title = "Zaudējums";
-    if (reason === "resign") {
+    if (reason === "timeout") {
+      detail = "Tev beidzās laiks — zaudēji uz laiku.";
+    } else if (reason === "resign") {
       detail =
         resignedBy &&
         String(resignedBy).trim().toLowerCase() === String(me).trim().toLowerCase()
@@ -9858,6 +9975,9 @@ function initSocket() {
         payload.dambreteVariant
       );
     }
+    if (boardState.type === "chess" && payload?.chessClock) {
+      ingestChessClockPayload(payload);
+    }
     boardState.selectedCell = null;
     // Obligāti notīrīt — pretējā gadījumā paliek iepriekšējās kārtas jumps/moves
     // pret jauno laukumu (piem. pēc bota gājiena) un neviens kauliņš nav klikšķināms līdz refresh.
@@ -10281,7 +10401,9 @@ function startBoardGame(payload) {
       const c = Math.floor(Number(payload?.zole3pCoinsPerPoint) || 0);
       return Math.max(0, Math.min(5, c));
     })(),
+    chessClock: null,
   };
+  ingestChessClockPayload(payload);
   const gameArea = document.getElementById("board-game-area");
   const lobby = document.getElementById("board-games-lobby");
   const modal = document.getElementById("board-games-modal");
@@ -10297,6 +10419,7 @@ function startBoardGame(payload) {
 }
 
 function hideBoardGameArea() {
+  stopChessClockTick();
   if (window.VZZoleBoardTrickHold?.reset) {
     window.VZZoleBoardTrickHold.reset();
   }
@@ -10553,7 +10676,10 @@ function renderBoardGame() {
               : "Gaidām otra spēlētāja gājienu…";
       }
     } else if (!isMyTurn) {
-      hintEl.textContent = "Gaidām pretinieka gājienu.";
+      hintEl.textContent =
+        boardState.type === "chess" && boardState.chessClock
+          ? "Gaidām pretinieka gājienu. Laiks tērējas tikai viņa pusē."
+          : "Gaidām pretinieka gājienu.";
     } else if (boardState.type === "dambrete") {
       const jumpsOn = (boardState.legalMoves?.jumps || []).length > 0;
       const sel = boardState.selectedCell;
@@ -10579,17 +10705,23 @@ function renderBoardGame() {
           "Spied savu kauliņu, tad <strong class=\"vz-hint-mark vz-hint-mark--green\">zaļo</strong> lauciņu. Mainīt izvēli — spied citu savu kauliņu.";
       }
     } else if (boardState.type === "chess") {
+      const clockNote =
+        boardState.chessClock && !boardState.vsBot
+          ? " Katram spēlētājam 10 min uz visu spēli; laiks tērējas tikai tavā gājienā."
+          : boardState.chessClock && boardState.vsBot
+            ? " Tavs laiks: 10 min uz visu partiju (pret botu)."
+            : "";
       const sel = boardState.selectedCell;
       if (sel) {
         const sq = boardCellAlgebraic(sel[0], sel[1]);
         const n = countChessValidDestinations(sel[0], sel[1], boardState.legalMoves);
         hintEl.innerHTML =
           n > 0
-            ? `Izvēlēta figūra <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied <strong class="vz-hint-mark vz-hint-mark--green">zaļo</strong> lauciņu (${n} ${n === 1 ? "gājiens" : "gājieni"}). Citur — atcelt vai citu figūru.`
-            : `Izvēlēta <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Nav derīgu lauku — izvēlies citu savu figūru.`;
+            ? `Izvēlēta figūra <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied <strong class="vz-hint-mark vz-hint-mark--green">zaļo</strong> lauciņu (${n} ${n === 1 ? "gājiens" : "gājieni"}). Citur — atcelt vai citu figūru.${clockNote}`
+            : `Izvēlēta <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Nav derīgu lauku — izvēlies citu savu figūru.${clockNote}`;
       } else {
         hintEl.innerHTML =
-          "Spied savu figūru, tad <strong class=\"vz-hint-mark vz-hint-mark--green\">zaļo</strong> lauciņu. Mainīt — spied citu savu figūru.";
+          `Spied savu figūru, tad <strong class="vz-hint-mark vz-hint-mark--green">zaļo</strong> lauciņu. Mainīt — spied citu savu figūru.${clockNote}`;
       }
     } else {
       hintEl.textContent =
@@ -10695,6 +10827,7 @@ function renderBoardGame() {
   syncBoardModalFullscreen();
   syncBoardBrowserFullscreenUi();
   syncBoardModalContext();
+  syncChessClockDom();
 }
 
 async function handleChessCellClick(r, c, isPiece) {

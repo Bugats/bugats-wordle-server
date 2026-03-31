@@ -686,6 +686,9 @@ function getDuelOpponent(duel, username) {
 // ======== GALDA SPĒLES (dambrete, šahs) ========
 const BOARD_GAME_INVITE_TIMEOUT_MS = 60 * 1000; // 60s
 const BOARD_GAME_MOVE_TIMEOUT_MS = 5 * 60 * 1000; // 5 min per move (resign if exceeded)
+/** Šahs PvP / vs bot (tikai cilvēkam): atlikušais laiks katram spēlētājam (ms). */
+const CHESS_CLOCK_DEFAULT_MS = 10 * 60 * 1000; // 10 min katram
+const CHESS_CLOCK_INCREMENT_MS = 0; // Fischer +s — pagaidām 0
 const BOARD_GAME_REWARD_XP = 3;
 /** Coins tikai PvP (ne pret botu); 2 spēlētāji — mazāks risks, 3P zole — nedaudz lielāka izmaksa. */
 const BOARD_GAME_REWARD_COINS_2P = 8;
@@ -956,6 +959,93 @@ function boardGameSeatIndex(game, username) {
   return -1;
 }
 
+function chessClockInit(game) {
+  if (!game || game.type !== "chess") return;
+  const humanMs = CHESS_CLOCK_DEFAULT_MS;
+  const botMs = 365 * 24 * 60 * 60 * 1000; // vs bot: “bezgalīgs” laiks botam
+  game.chessClock = {
+    remainingMs: game.vsBot ? [humanMs, botMs] : [humanMs, humanMs],
+    incrementMs: CHESS_CLOCK_INCREMENT_MS,
+    turnStartAt: Date.now(),
+  };
+}
+
+function chessClockPayload(game) {
+  const clk = game?.chessClock;
+  if (!clk || !Array.isArray(clk.remainingMs)) return null;
+  const now = Date.now();
+  const elapsed = Math.max(0, now - (Number(clk.turnStartAt) || now));
+  const cur = game.turn;
+  const r0 = Math.max(0, (Number(clk.remainingMs[0]) || 0) - (cur === 0 ? elapsed : 0));
+  const r1 = Math.max(0, (Number(clk.remainingMs[1]) || 0) - (cur === 1 ? elapsed : 0));
+  return {
+    remainingMs: [r0, r1],
+    incrementMs: Math.max(0, Math.floor(Number(clk.incrementMs) || 0)),
+    turnStartAt: Number(clk.turnStartAt) || now,
+    serverNow: now,
+  };
+}
+
+function emitChessEnd(io, game, endBase, vsBot) {
+  if (vsBot) {
+    const human = game.players[0];
+    const { coinsGain, coinsLoss } = boardEndCoinsForPlayer(
+      game,
+      endBase.winner,
+      human
+    );
+    getSocketByUsername(human)?.emit("board.end", {
+      ...endBase,
+      coinsGain,
+      coinsLoss,
+    });
+  } else {
+    for (const p of game.players) {
+      const sock = getSocketByUsername(p);
+      if (!sock) continue;
+      const { coinsGain, coinsLoss } = boardEndCoinsForPlayer(
+        game,
+        endBase.winner,
+        p
+      );
+      sock.emit("board.end", { ...endBase, coinsGain, coinsLoss });
+    }
+  }
+}
+
+function finishChessOnTimeout(io, game, loserIdx) {
+  if (!game || game.status !== "active" || game.type !== "chess") return;
+  const winnerIdx = 1 - loserIdx;
+  const winner = game.players[winnerIdx] || null;
+  finishBoardGame(game, winner, "timeout");
+  const endBase = {
+    gameId: game.id,
+    type: "chess",
+    players: game.players,
+    vsBot: !!game.vsBot,
+    winner,
+    reason: "timeout",
+    timedOutPlayer: game.players[loserIdx] || null,
+    fen: game.fen,
+  };
+  emitChessEnd(io, game, endBase, !!game.vsBot);
+}
+
+function tickChessClocks(io) {
+  if (!io) return;
+  const now = Date.now();
+  for (const game of boardGames.values()) {
+    if (!game || game.status !== "active" || game.type !== "chess") continue;
+    const clk = game.chessClock;
+    if (!clk || !Array.isArray(clk.remainingMs)) continue;
+    const idx = game.turn;
+    if (game.vsBot && idx === 1) continue;
+    const elapsed = Math.max(0, now - (Number(clk.turnStartAt) || now));
+    const left = (Number(clk.remainingMs[idx]) || 0) - elapsed;
+    if (left <= 0) finishChessOnTimeout(io, game, idx);
+  }
+}
+
 function playBoardBotMove(io, game) {
   if (!game || game.status !== "active" || !game.vsBot) return;
   const humanUsername = game.players[0];
@@ -1011,6 +1101,19 @@ function playBoardBotMove(io, game) {
     if (!san) return;
     const m = chess.move(san);
     if (!m) return;
+    const clkB = game.chessClock;
+    const prevTurnB = game.turn;
+    if (clkB && Array.isArray(clkB.remainingMs)) {
+      const nowB = Date.now();
+      const elapsedB = Math.max(0, nowB - (Number(clkB.turnStartAt) || nowB));
+      let remB = Math.max(
+        0,
+        (Number(clkB.remainingMs[prevTurnB]) || 0) - elapsedB
+      );
+      remB += Math.max(0, Math.floor(Number(clkB.incrementMs) || 0));
+      clkB.remainingMs[prevTurnB] = remB;
+      clkB.turnStartAt = nowB;
+    }
     game.fen = chess.fen();
     game.turn = 1 - game.turn;
     game.moves.push({ san: m.san, by: BOARD_BOT_USERNAME, ts: Date.now() });
@@ -1037,6 +1140,7 @@ function playBoardBotMove(io, game) {
         fen: game.fen,
         turn: game.turn,
         move: m.san,
+        chessClock: chessClockPayload(game),
       });
     }
   }
@@ -1112,6 +1216,7 @@ function createChessGame(challenger, opponent) {
   boardGames.set(gameId, game);
   userToBoardGame.set(challenger, gameId);
   userToBoardGame.set(opponent, gameId);
+  chessClockInit(game);
   return game;
 }
 
@@ -1166,6 +1271,7 @@ function createChessVsBot(humanUsername, difficulty = "medium") {
   };
   boardGames.set(gameId, game);
   userToBoardGame.set(humanUsername, gameId);
+  chessClockInit(game);
   return game;
 }
 
@@ -6412,6 +6518,14 @@ const io = new Server(httpServer, {
 });
 ioServerRef = io;
 
+if (process.env.NODE_ENV !== "test") {
+  setInterval(() => {
+    try {
+      tickChessClocks(io);
+    } catch (_) {}
+  }, 1000);
+}
+
 // ======== ONLINE saraksts ========
 const onlineBySocket = new Map(); // socket.id -> username
 
@@ -11401,6 +11515,9 @@ io.on("connection", (socket) => {
     const boardGame = boardGameId ? boardGames.get(boardGameId) : null;
     if (boardGame && boardGame.status === "active") {
       socket.join(`board:${boardGame.id}`);
+      if (boardGame.type === "chess" && !boardGame.chessClock) {
+        chessClockInit(boardGame);
+      }
       if (boardGame.type === "zole" && boardGame.zole) {
         boardGame.turn =
           boardGame.zole.phase === "bid"
@@ -11429,6 +11546,10 @@ io.on("connection", (socket) => {
         zole3pCoinsPerPoint:
           boardGame.type === "zole" && boardGame.zoleMode === "online_3p"
             ? clampZole3pCoinsPerPoint(boardGame.zole3pCoinsPerPoint)
+            : undefined,
+        chessClock:
+          boardGame.type === "chess"
+            ? chessClockPayload(boardGame)
             : undefined,
       });
     }
@@ -12873,6 +12994,8 @@ io.on("connection", (socket) => {
         board: game.board,
         fen: game.fen,
         dambreteVariant: game.dambreteVariant,
+        chessClock:
+          game.type === "chess" ? chessClockPayload(game) : undefined,
       };
       io.to(room).emit("board.start", payloadOut);
     }
@@ -12920,6 +13043,8 @@ io.on("connection", (socket) => {
       dambreteVariant: game.dambreteVariant,
       zole: game.type === "zole" ? zolePublicSnapshot(game.zole, 0) : undefined,
       zoleMode: game.type === "zole" ? game.zoleMode : undefined,
+      chessClock:
+        game.type === "chess" ? chessClockPayload(game) : undefined,
     };
     socket.emit("board.start", payloadOut);
     broadcastOnlineBoardPresence();
@@ -13127,6 +13252,19 @@ io.on("connection", (socket) => {
       const m = chess.move(san);
       if (!m)
         return socket.emit("board.error", { message: "Nederīgs gājiens." });
+      const clk = game.chessClock;
+      const prevTurn = game.turn;
+      if (clk && Array.isArray(clk.remainingMs)) {
+        const nowC = Date.now();
+        const elapsedC = Math.max(0, nowC - (Number(clk.turnStartAt) || nowC));
+        let remC = Math.max(
+          0,
+          (Number(clk.remainingMs[prevTurn]) || 0) - elapsedC
+        );
+        remC += Math.max(0, Math.floor(Number(clk.incrementMs) || 0));
+        clk.remainingMs[prevTurn] = remC;
+        clk.turnStartAt = nowC;
+      }
       game.fen = chess.fen();
       game.moves.push({ san: m.san, by: user.username, ts: Date.now() });
       game.turn = 1 - game.turn;
@@ -13179,6 +13317,7 @@ io.on("connection", (socket) => {
           fen: game.fen,
           turn: game.turn,
           move: m.san,
+          chessClock: chessClockPayload(game),
         });
         if (game.vsBot && game.turn === 1)
           setImmediate(() => playBoardBotMove(io, game));

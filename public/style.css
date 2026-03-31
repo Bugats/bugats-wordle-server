@@ -5786,6 +5786,48 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   color: #86efac;
   font-weight: 700;
 }
+.vz-board-chess-clocks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 10px;
+}
+.vz-board-chess-clock {
+  flex: 1 1 140px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.vz-board-chess-clock--active {
+  border-color: rgba(157, 34, 53, 0.65);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+  background: rgba(157, 34, 53, 0.18);
+}
+.vz-board-chess-clock--low {
+  border-color: rgba(248, 113, 113, 0.55);
+}
+.vz-board-chess-clock__who {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(244, 244, 245, 0.88);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 55%;
+}
+.vz-board-chess-clock__time {
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  font-weight: 700;
+  color: #faf7f8;
+  letter-spacing: 0.02em;
+}
 .vz-board-game-hint {
   font-size: 13px;
   line-height: 1.45;
