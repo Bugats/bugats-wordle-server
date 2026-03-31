@@ -705,10 +705,15 @@
         typeof zole.trickLeader === "number" ? zole.trickLeader : null;
       if (tl != null) {
         const nm = zole.players?.[tl] || "?";
+        const mz =
+          zole.contract === "maza_zole" &&
+          typeof zole.contractorIdx === "number"
+            ? " Mazajam stiķis = lielais zaudē uzreiz."
+            : "";
         sub.textContent =
           tl === myIdx
-            ? "Tu vadi šo stiķi — met pirmo kārti."
-            : `Vada ${nm} — gaida pirmo kārti.`;
+            ? `Tu vadi šo stiķi — met pirmo kārti.${mz}`
+            : `Vada ${nm} — gaida pirmo kārti.${mz}`;
       } else {
         sub.textContent = "\u00a0";
       }
@@ -977,9 +982,14 @@
       return `Zole zaudēta (${lr.tier} p. katram pretiniekam).${bs}`;
     }
     if (lr.kind === "maza_zole") {
-      return lr.win
-        ? "Mazā zole uzvarēta (+12 · −6 katram mazajam)."
-        : "Mazā zole zaudēta (−14 · +7 katram mazajam).";
+      if (lr.win) {
+        return "Mazā zole uzvarēta (+12 · −6 katram mazajam).";
+      }
+      const early =
+        lr.earlyOpponentTrick === true
+          ? " Pretinieks ņēma stiķi — partija beidzās uzreiz."
+          : "";
+      return `Mazā zole zaudēta (−14 · +7 katram mazajam).${early}`;
     }
     return "";
   }
