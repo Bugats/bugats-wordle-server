@@ -1876,7 +1876,7 @@ function handleRatePromptFeedback() {
 }
 
 // ==================== TUTORIAL ====================
-const TUTORIAL_STORAGE_KEY = "vz_tutorial_seen_v2";
+const TUTORIAL_STORAGE_KEY = "vz_tutorial_seen_v3";
 const LV_KEYBOARD_HINT_STORAGE = "vz_lv_keyboard_hint_shown";
 const TUTORIAL_STEPS = [
   {
@@ -1896,8 +1896,8 @@ const TUTORIAL_STEPS = [
     body: "Izvēlies burtus, saliec vārdu un nospied ENTER (vai taustiņu Enter). Garums atkarīgs no raunda (bieži 5 vai 6 burti).",
   },
   {
-    title: "Zaļš = pareizā vieta",
-    body: "Burts ir vārdā un pareizajā vietā.",
+    title: "Sarkans = pareizā vieta",
+    body: "Burts ir vārdā un pareizajā vietā (sarkanā rūtiņā).",
     example: ["A", "B", "C", "D", "E", "F"],
     exampleStatus: [
       "correct",
@@ -4595,7 +4595,7 @@ async function startNewRound() {
         if (localStorage.getItem(LV_KEYBOARD_HINT_STORAGE) === "pending") {
           localStorage.setItem(LV_KEYBOARD_HINT_STORAGE, "1");
           msg +=
-            " Tastatūra: latviešu QWERTY (bez Q, W, X, Y); SHIFT = Ā, Č, Ē… Atkārtoti SHIFT — atpakaļ. Palīdzība: 📖 Tutorial augšā.";
+            " Pareizā vieta = sarkana rūtiņa; dzeltens = burts ir, bet citā vietā. Tastatūra: latviešu QWERTY (bez Q, W, X, Y); SHIFT = Ā, Č, Ē… Palīdzība: 📖 Tutorial augšā.";
         }
       } catch {}
       gameMessageEl.textContent = msg;
@@ -11540,7 +11540,7 @@ function buildShareMatrix(rowsUsed) {
 
 function buildShareGridText(matrix) {
   const map = {
-    correct: "🟩",
+    correct: "🟥",
     present: "🟨",
     absent: "⬛",
     empty: "⬜",
@@ -11610,7 +11610,7 @@ async function buildShareSticker(data) {
   const startY = 300;
 
   const colors = {
-    correct: "#00c853",
+    correct: "#9d2235",
     present: "#ff9100",
     absent: "#1a1b2e",
     empty: "#2a2a2c",
@@ -12554,7 +12554,7 @@ function showLevelUpAnimation(level, rankTitle) {
       particleCount: 100,
       spread: 100,
       origin: { y: 0.5 },
-      colors: ["#ffd700", "#ff8c00", "#00c853"],
+      colors: ["#ffd700", "#ff8c00", "#9d2235"],
     });
   }
   _levelUpDismissTimer = setTimeout(dismiss, 4000);
