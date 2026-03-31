@@ -813,6 +813,51 @@ const zole3pSeatInviteById = new Map();
 
 const ZOLE_3P_LOBBY_TTL_MS = 30 * 60 * 1000;
 
+/** Set when Socket.IO server is created; used to broadcast open Zole 3P lobby list */
+let ioServerRef = null;
+
+function zole3pLobbyListEntry(lobby) {
+  if (!lobby) return null;
+  const now = Date.now();
+  if (now > Number(lobby.expiresAt || 0)) return null;
+  const players = Array.isArray(lobby.players) ? lobby.players.slice() : [];
+  if (players.length >= 3) return null;
+  const cpp = clampZole3pCoinsPerPoint(lobby.zole3pCoinsPerPoint);
+  const openSeats = Math.max(0, 3 - players.length);
+  return {
+    lobbyId: lobby.id,
+    host: lobby.host,
+    players,
+    playerCount: players.length,
+    openSeats,
+    zole3pCoinsPerPoint: cpp,
+    hasPendingInvite: !!(
+      lobby.invitedSeat && String(lobby.invitedSeat).trim()
+    ),
+    stakeLabel:
+      cpp > 0 ? `${cpp} coins / tabulas punkts` : "+10/−4 (fiksēti)",
+  };
+}
+
+function buildZole3pOpenLobbyListPayload() {
+  const now = Date.now();
+  const rooms = [];
+  for (const lobby of zole3pLobbyById.values()) {
+    const e = zole3pLobbyListEntry(lobby);
+    if (e) rooms.push(e);
+  }
+  rooms.sort((a, b) => {
+    if (b.openSeats !== a.openSeats) return b.openSeats - a.openSeats;
+    return String(a.host || "").localeCompare(String(b.host || ""), "lv");
+  });
+  return { rooms, serverNow: now };
+}
+
+function broadcastZole3pOpenLobbyList() {
+  if (!ioServerRef) return;
+  ioServerRef.emit("board.zoleOpenLobbies", buildZole3pOpenLobbyListPayload());
+}
+
 function zole3pLobbyPayload(lobby) {
   if (!lobby) return null;
   return {
@@ -1197,12 +1242,18 @@ function createZoleOnline3pGame(usernameA, usernameB, usernameC) {
   return game;
 }
 
-function notifyZole3pLobbyPeers(lobbyId, event, payload) {
+function notifyZole3pLobbyPeers(
+  lobbyId,
+  event,
+  payload,
+  skipOpenLobbyBroadcast = false
+) {
   const lobby = zole3pLobbyById.get(lobbyId);
   if (!lobby) return;
   for (const p of lobby.players || []) {
     getSocketByUsername(p)?.emit(event, payload);
   }
+  if (!skipOpenLobbyBroadcast) broadcastZole3pOpenLobbyList();
 }
 
 function zole3pClearInvitedSeatIfUser(username) {
@@ -1237,10 +1288,15 @@ function clearZole3pLobby(lobbyId, notifyCancel) {
   const lobby = zole3pLobbyById.get(lobbyId);
   if (!lobby) return;
   if (notifyCancel) {
-    notifyZole3pLobbyPeers(lobbyId, "board.zoleLobby", {
-      zoleLobby: false,
-      cancelled: true,
-    });
+    notifyZole3pLobbyPeers(
+      lobbyId,
+      "board.zoleLobby",
+      {
+        zoleLobby: false,
+        cancelled: true,
+      },
+      true
+    );
   }
   const toDel = [];
   for (const [id, meta] of zole3pSeatInviteById.entries()) {
@@ -1252,6 +1308,7 @@ function clearZole3pLobby(lobbyId, notifyCancel) {
   }
   if (lobby.invitedSeat) userToZole3pLobby.delete(lobby.invitedSeat);
   zole3pLobbyById.delete(lobbyId);
+  broadcastZole3pOpenLobbyList();
 }
 
 function emitZoleToHumans(io, game, event, base) {
@@ -6353,6 +6410,7 @@ const io = new Server(httpServer, {
       ? { origin: "*", methods: ["GET", "POST"] }
       : { origin: CORS_ORIGINS, methods: ["GET", "POST"], credentials: true },
 });
+ioServerRef = io;
 
 // ======== ONLINE saraksts ========
 const onlineBySocket = new Map(); // socket.id -> username
@@ -11313,6 +11371,8 @@ io.on("connection", (socket) => {
 
   const passiveChanged = markActivity(user);
 
+  socket.emit("board.zoleOpenLobbies", buildZole3pOpenLobbyListPayload());
+
   // Ja lietotājs ir aktīvā duelī un viņš pārlādē lapu, dodam iespēju turpināt
   try {
     const duelId = userToDuel.get(user.username);
@@ -12433,6 +12493,67 @@ io.on("connection", (socket) => {
     zole3pLobbyById.set(id, lobby);
     userToZole3pLobby.set(fromUser.username, id);
     socket.emit("board.zoleLobby", zole3pLobbyPayload(lobby));
+    broadcastZole3pOpenLobbyList();
+  });
+
+  socket.on("board.zoleRequestOpenLobbies", () => {
+    socket.emit("board.zoleOpenLobbies", buildZole3pOpenLobbyListPayload());
+  });
+
+  socket.on("board.zoleJoinOpenLobby", (payload) => {
+    const user = socket.data.user;
+    if (!user) return;
+    const lobbyId = String(payload?.lobbyId || "").trim();
+    if (!lobbyId)
+      return socket.emit("board.error", { message: "Nav norādīta istaba." });
+    if (userToBoardGame.has(user.username))
+      return socket.emit("board.error", { message: "Tu jau esi spēlē." });
+    const existingLid = userToZole3pLobby.get(user.username);
+    if (existingLid) {
+      const ex = zole3pLobbyById.get(existingLid);
+      if (ex && existingLid === lobbyId) {
+        socket.emit("board.zoleLobby", zole3pLobbyPayload(ex));
+        return;
+      }
+      if (ex)
+        return socket.emit("board.error", {
+          message:
+            "Tu jau gaidi citā zoles istabā. Vispirms pamet to vai atcel saimnieks.",
+        });
+      userToZole3pLobby.delete(user.username);
+    }
+    const lobby = zole3pLobbyById.get(lobbyId);
+    if (!lobby)
+      return socket.emit("board.error", {
+        message: "Šī istaba vairs nav pieejama.",
+      });
+    if (Date.now() > (lobby.expiresAt || 0)) {
+      clearZole3pLobby(lobbyId, true);
+      return socket.emit("board.error", {
+        message: "Zoles istaba ir beigusies.",
+      });
+    }
+    if (lobby.players.length >= 3)
+      return socket.emit("board.error", { message: "Istaba jau ir pilna." });
+    if (lobby.invitedSeat)
+      return socket.emit("board.error", {
+        message:
+          "Saimnieks gaida uzaicināta spēlētāja atbildi — brīva vieta vēl nav.",
+      });
+    if (
+      lobby.players.some(
+        (p) =>
+          String(p).toLowerCase() === String(user.username).toLowerCase()
+      )
+    ) {
+      socket.emit("board.zoleLobby", zole3pLobbyPayload(lobby));
+      return;
+    }
+    lobby.players.push(user.username);
+    userToZole3pLobby.set(user.username, lobby.id);
+    lobby.expiresAt = Date.now() + ZOLE_3P_LOBBY_TTL_MS;
+    notifyZole3pLobbyPeers(lobby.id, "board.zoleLobby", zole3pLobbyPayload(lobby));
+    maybeStartZole3pFromLobby(io, lobby);
   });
 
   socket.on("board.zoleSetLobbyStake", (payload) => {
@@ -13370,6 +13491,11 @@ if (process.env.NODE_ENV !== "test") {
 const __testHooks = {
   setRegionStateForTestOnly,
   getCurrentRoundWordForTestOnly,
+  resetWeeklyQueueForTestOnly() {
+    if (process.env.NODE_ENV !== "test") return;
+    tournamentStore.weeklyQueue = buildInitialWeeklyQueue(Date.now());
+    saveTournamentStore();
+  },
   grantRegionRewardForCompetitiveWinForTestOnly(username, basePoints) {
     if (process.env.NODE_ENV !== "test") return false;
     const u = getUserByNameForTestOnly(username);

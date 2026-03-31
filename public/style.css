@@ -7317,6 +7317,76 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   font-size: 11px;
   opacity: 0.85;
 }
+
+.vz-board-zole-open-lobbies {
+  margin: 0 0 14px;
+  padding: 12px 12px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(196, 181, 253, 0.28);
+  background: rgba(15, 23, 42, 0.35);
+}
+.vz-board-zole-open-lobbies__title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e9d5ff;
+}
+.vz-board-zole-open-lobbies__intro {
+  margin: 0 0 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(244, 244, 245, 0.78);
+}
+.vz-board-zole-open-lobbies__scroll {
+  max-height: min(220px, 42vh);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.vz-board-zole-open-lobbies__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  color: #f4f4f5;
+}
+.vz-board-zole-open-lobbies__table th,
+.vz-board-zole-open-lobbies__table td {
+  padding: 7px 8px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  vertical-align: middle;
+}
+.vz-board-zole-open-lobbies__table th {
+  font-weight: 700;
+  color: #ddd6fe;
+  background: rgba(0, 0, 0, 0.2);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.vz-board-zole-open-lobbies__table tr:last-child td {
+  border-bottom: none;
+}
+.vz-board-zole-open-lobbies__join {
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: var(--vz-accent-grad);
+  color: var(--vz-lv-white);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.vz-board-zole-open-lobbies__join:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.vz-board-zole-open-lobbies__empty {
+  margin: 8px 0 0;
+}
+
 .vz-board-invite-stake {
   margin: 8px 0 0;
   font-size: 13px;

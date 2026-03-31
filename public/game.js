@@ -736,6 +736,113 @@ const BOARD_BOT_DISPLAY_NAME = "VZBot";
 /** Atvērtā 3 spēlētāju zoles istaba (līdz spēles sākumam vai atcelšanai) */
 let zole3pLobbySnapshot = null;
 
+/** Servera saraksts ar brīvajām 3P zoles istabām (globāls broadcast) */
+let zole3pOpenLobbiesCache = { rooms: [], serverNow: 0 };
+let zole3pOpenLobbyPollTimer = null;
+
+function clearZole3pOpenLobbyPoll() {
+  if (zole3pOpenLobbyPollTimer != null) {
+    clearInterval(zole3pOpenLobbyPollTimer);
+    zole3pOpenLobbyPollTimer = null;
+  }
+}
+
+function scheduleZole3pOpenLobbyPoll() {
+  clearZole3pOpenLobbyPoll();
+  if (!state.socket || typeof state.socket.emit !== "function") return;
+  zole3pOpenLobbyPollTimer = setInterval(() => {
+    try {
+      state.socket.emit("board.zoleRequestOpenLobbies");
+    } catch (_) {}
+  }, 12000);
+}
+
+function renderZole3pOpenLobbyTable() {
+  const wrap = document.getElementById("board-zole-3p-open-lobbies");
+  const tbody = document.getElementById("board-zole-3p-open-lobbies-body");
+  const emptyEl = document.getElementById("board-zole-3p-open-lobbies-empty");
+  if (!wrap || !tbody) return;
+  const me = String(state.username || "").trim().toLowerCase();
+  const inGame = !!boardState.gameId;
+  const inLobby = !!zole3pLobbySnapshot?.zoleLobby;
+  const myLobbyId = inLobby
+    ? String(zole3pLobbySnapshot?.lobbyId || "").trim()
+    : "";
+  const rooms = Array.isArray(zole3pOpenLobbiesCache?.rooms)
+    ? zole3pOpenLobbiesCache.rooms
+    : [];
+  if (emptyEl) {
+    emptyEl.classList.toggle("hidden", rooms.length > 0);
+  }
+  if (rooms.length === 0) {
+    tbody.innerHTML = "";
+    return;
+  }
+  const rows = rooms.map((r) => {
+    const lid = String(r?.lobbyId || "").trim();
+    const host = String(r?.host || "—");
+    const n = Math.max(0, Math.floor(Number(r?.playerCount) || 0));
+    const open = Math.max(0, Math.floor(Number(r?.openSeats) || 0));
+    const stake = String(r?.stakeLabel || "—");
+    const pending = !!r?.hasPendingInvite;
+    const inThis =
+      me &&
+      Array.isArray(r?.players) &&
+      r.players.some((p) => String(p || "").toLowerCase() === me);
+    let btnLabel = "Pievienoties";
+    let disabled = false;
+    let title = "";
+    if (inGame) {
+      disabled = true;
+      title = "Vispirms beidz pašreizējo spēli.";
+    } else if (inLobby && !inThis) {
+      disabled = true;
+      title = "Vispirms pamet savu istabu.";
+    } else if (pending) {
+      disabled = true;
+      title = "Saimnieks gaida uzaicināta spēlētāja atbildi.";
+    } else if (inThis) {
+      btnLabel = myLobbyId === lid ? "Atvērt" : "Jau istabā";
+      disabled = myLobbyId === lid ? false : true;
+      title =
+        myLobbyId === lid
+          ? "Atver lobby skatu."
+          : "Tu jau esi šīs istabas dalībnieks.";
+    }
+    const oc = open > 0 && !pending ? `${n}/3` : `${n}/3 · gaida`;
+    return `<tr data-zole-lobby-id="${escapeHtml(lid)}">
+      <td>${escapeHtml(host)}</td>
+      <td>${escapeHtml(oc)}</td>
+      <td>${escapeHtml(stake)}</td>
+      <td><button type="button" class="vz-board-zole-open-lobbies__join js-zole-open-lobby-join" data-zole-lobby-id="${escapeHtml(lid)}" ${disabled ? "disabled" : ""} title="${escapeHtml(title)}">${escapeHtml(btnLabel)}</button></td>
+    </tr>`;
+  });
+  tbody.innerHTML = rows.join("");
+}
+
+function syncZole3pOpenLobbyPanelVisibility() {
+  const wrap = document.getElementById("board-zole-3p-open-lobbies");
+  if (!wrap) return;
+  const lobbyEl = document.getElementById("board-games-lobby");
+  const lobbyVisible = lobbyEl && !lobbyEl.classList.contains("hidden");
+  const inInvite = (() => {
+    const invite = document.getElementById("board-games-invite");
+    return invite && !invite.classList.contains("hidden");
+  })();
+  const inZoleRoomFlow =
+    getSelectedBoardZoleMode() === "online_3p" ||
+    !!zole3pLobbySnapshot?.zoleLobby;
+  const show =
+    lobbyVisible && !inInvite && inZoleRoomFlow && !boardState.gameId;
+  wrap.classList.toggle("hidden", !show);
+  if (show) {
+    renderZole3pOpenLobbyTable();
+    scheduleZole3pOpenLobbyPoll();
+  } else {
+    clearZole3pOpenLobbyPoll();
+  }
+}
+
 function syncZole3pStakeSelectFromLobby() {
   const sel = document.getElementById("board-zole-3p-stake");
   if (!sel) return;
@@ -792,6 +899,7 @@ function updateZole3pLobbyUI(payload) {
       appendGaldaSystemMessage("Zoles istaba atcelta.");
     syncZole3pStakeSelectFromLobby();
     syncBoardDambreteModePanelVisibility();
+    syncZole3pOpenLobbyPanelVisibility();
     return;
   }
   zole3pLobbySnapshot = payload;
@@ -838,6 +946,7 @@ function updateZole3pLobbyUI(payload) {
   if (guestLeave)
     guestLeave.classList.toggle("hidden", !inLobby || isHost || n >= 3);
   syncBoardDambreteModePanelVisibility();
+  syncZole3pOpenLobbyPanelVisibility();
 }
 
 function normalizeDambreteVariantClient(v) {
@@ -9661,6 +9770,13 @@ function initSocket() {
   socket.on("board.zoleLobby", (payload) => {
     updateZole3pLobbyUI(payload);
   });
+  socket.on("board.zoleOpenLobbies", (payload) => {
+    zole3pOpenLobbiesCache = {
+      rooms: Array.isArray(payload?.rooms) ? payload.rooms : [],
+      serverNow: Number(payload?.serverNow) || Date.now(),
+    };
+    syncZole3pOpenLobbyPanelVisibility();
+  });
   socket.on("board.error", (payload) => {
     appendGaldaSystemMessage(payload?.message || "Galda spēles kļūda.");
   });
@@ -9880,6 +9996,7 @@ function syncBoardDambreteModePanelVisibility() {
     !zole3pLobbySnapshot?.zoleLobby;
   if (zoleRoomEntry) zoleRoomEntry.classList.toggle("hidden", !show3pEntry);
   syncBoardModalContext();
+  syncZole3pOpenLobbyPanelVisibility();
 }
 
 function showBoardModal() {
@@ -9900,6 +10017,7 @@ function showBoardModal() {
     if (gameArea) gameArea.classList.remove("hidden");
     renderBoardGame();
     syncBoardModalFullscreen();
+    syncZole3pOpenLobbyPanelVisibility();
   } else {
     if (lobby) lobby.classList.remove("hidden");
     if (invite) invite.classList.add("hidden");
@@ -9911,6 +10029,7 @@ function showBoardModal() {
   }
   syncBoardDambreteModePanelVisibility();
   syncBoardModalContext();
+  syncZole3pOpenLobbyPanelVisibility();
   if (inner && (!overlay || overlay.classList.contains("hidden"))) {
     requestAnimationFrame(() => {
       try {
@@ -10002,6 +10121,7 @@ function syncBoardModalFullscreen() {
 }
 
 function hideBoardModal() {
+  clearZole3pOpenLobbyPoll();
   hideBoardResultOverlay();
   void exitBoardBrowserFullscreenIfActive();
   const modal = document.getElementById("board-games-modal");
@@ -10099,6 +10219,7 @@ function showBoardInviteModal(from, type, payload) {
   syncBoardModalFullscreen();
   syncBoardDambreteModePanelVisibility();
   syncBoardModalContext();
+  syncZole3pOpenLobbyPanelVisibility();
   if (inner) {
     requestAnimationFrame(() => {
       try {
@@ -10172,6 +10293,7 @@ function startBoardGame(payload) {
   syncBoardModalFullscreen();
   syncBoardDambreteModePanelVisibility();
   syncBoardModalContext();
+  syncZole3pOpenLobbyPanelVisibility();
 }
 
 function hideBoardGameArea() {
@@ -10201,6 +10323,7 @@ function hideBoardGameArea() {
   updateBoardGameBadge(false);
   document.getElementById("board-zole-stake-banner")?.classList.add("hidden");
   syncBoardModalContext();
+  clearZole3pOpenLobbyPoll();
 }
 
 function updateBoardGameBadge(show) {
@@ -10995,6 +11118,25 @@ function bindBoardGames() {
   document.querySelectorAll('input[name="board-zole-mode"]').forEach((el) => {
     el.addEventListener("change", () => syncBoardDambreteModePanelVisibility());
   });
+  document
+    .getElementById("board-zole-3p-open-lobbies")
+    ?.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".js-zole-open-lobby-join");
+      if (!btn || btn.disabled) return;
+      const lid = String(btn.dataset.zoleLobbyId || "").trim();
+      if (!lid) return;
+      const label = String(btn.textContent || "").trim();
+      if (label === "Atvērt") {
+        showBoardModal();
+        const snap = zole3pLobbySnapshot;
+        if (String(snap?.lobbyId || "").trim() === lid) {
+          updateZole3pLobbyUI(snap);
+        }
+        return;
+      }
+      if (!boardGamesEnsureSocketConnected()) return;
+      state.socket.emit("board.zoleJoinOpenLobby", { lobbyId: lid });
+    });
 }
 
 // ==================== ČATS: SŪTĪŠANA + SEZONAS KOMANDA ====================
