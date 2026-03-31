@@ -1,6 +1,6 @@
 import request from "supertest";
 import { describe, expect, it } from "vitest";
-import { app } from "../server.js";
+import { app, __testHooks } from "../server.js";
 
 async function ensureUserToken({
   username,
@@ -338,6 +338,7 @@ describe("Tournament brackets API", () => {
   });
 
   it("allows weekly queue join but blocks same-device fake profile", async () => {
+    __testHooks.resetWeeklyQueueForTestOnly();
     const sharedDeviceId = `shared-device-${Date.now().toString().slice(-8)}`;
     const u1 = `wq${Date.now().toString().slice(-6)}a`;
     const u2 = `wq${Date.now().toString().slice(-6)}b`;
