@@ -11541,7 +11541,7 @@ io.on("connection", (socket) => {
                 boardGameSeatIndex(boardGame, user.username)
               )
             : undefined,
-        vsBot: boardGame.type === "zole" ? !!boardGame.vsBot : undefined,
+        vsBot: !!boardGame.vsBot,
         zoleMode: boardGame.type === "zole" ? boardGame.zoleMode : undefined,
         zole3pCoinsPerPoint:
           boardGame.type === "zole" && boardGame.zoleMode === "online_3p"
@@ -11552,6 +11552,19 @@ io.on("connection", (socket) => {
             ? chessClockPayload(boardGame)
             : undefined,
       });
+    }
+  } catch {}
+  try {
+    const zlId = userToZole3pLobby.get(user.username);
+    const zlob = zlId ? zole3pLobbyById.get(zlId) : null;
+    if (zlob) {
+      if (Date.now() > (zlob.expiresAt || 0)) {
+        clearZole3pLobby(zlId, true);
+      } else {
+        socket.emit("board.zoleLobby", zole3pLobbyPayload(zlob));
+      }
+    } else if (zlId) {
+      userToZole3pLobby.delete(user.username);
     }
   } catch {}
   ensureDailyMissions(user);

@@ -9418,6 +9418,11 @@ function initSocket() {
   socket.on("disconnect", (reason) => {
     if (reason === "io client disconnect") return;
     appendSystemMessage("Atvienots no servera.");
+    if (boardState?.gameId || zole3pLobbySnapshot?.zoleLobby) {
+      appendGaldaSystemMessage(
+        "Īslaicīgs atvienojums — pēc atkārtotas pieslēgšanās galds un istaba sinhronizēsies automātiski."
+      );
+    }
   });
 
   socket.on("chatHistory", (payload) => {
@@ -10000,7 +10005,9 @@ function initSocket() {
   });
   socket.on("board.resume", (payload) => {
     startBoardGame(payload);
-    appendGaldaSystemMessage("Spēle atjaunota.");
+    appendGaldaSystemMessage(
+      "Atjaunoju galda spēli — stāvoklis ielādēts no servera. Vari turpināt."
+    );
     const myIdx = boardGamePlayerIndex(payload?.players || [], state.username);
     const t = payload?.type || "dambrete";
     const isMyTurn =
