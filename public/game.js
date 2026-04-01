@@ -734,6 +734,10 @@ let boardState = {
 };
 
 const BOARD_BOT_DISPLAY_NAME = "VZBot";
+const ZOLE_BOT_USERNAMES = new Set(["ZoleBot1", "ZoleBot2"]);
+
+/** Pēdējais galda rezultāts — revānša pogai */
+let lastBoardResultSnapshot = null;
 
 let _chessClockRaf = null;
 
@@ -1091,6 +1095,8 @@ function boardZoleModeLabel(mode) {
 
 function hideBoardResultOverlay() {
   document.getElementById("board-result-overlay")?.classList.add("hidden");
+  document.getElementById("board-result-rematch")?.classList.add("hidden");
+  document.getElementById("board-result-rematch-status")?.classList.add("hidden");
   const modal = document.getElementById("board-games-modal");
   const inner = document.getElementById("board-modal-inner");
   if (modal && !modal.classList.contains("hidden") && inner) {
@@ -1117,6 +1123,71 @@ function boardGameOpponentName(players, vsBot) {
   if (!opp) return "pretinieks";
   if (vsBot && String(opp) === BOARD_BOT_DISPLAY_NAME) return "bots (VZBot)";
   return String(opp);
+}
+
+function boardResultHumanOpponentUsername(players) {
+  const arr = players || [];
+  const meLc = String(state.username || "").trim().toLowerCase();
+  const humans = arr.filter((p) => {
+    const s = String(p || "").trim();
+    if (!s) return false;
+    if (s === BOARD_BOT_DISPLAY_NAME) return false;
+    if (ZOLE_BOT_USERNAMES.has(s)) return false;
+    return true;
+  });
+  const others = humans.filter(
+    (p) => String(p || "").trim().toLowerCase() !== meLc
+  );
+  if (others.length !== 1) return "";
+  return String(others[0] || "").trim();
+}
+
+function isBoardResultRematchEligible(snap) {
+  if (!snap || snap.vsBot) return false;
+  const t = snap.gameType;
+  if (t !== "dambrete" && t !== "chess" && t !== "zole") return false;
+  if (t === "zole" && snap.zoleMode !== "online_2p") return false;
+  return !!snap.opponentUsername;
+}
+
+function syncBoardResultRematchUi() {
+  const btn = document.getElementById("board-result-rematch");
+  const st = document.getElementById("board-result-rematch-status");
+  const overlay = document.getElementById("board-result-overlay");
+  if (st) {
+    st.textContent = "";
+    st.classList.add("hidden");
+  }
+  if (!btn) return;
+  const show =
+    overlay &&
+    !overlay.classList.contains("hidden") &&
+    isBoardResultRematchEligible(lastBoardResultSnapshot);
+  btn.classList.toggle("hidden", !show);
+  btn.disabled = false;
+}
+
+function sendBoardRematchInvite() {
+  const snap = lastBoardResultSnapshot;
+  if (!isBoardResultRematchEligible(snap)) return;
+  if (!boardGamesEnsureSocketConnected()) return;
+  const opp = snap.opponentUsername;
+  const type = snap.gameType;
+  const payload = { type, opponentUsername: opp };
+  if (type === "dambrete")
+    payload.dambreteVariant = snap.dambreteVariant || "russian";
+  if (type === "zole") payload.zoleMode = "online_2p";
+  state.socket.emit("board.rematchRequest", payload);
+  const st = document.getElementById("board-result-rematch-status");
+  if (st) {
+    st.textContent = `Revānša uzaicinājums nosūtīts: ${opp}. Gaidām atbildi…`;
+    st.classList.remove("hidden");
+  }
+  const btn = document.getElementById("board-result-rematch");
+  if (btn) btn.disabled = true;
+  hideBoardResultOverlay();
+  showBoardModal();
+  appendGaldaSystemMessage(`Revānšs: uzaicinājums nosūtīts ${opp}.`);
 }
 
 function zoleResultExtraLine(snap) {
@@ -1166,6 +1237,14 @@ function showBoardGameResult(payload) {
       : gameType === "zole"
         ? "Zole"
         : `Dambrete (${boardDambreteModeLabel(dVar)})`;
+
+  lastBoardResultSnapshot = {
+    gameType,
+    vsBot,
+    zoleMode: gameType === "zole" ? boardState.zoleMode : null,
+    dambreteVariant: gameType === "dambrete" ? dVar : null,
+    opponentUsername: boardResultHumanOpponentUsername(players),
+  };
 
   overlay.classList.remove(
     "vz-board-result--win",
@@ -1298,6 +1377,7 @@ function showBoardGameResult(payload) {
   }
 
   overlay.classList.remove("hidden");
+  syncBoardResultRematchUi();
   _boardResultFocusReturn = document.activeElement;
   document.getElementById("board-result-close")?.focus({ preventScroll: true });
 }
@@ -9872,14 +9952,19 @@ function initSocket() {
     showBoardInviteModal(from, type, payload);
     const typeLv =
       type === "chess" ? "šahu" : type === "zole" ? "zoli" : "dambreti";
+    const rem = !!payload?.rematch;
     appendGaldaSystemMessage(
-      `${from} uzaicina uz ${typeLv}. Atver «Galda spēles», lai pieņemtu vai noraidītu.`
+      rem
+        ? `${from} piedāvā revānšu (${typeLv}). Atver «Galda spēles», lai pieņemtu vai noraidītu.`
+        : `${from} uzaicina uz ${typeLv}. Atver «Galda spēles», lai pieņemtu vai noraidītu.`
     );
   });
-  socket.on("board.inviteSent", () => {
+  socket.on("board.inviteSent", (payload) => {
     const pending = document.getElementById("board-invite-pending");
     if (pending) pending.classList.remove("hidden");
-    appendGaldaSystemMessage("Uzaicinājums nosūtīts.");
+    appendGaldaSystemMessage(
+      payload?.rematch ? "Revānša uzaicinājums nosūtīts." : "Uzaicinājums nosūtīts."
+    );
   });
   socket.on("board.zoleThirdInviteSent", () => {
     appendGaldaSystemMessage("Zoles uzaicinājums trešajam spēlētājam nosūtīts.");
@@ -9898,6 +9983,7 @@ function initSocket() {
     appendGaldaSystemMessage(payload?.message || "Galda spēles kļūda.");
   });
   socket.on("board.start", (payload) => {
+    lastBoardResultSnapshot = null;
     zole3pLobbySnapshot = null;
     document.getElementById("board-zole-3p-lobby")?.classList.add("hidden");
     syncBoardDambreteModePanelVisibility();
@@ -10277,9 +10363,19 @@ function showBoardInviteModal(from, type, payload) {
     const typeEl = document.getElementById("board-invite-type");
     const varEl = document.getElementById("board-invite-dambrete-variant");
     if (fromEl) fromEl.textContent = from;
+    const rem = !!payload?.rematch;
     if (typeEl)
-      typeEl.textContent =
-        type === "chess" ? "šahu" : type === "zole" ? "zoli" : "dambreti";
+      typeEl.textContent = rem
+        ? type === "chess"
+          ? "šahu (revānšs)"
+          : type === "zole"
+            ? "zoli (revānšs)"
+            : "dambreti (revānšs)"
+        : type === "chess"
+          ? "šahu"
+          : type === "zole"
+            ? "zoli"
+            : "dambreti";
     invite.dataset.from = from;
     invite.dataset.type = type || "dambrete";
     invite.dataset.inviteId = String(payload?.inviteId || "").trim();
@@ -11022,6 +11118,9 @@ function bindBoardGames() {
   const boardResultOverlay = document.getElementById("board-result-overlay");
   if (boardResultClose)
     boardResultClose.addEventListener("click", hideBoardResultOverlay);
+  document
+    .getElementById("board-result-rematch")
+    ?.addEventListener("click", sendBoardRematchInvite);
   if (boardResultOverlay) {
     boardResultOverlay.addEventListener("click", (e) => {
       if (e.target === boardResultOverlay) hideBoardResultOverlay();

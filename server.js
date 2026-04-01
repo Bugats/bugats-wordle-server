@@ -12586,6 +12586,81 @@ io.on("connection", (socket) => {
     });
   });
 
+  socket.on("board.rematchRequest", (payload) => {
+    const fromUser = socket.data.user;
+    if (!fromUser) return;
+    const gameType = String(payload?.type || "dambrete").toLowerCase();
+    const targetName = String(
+      payload?.opponentUsername || payload?.target || payload?.username || ""
+    ).trim();
+    if (!targetName)
+      return socket.emit("board.error", { message: "Nav norādīts pretinieks." });
+    if (String(fromUser.username).toLowerCase() === targetName.toLowerCase())
+      return socket.emit("board.error", { message: "Nevari uzaicināt sevi." });
+    if (
+      gameType !== "dambrete" &&
+      gameType !== "chess" &&
+      gameType !== "zole"
+    )
+      return socket.emit("board.error", { message: "Nederīgs spēles tips." });
+    const zoleModeRaw =
+      gameType === "zole" ? parseZoleModeFromPayload(payload) : undefined;
+    if (gameType === "zole" && zoleModeRaw === "online_3p")
+      return socket.emit("board.error", {
+        message:
+          "Revānšs 3 cilvēku istabā: uzaicini otru spēlētāju manuāli no lauka.",
+      });
+    const zoleMode =
+      gameType === "zole" ? zoleModeRaw || "online_2p" : undefined;
+    if (gameType === "zole" && zoleMode !== "online_2p")
+      return socket.emit("board.error", {
+        message: "Revānšs zolei šobrīd tikai režīmā «2 cilvēki + bots».",
+      });
+    const targetKey = findUserKeyCaseInsensitive(targetName);
+    const targetUser = targetKey ? USERS[targetKey] : null;
+    if (!targetUser)
+      return socket.emit("board.error", { message: "Lietotājs nav atrasts." });
+    if (userToBoardGame.has(fromUser.username))
+      return socket.emit("board.error", { message: "Tu jau esi spēlē." });
+    if (userToBoardGame.has(targetUser.username))
+      return socket.emit("board.error", {
+        message: "Pretinieks jau spēlē — revānšu nevar nosūtīt.",
+      });
+    const inviteId = crypto.randomBytes(6).toString("hex");
+    const dambreteVariant =
+      gameType === "dambrete"
+        ? parseDambreteVariantFromPayload(payload)
+        : "russian";
+    boardInviteVariantByPair.set(
+      boardInvitePairKey(fromUser.username, targetUser.username),
+      {
+        type: gameType,
+        dambreteVariant,
+        zoleMode,
+        expiresAt: Date.now() + BOARD_GAME_INVITE_TIMEOUT_MS,
+      }
+    );
+    const targetSocket = getSocketByUsername(targetUser.username);
+    if (targetSocket) {
+      targetSocket.emit("board.invite", {
+        inviteId,
+        from: fromUser.username,
+        type: gameType,
+        dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
+        zoleMode: gameType === "zole" ? zoleMode : undefined,
+        rematch: true,
+      });
+    }
+    socket.emit("board.inviteSent", {
+      inviteId,
+      target: targetUser.username,
+      type: gameType,
+      dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
+      zoleMode: gameType === "zole" ? zoleMode : undefined,
+      rematch: true,
+    });
+  });
+
   socket.on("board.zoleCreateLobby", (payload) => {
     const fromUser = socket.data.user;
     if (!fromUser) return;

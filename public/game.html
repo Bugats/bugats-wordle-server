@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-27-chess-clock" />
+  <link rel="stylesheet" href="style.css?v=2026-03-27-board-rematch" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1072,7 +1072,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-27-chess-clock"></script>
+    <script defer src="game.js?v=2026-03-27-board-rematch"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1515,9 +1515,15 @@
         <p id="board-result-title" class="vz-board-result-title"></p>
         <p id="board-result-detail" class="vz-board-result-detail"></p>
         <p id="board-result-coins" class="vz-board-result-coins hidden"></p>
-        <button type="button" id="board-result-close" class="vz-board-result-btn">
-          Sapratu
-        </button>
+        <p id="board-result-rematch-status" class="vz-board-result-rematch-status hidden" aria-live="polite"></p>
+        <div class="vz-board-result-actions">
+          <button type="button" id="board-result-rematch" class="vz-board-result-btn vz-board-result-btn--primary hidden">
+            Revānšs
+          </button>
+          <button type="button" id="board-result-close" class="vz-board-result-btn">
+            Sapratu
+          </button>
+        </div>
       </div>
     </div>
 
