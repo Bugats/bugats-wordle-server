@@ -592,6 +592,14 @@ const themeToggleBtn = document.getElementById("theme-toggle-btn");
 // Bez interneta + Play Store vērtējums
 const offlineOverlayEl = document.getElementById("vz-offline-overlay");
 const offlineRetryBtn = document.getElementById("vz-offline-retry-btn");
+const offlineLoginBtn = document.getElementById("vz-offline-login-btn");
+const offlineTitleEl = document.getElementById("vz-offline-title");
+const offlineTextEl = document.getElementById("vz-offline-text");
+const offlineHintEl = document.getElementById("vz-offline-hint");
+
+let _vzConnIssueOverlayTimer = null;
+let _vzConnIssueLastKey = "";
+
 const rateOverlayEl = document.getElementById("vz-rate-overlay");
 const tutorialOverlayEl = document.getElementById("vz-tutorial-overlay");
 const tutorialContentEl = document.getElementById("vz-tutorial-content");
@@ -1737,11 +1745,17 @@ function applyAuthSessionFromPayload(payload, fallbackUsername = "") {
 function handleAuthExpiredRedirect() {
   if (authRedirectTriggered) return;
   authRedirectTriggered = true;
+  try {
+    sessionStorage.setItem(
+      "vz_auth_notice",
+      "Sesija beigusies. Ielogojies vēlreiz."
+    );
+  } catch {}
   clearStoredAuth();
   try {
     clearOneSignalIdentity();
   } catch {}
-  window.location.href = "index.html";
+  window.location.href = "index.html#session";
 }
 
 async function tryRefreshAccessToken() {
@@ -1777,7 +1791,13 @@ async function apiRequest(path, options = {}, canRetryAuth = true) {
     headers.Authorization = "Bearer " + state.token;
   }
   const requestOptions = { ...options, headers };
-  const res = await fetchWithTimeout(API_BASE + path, requestOptions);
+  let res;
+  try {
+    res = await fetchWithTimeout(API_BASE + path, requestOptions);
+  } catch (err) {
+    showConnectionIssueOverlay(classifyApiFailure(err));
+    throw err;
+  }
   try {
     return await readJsonOrThrow(res);
   } catch (err) {
@@ -1786,7 +1806,23 @@ async function apiRequest(path, options = {}, canRetryAuth = true) {
       Number(err?.status) === 401 &&
       path !== "/auth/refresh" &&
       !!state.refreshToken;
-    if (!shouldRetry) throw err;
+    if (!shouldRetry) {
+      const info = classifyApiFailure(err);
+      const st = Number(err?.status);
+      if (
+        info.key === "client" &&
+        st >= 400 &&
+        st < 500 &&
+        st !== 401 &&
+        st !== 403
+      ) {
+        appendSystemMessage(info.text);
+        if (gameMessageEl) gameMessageEl.textContent = info.text;
+      } else {
+        showConnectionIssueOverlay(info);
+      }
+      throw err;
+    }
     const refreshed = await tryRefreshAccessToken();
     if (!refreshed) {
       handleAuthExpiredRedirect();
@@ -2008,6 +2044,117 @@ function setOfflineOverlay(show) {
   if (!offlineOverlayEl) return;
   if (show) offlineOverlayEl.classList.remove("hidden");
   else offlineOverlayEl.classList.add("hidden");
+}
+
+function classifyApiFailure(err) {
+  const status = Number(err?.status);
+  const msg = String(err?.message || "").toLowerCase();
+  if (status === 401 || status === 403)
+    return {
+      key: "auth",
+      title: "Piekļuve beigusies",
+      text:
+        "Tava sesija vairs nav derīga vai nav tiesību šai darbībai. Ielogojies vēlreiz.",
+      hint: "",
+      showLogin: true,
+    };
+  if (status >= 500 && status < 600)
+    return {
+      key: "server",
+      title: "Servera kļūda",
+      text:
+        "Serveris atbild ar kļūdu. Tas parasti ir īslaicīgi — pamēģini vēlreiz pēc brīža.",
+      hint: status ? `Kods: ${status}` : "",
+      showLogin: false,
+    };
+  if (status === 429)
+    return {
+      key: "rate",
+      title: "Pārāk daudz pieprasījumu",
+      text:
+        "Uz brīdi esi nosūtījis pārāk daudz pieprasījumu. Pagaidi un mēģini vēlreiz.",
+      hint: "",
+      showLogin: false,
+    };
+  if (status === 408 || status === 504)
+    return {
+      key: "timeout",
+      title: "Noildze",
+      text:
+        "Serveris neatbildēja laikā. Pārbaudi savienojumu un mēģini vēlreiz.",
+      hint: "",
+      showLogin: false,
+    };
+  if (
+    msg.includes("tīkls neatbildēja") ||
+    msg.includes("pieslēgties serverim") ||
+    msg.includes("failed to fetch") ||
+    msg.includes("networkerror") ||
+    msg.includes("load failed")
+  )
+    return {
+      key: "network",
+      title: "Savienojuma problēma",
+      text:
+        "Neizdevās sasniegt serveri. Pārbaudi internetu vai mēģini vēlāk.",
+      hint: "",
+      showLogin: false,
+    };
+  if (status >= 400)
+    return {
+      key: "client",
+      title: "Pieprasījums neizdevās",
+      text:
+        String(err?.message || "").trim() ||
+        "Neizdevās izpildīt pieprasījumu.",
+      hint: status ? `Kods: ${status}` : "",
+      showLogin: false,
+    };
+  return {
+    key: "unknown",
+    title: "Kaut kas nogāja greizi",
+    text:
+      String(err?.message || "").trim() ||
+      "Nezināma kļūda. Pamēģini vēlreiz.",
+    hint: "",
+    showLogin: false,
+  };
+}
+
+function showConnectionIssueOverlay(info, opts = {}) {
+  const silent = !!opts.silent;
+  const title = info?.title || "Savienojuma problēma";
+  const text = info?.text || "Mēģini vēlreiz.";
+  const hint = info?.hint || "";
+  const showLogin = !!info?.showLogin;
+  const key = String(info?.key || "");
+
+  if (offlineTitleEl) offlineTitleEl.textContent = title;
+  if (offlineTextEl) offlineTextEl.textContent = text;
+  if (offlineHintEl) {
+    offlineHintEl.textContent = hint;
+    offlineHintEl.classList.toggle("hidden", !hint);
+  }
+  if (offlineLoginBtn) offlineLoginBtn.classList.toggle("hidden", !showLogin);
+  if (offlineRetryBtn) {
+    offlineRetryBtn.textContent = showLogin ? "Atjaunot lapu" : "Mēģināt vēlreiz";
+  }
+  setOfflineOverlay(true);
+
+  if (!silent && key && key !== _vzConnIssueLastKey) {
+    _vzConnIssueLastKey = key;
+    appendSystemMessage(`[Savienojums] ${title}: ${text}`);
+  }
+  if (_vzConnIssueOverlayTimer != null) {
+    clearTimeout(_vzConnIssueOverlayTimer);
+    _vzConnIssueOverlayTimer = null;
+  }
+  if (opts.autoHideMs && opts.autoHideMs > 0) {
+    _vzConnIssueOverlayTimer = setTimeout(() => {
+      setOfflineOverlay(false);
+      _vzConnIssueOverlayTimer = null;
+    }, opts.autoHideMs);
+  }
 }
 
 /** Īsts PWA / «pievienots sākumekrānam» — ne jau parasts pārlūks fullscreen režīmā. */
@@ -9397,6 +9544,14 @@ function initSocket() {
     if (_socketEverConnected) appendSystemMessage("Savienojums atjaunots.");
     else appendSystemMessage("Pieslēgts VĀRDU ZONAS serverim.");
     _socketEverConnected = true;
+    if (navigator.onLine) {
+      if (_vzConnIssueOverlayTimer != null) {
+        clearTimeout(_vzConnIssueOverlayTimer);
+        _vzConnIssueOverlayTimer = null;
+      }
+      setOfflineOverlay(false);
+      _vzConnIssueLastKey = "";
+    }
   });
 
   socket.on("coins:purchased", async (payload) => {
@@ -9412,7 +9567,43 @@ function initSocket() {
 
   socket.on("connect_error", (err) => {
     console.error("Socket connect_error:", err && (err.message || err));
-    appendSystemMessage("Neizdevās pieslēgties čatam.");
+    const msg = String(err?.message || "").toLowerCase();
+    const jwt =
+      msg.includes("jwt") ||
+      msg.includes("token") ||
+      msg.includes("unauthorized") ||
+      msg.includes("forbidden");
+    if (jwt) {
+      showConnectionIssueOverlay(
+        {
+          key: "socket_auth",
+          title: "Piekļuve čatam un galdam",
+          text:
+            "Savienojums noraidīts — iespējams, beidzies sesijas tokens. Ielogojies vēlreiz vai atjauno lapu.",
+          hint: "",
+          showLogin: true,
+        },
+        { silent: true }
+      );
+      appendSystemMessage(
+        "[Savienojums] Čats/galds: sesija nav derīga — ielogojies vēlreiz."
+      );
+    } else {
+      showConnectionIssueOverlay(
+        {
+          key: "socket_net",
+          title: "Nav tiešsaistes savienojuma",
+          text:
+            "Neizdevās pieslēgties reāllaika serverim. Pārbaudi internetu; pēc atjaunošanās viss sinhronizēsies.",
+          hint: "",
+          showLogin: false,
+        },
+        { autoHideMs: 7000, silent: true }
+      );
+      appendSystemMessage(
+        "[Savienojums] Reāllaika serveris nav pieejams — mēģina atkārtoti pieslēgties…"
+      );
+    }
   });
 
   socket.on("disconnect", (reason) => {
@@ -12303,13 +12494,41 @@ async function initGame() {
     });
   }
 
-  if (!navigator.onLine) setOfflineOverlay(true);
-  window.addEventListener("offline", () => setOfflineOverlay(true));
-  window.addEventListener("online", () => setOfflineOverlay(false));
+  function resetOfflineOverlayToBrowserDefault() {
+    if (offlineTitleEl) offlineTitleEl.textContent = "Nav interneta";
+    if (offlineTextEl)
+      offlineTextEl.textContent =
+        "Pārbaudi savienojumu un mēģini vēlreiz.";
+    if (offlineHintEl) {
+      offlineHintEl.textContent = "";
+      offlineHintEl.classList.add("hidden");
+    }
+    if (offlineLoginBtn) offlineLoginBtn.classList.add("hidden");
+    if (offlineRetryBtn) offlineRetryBtn.textContent = "Mēģināt vēlreiz";
+  }
+
+  if (!navigator.onLine) {
+    resetOfflineOverlayToBrowserDefault();
+    setOfflineOverlay(true);
+  }
+  window.addEventListener("offline", () => {
+    resetOfflineOverlayToBrowserDefault();
+    setOfflineOverlay(true);
+  });
+  window.addEventListener("online", () => {
+    setOfflineOverlay(false);
+    _vzConnIssueLastKey = "";
+  });
   if (offlineRetryBtn) {
     offlineRetryBtn.addEventListener("click", () => {
       setOfflineOverlay(false);
       window.location.reload();
+    });
+  }
+  if (offlineLoginBtn) {
+    offlineLoginBtn.addEventListener("click", () => {
+      setOfflineOverlay(false);
+      window.location.href = "index.html#session";
     });
   }
   if (rateLaterBtn) {
@@ -12902,8 +13121,14 @@ async function initGame() {
     await runPostLoginInit();
   } catch (err) {
     console.error("Init /me kļūda:", err);
+    try {
+      sessionStorage.setItem(
+        "vz_auth_notice",
+        "Neizdevās ielādēt kontu no servera. Ielogojies vēlreiz."
+      );
+    } catch {}
     clearStoredAuth();
-    window.location.href = "index.html";
+    window.location.href = "index.html#session";
   }
 }
 

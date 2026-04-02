@@ -2857,7 +2857,18 @@ summary:focus-visible {
   box-shadow: 0 0 24px rgba(0, 0, 0, 0.6);
 }
 .vz-offline-title { margin: 0 0 8px; font-size: 20px; font-weight: 700; color: #fff; }
-.vz-offline-text { margin: 0 0 20px; font-size: 14px; color: #b0b0b0; }
+.vz-offline-text { margin: 0 0 10px; font-size: 14px; color: #b0b0b0; line-height: 1.45; }
+.vz-offline-hint {
+  margin: 0 0 18px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.55);
+}
+.vz-offline-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 .vz-offline-retry {
   padding: 10px 24px;
   border-radius: 8px;
@@ -2872,6 +2883,21 @@ summary:focus-visible {
 .vz-offline-retry:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(157, 34, 53, 0.45);
+}
+.vz-offline-secondary {
+  padding: 10px 24px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f4f4f5;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.1s ease;
+}
+.vz-offline-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
 }
 
 /* Play Store vērtējuma uzvednis (TWA) */

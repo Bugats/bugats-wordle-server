@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-27-board-rematch" />
+  <link rel="stylesheet" href="style.css?v=2026-03-27-connection-errors" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -72,11 +72,15 @@
     </div>
 
     <!-- Bez interneta -->
-    <div id="vz-offline-overlay" class="vz-offline-overlay hidden" role="alert" aria-live="assertive">
+    <div id="vz-offline-overlay" class="vz-offline-overlay hidden" role="alertdialog" aria-modal="true" aria-labelledby="vz-offline-title" aria-describedby="vz-offline-text">
       <div class="vz-offline-inner">
-        <p class="vz-offline-title">Nav interneta</p>
-        <p class="vz-offline-text">Pārbaudi savienojumu un mēģini vēlreiz.</p>
-        <button id="vz-offline-retry-btn" type="button" class="vz-offline-retry">Mēģināt vēlreiz</button>
+        <p id="vz-offline-title" class="vz-offline-title">Nav interneta</p>
+        <p id="vz-offline-text" class="vz-offline-text">Pārbaudi savienojumu un mēģini vēlreiz.</p>
+        <p id="vz-offline-hint" class="vz-offline-hint hidden"></p>
+        <div class="vz-offline-actions">
+          <button id="vz-offline-retry-btn" type="button" class="vz-offline-retry">Mēģināt vēlreiz</button>
+          <button id="vz-offline-login-btn" type="button" class="vz-offline-secondary hidden">Uz pieslēgšanos</button>
+        </div>
       </div>
     </div>
 
@@ -1072,7 +1076,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-27-board-reconnect"></script>
+    <script defer src="game.js?v=2026-03-27-connection-errors"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>

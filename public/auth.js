@@ -45,6 +45,14 @@ if (tabSignupBtn) {
 }
 setAuthTab(window.location.hash === "#signup" ? "signup" : "login");
 
+try {
+  const n = sessionStorage.getItem("vz_auth_notice");
+  if (n && String(n).trim()) {
+    showAuthError(String(n).trim());
+    sessionStorage.removeItem("vz_auth_notice");
+  }
+} catch {}
+
 // Referrāla kods no URL (?ref=Username)
 function getReferralFromUrl() {
   try {
