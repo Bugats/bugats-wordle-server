@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-28-social-clan-weekly" />
+  <link rel="stylesheet" href="style.css?v=2026-03-28-board-wait-result" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1076,7 +1076,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-28-social-clan-weekly"></script>
+    <script defer src="game.js?v=2026-03-28-board-wait-result"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1414,7 +1414,12 @@
               <button id="board-invite-zole" type="button" class="vz-board-invite-btn">🃏 Zole</button>
             </div>
           </div>
-          <div id="board-invite-pending" class="vz-board-pending hidden">Gaidām atbildi…</div>
+          <div id="board-invite-pending" class="vz-board-pending hidden" role="status" aria-live="polite">
+            <span id="board-invite-pending-text">Gaidām atbildi…</span>
+            <button type="button" id="board-invite-pending-cancel" class="vz-board-pending-cancel hidden">
+              Atcelt uzaicinājumu
+            </button>
+          </div>
           <details class="vz-board-rules">
             <summary class="vz-board-rules-summary">📖 Īsi noteikumi</summary>
             <div class="vz-board-rules-content">
@@ -1452,6 +1457,7 @@
           </p>
           <p id="board-invite-zole-stake" class="vz-board-invite-stake hidden"></p>
           <p class="vz-board-invite-sub">Uzvaras dod novada un klana punktus</p>
+          <p id="board-invite-expires" class="vz-board-invite-expires hidden" aria-live="polite"></p>
           <div class="vz-board-invite-actions">
             <button id="board-invite-accept" type="button">Pieņemt</button>
             <button id="board-invite-decline" type="button">Noraidīt</button>
@@ -1518,7 +1524,9 @@
         <p id="board-result-eyebrow" class="vz-board-result-eyebrow"></p>
         <p id="board-result-title" class="vz-board-result-title"></p>
         <p id="board-result-detail" class="vz-board-result-detail"></p>
+        <p id="board-result-summary" class="vz-board-result-summary hidden" aria-live="polite"></p>
         <p id="board-result-coins" class="vz-board-result-coins hidden"></p>
+        <p id="board-result-auto-close-hint" class="vz-board-result-auto-hint hidden"></p>
         <p id="board-result-rematch-status" class="vz-board-result-rematch-status hidden" aria-live="polite"></p>
         <div class="vz-board-result-actions">
           <button type="button" id="board-result-rematch" class="vz-board-result-btn vz-board-result-btn--primary hidden">

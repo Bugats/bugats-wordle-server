@@ -12748,6 +12748,7 @@ io.on("connection", (socket) => {
         type: gameType,
         dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
         zoleMode: gameType === "zole" ? zoleMode : undefined,
+        expiresAt: invite.expiresAt,
       });
     }
     socket.emit("board.inviteSent", {
@@ -12756,7 +12757,67 @@ io.on("connection", (socket) => {
       type: gameType,
       dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
       zoleMode: gameType === "zole" ? zoleMode : undefined,
+      expiresAt: invite.expiresAt,
     });
+  });
+
+  socket.on("board.inviteDecline", (payload) => {
+    const user = socket.data.user;
+    if (!user) return;
+    const fromName = String(payload?.from || "").trim();
+    if (!fromName)
+      return socket.emit("board.error", { message: "Nav norādīts uzaicinātājs." });
+    const pairKey = boardInvitePairKey(fromName, user.username);
+    const pending = boardInviteVariantByPair.get(pairKey);
+    const now = Date.now();
+    if (
+      !pending ||
+      pending.expiresAt <= now ||
+      (payload?.type &&
+        String(pending.type || "").toLowerCase() !==
+          String(payload.type || "").toLowerCase())
+    ) {
+      return socket.emit("board.error", {
+        message: "Aicinājums vairs nav derīgs.",
+      });
+    }
+    boardInviteVariantByPair.delete(pairKey);
+    clearPendingBoardInvite(user.username);
+    broadcastOnlineList(true);
+    const challengerSock = getSocketByUsername(fromName);
+    if (challengerSock) {
+      challengerSock.emit("board.inviteDeclined", {
+        by: user.username,
+        type: pending.type,
+      });
+    }
+    socket.emit("board.inviteDeclineOk", { from: fromName });
+  });
+
+  socket.on("board.inviteCancel", (payload) => {
+    const fromUser = socket.data.user;
+    if (!fromUser) return;
+    const targetName = String(
+      payload?.target || payload?.username || ""
+    ).trim();
+    if (!targetName)
+      return socket.emit("board.error", { message: "Nav norādīts pretinieks." });
+    const pairKey = boardInvitePairKey(fromUser.username, targetName);
+    const pending = boardInviteVariantByPair.get(pairKey);
+    const now = Date.now();
+    if (!pending || pending.expiresAt <= now) {
+      return socket.emit("board.error", {
+        message: "Nav aktīva uzaicinājuma šim spēlētājam.",
+      });
+    }
+    boardInviteVariantByPair.delete(pairKey);
+    clearPendingBoardInvite(targetName);
+    broadcastOnlineList(true);
+    const targetSock = getSocketByUsername(targetName);
+    if (targetSock) {
+      targetSock.emit("board.inviteCancelled", { by: fromUser.username });
+    }
+    socket.emit("board.inviteCancelOk", { target: targetName });
   });
 
   socket.on("board.rematchRequest", (payload) => {
@@ -12804,20 +12865,21 @@ io.on("connection", (socket) => {
       gameType === "dambrete"
         ? parseDambreteVariantFromPayload(payload)
         : "russian";
+    const remExp = Date.now() + BOARD_GAME_INVITE_TIMEOUT_MS;
     boardInviteVariantByPair.set(
       boardInvitePairKey(fromUser.username, targetUser.username),
       {
         type: gameType,
         dambreteVariant,
         zoleMode,
-        expiresAt: Date.now() + BOARD_GAME_INVITE_TIMEOUT_MS,
+        expiresAt: remExp,
         rematch: true,
       }
     );
     setPendingBoardInviteForTarget(
       targetUser.username,
       fromUser.username,
-      Date.now() + BOARD_GAME_INVITE_TIMEOUT_MS,
+      remExp,
       true
     );
     broadcastOnlineList(true);
@@ -12830,6 +12892,7 @@ io.on("connection", (socket) => {
         dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
         zoleMode: gameType === "zole" ? zoleMode : undefined,
         rematch: true,
+        expiresAt: remExp,
       });
     }
     socket.emit("board.inviteSent", {
@@ -12839,6 +12902,7 @@ io.on("connection", (socket) => {
       dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
       zoleMode: gameType === "zole" ? zoleMode : undefined,
       rematch: true,
+      expiresAt: remExp,
     });
   });
 
@@ -13023,6 +13087,7 @@ io.on("connection", (socket) => {
         zoleLobbyId: lobbyId,
         zoleLobbyPlayers: lobby.players.slice(),
         zole3pCoinsPerPoint: clampZole3pCoinsPerPoint(lobby.zole3pCoinsPerPoint),
+        expiresAt: lobby.expiresAt || Date.now() + ZOLE_3P_LOBBY_TTL_MS,
       });
     }
     socket.emit("board.zoleThirdInviteSent", {

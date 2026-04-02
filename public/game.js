@@ -747,7 +747,163 @@ const ZOLE_BOT_USERNAMES = new Set(["ZoleBot1", "ZoleBot2"]);
 /** Pēdējais galda rezultāts — revānša pogai */
 let lastBoardResultSnapshot = null;
 
+let boardInviteOutgoingInterval = null;
+let boardInviteIncomingInterval = null;
+let boardResultAutoCloseTimer = null;
+const BOARD_RESULT_OVERLAY_AUTO_MS = 45 * 1000;
+
 let _chessClockRaf = null;
+
+function clearBoardInviteOutgoingInterval() {
+  if (boardInviteOutgoingInterval != null) {
+    clearInterval(boardInviteOutgoingInterval);
+    boardInviteOutgoingInterval = null;
+  }
+}
+
+function clearBoardInviteIncomingInterval() {
+  if (boardInviteIncomingInterval != null) {
+    clearInterval(boardInviteIncomingInterval);
+    boardInviteIncomingInterval = null;
+  }
+}
+
+function clearBoardResultAutoCloseTimer() {
+  if (boardResultAutoCloseTimer != null) {
+    clearTimeout(boardResultAutoCloseTimer);
+    boardResultAutoCloseTimer = null;
+  }
+}
+
+function syncBoardInvitePendingUi() {
+  const pending = document.getElementById("board-invite-pending");
+  const text = document.getElementById("board-invite-pending-text");
+  const cancelBtn = document.getElementById("board-invite-pending-cancel");
+  if (!pending || !text) return;
+  const exp = Number(pending.dataset.expiresAt) || 0;
+  const target = String(pending.dataset.waitTarget || "").trim();
+  const left = Math.max(0, Math.ceil((exp - Date.now()) / 1000));
+  if (left > 0 && target) {
+    text.textContent = `Gaidām atbildi no ${target}… (${left}s)`;
+    if (cancelBtn) cancelBtn.classList.remove("hidden");
+  } else if (target) {
+    text.textContent =
+      "Uzaicinājuma termiņš beidzies (60s) — vari sūtīt jaunu uzaicinājumu.";
+    if (cancelBtn) cancelBtn.classList.add("hidden");
+  }
+}
+
+function startBoardInviteOutgoingWait(expiresAt, targetUsername) {
+  clearBoardInviteOutgoingInterval();
+  const pending = document.getElementById("board-invite-pending");
+  if (!pending) return;
+  pending.dataset.expiresAt = String(Number(expiresAt) || 0);
+  pending.dataset.waitTarget = String(targetUsername || "").trim();
+  pending.classList.remove("hidden");
+  syncBoardInvitePendingUi();
+  boardInviteOutgoingInterval = setInterval(() => {
+    syncBoardInvitePendingUi();
+    const left =
+      Math.ceil(
+        ((Number(pending.dataset.expiresAt) || 0) - Date.now()) / 1000
+      ) || 0;
+    if (left <= 0) clearBoardInviteOutgoingInterval();
+  }, 1000);
+}
+
+function stopBoardInviteOutgoingWait() {
+  clearBoardInviteOutgoingInterval();
+  const pending = document.getElementById("board-invite-pending");
+  const cancelBtn = document.getElementById("board-invite-pending-cancel");
+  if (pending) {
+    pending.classList.add("hidden");
+    pending.dataset.expiresAt = "";
+    pending.dataset.waitTarget = "";
+  }
+  if (cancelBtn) cancelBtn.classList.add("hidden");
+}
+
+function syncBoardInviteIncomingExpiryUi() {
+  const invite = document.getElementById("board-games-invite");
+  const expEl = document.getElementById("board-invite-expires");
+  if (!invite || !expEl) return;
+  const exp = Number(invite.dataset.inviteExpiresAt) || 0;
+  if (!exp || invite.classList.contains("hidden")) {
+    expEl.textContent = "";
+    expEl.classList.add("hidden");
+    return;
+  }
+  const left = Math.max(0, Math.ceil((exp - Date.now()) / 1000));
+  if (left <= 0) {
+    expEl.textContent = "Aicinājuma termiņš beidzies — aizver logu vai gaidi jaunu.";
+    expEl.classList.remove("hidden");
+    return;
+  }
+  expEl.textContent = `Atbildi līdz ${left}s (pēc tam aicinājums vairs nedarbosies).`;
+  expEl.classList.remove("hidden");
+}
+
+function startBoardInviteIncomingExpiry() {
+  clearBoardInviteIncomingInterval();
+  syncBoardInviteIncomingExpiryUi();
+  boardInviteIncomingInterval = setInterval(() => {
+    syncBoardInviteIncomingExpiryUi();
+    const invite = document.getElementById("board-games-invite");
+    const exp = Number(invite?.dataset?.inviteExpiresAt) || 0;
+    if (
+      !invite ||
+      invite.classList.contains("hidden") ||
+      Math.ceil((exp - Date.now()) / 1000) <= 0
+    ) {
+      clearBoardInviteIncomingInterval();
+    }
+  }, 1000);
+}
+
+function buildBoardResultSummaryLine(payload) {
+  const gameType = payload?.type || boardState.type || "dambrete";
+  const vsBot = !!payload?.vsBot;
+  const winner = payload?.winner ?? null;
+  const me = state.username;
+  const reason = String(payload?.reason || "finished");
+  const resignedBy = payload?.resignedBy;
+  const coinsGain = Number(payload?.coinsGain) || 0;
+  const coinsLoss = Number(payload?.coinsLoss) || 0;
+  const iWon =
+    winner &&
+    me &&
+    String(winner).trim().toLowerCase() === String(me).trim().toLowerCase();
+  const iLost = winner && me && !iWon;
+
+  if (vsBot) {
+    if (!winner) return "Kopsavilkums: neizšķirts · pret botiem coins nemainās.";
+    if (iWon) return "Kopsavilkums: uzvara · pret botiem coins nemainās.";
+    return "Kopsavilkums: zaudējums · pret botiem coins nemainās.";
+  }
+  if (!winner) {
+    if (gameType === "chess" && reason === "timeout")
+      return "Kopsavilkums: neizšķirts (laiks) · coins nemainās šim iemeslam.";
+    return "Kopsavilkums: neizšķirts.";
+  }
+  if (iWon) {
+    if (coinsGain > 0) return `Kopsavilkums: uzvara · +${coinsGain} coins.`;
+    return "Kopsavilkums: uzvara · šai spēlei coins nav izmaiņu.";
+  }
+  if (iLost) {
+    if (
+      reason === "resign" &&
+      resignedBy &&
+      String(resignedBy).trim().toLowerCase() === String(me).trim().toLowerCase()
+    ) {
+      return coinsLoss > 0
+        ? `Kopsavilkums: tu nodevies · −${coinsLoss} coins.`
+        : "Kopsavilkums: tu nodevies.";
+    }
+    if (coinsLoss > 0) return `Kopsavilkums: zaudējums · −${coinsLoss} coins.`;
+    return "Kopsavilkums: zaudējums.";
+  }
+  return "";
+}
 
 function stopChessClockTick() {
   if (_chessClockRaf != null) {
@@ -1102,6 +1258,17 @@ function boardZoleModeLabel(mode) {
 }
 
 function hideBoardResultOverlay() {
+  clearBoardResultAutoCloseTimer();
+  const sumEl = document.getElementById("board-result-summary");
+  const hintEl = document.getElementById("board-result-auto-close-hint");
+  if (sumEl) {
+    sumEl.textContent = "";
+    sumEl.classList.add("hidden");
+  }
+  if (hintEl) {
+    hintEl.textContent = "";
+    hintEl.classList.add("hidden");
+  }
   document.getElementById("board-result-overlay")?.classList.add("hidden");
   document.getElementById("board-result-rematch")?.classList.add("hidden");
   document.getElementById("board-result-rematch-status")?.classList.add("hidden");
@@ -1173,6 +1340,7 @@ function syncBoardResultRematchUi() {
     isBoardResultRematchEligible(lastBoardResultSnapshot);
   btn.classList.toggle("hidden", !show);
   btn.disabled = false;
+  if (show) clearBoardResultAutoCloseTimer();
 }
 
 function sendBoardRematchInvite() {
@@ -1384,10 +1552,39 @@ function showBoardGameResult(payload) {
     }
   }
 
+  const summaryEl = document.getElementById("board-result-summary");
+  const summaryLine = buildBoardResultSummaryLine(payload);
+  if (summaryEl) {
+    if (summaryLine) {
+      summaryEl.textContent = summaryLine;
+      summaryEl.classList.remove("hidden");
+    } else {
+      summaryEl.textContent = "";
+      summaryEl.classList.add("hidden");
+    }
+  }
+
   overlay.classList.remove("hidden");
   syncBoardResultRematchUi();
   _boardResultFocusReturn = document.activeElement;
   document.getElementById("board-result-close")?.focus({ preventScroll: true });
+
+  const remBtn = document.getElementById("board-result-rematch");
+  const showRematch = remBtn && !remBtn.classList.contains("hidden");
+  clearBoardResultAutoCloseTimer();
+  const autoHint = document.getElementById("board-result-auto-close-hint");
+  if (!showRematch && autoHint) {
+    autoHint.textContent = `Logu var aizvērt arī ar «Sapratu». Pēc ${Math.round(BOARD_RESULT_OVERLAY_AUTO_MS / 1000)}s aizvērsies pats, ja neko nespied.`;
+    autoHint.classList.remove("hidden");
+    boardResultAutoCloseTimer = setTimeout(() => {
+      const ov = document.getElementById("board-result-overlay");
+      if (ov && !ov.classList.contains("hidden")) hideBoardResultOverlay();
+    }, BOARD_RESULT_OVERLAY_AUTO_MS);
+  } else if (autoHint && showRematch) {
+    autoHint.textContent =
+      "Vari nosūtīt revānšu — logs neaizvērsies pats, kamēr neesi spiedis «Sapratu».";
+    autoHint.classList.remove("hidden");
+  }
 }
 
 // TOP10 + ONLINE
@@ -10253,11 +10450,37 @@ function initSocket() {
     );
   });
   socket.on("board.inviteSent", (payload) => {
-    const pending = document.getElementById("board-invite-pending");
-    if (pending) pending.classList.remove("hidden");
+    const target = String(payload?.target || "").trim();
+    const exp = Number(payload?.expiresAt) || Date.now() + 60 * 1000;
+    if (target) startBoardInviteOutgoingWait(exp, target);
     appendGaldaSystemMessage(
       payload?.rematch ? "Revānša uzaicinājums nosūtīts." : "Uzaicinājums nosūtīts."
     );
+  });
+  socket.on("board.inviteDeclined", (payload) => {
+    stopBoardInviteOutgoingWait();
+    const by = String(payload?.by || "").trim();
+    appendGaldaSystemMessage(
+      by ? `${by} noraidīja galda uzaicinājumu.` : "Uzaicinājums noraidīts."
+    );
+  });
+  socket.on("board.inviteCancelled", (payload) => {
+    clearBoardInviteIncomingInterval();
+    const by = String(payload?.by || "").trim();
+    hideBoardInviteModal();
+    appendGaldaSystemMessage(
+      by
+        ? `${by} atsauca galda uzaicinājumu.`
+        : "Uzaicinājums atcelts."
+    );
+  });
+  socket.on("board.inviteDeclineOk", () => {
+    hideBoardInviteModal();
+    appendGaldaSystemMessage("Tu noraidīji uzaicinājumu.");
+  });
+  socket.on("board.inviteCancelOk", () => {
+    stopBoardInviteOutgoingWait();
+    appendGaldaSystemMessage("Uzaicinājums atcelts.");
   });
   socket.on("board.zoleThirdInviteSent", () => {
     appendGaldaSystemMessage("Zoles uzaicinājums trešajam spēlētājam nosūtīts.");
@@ -10276,6 +10499,7 @@ function initSocket() {
     appendGaldaSystemMessage(payload?.message || "Galda spēles kļūda.");
   });
   socket.on("board.start", (payload) => {
+    stopBoardInviteOutgoingWait();
     lastBoardResultSnapshot = null;
     zole3pLobbySnapshot = null;
     document.getElementById("board-zole-3p-lobby")?.classList.add("hidden");
@@ -10674,6 +10898,8 @@ function showBoardInviteModal(from, type, payload) {
     invite.dataset.from = from;
     invite.dataset.type = type || "dambrete";
     invite.dataset.inviteId = String(payload?.inviteId || "").trim();
+    const invExp = Number(payload?.expiresAt) || 0;
+    invite.dataset.inviteExpiresAt = invExp > 0 ? String(invExp) : "";
     const dv =
       type === "dambrete"
         ? normalizeDambreteVariantClient(payload?.dambreteVariant)
@@ -10731,6 +10957,7 @@ function showBoardInviteModal(from, type, payload) {
   syncBoardDambreteModePanelVisibility();
   syncBoardModalContext();
   syncZole3pOpenLobbyPanelVisibility();
+  startBoardInviteIncomingExpiry();
   if (inner) {
     requestAnimationFrame(() => {
       try {
@@ -10741,9 +10968,14 @@ function showBoardInviteModal(from, type, payload) {
 }
 
 function hideBoardInviteModal() {
+  clearBoardInviteIncomingInterval();
   const invite = document.getElementById("board-games-invite");
-  if (invite) invite.classList.add("hidden");
+  if (invite) {
+    invite.classList.add("hidden");
+    invite.dataset.inviteExpiresAt = "";
+  }
   document.getElementById("board-invite-zole-stake")?.classList.add("hidden");
+  document.getElementById("board-invite-expires")?.classList.add("hidden");
   showBoardModal();
   syncBoardDambreteModePanelVisibility();
 }
@@ -11456,7 +11688,6 @@ function bindBoardGames() {
       payload.zoleMode = zm;
     }
     state.socket.emit("board.invite", payload);
-    document.getElementById("board-invite-pending")?.classList.remove("hidden");
   };
   if (inviteDambrete)
     inviteDambrete.addEventListener("click", () => doInvite("dambrete"));
@@ -11482,7 +11713,7 @@ function bindBoardGames() {
     if (gameArea) gameArea.classList.remove("hidden");
     if (lobby) lobby.classList.add("hidden");
     state.socket.emit("board.startVsBot", payload);
-    document.getElementById("board-invite-pending")?.classList.add("hidden");
+    stopBoardInviteOutgoingWait();
   };
   if (vsBotDambrete)
     vsBotDambrete.addEventListener("click", () => doVsBot("dambrete"));
@@ -11526,8 +11757,24 @@ function bindBoardGames() {
         state.socket.emit("board.zoleDeclineThird", {
           inviteId: String(invite?.dataset?.inviteId || "").trim(),
         });
+        hideBoardInviteModal();
+        return;
       }
-      hideBoardInviteModal();
+      const from = String(invite?.dataset?.from || "").trim();
+      const type = invite?.dataset?.type || "dambrete";
+      if (from && state.socket) {
+        state.socket.emit("board.inviteDecline", { from, type });
+      } else {
+        hideBoardInviteModal();
+      }
+    });
+  document
+    .getElementById("board-invite-pending-cancel")
+    ?.addEventListener("click", () => {
+      const pending = document.getElementById("board-invite-pending");
+      const target = String(pending?.dataset?.waitTarget || "").trim();
+      if (!target || !state.socket) return;
+      state.socket.emit("board.inviteCancel", { target });
     });
   const zole3pInviteThird = document.getElementById("board-zole-3p-invite-third");
   const zole3pCancel = document.getElementById("board-zole-3p-cancel-lobby");
@@ -11551,8 +11798,20 @@ function bindBoardGames() {
     });
   if (resignBtn)
     resignBtn.addEventListener("click", () => {
-      if (boardState.gameId && state.socket)
-        state.socket.emit("board.resign", { gameId: boardState.gameId });
+      if (!boardState.gameId || !state.socket) return;
+      const t =
+        boardState.type === "chess"
+          ? "šahu"
+          : boardState.type === "zole"
+            ? "zoli"
+            : "dambreti";
+      if (
+        !confirm(
+          `Vai tiešām padoties ${t}? Pretinieks uzvarēs; PvP spēlē var zaudēt coins.`
+        )
+      )
+        return;
+      state.socket.emit("board.resign", { gameId: boardState.gameId });
     });
   const boardFsBtn = document.getElementById("board-browser-fs-btn");
   if (boardFsBtn) {
