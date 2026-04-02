@@ -5448,19 +5448,6 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.78);
 }
-.vz-board-result-summary {
-  margin: -10px 0 16px;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.45;
-  color: rgba(255, 248, 220, 0.96);
-}
-.vz-board-result-auto-hint {
-  margin: -6px 0 14px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: rgba(255, 255, 255, 0.55);
-}
 .vz-board-result-coins {
   margin: -8px 0 20px;
   font-size: 14px;

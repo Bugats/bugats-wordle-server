@@ -787,8 +787,7 @@ function syncBoardInvitePendingUi() {
     text.textContent = `Gaidām atbildi no ${target}… (${left}s)`;
     if (cancelBtn) cancelBtn.classList.remove("hidden");
   } else if (target) {
-    text.textContent =
-      "Uzaicinājuma termiņš beidzies (60s) — vari sūtīt jaunu uzaicinājumu.";
+    text.textContent = "Termiņš beidzies.";
     if (cancelBtn) cancelBtn.classList.add("hidden");
   }
 }
@@ -835,11 +834,11 @@ function syncBoardInviteIncomingExpiryUi() {
   }
   const left = Math.max(0, Math.ceil((exp - Date.now()) / 1000));
   if (left <= 0) {
-    expEl.textContent = "Aicinājuma termiņš beidzies — aizver logu vai gaidi jaunu.";
+    expEl.textContent = "Termiņš beidzies.";
     expEl.classList.remove("hidden");
     return;
   }
-  expEl.textContent = `Atbildi līdz ${left}s (pēc tam aicinājums vairs nedarbosies).`;
+  expEl.textContent = `Atlikušas ${left}s`;
   expEl.classList.remove("hidden");
 }
 
@@ -858,51 +857,6 @@ function startBoardInviteIncomingExpiry() {
       clearBoardInviteIncomingInterval();
     }
   }, 1000);
-}
-
-function buildBoardResultSummaryLine(payload) {
-  const gameType = payload?.type || boardState.type || "dambrete";
-  const vsBot = !!payload?.vsBot;
-  const winner = payload?.winner ?? null;
-  const me = state.username;
-  const reason = String(payload?.reason || "finished");
-  const resignedBy = payload?.resignedBy;
-  const coinsGain = Number(payload?.coinsGain) || 0;
-  const coinsLoss = Number(payload?.coinsLoss) || 0;
-  const iWon =
-    winner &&
-    me &&
-    String(winner).trim().toLowerCase() === String(me).trim().toLowerCase();
-  const iLost = winner && me && !iWon;
-
-  if (vsBot) {
-    if (!winner) return "Kopsavilkums: neizšķirts · pret botiem coins nemainās.";
-    if (iWon) return "Kopsavilkums: uzvara · pret botiem coins nemainās.";
-    return "Kopsavilkums: zaudējums · pret botiem coins nemainās.";
-  }
-  if (!winner) {
-    if (gameType === "chess" && reason === "timeout")
-      return "Kopsavilkums: neizšķirts (laiks) · coins nemainās šim iemeslam.";
-    return "Kopsavilkums: neizšķirts.";
-  }
-  if (iWon) {
-    if (coinsGain > 0) return `Kopsavilkums: uzvara · +${coinsGain} coins.`;
-    return "Kopsavilkums: uzvara · šai spēlei coins nav izmaiņu.";
-  }
-  if (iLost) {
-    if (
-      reason === "resign" &&
-      resignedBy &&
-      String(resignedBy).trim().toLowerCase() === String(me).trim().toLowerCase()
-    ) {
-      return coinsLoss > 0
-        ? `Kopsavilkums: tu nodevies · −${coinsLoss} coins.`
-        : "Kopsavilkums: tu nodevies.";
-    }
-    if (coinsLoss > 0) return `Kopsavilkums: zaudējums · −${coinsLoss} coins.`;
-    return "Kopsavilkums: zaudējums.";
-  }
-  return "";
 }
 
 function stopChessClockTick() {
@@ -1259,16 +1213,6 @@ function boardZoleModeLabel(mode) {
 
 function hideBoardResultOverlay() {
   clearBoardResultAutoCloseTimer();
-  const sumEl = document.getElementById("board-result-summary");
-  const hintEl = document.getElementById("board-result-auto-close-hint");
-  if (sumEl) {
-    sumEl.textContent = "";
-    sumEl.classList.add("hidden");
-  }
-  if (hintEl) {
-    hintEl.textContent = "";
-    hintEl.classList.add("hidden");
-  }
   document.getElementById("board-result-overlay")?.classList.add("hidden");
   document.getElementById("board-result-rematch")?.classList.add("hidden");
   document.getElementById("board-result-rematch-status")?.classList.add("hidden");
@@ -1552,18 +1496,6 @@ function showBoardGameResult(payload) {
     }
   }
 
-  const summaryEl = document.getElementById("board-result-summary");
-  const summaryLine = buildBoardResultSummaryLine(payload);
-  if (summaryEl) {
-    if (summaryLine) {
-      summaryEl.textContent = summaryLine;
-      summaryEl.classList.remove("hidden");
-    } else {
-      summaryEl.textContent = "";
-      summaryEl.classList.add("hidden");
-    }
-  }
-
   overlay.classList.remove("hidden");
   syncBoardResultRematchUi();
   _boardResultFocusReturn = document.activeElement;
@@ -1572,18 +1504,11 @@ function showBoardGameResult(payload) {
   const remBtn = document.getElementById("board-result-rematch");
   const showRematch = remBtn && !remBtn.classList.contains("hidden");
   clearBoardResultAutoCloseTimer();
-  const autoHint = document.getElementById("board-result-auto-close-hint");
-  if (!showRematch && autoHint) {
-    autoHint.textContent = `Logu var aizvērt arī ar «Sapratu». Pēc ${Math.round(BOARD_RESULT_OVERLAY_AUTO_MS / 1000)}s aizvērsies pats, ja neko nespied.`;
-    autoHint.classList.remove("hidden");
+  if (!showRematch) {
     boardResultAutoCloseTimer = setTimeout(() => {
       const ov = document.getElementById("board-result-overlay");
       if (ov && !ov.classList.contains("hidden")) hideBoardResultOverlay();
     }, BOARD_RESULT_OVERLAY_AUTO_MS);
-  } else if (autoHint && showRematch) {
-    autoHint.textContent =
-      "Vari nosūtīt revānšu — logs neaizvērsies pats, kamēr neesi spiedis «Sapratu».";
-    autoHint.classList.remove("hidden");
   }
 }
 
@@ -11799,18 +11724,6 @@ function bindBoardGames() {
   if (resignBtn)
     resignBtn.addEventListener("click", () => {
       if (!boardState.gameId || !state.socket) return;
-      const t =
-        boardState.type === "chess"
-          ? "šahu"
-          : boardState.type === "zole"
-            ? "zoli"
-            : "dambreti";
-      if (
-        !confirm(
-          `Vai tiešām padoties ${t}? Pretinieks uzvarēs; PvP spēlē var zaudēt coins.`
-        )
-      )
-        return;
       state.socket.emit("board.resign", { gameId: boardState.gameId });
     });
   const boardFsBtn = document.getElementById("board-browser-fs-btn");
