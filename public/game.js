@@ -11371,6 +11371,13 @@ function renderBoardGame() {
       );
     }
   }
+  const resignEl = document.getElementById("board-resign-btn");
+  if (resignEl) {
+    const zoleHandOver =
+      boardState.type === "zole" && boardState.zole?.phase === "end";
+    resignEl.classList.toggle("hidden", !boardState.gameId || zoleHandOver);
+  }
+
   syncZoleStakeBannerInGameArea();
   syncBoardModalFullscreen();
   syncBoardBrowserFullscreenUi();
