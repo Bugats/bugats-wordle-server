@@ -103,6 +103,7 @@
       friendInvitesIn: [],
       friendInvitesOut: [],
       onlineUsers: new Set(),
+      onlineMiniByUser: new Map(),
       lastShareResult: null,
       rows: 6,
       cols: 5,

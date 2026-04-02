@@ -3371,11 +3371,35 @@ function renderClanCard(me) {
   }
 
   if (clan) {
+    const wg = clan.weeklyGoal;
+    const weeklyBlock =
+      wg && typeof wg === "object"
+        ? `<div class="vz-clan-weekly-goal" role="status" aria-live="polite">
+        <div class="vz-clan-weekly-goal__head">
+          <span class="vz-clan-weekly-goal__label">${escapeHtml(wg.label || "Nedēļas mērķis")}</span>
+          ${
+            clan.canManage
+              ? `<span class="vz-clan-weekly-goal__edit">
+            <label class="vz-sr-only" for="vz-clan-weekly-goal-target">Mērķa skaits (5–500)</label>
+            <input id="vz-clan-weekly-goal-target" type="number" min="5" max="500" step="1" value="${escapeHtml(String(Math.max(5, Math.min(500, Number(wg.target) || 10))))}" />
+            <button type="button" id="vz-clan-weekly-goal-save">Saglabāt mērķi</button>
+          </span>`
+              : ""
+          }
+        </div>
+        <div class="vz-clan-weekly-goal__bar-wrap" aria-hidden="true">
+          <div class="vz-clan-weekly-goal__bar" style="width:${Math.min(100, Math.max(0, Number(wg.pct) || 0))}%"></div>
+        </div>
+        <div class="vz-clan-weekly-goal__nums">${escapeHtml(String(Math.max(0, Math.floor(Number(wg.progress) || 0))))} / ${escapeHtml(String(Math.max(1, Math.floor(Number(wg.target) || 1))))}${wg.done ? " · ✓" : ""}</div>
+        <p class="vz-clan-weekly-goal__hint">Skaita tikai PvP uzvaras šahā, dambretē un zolē (ne pret botu).</p>
+      </div>`
+        : "";
     contentEl.innerHTML = `
       <div class="vz-clan-info">
         <strong>[${escapeHtml(clan.tag || "")}] ${escapeHtml(clan.name || "")}</strong>
         <span>${clan.memberCount || 0} dalībnieki · ${clan.totalXp || 0} XP</span>
       </div>
+      ${weeklyBlock}
       <div class="vz-clan-members">
         ${(clan.members || [])
           .map(
@@ -3492,6 +3516,29 @@ function bindClanActions(container, clan) {
   const leaveBtn = container.querySelector("#vz-clan-leave-btn");
   const chatInput = container.querySelector("#vz-clan-chat-input");
   const chatSend = container.querySelector("#vz-clan-chat-send");
+  const wgSave = container.querySelector("#vz-clan-weekly-goal-save");
+  const wgTarget = container.querySelector("#vz-clan-weekly-goal-target");
+
+  if (wgSave && wgTarget && clan?.canManage) {
+    wgSave.addEventListener("click", async () => {
+      const n = Math.floor(Number(wgTarget.value));
+      if (!Number.isFinite(n) || n < 5 || n > 500) {
+        appendSystemMessage("Nedēļas mērķim jābūt no 5 līdz 500.");
+        return;
+      }
+      try {
+        const data = await apiPost("/clan/weekly-goal", { target: n });
+        if (data?.me) updatePlayerCard(data.me);
+        else if (data?.clan && state.me) {
+          state.me.clan = data.clan;
+          renderClanCard(state.me);
+        }
+        appendSystemMessage("Klana nedēļas mērķis atjaunināts.");
+      } catch (err) {
+        appendSystemMessage(err?.message || "Neizdevās saglabāt mērķi.");
+      }
+    });
+  }
 
   if (inviteBtn && inviteInput) {
     inviteBtn.addEventListener("click", async () => {
@@ -4568,6 +4615,39 @@ async function claimMissionBonus() {
 }
 
 // ==================== DRAUGI ====================
+function formatSocialPresenceFromPayload(p) {
+  if (!p || typeof p !== "object") return null;
+  const inGame = !!p.inBoardGame;
+  const lobby = !!p.zole3pLobby;
+  const invite = p.pendingBoardInvite;
+  const lastHand = !!p.zoleVsBotLastHand;
+  const parts = [];
+  const titleBits = [];
+  if (inGame) {
+    parts.push("galds");
+    titleBits.push("Spēlē galda spēli");
+  }
+  if (lobby) {
+    parts.push("Zole 3P");
+    titleBits.push("Atvērta Zoles 3 cilvēku istaba");
+  }
+  if (invite && invite.from) {
+    if (invite.rematch) {
+      parts.push("revānšs");
+      titleBits.push(`Gaida revānšu no ${invite.from}`);
+    } else {
+      parts.push("aicinājums");
+      titleBits.push(`Gaida galda uzaicinājumu no ${invite.from}`);
+    }
+  }
+  if (lastHand) {
+    parts.push("pēdējā partija");
+    titleBits.push("Zole pret botiem — pēdējā partija šajā mačā");
+  }
+  if (!parts.length) return null;
+  return { text: parts.join(" · "), title: titleBits.join(" · ") };
+}
+
 function applyFriendsPayload(payload) {
   if (!payload || typeof payload !== "object") return;
   state.friends = Array.isArray(payload.friends) ? payload.friends : [];
@@ -4657,6 +4737,7 @@ function renderFriends() {
   state.friends.forEach((name) => {
     const row = createEl("li", "vz-friend-row");
     const left = createEl("div", "vz-friend-left");
+    const top = createEl("div", "vz-friend-top");
     const dot = createEl("span", "vz-friend-status");
     const online = state.onlineUsers.has(
       String(name || "")
@@ -4664,12 +4745,25 @@ function renderFriends() {
         .toLowerCase()
     );
     if (online) dot.classList.add("vz-friend-online");
-    left.appendChild(dot);
+    top.appendChild(dot);
 
     const nick = createEl("span", "vz-friend-name clickable-username");
     nick.textContent = name;
     nick.addEventListener("click", () => openProfile(name));
-    left.appendChild(nick);
+    top.appendChild(nick);
+    left.appendChild(top);
+    const mini = state.onlineMiniByUser?.get(
+      String(name || "")
+        .trim()
+        .toLowerCase()
+    );
+    const pres = formatSocialPresenceFromPayload(mini);
+    if (pres) {
+      const pr = createEl("span", "vz-friend-presence");
+      pr.textContent = pres.text;
+      pr.title = pres.title;
+      left.appendChild(pr);
+    }
     row.appendChild(left);
 
     const actions = createEl("div", "vz-friend-actions");
@@ -7527,6 +7621,7 @@ function updateOnlineList(payload) {
   const myName = (state.username || "").trim();
   const visibleCount = players.length;
   const onlineSet = new Set();
+  const miniMap = new Map();
 
   players.forEach((p) => {
     let username = "";
@@ -7547,11 +7642,11 @@ function updateOnlineList(payload) {
     }
 
     if (!username) return;
-    onlineSet.add(
-      String(username || "")
-        .trim()
-        .toLowerCase()
-    );
+    const uKey = String(username || "")
+      .trim()
+      .toLowerCase();
+    onlineSet.add(uKey);
+    if (p && typeof p === "object") miniMap.set(uKey, p);
 
     const li = document.createElement("li");
     if (username === myName) li.classList.add("vz-online-self");
@@ -7586,12 +7681,13 @@ function updateOnlineList(payload) {
     const badge = buildRegionBadge(region, "vz-region-badge-online");
     if (badge) li.appendChild(badge);
     li.appendChild(span);
-    if (p && p.zoleVsBotLastHand) {
-      const lh = document.createElement("span");
-      lh.className = "vz-online-last-hand";
-      lh.textContent = "pēdējā partija";
-      lh.title = "Spēlē zoli pret botiem — pēdējā partija šajā mačā";
-      li.appendChild(lh);
+    const pres = formatSocialPresenceFromPayload(p);
+    if (pres) {
+      const pr = document.createElement("span");
+      pr.className = "vz-online-presence";
+      pr.textContent = pres.text;
+      pr.title = pres.title;
+      li.appendChild(pr);
     }
 
     ul.appendChild(li);
@@ -7601,6 +7697,7 @@ function updateOnlineList(payload) {
     typeof count === "number" && count > 0 ? count : visibleCount;
   countEl.textContent = String(finalCount);
   state.onlineUsers = onlineSet;
+  state.onlineMiniByUser = miniMap;
   renderFriends();
 }
 

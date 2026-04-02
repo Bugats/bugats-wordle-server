@@ -788,8 +788,33 @@ function boardEndCoinsForPlayer(game, winnerUsername, playerUsername) {
 
 const boardGames = new Map(); // gameId -> { type, players, board, turn, status, ... }
 const userToBoardGame = new Map(); // username -> gameId
-/** @type {Map<string, { type: string, dambreteVariant: string, expiresAt: number }>} */
+/** @type {Map<string, { type: string, dambreteVariant: string, zoleMode?: string, expiresAt: number, rematch?: boolean }>} */
 const boardInviteVariantByPair = new Map();
+/** username (lowercase) -> { from, expiresAt, rematch } — gaidīts galda uzaicinājums (draugu statusam). */
+const pendingBoardInviteByUsername = new Map();
+
+function setPendingBoardInviteForTarget(targetUsername, fromUsername, expiresAt, rematch = false) {
+  const key = String(targetUsername || "").trim().toLowerCase();
+  const from = String(fromUsername || "").trim();
+  if (!key || !from) return;
+  pendingBoardInviteByUsername.set(key, {
+    from,
+    expiresAt: Math.max(0, Number(expiresAt) || 0),
+    rematch: !!rematch,
+  });
+}
+
+function clearPendingBoardInvite(username) {
+  const key = String(username || "").trim().toLowerCase();
+  if (key) pendingBoardInviteByUsername.delete(key);
+}
+
+function pruneExpiredPendingInvites() {
+  const now = Date.now();
+  for (const [k, v] of pendingBoardInviteByUsername.entries()) {
+    if (!v || (v.expiresAt || 0) <= now) pendingBoardInviteByUsername.delete(k);
+  }
+}
 
 function parseDambreteVariantFromPayload(payload) {
   const v = String(
@@ -1773,6 +1798,7 @@ function finishBoardGame(game, winnerUsername, reason) {
     }
     if (!game.vsBot) {
       grantRegionRewardForCompetitiveWin(winner, BOARD_GAME_REGION_POINTS);
+      bumpClanWeeklyGoalForPvpBoardWin(winner);
     }
     ensureRankFields(winner);
     if (winner.dambreteWins == null) winner.dambreteWins = 0;
@@ -3009,6 +3035,49 @@ function getClanById(id) {
   );
 }
 
+/** Klana «ķēķa» nedēļas mērķis: kopējais PvP galda uzvaru skaits (tikai PvP, ne pret botu). */
+const CLAN_WEEKLY_GOAL_PVP_WINS = 10;
+
+function isoWeekKeyFromTs(ts = Date.now()) {
+  const d = new Date(ts);
+  const dayNr = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - dayNr + 3);
+  const firstThursday = d.valueOf();
+  d.setMonth(0, 1);
+  if (d.getDay() !== 4) {
+    d.setMonth(0, 1 + ((4 - d.getDay() + 7) % 7));
+  }
+  const week1 = d.valueOf();
+  const w = 1 + Math.ceil((firstThursday - week1) / 604800000);
+  const y = new Date(firstThursday).getFullYear();
+  return `${y}-W${String(w).padStart(2, "0")}`;
+}
+
+function ensureClanWeeklyGoal(clan, now = Date.now()) {
+  if (!clan) return;
+  const key = isoWeekKeyFromTs(now);
+  if (String(clan.weeklyGoalWeekKey || "") !== key) {
+    clan.weeklyGoalWeekKey = key;
+    clan.weeklyGoalProgress = 0;
+  }
+  const rawT = Math.floor(Number(clan.weeklyGoalTarget) || 0);
+  clan.weeklyGoalTarget =
+    rawT >= 1 ? Math.min(500, rawT) : CLAN_WEEKLY_GOAL_PVP_WINS;
+}
+
+function bumpClanWeeklyGoalForPvpBoardWin(user) {
+  if (!user?.username || !user.clanId) return;
+  const clan = getClanById(user.clanId);
+  if (!clan) return;
+  ensureClanWeeklyGoal(clan, Date.now());
+  clan.weeklyGoalProgress =
+    Math.max(0, Math.floor(clan.weeklyGoalProgress || 0)) + 1;
+  saveClanStore();
+  try {
+    ioServerRef?.to(`clan:${clan.id}`).emit("clan:update", { clanId: clan.id });
+  } catch (_) {}
+}
+
 function getClanByTag(tag) {
   const t = String(tag || "")
     .trim()
@@ -3060,6 +3129,11 @@ function buildClanPayload(clan, forUser = null) {
     const u = key ? USERS[key] : null;
     return sum + Math.max(0, Number(u?.totalWins || 0) || 0);
   }, 0);
+  ensureClanWeeklyGoal(clan, Date.now());
+  const goalTarget = Math.max(1, Math.floor(clan.weeklyGoalTarget || 0) || 1);
+  const goalProg = Math.max(0, Math.floor(clan.weeklyGoalProgress || 0));
+  const goalPct =
+    goalTarget > 0 ? Math.min(100, Math.round((goalProg / goalTarget) * 1000) / 10) : 0;
   return {
     id: clan.id,
     name: clan.name,
@@ -3074,6 +3148,14 @@ function buildClanPayload(clan, forUser = null) {
     myRole: forUser ? getClanMemberRole(clan, forUser.username) : null,
     canManage: forUser ? canClanManage(clan, forUser.username) : false,
     chat: (clan.chat || []).slice(-CLAN_CHAT_HISTORY),
+    weeklyGoal: {
+      weekKey: clan.weeklyGoalWeekKey || isoWeekKeyFromTs(),
+      label: "PvP galda uzvaras (šī nedēļa)",
+      progress: goalProg,
+      target: goalTarget,
+      pct: goalPct,
+      done: goalProg >= goalTarget,
+    },
   };
 }
 const tournamentManager = new BracketsManager(tournamentDb);
@@ -6531,12 +6613,49 @@ const onlineBySocket = new Map(); // socket.id -> username
 
 function onlineBoardStatusForUsername(username) {
   const un = String(username || "").trim();
-  if (!un) return { inBoardGame: false, zoleVsBotLastHand: false };
+  const uKey = un.toLowerCase();
+  const zoleLobbyId = userToZole3pLobby.get(un);
+  const zole3pLobby =
+    !!zoleLobbyId &&
+    (() => {
+      const lob = zole3pLobbyById.get(zoleLobbyId);
+      return !!(
+        lob &&
+        Date.now() <= Number(lob.expiresAt || 0) &&
+        Array.isArray(lob.players) &&
+        lob.players.length < 3
+      );
+    })();
+  let pendingBoardInvite = null;
+  const pinv = pendingBoardInviteByUsername.get(uKey);
+  if (pinv && (pinv.expiresAt || 0) > Date.now()) {
+    pendingBoardInvite = { from: pinv.from, rematch: !!pinv.rematch };
+  }
+  if (!un) {
+    return {
+      inBoardGame: false,
+      zoleVsBotLastHand: false,
+      zole3pLobby: false,
+      pendingBoardInvite: null,
+    };
+  }
   const gid = userToBoardGame.get(un);
-  if (!gid) return { inBoardGame: false, zoleVsBotLastHand: false };
+  if (!gid) {
+    return {
+      inBoardGame: false,
+      zoleVsBotLastHand: false,
+      zole3pLobby,
+      pendingBoardInvite,
+    };
+  }
   const g = boardGames.get(gid);
   if (!g || g.status !== "active") {
-    return { inBoardGame: false, zoleVsBotLastHand: false };
+    return {
+      inBoardGame: false,
+      zoleVsBotLastHand: false,
+      zole3pLobby,
+      pendingBoardInvite,
+    };
   }
   const zLast =
     g.type === "zole" &&
@@ -6544,7 +6663,12 @@ function onlineBoardStatusForUsername(username) {
     g.zoleMode === "vs_bot" &&
     g.zole?.phase === "end" &&
     !!g.zole.zoleLastMatchHand;
-  return { inBoardGame: true, zoleVsBotLastHand: zLast };
+  return {
+    inBoardGame: true,
+    zoleVsBotLastHand: zLast,
+    zole3pLobby,
+    pendingBoardInvite,
+  };
 }
 
 function getMiniUserPayload(username) {
@@ -6561,6 +6685,8 @@ function getMiniUserPayload(username) {
       region: "",
       inBoardGame: board.inBoardGame,
       zoleVsBotLastHand: board.zoleVsBotLastHand,
+      zole3pLobby: !!board.zole3pLobby,
+      pendingBoardInvite: board.pendingBoardInvite || null,
     };
   }
   const info = ensureRankFields(u);
@@ -6574,11 +6700,14 @@ function getMiniUserPayload(username) {
     region: u.region || "",
     inBoardGame: board.inBoardGame,
     zoleVsBotLastHand: board.zoleVsBotLastHand,
+    zole3pLobby: !!board.zole3pLobby,
+    pendingBoardInvite: board.pendingBoardInvite || null,
   };
 }
 
 let lastOnlineSig = "";
 function broadcastOnlineList(force = false) {
+  pruneExpiredPendingInvites();
   const uniq = Array.from(new Set(onlineBySocket.values()))
     .map((x) => String(x || "").trim())
     .filter(Boolean)
@@ -6593,7 +6722,9 @@ function broadcastOnlineList(force = false) {
           u.rankTitle || ""
         }|${u.supporter ? 1 : 0}|${u.region || ""}|${
           u.inBoardGame ? 1 : 0
-        }|${u.zoleVsBotLastHand ? 1 : 0}`
+        }|${u.zoleVsBotLastHand ? 1 : 0}|${u.zole3pLobby ? 1 : 0}|${
+          u.pendingBoardInvite?.from || ""
+        }|${u.pendingBoardInvite?.rematch ? 1 : 0}`
     )
     .join(";");
 
@@ -8581,6 +8712,28 @@ app.get("/clan/leaderboard", (_req, res) => {
     .sort((a, b) => (b.totalXp || 0) - (a.totalXp || 0))
     .slice(0, 50);
   res.json({ clans: list });
+});
+
+app.post("/clan/weekly-goal", authMiddleware, (req, res) => {
+  const user = req.user;
+  const clan = user.clanId ? getClanById(user.clanId) : null;
+  if (!clan)
+    return res.status(400).json({ message: "Tu neesi klanā." });
+  if (!canClanManage(clan, user.username)) {
+    return res
+      .status(403)
+      .json({ message: "Tikai vadītājs vai admins var mainīt nedēļas mērķi." });
+  }
+  const raw = req.body?.target ?? req.body?.weeklyGoalTarget;
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n) || n < 5 || n > 500) {
+    return res.status(400).json({ message: "Mērķim jābūt no 5 līdz 500." });
+  }
+  ensureClanWeeklyGoal(clan, Date.now());
+  clan.weeklyGoalTarget = n;
+  saveClanStore();
+  io.emit("clan:update", { clanId: clan.id });
+  return res.json({ ok: true, clan: buildClanPayload(clan, user) });
 });
 
 app.get("/clan/:id", authMiddleware, (req, res) => {
@@ -12580,6 +12733,13 @@ io.on("connection", (socket) => {
         expiresAt: invite.expiresAt,
       }
     );
+    setPendingBoardInviteForTarget(
+      targetUser.username,
+      fromUser.username,
+      invite.expiresAt,
+      false
+    );
+    broadcastOnlineList(true);
     const targetSocket = getSocketByUsername(targetUser.username);
     if (targetSocket) {
       targetSocket.emit("board.invite", {
@@ -12651,8 +12811,16 @@ io.on("connection", (socket) => {
         dambreteVariant,
         zoleMode,
         expiresAt: Date.now() + BOARD_GAME_INVITE_TIMEOUT_MS,
+        rematch: true,
       }
     );
+    setPendingBoardInviteForTarget(
+      targetUser.username,
+      fromUser.username,
+      Date.now() + BOARD_GAME_INVITE_TIMEOUT_MS,
+      true
+    );
+    broadcastOnlineList(true);
     const targetSocket = getSocketByUsername(targetUser.username);
     if (targetSocket) {
       targetSocket.emit("board.invite", {
@@ -13000,6 +13168,9 @@ io.on("connection", (socket) => {
       dambreteVariant = parseDambreteVariantFromPayload(payload);
     }
     boardInviteVariantByPair.delete(pairKey);
+    clearPendingBoardInvite(challengerName);
+    clearPendingBoardInvite(opponentName);
+    broadcastOnlineList(true);
 
     let game;
     if (gameType === "zole") {
@@ -13636,6 +13807,7 @@ io.on("connection", (socket) => {
       const u2 = socket.data.user;
       const uname2 = u2 && u2.username ? u2.username : null;
       if (uname2) {
+        clearPendingBoardInvite(uname2);
         zole3pClearInvitedSeatIfUser(uname2);
         const lid = userToZole3pLobby.get(uname2);
         if (lid) {

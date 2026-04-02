@@ -1572,10 +1572,21 @@ summary:focus-visible {
 }
 
 .vz-online-list li {
-  margin: 1px 0;
+  margin: 4px 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+}
+
+.vz-online-presence {
+  flex-basis: 100%;
+  margin: 0 0 0 26px;
+  font-size: 10px;
+  line-height: 1.25;
+  font-weight: 600;
+  color: rgba(255, 220, 180, 0.95);
+  opacity: 0.92;
 }
 
 /* ===== FRIENDS ===== */
@@ -1665,9 +1676,28 @@ summary:focus-visible {
 
 .vz-friend-left {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.vz-friend-top {
+  display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.vz-friend-presence {
+  margin-left: 16px;
+  font-size: 10px;
+  line-height: 1.25;
+  font-weight: 600;
+  color: rgba(255, 220, 180, 0.95);
+  opacity: 0.92;
+  max-width: 100%;
 }
 
 .vz-friend-name {
@@ -3777,6 +3807,72 @@ summary:focus-visible {
 
 .vz-clan-info { margin-bottom: 8px; }
 .vz-clan-info strong { display: block; }
+.vz-clan-weekly-goal {
+  margin: 10px 0 12px;
+  padding: 10px 10px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.22);
+}
+.vz-clan-weekly-goal__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.vz-clan-weekly-goal__label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+.vz-clan-weekly-goal__edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.vz-clan-weekly-goal__edit input {
+  width: 4.2rem;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.vz-clan-weekly-goal__edit button {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(157, 34, 53, 0.35);
+  color: #fff;
+  cursor: pointer;
+}
+.vz-clan-weekly-goal__bar-wrap {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.vz-clan-weekly-goal__bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #9d2235, #ff6b6b);
+  transition: width 0.35s ease;
+}
+.vz-clan-weekly-goal__nums {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.95;
+}
+.vz-clan-weekly-goal__hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  opacity: 0.75;
+  line-height: 1.35;
+}
 .vz-clan-members { margin: 8px 0; max-height: 120px; overflow-y: auto; }
 .vz-clan-member {
   display: flex;
