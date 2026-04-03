@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-28-zole-end-details" />
+  <link rel="stylesheet" href="style.css?v=2026-03-28-board-quick-wins" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1072,11 +1072,11 @@
     <script defer src="modules/duel.js?v=2026-03-16-modsplit-1"></script>
     <script defer src="modules/board-games.js?v=2026-03-29-dambrete-white-pov"></script>
     <script defer src="modules/zole-legal.js?v=2026-03-24-zole-discard"></script>
-    <script defer src="modules/zole-board.js?v=2026-03-28-zole-end-details"></script>
+    <script defer src="modules/zole-board.js?v=2026-03-28-board-quick-wins"></script>
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-28-zole-hide-resign-end"></script>
+    <script defer src="game.js?v=2026-03-28-board-quick-wins"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1375,7 +1375,10 @@
               </button>
             </div>
             <div id="board-zole-3p-lobby" class="vz-board-zole-3p-lobby hidden" aria-live="polite">
-              <p id="board-zole-3p-lobby-text" class="vz-board-zole-3p-text"></p>
+              <p id="board-zole-3p-lobby-text" class="vz-board-zole-3p-text">
+                <span id="board-zole-3p-lobby-core"></span>
+                <span id="board-zole-3p-invite-countdown" class="vz-board-zole-invite-countdown hidden" aria-live="polite"></span>
+              </p>
               <div id="board-zole-3p-host-actions" class="hidden">
                 <label for="board-zole-3p-third" class="vz-board-label">Spēlētāja lietotājvārds</label>
                 <input id="board-zole-3p-third" type="text" placeholder="uzaicināt uz istabu" autocomplete="username" />
@@ -1402,12 +1405,34 @@
               <button id="board-vsbot-chess" type="button" class="vz-board-invite-btn">♔ Šahs vs bot</button>
               <button id="board-vsbot-zole" type="button" class="vz-board-invite-btn">🃏 Zole vs bot</button>
             </div>
+            <div class="vz-board-chess-time-row vz-board-chess-time-row--vsbot" id="board-chess-time-row-vsbot">
+              <label for="board-chess-time-preset-vsbot" class="vz-board-label">Šaha laiks (pret botu)</label>
+              <select id="board-chess-time-preset-vsbot" class="vz-board-chess-time-select">
+                <option value="10+0">10 min + 0 s</option>
+                <option value="15+0">15 min + 0 s</option>
+                <option value="5+5">5 min + 5 s</option>
+                <option value="10+5">10 min + 5 s</option>
+                <option value="15+10">15 min + 10 s</option>
+                <option value="3+2">3 min + 2 s</option>
+              </select>
+            </div>
           </div>
           <p class="vz-board-divider">— vai izacini draugu —</p>
           <div class="vz-board-invite-form">
             <label for="board-invite-username" class="vz-board-label">Pretinieka lietotājvārds</label>
             <input id="board-invite-username" type="text" placeholder="piemēram: spēlētājs123" autocomplete="username" aria-describedby="board-invite-hint" />
             <span id="board-invite-hint" class="vz-board-hint">Ievadi tieši tā, kā parādās čatā vai TOP sarakstā. Zolei 3 cilvēkiem vispirms «Izveidot zoles istabu».</span>
+            <div class="vz-board-chess-time-row" id="board-chess-time-row">
+              <label for="board-chess-time-preset" class="vz-board-label">Šaha laiks (PvP)</label>
+              <select id="board-chess-time-preset" class="vz-board-chess-time-select" title="Tiek lietots, kad izsūti šaha uzaicinājumu vai revānšu.">
+                <option value="10+0">10 min + 0 s (klasika)</option>
+                <option value="15+0">15 min + 0 s</option>
+                <option value="5+5">5 min + 5 s</option>
+                <option value="10+5">10 min + 5 s</option>
+                <option value="15+10">15 min + 10 s</option>
+                <option value="3+2">3 min + 2 s (ātri)</option>
+              </select>
+            </div>
             <div class="vz-board-invite-btns">
               <button id="board-invite-dambrete" type="button" class="vz-board-invite-btn">♟️ Dambrete</button>
               <button id="board-invite-chess" type="button" class="vz-board-invite-btn">♔ Šahs</button>
@@ -1456,6 +1481,7 @@
             <span id="board-invite-dambrete-variant" class="hidden"></span>
           </p>
           <p id="board-invite-zole-stake" class="vz-board-invite-stake hidden"></p>
+          <p id="board-invite-chess-time" class="vz-board-invite-stake hidden"></p>
           <p class="vz-board-invite-sub">Uzvaras dod novada un klana punktus</p>
           <p id="board-invite-expires" class="vz-board-invite-expires hidden" aria-live="polite"></p>
           <div class="vz-board-invite-actions">

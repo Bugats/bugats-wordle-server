@@ -687,8 +687,65 @@ function getDuelOpponent(duel, username) {
 const BOARD_GAME_INVITE_TIMEOUT_MS = 60 * 1000; // 60s
 const BOARD_GAME_MOVE_TIMEOUT_MS = 5 * 60 * 1000; // 5 min per move (resign if exceeded)
 /** Šahs PvP / vs bot (tikai cilvēkam): atlikušais laiks katram spēlētājam (ms). */
-const CHESS_CLOCK_DEFAULT_MS = 10 * 60 * 1000; // 10 min katram
-const CHESS_CLOCK_INCREMENT_MS = 0; // Fischer +s — pagaidām 0
+const CHESS_CLOCK_DEFAULT_MS = 10 * 60 * 1000; // 10 min katram (noklusējums)
+const CHESS_CLOCK_INCREMENT_MS = 0; // noklusējuma Fischer +s
+const CHESS_CLOCK_MIN_INITIAL_MS = 60 * 1000;
+const CHESS_CLOCK_MAX_INITIAL_MS = 60 * 60 * 1000;
+const CHESS_CLOCK_MAX_INCREMENT_MS = 60 * 1000;
+
+function clampChessInitialMs(ms) {
+  const n = Math.floor(Number(ms) || 0);
+  if (!Number.isFinite(n)) return CHESS_CLOCK_DEFAULT_MS;
+  return Math.min(
+    CHESS_CLOCK_MAX_INITIAL_MS,
+    Math.max(CHESS_CLOCK_MIN_INITIAL_MS, n)
+  );
+}
+
+function clampChessIncrementMs(ms) {
+  const n = Math.floor(Number(ms) || 0);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(CHESS_CLOCK_MAX_INCREMENT_MS, Math.max(0, n));
+}
+
+/** Šaha laika izvēle no klienta: preset string vai { initialMs, incrementMs }. */
+function parseChessClockOptsFromPayload(payload) {
+  const preset = String(payload?.chessClockPreset ?? payload?.chessTime ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+  if (preset === "5+5" || preset === "5_5")
+    return { initialMsPerSide: 5 * 60 * 1000, incrementMs: 5 * 1000 };
+  if (preset === "10+5" || preset === "10_5")
+    return { initialMsPerSide: 10 * 60 * 1000, incrementMs: 5 * 1000 };
+  if (preset === "15+10" || preset === "15_10")
+    return { initialMsPerSide: 15 * 60 * 1000, incrementMs: 10 * 1000 };
+  if (preset === "3+2" || preset === "3_2")
+    return { initialMsPerSide: 3 * 60 * 1000, incrementMs: 2 * 1000 };
+  if (preset === "10+0" || preset === "10_0")
+    return { initialMsPerSide: 10 * 60 * 1000, incrementMs: 0 };
+  if (preset === "15+0" || preset === "15_0")
+    return { initialMsPerSide: 15 * 60 * 1000, incrementMs: 0 };
+  const ini = payload?.chessInitialMs ?? payload?.chessClockInitialMs;
+  const inc = payload?.chessIncrementMs ?? payload?.chessClockIncrementMs;
+  if (ini != null || inc != null) {
+    return {
+      initialMsPerSide: clampChessInitialMs(ini ?? CHESS_CLOCK_DEFAULT_MS),
+      incrementMs: clampChessIncrementMs(inc ?? CHESS_CLOCK_INCREMENT_MS),
+    };
+  }
+  return {
+    initialMsPerSide: CHESS_CLOCK_DEFAULT_MS,
+    incrementMs: CHESS_CLOCK_INCREMENT_MS,
+  };
+}
+
+function chessClockPresetLabel(opts) {
+  if (!opts || typeof opts !== "object") return "10+0";
+  const a = Math.round((Number(opts.initialMsPerSide) || 0) / 60000);
+  const b = Math.round((Number(opts.incrementMs) || 0) / 1000);
+  return `${a}+${b}`;
+}
 const BOARD_GAME_REWARD_XP = 3;
 /** Coins tikai PvP (ne pret botu); 2 spēlētāji — mazāks risks, 3P zole — nedaudz lielāka izmaksa. */
 const BOARD_GAME_REWARD_COINS_2P = 8;
@@ -788,7 +845,7 @@ function boardEndCoinsForPlayer(game, winnerUsername, playerUsername) {
 
 const boardGames = new Map(); // gameId -> { type, players, board, turn, status, ... }
 const userToBoardGame = new Map(); // username -> gameId
-/** @type {Map<string, { type: string, dambreteVariant: string, zoleMode?: string, expiresAt: number, rematch?: boolean }>} */
+/** @type {Map<string, { type: string, dambreteVariant: string, zoleMode?: string, expiresAt: number, rematch?: boolean, fromUsername?: string, targetUsername?: string }>} */
 const boardInviteVariantByPair = new Map();
 /** username (lowercase) -> { from, expiresAt, rematch } — gaidīts galda uzaicinājums (draugu statusam). */
 const pendingBoardInviteByUsername = new Map();
@@ -816,6 +873,62 @@ function pruneExpiredPendingInvites() {
   }
 }
 
+function tickExpiredBoardInvites(io) {
+  if (!io) return;
+  const now = Date.now();
+  const toDel = [];
+  for (const [pairKey, v] of boardInviteVariantByPair.entries()) {
+    if (!v || (v.expiresAt || 0) > now) continue;
+    toDel.push([pairKey, v]);
+  }
+  for (const [pairKey, v] of toDel) {
+    boardInviteVariantByPair.delete(pairKey);
+    const target = String(v.targetUsername || "").trim();
+    const from = String(v.fromUsername || "").trim();
+    if (target) clearPendingBoardInvite(target);
+    broadcastOnlineList(true);
+    const payload = {
+      type: v.type || "dambrete",
+      from,
+      target,
+      rematch: !!v.rematch,
+    };
+    if (from) getSocketByUsername(from)?.emit("board.inviteTimedOut", payload);
+    if (target) getSocketByUsername(target)?.emit("board.inviteTimedOut", payload);
+  }
+}
+
+function expireZole3pThirdSeatInvites(io) {
+  if (!io) return;
+  const now = Date.now();
+  for (const lobby of zole3pLobbyById.values()) {
+    if (!lobby || !lobby.invitedSeat) continue;
+    const exp = Number(lobby.thirdInviteExpiresAt || 0);
+    if (!exp || now <= exp) continue;
+    const target = String(lobby.invitedSeat || "").trim();
+    const host = lobby.host;
+    lobby.invitedSeat = null;
+    lobby.thirdInviteExpiresAt = null;
+    const delIds = [];
+    for (const [id, meta] of zole3pSeatInviteById.entries()) {
+      if (
+        meta.lobbyId === lobby.id &&
+        String(meta.inviteeUsername || "").toLowerCase() === target.toLowerCase()
+      ) {
+        delIds.push(id);
+      }
+    }
+    for (const id of delIds) zole3pSeatInviteById.delete(id);
+    notifyZole3pLobbyPeers(lobby.id, "board.zoleLobby", zole3pLobbyPayload(lobby));
+    if (target) {
+      getSocketByUsername(host)?.emit("board.zoleThirdInviteTimedOut", {
+        target,
+        lobbyId: lobby.id,
+      });
+    }
+  }
+}
+
 function parseDambreteVariantFromPayload(payload) {
   const v = String(
     payload?.dambreteVariant ?? payload?.dambreteMode ?? ""
@@ -840,6 +953,8 @@ const userToZole3pLobby = new Map();
 const zole3pSeatInviteById = new Map();
 
 const ZOLE_3P_LOBBY_TTL_MS = 30 * 60 * 1000;
+/** Trešā spēlētāja uzaicinājuma noildze (atsevišķi no istabas TTL). */
+const ZOLE_3P_THIRD_INVITE_TTL_MS = 90 * 1000;
 
 /** Set when Socket.IO server is created; used to broadcast open Zole 3P lobby list */
 let ioServerRef = null;
@@ -888,6 +1003,8 @@ function broadcastZole3pOpenLobbyList() {
 
 function zole3pLobbyPayload(lobby) {
   if (!lobby) return null;
+  const now = Date.now();
+  const invExp = Number(lobby.thirdInviteExpiresAt || 0);
   return {
     zoleLobby: true,
     lobbyId: lobby.id,
@@ -895,6 +1012,8 @@ function zole3pLobbyPayload(lobby) {
     players: lobby.players.slice(),
     needThird: lobby.players.length < 3,
     invitedThird: lobby.invitedSeat || null,
+    thirdInviteExpiresAt:
+      lobby.invitedSeat && invExp > now ? invExp : null,
     zole3pCoinsPerPoint: clampZole3pCoinsPerPoint(lobby.zole3pCoinsPerPoint),
   };
 }
@@ -912,6 +1031,7 @@ function removeUserFromZole3pLobby(lobbyId, username) {
     String(lobby.invitedSeat).toLowerCase() === u.toLowerCase()
   ) {
     lobby.invitedSeat = null;
+    lobby.thirdInviteExpiresAt = null;
   }
   const delInv = [];
   for (const [id, meta] of zole3pSeatInviteById.entries()) {
@@ -984,14 +1104,21 @@ function boardGameSeatIndex(game, username) {
   return -1;
 }
 
-function chessClockInit(game) {
+function chessClockInit(game, opts = null) {
   if (!game || game.type !== "chess") return;
-  const humanMs = CHESS_CLOCK_DEFAULT_MS;
+  const o = opts && typeof opts === "object" ? opts : {};
+  const humanMs = clampChessInitialMs(
+    o.initialMsPerSide ?? CHESS_CLOCK_DEFAULT_MS
+  );
+  const inc = clampChessIncrementMs(
+    o.incrementMs ?? CHESS_CLOCK_INCREMENT_MS
+  );
   const botMs = 365 * 24 * 60 * 60 * 1000; // vs bot: “bezgalīgs” laiks botam
   game.chessClock = {
     remainingMs: game.vsBot ? [humanMs, botMs] : [humanMs, humanMs],
-    incrementMs: CHESS_CLOCK_INCREMENT_MS,
+    incrementMs: inc,
     turnStartAt: Date.now(),
+    initialMsPerSide: humanMs,
   };
 }
 
@@ -1006,6 +1133,10 @@ function chessClockPayload(game) {
   return {
     remainingMs: [r0, r1],
     incrementMs: Math.max(0, Math.floor(Number(clk.incrementMs) || 0)),
+    initialMsPerSide:
+      Number(clk.initialMsPerSide) > 0
+        ? Math.floor(Number(clk.initialMsPerSide))
+        : CHESS_CLOCK_DEFAULT_MS,
     turnStartAt: Number(clk.turnStartAt) || now,
     serverNow: now,
   };
@@ -1223,7 +1354,7 @@ function createDambreteGame(challenger, opponent, dambreteVariant = "russian") {
   return game;
 }
 
-function createChessGame(challenger, opponent) {
+function createChessGame(challenger, opponent, chessClockOpts = null) {
   const gameId = crypto.randomBytes(8).toString("hex");
   const chess = new Chess();
   const game = {
@@ -1241,7 +1372,7 @@ function createChessGame(challenger, opponent) {
   boardGames.set(gameId, game);
   userToBoardGame.set(challenger, gameId);
   userToBoardGame.set(opponent, gameId);
-  chessClockInit(game);
+  chessClockInit(game, chessClockOpts);
   return game;
 }
 
@@ -1276,7 +1407,11 @@ function createDambreteVsBot(
   return game;
 }
 
-function createChessVsBot(humanUsername, difficulty = "medium") {
+function createChessVsBot(
+  humanUsername,
+  difficulty = "medium",
+  chessClockOpts = null
+) {
   const depth = difficulty === "easy" ? 2 : difficulty === "hard" ? 4 : 3;
   const gameId = crypto.randomBytes(8).toString("hex");
   const chess = new Chess();
@@ -1296,7 +1431,7 @@ function createChessVsBot(humanUsername, difficulty = "medium") {
   };
   boardGames.set(gameId, game);
   userToBoardGame.set(humanUsername, gameId);
-  chessClockInit(game);
+  chessClockInit(game, chessClockOpts);
   return game;
 }
 
@@ -1396,6 +1531,7 @@ function zole3pClearInvitedSeatIfUser(username) {
       String(lobby.invitedSeat).toLowerCase() === u
     ) {
       lobby.invitedSeat = null;
+      lobby.thirdInviteExpiresAt = null;
       const toDel = [];
       for (const [id, meta] of zole3pSeatInviteById.entries()) {
         if (
@@ -6604,6 +6740,8 @@ if (process.env.NODE_ENV !== "test") {
   setInterval(() => {
     try {
       tickChessClocks(io);
+      tickExpiredBoardInvites(io);
+      expireZole3pThirdSeatInvites(io);
     } catch (_) {}
   }, 1000);
 }
@@ -12724,6 +12862,8 @@ io.on("connection", (socket) => {
       type: gameType,
       expiresAt: Date.now() + BOARD_GAME_INVITE_TIMEOUT_MS,
     };
+    const chessClockOpts =
+      gameType === "chess" ? parseChessClockOptsFromPayload(payload) : null;
     boardInviteVariantByPair.set(
       boardInvitePairKey(fromUser.username, targetUser.username),
       {
@@ -12731,6 +12871,9 @@ io.on("connection", (socket) => {
         dambreteVariant,
         zoleMode,
         expiresAt: invite.expiresAt,
+        fromUsername: fromUser.username,
+        targetUsername: targetUser.username,
+        chessClockOpts: chessClockOpts || undefined,
       }
     );
     setPendingBoardInviteForTarget(
@@ -12742,14 +12885,20 @@ io.on("connection", (socket) => {
     broadcastOnlineList(true);
     const targetSocket = getSocketByUsername(targetUser.username);
     if (targetSocket) {
-      targetSocket.emit("board.invite", {
+      const invPayload = {
         inviteId,
         from: fromUser.username,
         type: gameType,
         dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
         zoleMode: gameType === "zole" ? zoleMode : undefined,
         expiresAt: invite.expiresAt,
-      });
+      };
+      if (gameType === "chess" && chessClockOpts) {
+        invPayload.chessClockPreset = chessClockPresetLabel(chessClockOpts);
+        invPayload.chessInitialMs = chessClockOpts.initialMsPerSide;
+        invPayload.chessIncrementMs = chessClockOpts.incrementMs;
+      }
+      targetSocket.emit("board.invite", invPayload);
     }
     socket.emit("board.inviteSent", {
       inviteId,
@@ -12866,6 +13015,8 @@ io.on("connection", (socket) => {
         ? parseDambreteVariantFromPayload(payload)
         : "russian";
     const remExp = Date.now() + BOARD_GAME_INVITE_TIMEOUT_MS;
+    const remChessOpts =
+      gameType === "chess" ? parseChessClockOptsFromPayload(payload) : null;
     boardInviteVariantByPair.set(
       boardInvitePairKey(fromUser.username, targetUser.username),
       {
@@ -12874,6 +13025,9 @@ io.on("connection", (socket) => {
         zoleMode,
         expiresAt: remExp,
         rematch: true,
+        fromUsername: fromUser.username,
+        targetUsername: targetUser.username,
+        chessClockOpts: remChessOpts || undefined,
       }
     );
     setPendingBoardInviteForTarget(
@@ -12885,7 +13039,7 @@ io.on("connection", (socket) => {
     broadcastOnlineList(true);
     const targetSocket = getSocketByUsername(targetUser.username);
     if (targetSocket) {
-      targetSocket.emit("board.invite", {
+      const remInv = {
         inviteId,
         from: fromUser.username,
         type: gameType,
@@ -12893,7 +13047,13 @@ io.on("connection", (socket) => {
         zoleMode: gameType === "zole" ? zoleMode : undefined,
         rematch: true,
         expiresAt: remExp,
-      });
+      };
+      if (gameType === "chess" && remChessOpts) {
+        remInv.chessClockPreset = chessClockPresetLabel(remChessOpts);
+        remInv.chessInitialMs = remChessOpts.initialMsPerSide;
+        remInv.chessIncrementMs = remChessOpts.incrementMs;
+      }
+      targetSocket.emit("board.invite", remInv);
     }
     socket.emit("board.inviteSent", {
       inviteId,
@@ -13071,6 +13231,7 @@ io.on("connection", (socket) => {
       });
     const inviteId3 = crypto.randomBytes(6).toString("hex");
     lobby.invitedSeat = targetUser.username;
+    lobby.thirdInviteExpiresAt = Date.now() + ZOLE_3P_THIRD_INVITE_TTL_MS;
     zole3pSeatInviteById.set(inviteId3, {
       lobbyId,
       inviteeUsername: targetUser.username,
@@ -13087,11 +13248,12 @@ io.on("connection", (socket) => {
         zoleLobbyId: lobbyId,
         zoleLobbyPlayers: lobby.players.slice(),
         zole3pCoinsPerPoint: clampZole3pCoinsPerPoint(lobby.zole3pCoinsPerPoint),
-        expiresAt: lobby.expiresAt || Date.now() + ZOLE_3P_LOBBY_TTL_MS,
+        expiresAt: lobby.thirdInviteExpiresAt || Date.now() + ZOLE_3P_THIRD_INVITE_TTL_MS,
       });
     }
     socket.emit("board.zoleThirdInviteSent", {
       target: targetUser.username,
+      thirdInviteExpiresAt: lobby.thirdInviteExpiresAt,
     });
     notifyZole3pLobbyPeers(lobbyId, "board.zoleLobby", zole3pLobbyPayload(lobby));
   });
@@ -13135,6 +13297,7 @@ io.on("connection", (socket) => {
     }
     zole3pSeatInviteById.delete(inviteId);
     lobby.invitedSeat = null;
+    lobby.thirdInviteExpiresAt = null;
     lobby.players.push(user.username);
     userToZole3pLobby.set(user.username, lobby.id);
     lobby.expiresAt = Date.now() + ZOLE_3P_LOBBY_TTL_MS;
@@ -13184,7 +13347,10 @@ io.on("connection", (socket) => {
       return;
     zole3pSeatInviteById.delete(inviteId);
     const lobby = zole3pLobbyById.get(meta.lobbyId);
-    if (lobby && lobby.invitedSeat === user.username) lobby.invitedSeat = null;
+    if (lobby && lobby.invitedSeat === user.username) {
+      lobby.invitedSeat = null;
+      lobby.thirdInviteExpiresAt = null;
+    }
     const host = lobby?.host;
     if (lobby && host) {
       notifyZole3pLobbyPeers(meta.lobbyId, "board.zoleLobby", zole3pLobbyPayload(lobby));
@@ -13276,7 +13442,10 @@ io.on("connection", (socket) => {
       }
       game = createZoleOnline2pGame(challengerName, opponentName);
     } else if (gameType === "chess") {
-      game = createChessGame(challengerName, opponentName);
+      const clkOpts =
+        pendingVar?.chessClockOpts ||
+        parseChessClockOptsFromPayload(payload);
+      game = createChessGame(challengerName, opponentName, clkOpts);
     } else {
       game = createDambreteGame(challengerName, opponentName, dambreteVariant);
     }
@@ -13348,7 +13517,8 @@ io.on("connection", (socket) => {
         ? parseDambreteVariantFromPayload(payload)
         : "russian";
     if (gameType === "chess") {
-      game = createChessVsBot(user.username, validDifficulty);
+      const clkOpts = parseChessClockOptsFromPayload(payload);
+      game = createChessVsBot(user.username, validDifficulty, clkOpts);
     } else if (gameType === "zole") {
       game = createZoleVsBotGame(user.username, validDifficulty);
       game.zoleMode = "vs_bot";
