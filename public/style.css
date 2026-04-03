@@ -5498,6 +5498,16 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
+.vz-board-result-btn--secondary {
+  color: #f4f4f5;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+.vz-board-result-btn--secondary:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
 .vz-board-result-btn--primary {
   color: var(--vz-lv-white);
   background: var(--vz-accent-grad);

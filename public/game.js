@@ -1297,6 +1297,9 @@ function boardZoleModeLabel(mode) {
 
 function hideBoardResultOverlay() {
   clearBoardResultAutoCloseTimer();
+  document
+    .getElementById("board-result-play-again-vsbot")
+    ?.classList.add("hidden");
   document.getElementById("board-result-overlay")?.classList.add("hidden");
   document.getElementById("board-result-rematch")?.classList.add("hidden");
   document.getElementById("board-result-rematch-status")?.classList.add("hidden");
@@ -1324,7 +1327,7 @@ function boardGameOpponentName(players, vsBot) {
   }
   const opp = idx === 0 ? arr[1] : arr[0];
   if (!opp) return "pretinieks";
-  if (vsBot && String(opp) === BOARD_BOT_DISPLAY_NAME) return "bots (VZBot)";
+  if (vsBot && String(opp) === BOARD_BOT_DISPLAY_NAME) return "botu (VZBot)";
   return String(opp);
 }
 
@@ -1432,6 +1435,10 @@ function showBoardGameResult(payload) {
   const coinsLoss = Number(payload?.coinsLoss) || 0;
   const me = state.username;
   const oppName = boardGameOpponentName(players, vsBot);
+  const oppPhrase =
+    vsBot && oppName.startsWith("botu")
+      ? oppName
+      : `pret ${oppName}`;
   const dVar =
     gameType === "dambrete"
       ? normalizeDambreteVariantClient(
@@ -1509,14 +1516,18 @@ function showBoardGameResult(payload) {
   } else if (iWon) {
     title = "Uzvara";
     if (reason === "timeout") {
-      detail = `Tu uzvarēji — pretiniekam beidzās laiks${oppName ? ` (${oppName})` : ""}.`;
+      detail = vsBot
+        ? "Tu uzvarēji — botam beidzās laiks."
+        : `Tu uzvarēji — pretiniekam beidzās laiks${oppName ? ` (${oppName})` : ""}.`;
     } else if (reason === "resign") {
       detail =
         resignedBy && String(resignedBy).trim().toLowerCase() !== String(me).trim().toLowerCase()
-          ? `Tu uzvarēji — ${oppName} padodas.`
-          : `Tu uzvarēji pret ${oppName}.`;
+          ? vsBot
+            ? "Bots padodas — uzvara tev."
+            : `Tu uzvarēji — ${oppName} padodas.`
+          : `Tu uzvarēji ${oppPhrase}.`;
     } else if (reason === "checkmate") {
-      detail = `Tu uzvarēji ar matu pret ${oppName}.`;
+      detail = `Tu uzvarēji ar matu ${oppPhrase}.`;
     } else if (gameType === "zole") {
       const snap = payload?.zole || boardState.zole;
       const td = snap?.tableDelta;
@@ -1537,7 +1548,7 @@ function showBoardGameResult(payload) {
         tab +
         zoleResultExtraLine(snap);
     } else {
-      detail = `Tu uzvarēji pret ${oppName}.`;
+      detail = `Tu uzvarēji ${oppPhrase}.`;
     }
     overlay.classList.add("vz-board-result--win");
   } else {
@@ -1549,9 +1560,13 @@ function showBoardGameResult(payload) {
         resignedBy &&
         String(resignedBy).trim().toLowerCase() === String(me).trim().toLowerCase()
           ? "Tu padodies — spēle zaudēta."
-          : `Tu zaudēji pret ${String(winner)}.`;
+          : vsBot
+            ? `Tu zaudēji — uzvarēja ${oppName}.`
+            : `Tu zaudēji pret ${String(winner)}.`;
     } else if (reason === "checkmate") {
-      detail = `Tu zaudēji — ${String(winner)} uzvarēja ar matu.`;
+      detail = vsBot
+        ? `Tu zaudēji — ${oppName} uzvarēja ar matu.`
+        : `Tu zaudēji — ${String(winner)} uzvarēja ar matu.`;
     } else if (gameType === "zole") {
       const snap = payload?.zole || boardState.zole;
       const td = snap?.tableDelta;
@@ -1567,7 +1582,9 @@ function showBoardGameResult(payload) {
         `Uz tabulas uzvarēja ${String(winner)}.${tab}` +
         zoleResultExtraLine(snap);
     } else {
-      detail = `Tu zaudēji — uzvarēja ${String(winner)}.`;
+      detail = vsBot
+        ? `Tu zaudēji — uzvarēja ${oppName}.`
+        : `Tu zaudēji — uzvarēja ${String(winner)}.`;
     }
     overlay.classList.add("vz-board-result--loss");
   }
@@ -1578,7 +1595,7 @@ function showBoardGameResult(payload) {
 
   if (coinsEl) {
     if (vsBot) {
-      coinsEl.textContent = "Pret botiem coins nemainās.";
+      coinsEl.textContent = "Pret botu coins nemainās.";
       coinsEl.classList.remove("hidden");
     } else if (iWon && coinsGain > 0) {
       coinsEl.textContent = `+${coinsGain} coins`;
@@ -1590,6 +1607,13 @@ function showBoardGameResult(payload) {
       coinsEl.textContent = "";
       coinsEl.classList.add("hidden");
     }
+  }
+
+  const againBtn = document.getElementById("board-result-play-again-vsbot");
+  if (againBtn) {
+    const showAgain = !!vsBot && !!gameType && gameType !== "zole";
+    againBtn.classList.toggle("hidden", !showAgain);
+    againBtn.dataset.gameType = showAgain ? gameType : "";
   }
 
   overlay.classList.remove("hidden");
@@ -11741,6 +11765,31 @@ function bindBoardGames() {
   const boardResultOverlay = document.getElementById("board-result-overlay");
   if (boardResultClose)
     boardResultClose.addEventListener("click", hideBoardResultOverlay);
+  document
+    .getElementById("board-result-play-again-vsbot")
+    ?.addEventListener("click", () => {
+      const btn = document.getElementById("board-result-play-again-vsbot");
+      const t = String(btn?.dataset?.gameType || "").toLowerCase();
+      if (!t || (t !== "dambrete" && t !== "chess")) return;
+      hideBoardResultOverlay();
+      showBoardModal();
+      const diffEl = document.querySelector(
+        'input[name="board-bot-diff"]:checked'
+      );
+      const difficulty = diffEl?.value || "medium";
+      const payload = { type: t, difficulty };
+      if (t === "dambrete")
+        payload.dambreteVariant = getSelectedBoardDambreteVariant();
+      if (t === "chess")
+        payload.chessClockPreset = getChessClockPresetForVsBot();
+      if (!boardGamesEnsureSocketConnected()) return;
+      const gameArea = document.getElementById("board-game-area");
+      const lobby = document.getElementById("board-games-lobby");
+      if (gameArea) gameArea.classList.remove("hidden");
+      if (lobby) lobby.classList.add("hidden");
+      state.socket.emit("board.startVsBot", payload);
+      stopBoardInviteOutgoingWait();
+    });
   document
     .getElementById("board-result-rematch")
     ?.addEventListener("click", sendBoardRematchInvite);
