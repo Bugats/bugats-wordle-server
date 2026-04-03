@@ -1070,6 +1070,7 @@
       const endMain = el("div", "vz-zole-end__main");
       endMain.appendChild(buildMatchScoreStrip(zole, myIdx));
       endMain.appendChild(buildEndCenter(zole, zm));
+      let deltaLine = "";
       if (zole.tableDelta) {
         const parts = [];
         for (let i = 0; i < 3; i++) {
@@ -1077,15 +1078,25 @@
           if (!n) continue;
           parts.push(`${zole.players?.[i] || "?"}: ${formatPts(n)}`);
         }
-        endMain.appendChild(
-          el("div", "vz-zole-end__delta", parts.join(" · ") || "—")
-        );
+        deltaLine = parts.join(" · ") || "";
       }
       const story = lastResultText(zole);
-      if (story) endMain.appendChild(el("div", "vz-zole-end__story", story));
       const eyesLine = endEyesWinnerLine(zole);
-      if (eyesLine) {
-        endMain.appendChild(el("div", "vz-zole-end__eyes", eyesLine));
+      if (deltaLine || story || eyesLine) {
+        const details = document.createElement("details");
+        details.className = "vz-zole-end__details";
+        const sum = el(
+          "summary",
+          "vz-zole-end__details-summary",
+          "Sīkāk par šo partiju"
+        );
+        details.appendChild(sum);
+        const body = el("div", "vz-zole-end__details-body");
+        if (deltaLine) body.appendChild(el("div", "vz-zole-end__delta", deltaLine));
+        if (story) body.appendChild(el("div", "vz-zole-end__story", story));
+        if (eyesLine) body.appendChild(el("div", "vz-zole-end__eyes", eyesLine));
+        details.appendChild(body);
+        endMain.appendChild(details);
       }
       endBox.appendChild(endMain);
       const hudEnd = buildZoleTableHud(zole, myIdx);
