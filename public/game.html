@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-28-board-result-bot-copy" />
+  <link rel="stylesheet" href="style.css?v=2026-03-28-zole-lobby-hero" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1076,7 +1076,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-28-board-result-bot-copy"></script>
+    <script defer src="game.js?v=2026-03-28-zole-lobby-hero"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1322,35 +1322,15 @@
             </div>
           </div>
           <div id="board-zole-room-zone" class="vz-board-zole-room-zone hidden" aria-labelledby="board-zole-room-zone-title">
-            <h4 id="board-zole-room-zone-title" class="vz-board-zole-room-zone__title">
-              🃏 Zoles istaba — 3 spēlētāji
-            </h4>
-            <p class="vz-board-zole-room-zone__intro">
-              Šeit top tava privātā istaba: spied «Izveidot», tad uzaicini divus spēlētājus zemāk vai ar «Zole» uzaicinājumu. Kad vietas aizpildītas, spēle sākas automātiski.
-            </p>
-            <div class="vz-board-zole-stake-row">
-              <label for="board-zole-3p-stake" class="vz-board-label">Coins par tabulas punktu</label>
-              <select id="board-zole-3p-stake" class="vz-board-zole-stake-select" title="Pēc partijas: coins mainās proporcionāli tabulas punktiem. 0 = fiksēti +10/−4 kā citur.">
-                <option value="0" selected>0 — kā parasti (+10 uzvara)</option>
-                <option value="1">1 coin / punkts</option>
-                <option value="2">2 coins / punkts</option>
-                <option value="3">3 coins / punkts</option>
-                <option value="4">4 coins / punkts</option>
-                <option value="5">5 coins / punkts (max)</option>
-              </select>
-              <p class="vz-board-hint vz-board-zole-stake-hint">
-                Likme attiecas uz visu istabu. Trešais spēlētājs to redz uzaicinājumā. Mainīt drīkst tikai saimnieks, kamēr nav 3 vietās.
-              </p>
-            </div>
             <div
               id="board-zole-3p-open-lobbies"
-              class="vz-board-zole-open-lobbies hidden"
+              class="vz-board-zole-open-lobbies vz-board-zole-open-lobbies--hero hidden"
               aria-labelledby="board-zole-3p-open-lobbies-title">
               <h4 id="board-zole-3p-open-lobbies-title" class="vz-board-zole-open-lobbies__title">
-                Atvērtās istabas
+                Atvērtās istabas — pievienojies
               </h4>
               <p class="vz-board-zole-open-lobbies__intro">
-                Spēlētāju izveidotas istabas ar brīvām vietām. Likme un sastāvs — pirms pievienošanās.
+                Citu spēlētāju istabas ar brīvām vietām. Skaties likmi un sastāvu, tad spied «Pievienoties». Vai izveido savu istabu zemāk.
               </p>
               <div class="vz-board-zole-open-lobbies__scroll">
                 <table class="vz-board-zole-open-lobbies__table">
@@ -1367,6 +1347,26 @@
               </div>
               <p id="board-zole-3p-open-lobbies-empty" class="vz-board-hint vz-board-zole-open-lobbies__empty hidden">
                 Šobrīd nav brīvu istabu — vari izveidot savu vai atsvaidzināt pēc brīža.
+              </p>
+            </div>
+            <h4 id="board-zole-room-zone-title" class="vz-board-zole-room-zone__title">
+              🃏 Tava istaba — 3 spēlētāji
+            </h4>
+            <p class="vz-board-zole-room-zone__intro">
+              Spied «Izveidot istabu», tad uzaicini divus spēlētājus vai izmanto «Zole» uzaicinājumu no lobija. Kad visas 3 vietas aizņemtas, spēle sākas automātiski.
+            </p>
+            <div class="vz-board-zole-stake-row">
+              <label for="board-zole-3p-stake" class="vz-board-label">Coins par tabulas punktu</label>
+              <select id="board-zole-3p-stake" class="vz-board-zole-stake-select" title="Pēc partijas: coins mainās proporcionāli tabulas punktiem. 0 = fiksēti +10/−4 kā citur.">
+                <option value="0" selected>0 — kā parasti (+10 uzvara)</option>
+                <option value="1">1 coin / punkts</option>
+                <option value="2">2 coins / punkts</option>
+                <option value="3">3 coins / punkts</option>
+                <option value="4">4 coins / punkts</option>
+                <option value="5">5 coins / punkts (max)</option>
+              </select>
+              <p class="vz-board-hint vz-board-zole-stake-hint">
+                Likme attiecas uz visu istabu. Trešais spēlētājs to redz uzaicinājumā. Mainīt drīkst tikai saimnieks, kamēr nav 3 vietās.
               </p>
             </div>
             <div id="board-zole-3p-lobby-entry" class="vz-board-zole-3p-entry hidden">

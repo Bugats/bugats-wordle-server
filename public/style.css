@@ -7610,11 +7610,26 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   border: 1px solid rgba(196, 181, 253, 0.28);
   background: rgba(15, 23, 42, 0.35);
 }
+.vz-board-zole-open-lobbies--hero {
+  margin: 0 0 16px;
+  padding: 14px 14px 12px;
+  border-width: 2px;
+  border-color: rgba(196, 181, 253, 0.55);
+  background: linear-gradient(
+    165deg,
+    rgba(76, 29, 149, 0.32) 0%,
+    rgba(15, 23, 42, 0.55) 100%
+  );
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2), 0 6px 20px rgba(0, 0, 0, 0.2);
+}
 .vz-board-zole-open-lobbies__title {
   margin: 0 0 6px;
   font-size: 13px;
   font-weight: 700;
   color: #e9d5ff;
+}
+.vz-board-zole-open-lobbies--hero .vz-board-zole-open-lobbies__title {
+  font-size: 15px;
 }
 .vz-board-zole-open-lobbies__intro {
   margin: 0 0 10px;
