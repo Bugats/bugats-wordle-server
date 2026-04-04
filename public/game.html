@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-28-empty-states" />
+  <link rel="stylesheet" href="style.css?v=2026-03-29-coins-copy" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -315,9 +315,11 @@
                   <div class="vz-card-row"><span>Lab. streak:</span><span id="player-best-streak"></span></div>
                   <div class="vz-card-row"><span>Coins:</span><span id="player-coins"></span></div>
                   <p class="vz-coins-hint">
-                    Iegūsti vārdu spēlē (misijas, duelis u.c.) un
-                    <strong>tikai pret cilvēkiem</strong> galda spēlēs. Pret
-                    <strong>botiem</strong> coins nemainās.
+                    Viens atlikums visur: vārdu zonā vari <strong>iegūt un zaudēt</strong> coins
+                    spēlējot; <strong>Zolē, dambretē un šahā</strong> pēc partijas ar
+                    <strong>cilvēkiem</strong> coins var mainīties (uzvara / zaudējums). Pret
+                    <strong>botiem</strong> coins nemainās. Vari arī <strong>papildināt ar naudu</strong>
+                    caur Stripe, ja ieslēgts.
                     <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Īss skaidrojums</a>
                   </p>
                   <div id="vz-stripe-coins-buy" class="vz-stripe-coins hidden">
@@ -889,6 +891,11 @@
         <div class="profile-row"><span>XP:</span><span id="pp-xp"></span></div>
         <div class="profile-row"><span>Punkti:</span><span id="pp-score"></span></div>
         <div class="profile-row"><span>Coins:</span><span id="pp-coins"></span></div>
+        <p class="vz-coins-hint vz-coins-hint--popup">
+          Tas pats atlikums: vārdu zona + galds (Zole, dambrete, šahs) pret cilvēkiem; pret botiem
+          nemainās; papildināšana ar Stripe, ja ieslēgts.
+          <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Īsi par coins</a>
+        </p>
         <div id="pp-stripe-coins-buy" class="vz-stripe-coins vz-stripe-coins--popup hidden">
           <div class="vz-stripe-coins__label">Pirkt coins</div>
           <div id="pp-stripe-coins-pack-list" class="vz-stripe-coins__packs"></div>

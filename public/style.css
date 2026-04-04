@@ -1171,6 +1171,10 @@ summary:focus-visible {
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
+.vz-coins-hint--popup {
+  margin: 4px 0 8px;
+  font-size: 10px;
+}
 
 /* Rank aura (ESOŠĀS — backward compatible) */
 .vz-player-card.vz-rank-low {
