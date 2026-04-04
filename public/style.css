@@ -7684,7 +7684,65 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   cursor: not-allowed;
 }
 .vz-board-zole-open-lobbies__empty {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
+}
+.vz-board-zole-open-lobbies__empty-inner {
+  padding: 6px 4px 2px;
+}
+
+/* Vienoti tukšie stāvokļi (draugi, DM, Zole istabas, turnīrs, VIP) */
+.vz-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 18px 14px 16px;
+  margin: 6px 0;
+  border-radius: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  background: linear-gradient(
+    165deg,
+    rgba(157, 34, 53, 0.12) 0%,
+    rgba(0, 0, 0, 0.2) 100%
+  );
+  color: rgba(255, 255, 255, 0.92);
+}
+.vz-empty-state--compact {
+  padding: 12px 10px 11px;
+  margin: 4px 0;
+  gap: 4px;
+}
+.vz-empty-state__glyph {
+  font-size: 28px;
+  line-height: 1;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+  opacity: 0.95;
+}
+.vz-empty-state--compact .vz-empty-state__glyph {
+  font-size: 22px;
+}
+.vz-empty-state__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+}
+.vz-empty-state--compact .vz-empty-state__title {
+  font-size: 12px;
+}
+.vz-empty-state__text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: rgba(255, 248, 240, 0.78);
+  max-width: 22rem;
+}
+.vz-empty-state--compact .vz-empty-state__text {
+  font-size: 11px;
+  max-width: 100%;
 }
 
 .vz-board-invite-stake {

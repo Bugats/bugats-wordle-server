@@ -42,6 +42,30 @@ function escapeHtml(s) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+
+/** Vienots mīksts tukšā stāvokļa bloks (īss virsraksts + 1 rindiņa). */
+function fillVzEmptyState(el, options = {}) {
+  if (!el) return;
+  const glyph = String(options.glyph ?? "✦").trim() || "✦";
+  const title = String(options.title || "").trim();
+  const text = String(options.text || "").trim();
+  const compact = !!options.compact;
+  const extra = String(options.extraClass || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  el.className = [
+    "vz-empty-state",
+    compact ? "vz-empty-state--compact" : "",
+    ...extra,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const g = escapeHtml(glyph);
+  const t = title ? `<p class="vz-empty-state__title">${escapeHtml(title)}</p>` : "";
+  const x = text ? `<p class="vz-empty-state__text">${escapeHtml(text)}</p>` : "";
+  el.innerHTML = `<div class="vz-empty-state__glyph" aria-hidden="true">${g}</div>${t}${x}`;
+}
 const {
   dmNormalizeMessageForStore,
   dmObjectToThreads,
@@ -1052,7 +1076,19 @@ function renderZole3pOpenLobbyTable() {
     ? zole3pOpenLobbiesCache.rooms
     : [];
   if (emptyEl) {
-    emptyEl.classList.toggle("hidden", rooms.length > 0);
+    if (rooms.length === 0) {
+      fillVzEmptyState(emptyEl, {
+        glyph: "🃏",
+        title: "Vēl neviena atvērta istaba",
+        text: "Izveido savu zemāk vai atgriezies pēc brīža.",
+        compact: true,
+        extraClass: "vz-board-zole-open-lobbies__empty-inner",
+      });
+      emptyEl.classList.remove("hidden");
+    } else {
+      emptyEl.classList.add("hidden");
+      emptyEl.innerHTML = "";
+    }
   }
   if (rooms.length === 0) {
     tbody.innerHTML = "";
@@ -4971,8 +5007,12 @@ function renderFriends() {
     !state.friendInvitesIn.length &&
     !state.friendInvitesOut.length
   ) {
-    const empty = createEl("div", "mission-status");
-    empty.textContent = "Nav draugu. Pievieno kādu!";
+    const empty = createEl("div");
+    fillVzEmptyState(empty, {
+      glyph: "🤝",
+      title: "Draugu saraksts ir tukšs",
+      text: "Augšā ievadi vārdu un spied «Pievienot».",
+    });
     friendsInvitesEl.appendChild(empty);
     return;
   }
@@ -6741,9 +6781,14 @@ function renderVipRoomFriendPicker(canCreate) {
   vipRoomFriendsEl.appendChild(summary);
 
   if (!state.friends.length) {
-    const empty = createEl("div", "vz-vip-room-friends-empty");
-    empty.textContent =
-      "Nav draugu sarakstā. Pievieno draugus, lai aizpildītu tukšos slotus.";
+    const empty = createEl("div");
+    fillVzEmptyState(empty, {
+      glyph: "👥",
+      title: "Nav draugu sarakstā",
+      text: "Pievieno draugus profilā, tad izvēlies tos slotos.",
+      compact: true,
+      extraClass: "vz-vip-room-friends-empty",
+    });
     vipRoomFriendsEl.appendChild(empty);
     return;
   }
@@ -6770,8 +6815,14 @@ function renderVipRoomList() {
   vipRoomListEl.innerHTML = "";
   const rooms = Array.isArray(state.vipRooms) ? state.vipRooms : [];
   if (!rooms.length) {
-    const empty = createEl("div", "mission-status");
-    empty.textContent = "VIP istabu ielūgumu nav.";
+    const empty = createEl("div");
+    fillVzEmptyState(empty, {
+      glyph: "🏆",
+      title: "Nav VIP istabu",
+      text: "Izveido istabu, kad tev ir tiesības.",
+      compact: true,
+      extraClass: "mission-status",
+    });
     vipRoomListEl.appendChild(empty);
     return;
   }
@@ -7327,7 +7378,7 @@ function clearTournamentCardUi() {
   }
   if (tournamentEmptyEl) {
     tournamentEmptyEl.textContent = "";
-    tournamentEmptyEl.classList.add("hidden");
+    tournamentEmptyEl.className = "hidden";
   }
   if (tournamentMyMatchEl) tournamentMyMatchEl.classList.add("hidden");
   if (tournamentMyMatchTextEl) tournamentMyMatchTextEl.textContent = "—";
@@ -7473,7 +7524,13 @@ function renderTournamentCard(meta, details) {
     ? String(details.finalStandings?.[0]?.name || "").trim()
     : "";
   if (championName && tournamentEmptyEl) {
-    tournamentEmptyEl.textContent = `Uzvarētājs: ${championName}`;
+    fillVzEmptyState(tournamentEmptyEl, {
+      glyph: "🏆",
+      title: "Turnīrs noslēgts",
+      text: `Uzvarētājs: ${championName}`,
+      compact: true,
+      extraClass: "mission-status",
+    });
     tournamentEmptyEl.classList.remove("hidden");
   }
 
@@ -7497,7 +7554,13 @@ function renderTournamentCard(meta, details) {
       });
       tournamentMatchListEl.classList.remove("hidden");
     } else if (!championName && tournamentEmptyEl) {
-      tournamentEmptyEl.textContent = "Šobrīd nav aktīvu maču.";
+      fillVzEmptyState(tournamentEmptyEl, {
+        glyph: "📋",
+        title: "Nav aktīvu maču",
+        text: "Gaidām nākamo kārtu vai atjauninājumu.",
+        compact: true,
+        extraClass: "mission-status",
+      });
       tournamentEmptyEl.classList.remove("hidden");
     }
   }
@@ -9197,9 +9260,12 @@ function dmRenderInbox() {
 
   if (!items.length) {
     const empty = document.createElement("div");
-    empty.style.opacity = "0.8";
-    empty.textContent =
-      "Inbox tukšs. Atver profilu un spied “Rakstīt privāti”.";
+    fillVzEmptyState(empty, {
+      glyph: "✉️",
+      title: "Vēl nav sarunu",
+      text: "Profilā spied «Rakstīt privāti».",
+      compact: true,
+    });
     box.appendChild(empty);
     return;
   }
