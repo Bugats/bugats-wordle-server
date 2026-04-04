@@ -879,7 +879,14 @@
       global.requestAnimationFrame(measure);
     });
     if (typeof ResizeObserver !== "undefined") {
-      const ro = new ResizeObserver(() => measure());
+      let roRaf = null;
+      const ro = new ResizeObserver(() => {
+        if (roRaf != null) return;
+        roRaf = global.requestAnimationFrame(() => {
+          roRaf = null;
+          measure();
+        });
+      });
       ro.observe(dock);
       const felt = dock.closest(".vz-zole-classic__felt");
       if (felt) ro.observe(felt);

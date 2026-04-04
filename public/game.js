@@ -707,6 +707,36 @@ function boardZoleIsHumanTurn(myIdx, zole) {
   return false;
 }
 
+/** Atslēga, lai «Tava kārta» čatā nerādītos atkārtoti vienā un tajā pašā gājienā (Zole: fāze + stiķis). */
+function galdaTurnNotifyDedupeKey(gameType, gameId, partial) {
+  const id = gameId != null ? String(gameId) : "";
+  const z = partial?.zole;
+  if (gameType === "zole" && z && typeof z === "object") {
+    const ph = String(z.phase || "");
+    if (ph === "bid") return `${id}:bid:${z.bidTurn ?? 0}`;
+    if (ph === "discard")
+      return `${id}:disc:${z.contractorIdx ?? 0}:${String(z.contract || "")}`;
+    if (ph === "play")
+      return `${id}:play:tp${z.tricksPlayed ?? 0}:tl${z.trickLeader ?? ""}:tr${z.turn ?? 0}`;
+    return `${id}:z:${ph}`;
+  }
+  const turn = normalizeBoardTurnFromPayload(
+    partial?.turn,
+    gameType || "dambrete"
+  );
+  let mv = "";
+  if (gameType === "chess") {
+    mv = String(partial?.move ?? partial?.san ?? "").trim();
+  } else if (gameType === "dambrete" && partial?.move != null) {
+    try {
+      mv = JSON.stringify(partial.move);
+    } catch (_) {
+      mv = "";
+    }
+  }
+  return `${id}:t${turn}${mv ? ":" + mv : ""}`;
+}
+
 /** Rinda: ātri nomainot izvēli pirms pirmās /moves atbildes, pieprasījumi nedrīkst pārklāties. */
 function queueBoardLegalMovesFetch(clickedCell, gameType) {
   const gid = boardState.gameId;
@@ -770,6 +800,8 @@ const ZOLE_BOT_USERNAMES = new Set(["ZoleBot1", "ZoleBot2"]);
 
 /** Pēdējais galda rezultāts — revānša pogai */
 let lastBoardResultSnapshot = null;
+/** Lai «[Galds] Tava kārta» nerādītos atkārtoti katram board.move (piem., šaha pulkstenis). */
+let _lastGaldaTurnNotifyKey = null;
 
 let boardInviteOutgoingInterval = null;
 let boardInviteIncomingInterval = null;
@@ -10652,6 +10684,14 @@ function initSocket() {
     const isMyTurn =
       myIdx === normalizeBoardTurnFromPayload(payload?.turn ?? 0, t);
     updateBoardGameBadge(isMyTurn);
+    const gid = payload?.gameId ?? boardState.gameId;
+    if (isMyTurn && gid != null) {
+      _lastGaldaTurnNotifyKey = galdaTurnNotifyDedupeKey(t, gid, {
+        turn: payload?.turn,
+        zole: t === "zole" ? payload?.zole : undefined,
+      });
+      appendGaldaSystemMessage("Tava kārta galda spēlē.");
+    }
   });
   socket.on("board.resume", (payload) => {
     startBoardGame(payload);
@@ -10663,6 +10703,14 @@ function initSocket() {
     const isMyTurn =
       myIdx === normalizeBoardTurnFromPayload(payload?.turn ?? 0, t);
     updateBoardGameBadge(isMyTurn);
+    const gid = payload?.gameId ?? boardState.gameId;
+    if (isMyTurn && gid != null) {
+      _lastGaldaTurnNotifyKey = galdaTurnNotifyDedupeKey(t, gid, {
+        turn: payload?.turn,
+        zole: t === "zole" ? payload?.zole : undefined,
+      });
+      appendGaldaSystemMessage("Tava kārta galda spēlē.");
+    }
   });
   socket.on("board.move", (payload) => {
     if (payload?.gameId !== boardState.gameId) return;
@@ -10732,7 +10780,17 @@ function initSocket() {
         ? boardZoleIsHumanTurn(myIdx, boardState.zole)
         : myIdx === boardState.turn;
     if (isMyTurn) {
-      appendGaldaSystemMessage("Tava kārta galda spēlē.");
+      const turnKey = galdaTurnNotifyDedupeKey(
+        boardState.type,
+        boardState.gameId,
+        boardState.type === "zole"
+          ? { zole: boardState.zole, turn: boardState.turn }
+          : payload
+      );
+      if (turnKey !== _lastGaldaTurnNotifyKey) {
+        _lastGaldaTurnNotifyKey = turnKey;
+        appendGaldaSystemMessage("Tava kārta galda spēlē.");
+      }
       const modal = document.getElementById("board-games-modal");
       if (modal && modal.classList.contains("hidden")) {
         const gameArea = document.getElementById("board-game-area");
@@ -10743,6 +10801,7 @@ function initSocket() {
       }
       updateBoardGameBadge(true);
     } else {
+      _lastGaldaTurnNotifyKey = null;
       updateBoardGameBadge(false);
     }
     syncBoardModalFullscreen();
@@ -10759,6 +10818,7 @@ function initSocket() {
     const coinsGain = payload?.coinsGain || 0;
     const coinsLoss = payload?.coinsLoss || 0;
     boardState.gameId = null;
+    _lastGaldaTurnNotifyKey = null;
     const won =
       winner &&
       String(winner).trim().toLowerCase() ===
@@ -11148,6 +11208,7 @@ function hideBoardInviteModal() {
 }
 
 function startBoardGame(payload) {
+  _lastGaldaTurnNotifyKey = null;
   hideBoardResultOverlay();
   boardLegalMovesFetchId++;
   boardMovesFetchChain = Promise.resolve();
@@ -13623,11 +13684,19 @@ async function initGame() {
       ev && ev.reason && ev.reason.message
         ? ev.reason.message
         : "Nezināma kļūda (Promise).";
+    if (/ResizeObserver loop/i.test(String(msg))) {
+      console.warn("unhandledrejection (benign, ignored for chat):", ev.reason);
+      return;
+    }
     console.error("unhandledrejection:", ev.reason);
     appendSystemMessage("⚠️ Kļūda: " + msg);
   });
   window.addEventListener("error", (ev) => {
     const msg = ev && ev.message ? ev.message : "Nezināma kļūda.";
+    if (/ResizeObserver loop/i.test(String(msg))) {
+      console.warn("window.error (benign, ignored for chat):", msg);
+      return;
+    }
     console.error("window.error:", ev);
     appendSystemMessage("⚠️ Kļūda: " + msg);
   });
