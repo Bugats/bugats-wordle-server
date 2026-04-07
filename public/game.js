@@ -1151,6 +1151,7 @@ function renderBoardOpenSeatsTable(kind) {
   }
   if (rows.length === 0) {
     tbody.innerHTML = "";
+    syncMyBoardOpenSeatButtons();
     return;
   }
   const html = rows.map((r) => {
