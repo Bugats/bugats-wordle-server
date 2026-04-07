@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-29-coins-copy" />
+  <link rel="stylesheet" href="style.css?v=2026-04-07-open-seats-lists" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1083,7 +1083,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-29-galda-speles-label"></script>
+    <script defer src="game.js?v=2026-04-07-open-seats-lists"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1334,7 +1334,7 @@
               class="vz-board-zole-open-lobbies vz-board-zole-open-lobbies--hero hidden"
               aria-labelledby="board-zole-3p-open-lobbies-title">
               <h4 id="board-zole-3p-open-lobbies-title" class="vz-board-zole-open-lobbies__title">
-                Atvērtās istabas — pievienojies
+                Zole — atvērtās 3 cilvēku istabas
               </h4>
               <p class="vz-board-zole-open-lobbies__intro">
                 Citu spēlētāju istabas ar brīvām vietām. Skaties likmi un sastāvu, tad spied «Pievienoties». Vai izveido savu istabu zemāk.
@@ -1424,6 +1424,78 @@
                 <option value="15+10">15 min + 10 s</option>
                 <option value="3+2">3 min + 2 s</option>
               </select>
+            </div>
+          </div>
+          <div
+            id="board-dambrete-open-seats"
+            class="vz-board-zole-open-lobbies hidden"
+            aria-labelledby="board-dambrete-open-seats-title">
+            <h4 id="board-dambrete-open-seats-title" class="vz-board-zole-open-lobbies__title">
+              Dambrete — gaida pretinieku
+            </h4>
+            <p class="vz-board-zole-open-lobbies__intro">
+              Spēlētāji, kas publicējuši brīvu vietu. «Pievienoties» nosūta pieprasījumu saimniekam — viņš var pieņemt vai noraidīt.
+            </p>
+            <div class="vz-board-zole-open-lobbies__scroll">
+              <table class="vz-board-zole-open-lobbies__table">
+                <thead>
+                  <tr>
+                    <th scope="col">Spēlētājs</th>
+                    <th scope="col">Režīms</th>
+                    <th scope="col">Darbība</th>
+                  </tr>
+                </thead>
+                <tbody id="board-dambrete-open-seats-body"></tbody>
+              </table>
+            </div>
+            <div
+              id="board-dambrete-open-seats-empty"
+              class="vz-board-zole-open-lobbies__empty hidden"
+              role="status"
+              aria-live="polite"></div>
+            <div class="vz-board-open-seat-publish">
+              <button type="button" id="board-dambrete-open-seat-publish" class="vz-board-invite-btn vz-board-invite-btn--ghost">
+                Publicēt: gaidu pēc izvēlētā dambretes režīma
+              </button>
+              <button type="button" id="board-dambrete-open-seat-cancel" class="vz-board-resign vz-board-open-seat-publish__cancel hidden">
+                Noņemt mani no saraksta
+              </button>
+            </div>
+          </div>
+          <div
+            id="board-chess-open-seats"
+            class="vz-board-zole-open-lobbies hidden"
+            aria-labelledby="board-chess-open-seats-title">
+            <h4 id="board-chess-open-seats-title" class="vz-board-zole-open-lobbies__title">
+              Šahs — gaida pretinieku
+            </h4>
+            <p class="vz-board-zole-open-lobbies__intro">
+              Publicētā vieta izmanto <strong>šaha laiku no PvP izvēlnes</strong> zemāk. «Pievienoties» nosūta pieprasījumu saimniekam.
+            </p>
+            <div class="vz-board-zole-open-lobbies__scroll">
+              <table class="vz-board-zole-open-lobbies__table">
+                <thead>
+                  <tr>
+                    <th scope="col">Spēlētājs</th>
+                    <th scope="col">Laiks</th>
+                    <th scope="col">Darbība</th>
+                  </tr>
+                </thead>
+                <tbody id="board-chess-open-seats-body"></tbody>
+              </table>
+            </div>
+            <div
+              id="board-chess-open-seats-empty"
+              class="vz-board-zole-open-lobbies__empty hidden"
+              role="status"
+              aria-live="polite"></div>
+            <div class="vz-board-open-seat-publish">
+              <button type="button" id="board-chess-open-seat-publish" class="vz-board-invite-btn vz-board-invite-btn--ghost">
+                Publicēt: gaidu ar izvēlēto PvP laiku
+              </button>
+              <button type="button" id="board-chess-open-seat-cancel" class="vz-board-resign vz-board-open-seat-publish__cancel hidden">
+                Noņemt mani no saraksta
+              </button>
             </div>
           </div>
           <p class="vz-board-divider">— vai izacini draugu —</p>

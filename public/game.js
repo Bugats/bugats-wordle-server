@@ -838,9 +838,12 @@ function syncBoardInvitePendingUi() {
   if (!pending || !text) return;
   const exp = Number(pending.dataset.expiresAt) || 0;
   const target = String(pending.dataset.waitTarget || "").trim();
+  const toHost = pending.dataset.waitMode === "to_host";
   const left = Math.max(0, Math.ceil((exp - Date.now()) / 1000));
   if (left > 0 && target) {
-    text.textContent = `Gaidām atbildi no ${target}… (${left}s)`;
+    text.textContent = toHost
+      ? `Gaidām, kad ${target} pieņems pievienošanos… (${left}s)`
+      : `Gaidām atbildi no ${target}… (${left}s)`;
     if (cancelBtn) cancelBtn.classList.remove("hidden");
   } else if (target) {
     text.textContent = "Termiņš beidzies.";
@@ -848,12 +851,13 @@ function syncBoardInvitePendingUi() {
   }
 }
 
-function startBoardInviteOutgoingWait(expiresAt, targetUsername) {
+function startBoardInviteOutgoingWait(expiresAt, targetUsername, opts = {}) {
   clearBoardInviteOutgoingInterval();
   const pending = document.getElementById("board-invite-pending");
   if (!pending) return;
   pending.dataset.expiresAt = String(Number(expiresAt) || 0);
   pending.dataset.waitTarget = String(targetUsername || "").trim();
+  pending.dataset.waitMode = opts.toHost ? "to_host" : "";
   pending.classList.remove("hidden");
   syncBoardInvitePendingUi();
   boardInviteOutgoingInterval = setInterval(() => {
@@ -874,6 +878,7 @@ function stopBoardInviteOutgoingWait() {
     pending.classList.add("hidden");
     pending.dataset.expiresAt = "";
     pending.dataset.waitTarget = "";
+    pending.dataset.waitMode = "";
   }
   if (cancelBtn) cancelBtn.classList.add("hidden");
 }
@@ -1076,6 +1081,168 @@ function syncZole3pThirdInviteCountdownFromSnapshot() {
 let zole3pOpenLobbiesCache = { rooms: [], serverNow: 0 };
 let zole3pOpenLobbyPollTimer = null;
 
+/** Publiskās PvP vietas šaham / dambretēm */
+let boardOpenSeatsCache = { chess: [], dambrete: [], serverNow: 0 };
+let boardOpenSeatsPollTimer = null;
+
+function clearBoardOpenSeatsPoll() {
+  if (boardOpenSeatsPollTimer != null) {
+    clearInterval(boardOpenSeatsPollTimer);
+    boardOpenSeatsPollTimer = null;
+  }
+}
+
+function scheduleBoardOpenSeatsPoll() {
+  clearBoardOpenSeatsPoll();
+  if (!state.socket || typeof state.socket.emit !== "function") return;
+  boardOpenSeatsPollTimer = setInterval(() => {
+    try {
+      state.socket.emit("board.requestOpenSeats");
+    } catch (_) {}
+  }, 15000);
+}
+
+function dambreteVariantLabelClient(v) {
+  const x = String(v || "russian").toLowerCase();
+  return x === "english" ? "Angļu dambrete" : "Krievijas šaškas";
+}
+
+function renderBoardOpenSeatsTable(kind) {
+  const wrapId =
+    kind === "chess"
+      ? "board-chess-open-seats"
+      : "board-dambrete-open-seats";
+  const tbodyId =
+    kind === "chess"
+      ? "board-chess-open-seats-body"
+      : "board-dambrete-open-seats-body";
+  const emptyId =
+    kind === "chess"
+      ? "board-chess-open-seats-empty"
+      : "board-dambrete-open-seats-empty";
+  const wrap = document.getElementById(wrapId);
+  const tbody = document.getElementById(tbodyId);
+  const emptyEl = document.getElementById(emptyId);
+  if (!wrap || !tbody) return;
+  const rows =
+    kind === "chess"
+      ? Array.isArray(boardOpenSeatsCache?.chess)
+        ? boardOpenSeatsCache.chess
+        : []
+      : Array.isArray(boardOpenSeatsCache?.dambrete)
+        ? boardOpenSeatsCache.dambrete
+        : [];
+  const me = String(state.username || "").trim().toLowerCase();
+  const inGame = !!boardState.gameId;
+  if (emptyEl) {
+    if (rows.length === 0) {
+      fillVzEmptyState(emptyEl, {
+        glyph: kind === "chess" ? "♔" : "♟️",
+        title: "Neviens negaida pretinieku",
+        text: "Publicē savu vietu zemāk vai uzaicini draugu.",
+        compact: true,
+        extraClass: "vz-board-zole-open-lobbies__empty-inner",
+      });
+      emptyEl.classList.remove("hidden");
+    } else {
+      emptyEl.classList.add("hidden");
+      emptyEl.innerHTML = "";
+    }
+  }
+  if (rows.length === 0) {
+    tbody.innerHTML = "";
+    return;
+  }
+  const html = rows.map((r) => {
+    const host = String(r?.host || "—");
+    const hostLc = host.trim().toLowerCase();
+    const detail =
+      kind === "chess"
+        ? String(r?.chessClockPreset || "—").trim() || "—"
+        : dambreteVariantLabelClient(r?.dambreteVariant);
+    let btnLabel = "Pievienoties";
+    let disabled = false;
+    let title = "";
+    if (hostLc && me && hostLc === me) {
+      btnLabel = "Tu";
+      disabled = true;
+      title = "Tava publicētā vieta.";
+    } else if (inGame) {
+      disabled = true;
+      title = "Vispirms beidz pašreizējo spēli.";
+    }
+    const dataType = kind === "chess" ? "chess" : "dambrete";
+    return `<tr data-open-seat-host="${escapeHtml(host)}" data-open-seat-type="${dataType}">
+      <td>${escapeHtml(host)}</td>
+      <td>${escapeHtml(detail)}</td>
+      <td><button type="button" class="vz-board-zole-open-lobbies__join js-board-open-seat-join" data-open-seat-host="${escapeHtml(host)}" data-open-seat-type="${dataType}" ${disabled ? "disabled" : ""} title="${escapeHtml(title)}">${escapeHtml(btnLabel)}</button></td>
+    </tr>`;
+  });
+  tbody.innerHTML = html.join("");
+  syncMyBoardOpenSeatButtons();
+}
+
+function syncMyBoardOpenSeatButtons() {
+  const me = String(state.username || "").trim().toLowerCase();
+  const chessList = Array.isArray(boardOpenSeatsCache?.chess)
+    ? boardOpenSeatsCache.chess
+    : [];
+  const dList = Array.isArray(boardOpenSeatsCache?.dambrete)
+    ? boardOpenSeatsCache.dambrete
+    : [];
+  const inChess = chessList.some(
+    (r) => String(r?.host || "").trim().toLowerCase() === me
+  );
+  const inDamb = dList.some(
+    (r) => String(r?.host || "").trim().toLowerCase() === me
+  );
+  document
+    .getElementById("board-chess-open-seat-publish")
+    ?.classList.toggle("hidden", inChess);
+  document
+    .getElementById("board-chess-open-seat-cancel")
+    ?.classList.toggle("hidden", !inChess);
+  document
+    .getElementById("board-dambrete-open-seat-publish")
+    ?.classList.toggle("hidden", inDamb);
+  document
+    .getElementById("board-dambrete-open-seat-cancel")
+    ?.classList.toggle("hidden", !inDamb);
+}
+
+function syncBoardOpenSeatsPanelVisibility() {
+  const chessWrap = document.getElementById("board-chess-open-seats");
+  const dambWrap = document.getElementById("board-dambrete-open-seats");
+  const lobbyEl = document.getElementById("board-games-lobby");
+  const lobbyVisible = lobbyEl && !lobbyEl.classList.contains("hidden");
+  const inInvite = (() => {
+    const invite = document.getElementById("board-games-invite");
+    return invite && !invite.classList.contains("hidden");
+  })();
+  const show = lobbyVisible && !inInvite && !boardState.gameId;
+  if (chessWrap) {
+    chessWrap.classList.toggle("hidden", !show);
+    if (show) {
+      renderBoardOpenSeatsTable("chess");
+      scheduleBoardOpenSeatsPoll();
+    }
+  }
+  if (dambWrap) {
+    dambWrap.classList.toggle("hidden", !show);
+    if (show) {
+      renderBoardOpenSeatsTable("dambrete");
+      scheduleBoardOpenSeatsPoll();
+    }
+  }
+  if (!show) {
+    clearBoardOpenSeatsPoll();
+    return;
+  }
+  try {
+    state.socket?.emit("board.requestOpenSeats");
+  } catch (_) {}
+}
+
 function clearZole3pOpenLobbyPoll() {
   if (zole3pOpenLobbyPollTimer != null) {
     clearInterval(zole3pOpenLobbyPollTimer);
@@ -1189,6 +1356,7 @@ function syncZole3pOpenLobbyPanelVisibility() {
   } else {
     clearZole3pOpenLobbyPoll();
   }
+  syncBoardOpenSeatsPanelVisibility();
 }
 
 function syncZole3pStakeSelectFromLobby() {
@@ -1249,6 +1417,7 @@ function updateZole3pLobbyUI(payload) {
     syncZole3pStakeSelectFromLobby();
     syncBoardDambreteModePanelVisibility();
     syncZole3pOpenLobbyPanelVisibility();
+    syncBoardOpenSeatsPanelVisibility();
     return;
   }
   zole3pLobbySnapshot = payload;
@@ -1308,6 +1477,7 @@ function updateZole3pLobbyUI(payload) {
     guestLeave.classList.toggle("hidden", !inLobby || isHost || n >= 3);
   syncBoardDambreteModePanelVisibility();
   syncZole3pOpenLobbyPanelVisibility();
+  syncBoardOpenSeatsPanelVisibility();
 }
 
 function normalizeDambreteVariantClient(v) {
@@ -10596,9 +10766,16 @@ function initSocket() {
   socket.on("board.inviteSent", (payload) => {
     const target = String(payload?.target || "").trim();
     const exp = Number(payload?.expiresAt) || Date.now() + 60 * 1000;
-    if (target) startBoardInviteOutgoingWait(exp, target);
+    if (target)
+      startBoardInviteOutgoingWait(exp, target, {
+        toHost: !!payload?.toHost,
+      });
     appendGaldaSystemMessage(
-      payload?.rematch ? "Revānša uzaicinājums nosūtīts." : "Uzaicinājums nosūtīts."
+      payload?.rematch
+        ? "Revānša uzaicinājums nosūtīts."
+        : payload?.toHost
+          ? "Pieprasījums nosūtīts saimniekam — gaidi atbildi."
+          : "Uzaicinājums nosūtīts."
     );
   });
   socket.on("board.inviteDeclined", (payload) => {
@@ -10664,6 +10841,14 @@ function initSocket() {
       serverNow: Number(payload?.serverNow) || Date.now(),
     };
     syncZole3pOpenLobbyPanelVisibility();
+  });
+  socket.on("board.openSeats", (payload) => {
+    boardOpenSeatsCache = {
+      chess: Array.isArray(payload?.chess) ? payload.chess : [],
+      dambrete: Array.isArray(payload?.dambrete) ? payload.dambrete : [],
+      serverNow: Number(payload?.serverNow) || Date.now(),
+    };
+    syncBoardOpenSeatsPanelVisibility();
   });
   socket.on("board.error", (payload) => {
     appendGaldaSystemMessage(payload?.message || "Galda spēles kļūda.");
@@ -10921,6 +11106,7 @@ function syncBoardDambreteModePanelVisibility() {
   syncBoardChessTimeRowVisibility();
   syncBoardModalContext();
   syncZole3pOpenLobbyPanelVisibility();
+  syncBoardOpenSeatsPanelVisibility();
 }
 
 function showBoardModal() {
@@ -10954,6 +11140,7 @@ function showBoardModal() {
   syncBoardDambreteModePanelVisibility();
   syncBoardModalContext();
   syncZole3pOpenLobbyPanelVisibility();
+  syncBoardOpenSeatsPanelVisibility();
   if (inner && (!overlay || overlay.classList.contains("hidden"))) {
     requestAnimationFrame(() => {
       try {
@@ -11082,8 +11269,8 @@ function showBoardInviteModal(from, type, payload) {
     const varEl = document.getElementById("board-invite-dambrete-variant");
     if (fromEl) fromEl.textContent = from;
     const rem = !!payload?.rematch;
-    if (typeEl)
-      typeEl.textContent = rem
+    if (typeEl) {
+      let base = rem
         ? type === "chess"
           ? "šahu (revānšs)"
           : type === "zole"
@@ -11094,6 +11281,10 @@ function showBoardInviteModal(from, type, payload) {
           : type === "zole"
             ? "zoli"
             : "dambreti";
+      if (!rem && payload?.fromOpenSeatList)
+        base += " — pievienošanās no saraksta";
+      typeEl.textContent = base;
+    }
     invite.dataset.from = from;
     invite.dataset.type = type || "dambrete";
     invite.dataset.inviteId = String(payload?.inviteId || "").trim();
@@ -11183,6 +11374,7 @@ function showBoardInviteModal(from, type, payload) {
   syncBoardDambreteModePanelVisibility();
   syncBoardModalContext();
   syncZole3pOpenLobbyPanelVisibility();
+  syncBoardOpenSeatsPanelVisibility();
   startBoardInviteIncomingExpiry();
   if (inner) {
     requestAnimationFrame(() => {
@@ -11205,6 +11397,7 @@ function hideBoardInviteModal() {
   document.getElementById("board-invite-expires")?.classList.add("hidden");
   showBoardModal();
   syncBoardDambreteModePanelVisibility();
+  syncBoardOpenSeatsPanelVisibility();
 }
 
 function startBoardGame(payload) {
@@ -11298,6 +11491,7 @@ function hideBoardGameArea() {
   document.getElementById("board-zole-stake-banner")?.classList.add("hidden");
   syncBoardModalContext();
   clearZole3pOpenLobbyPoll();
+  clearBoardOpenSeatsPoll();
 }
 
 function updateBoardGameBadge(show) {
@@ -12187,6 +12381,62 @@ function bindBoardGames() {
       }
       if (!boardGamesEnsureSocketConnected()) return;
       state.socket.emit("board.zoleJoinOpenLobby", { lobbyId: lid });
+    });
+  document
+    .getElementById("board-dambrete-open-seat-publish")
+    ?.addEventListener("click", () => {
+      if (!boardGamesEnsureSocketConnected()) return;
+      state.socket.emit("board.openSeatPublish", {
+        type: "dambrete",
+        dambreteVariant: getSelectedBoardDambreteVariant(),
+      });
+    });
+  document
+    .getElementById("board-chess-open-seat-publish")
+    ?.addEventListener("click", () => {
+      if (!boardGamesEnsureSocketConnected()) return;
+      state.socket.emit("board.openSeatPublish", {
+        type: "chess",
+        chessClockPreset: getChessClockPresetForPvp(),
+      });
+    });
+  document
+    .getElementById("board-dambrete-open-seat-cancel")
+    ?.addEventListener("click", () => {
+      if (!boardGamesEnsureSocketConnected()) return;
+      state.socket.emit("board.openSeatCancel");
+    });
+  document
+    .getElementById("board-chess-open-seat-cancel")
+    ?.addEventListener("click", () => {
+      if (!boardGamesEnsureSocketConnected()) return;
+      state.socket.emit("board.openSeatCancel");
+    });
+  document
+    .getElementById("board-dambrete-open-seats")
+    ?.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".js-board-open-seat-join");
+      if (!btn || btn.disabled) return;
+      const host = String(btn.dataset.openSeatHost || "").trim();
+      if (!host) return;
+      if (!boardGamesEnsureSocketConnected()) return;
+      state.socket.emit("board.requestOpenSeatInvite", {
+        host,
+        type: "dambrete",
+      });
+    });
+  document
+    .getElementById("board-chess-open-seats")
+    ?.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".js-board-open-seat-join");
+      if (!btn || btn.disabled) return;
+      const host = String(btn.dataset.openSeatHost || "").trim();
+      if (!host) return;
+      if (!boardGamesEnsureSocketConnected()) return;
+      state.socket.emit("board.requestOpenSeatInvite", {
+        host,
+        type: "chess",
+      });
     });
 }
 

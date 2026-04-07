@@ -850,6 +850,75 @@ const boardInviteVariantByPair = new Map();
 /** username (lowercase) -> { from, expiresAt, rematch } — gaidīts galda uzaicinājums (draugu statusam). */
 const pendingBoardInviteByUsername = new Map();
 
+/** hostname (lowercase) -> { host, type, dambreteVariant?, chessClockOpts?, expiresAt } — publiska «gribu PvP» vieta */
+const boardOpenSeatByHost = new Map();
+const BOARD_OPEN_SEAT_TTL_MS = 45 * 60 * 1000;
+
+function broadcastBoardOpenSeatsList() {
+  if (!ioServerRef) return;
+  ioServerRef.emit("board.openSeats", buildBoardOpenSeatsListPayload());
+}
+
+function removeBoardOpenSeatForUser(username, doBroadcast = true) {
+  const key = String(username || "").trim().toLowerCase();
+  if (!key) return;
+  if (!boardOpenSeatByHost.delete(key)) return;
+  if (doBroadcast) broadcastBoardOpenSeatsList();
+}
+
+function buildBoardOpenSeatsListPayload() {
+  const now = Date.now();
+  const chess = [];
+  const dambrete = [];
+  for (const [k, v] of [...boardOpenSeatByHost.entries()]) {
+    if (!v || (v.expiresAt || 0) <= now) {
+      boardOpenSeatByHost.delete(k);
+      continue;
+    }
+    const host = String(v.host || "").trim();
+    if (!host || userToBoardGame.has(host)) {
+      boardOpenSeatByHost.delete(k);
+      continue;
+    }
+    const t = String(v.type || "").toLowerCase();
+    if (t === "chess") {
+      const opts = v.chessClockOpts || null;
+      chess.push({
+        host,
+        chessClockPreset: opts ? chessClockPresetLabel(opts) : "",
+        chessInitialMs: opts?.initialMsPerSide,
+        chessIncrementMs: opts?.incrementMs,
+      });
+    } else if (t === "dambrete") {
+      dambrete.push({
+        host,
+        dambreteVariant: normalizeDambreteVariant(v.dambreteVariant || "russian"),
+      });
+    } else {
+      boardOpenSeatByHost.delete(k);
+    }
+  }
+  chess.sort((a, b) =>
+    String(a.host || "").localeCompare(String(b.host || ""), "lv")
+  );
+  dambrete.sort((a, b) =>
+    String(a.host || "").localeCompare(String(b.host || ""), "lv")
+  );
+  return { chess, dambrete, serverNow: now };
+}
+
+function pruneExpiredBoardOpenSeats() {
+  const now = Date.now();
+  let changed = false;
+  for (const [k, v] of [...boardOpenSeatByHost.entries()]) {
+    if (!v || (v.expiresAt || 0) <= now) {
+      boardOpenSeatByHost.delete(k);
+      changed = true;
+    }
+  }
+  if (changed) broadcastBoardOpenSeatsList();
+}
+
 function setPendingBoardInviteForTarget(targetUsername, fromUsername, expiresAt, rematch = false) {
   const key = String(targetUsername || "").trim().toLowerCase();
   const from = String(fromUsername || "").trim();
@@ -1084,6 +1153,8 @@ function maybeStartZole3pFromLobby(io, lobby) {
       zole3pCoinsPerPoint: game.zole3pCoinsPerPoint ?? 0,
     });
   }
+  for (const p of game.players) removeBoardOpenSeatForUser(p, false);
+  broadcastBoardOpenSeatsList();
   setImmediate(() => playZoleBotBids(io, game));
   broadcastOnlineBoardPresence();
   return true;
@@ -6742,6 +6813,7 @@ if (process.env.NODE_ENV !== "test") {
       tickChessClocks(io);
       tickExpiredBoardInvites(io);
       expireZole3pThirdSeatInvites(io);
+      pruneExpiredBoardOpenSeats();
     } catch (_) {}
   }, 1000);
 }
@@ -11777,6 +11849,7 @@ io.on("connection", (socket) => {
   const passiveChanged = markActivity(user);
 
   socket.emit("board.zoleOpenLobbies", buildZole3pOpenLobbyListPayload());
+  socket.emit("board.openSeats", buildBoardOpenSeatsListPayload());
 
   // Ja lietotājs ir aktīvā duelī un viņš pārlādē lapu, dodam iespēju turpināt
   try {
@@ -12908,6 +12981,135 @@ io.on("connection", (socket) => {
       zoleMode: gameType === "zole" ? zoleMode : undefined,
       expiresAt: invite.expiresAt,
     });
+    removeBoardOpenSeatForUser(fromUser.username);
+  });
+
+  socket.on("board.openSeatPublish", (payload) => {
+    const user = socket.data.user;
+    if (!user) return;
+    const gameType = String(payload?.type || "dambrete").toLowerCase();
+    if (gameType !== "dambrete" && gameType !== "chess")
+      return socket.emit("board.error", {
+        message: "Atvērtā vieta pieejama tikai dambretē vai šahā.",
+      });
+    if (userToBoardGame.has(user.username))
+      return socket.emit("board.error", { message: "Tu jau esi spēlē." });
+    const key = String(user.username).trim().toLowerCase();
+    if (!key) return;
+    const exp = Date.now() + BOARD_OPEN_SEAT_TTL_MS;
+    if (gameType === "chess") {
+      const chessClockOpts = parseChessClockOptsFromPayload(payload);
+      boardOpenSeatByHost.set(key, {
+        host: user.username,
+        type: "chess",
+        chessClockOpts: chessClockOpts || undefined,
+        expiresAt: exp,
+      });
+    } else {
+      const dambreteVariant = parseDambreteVariantFromPayload(payload);
+      boardOpenSeatByHost.set(key, {
+        host: user.username,
+        type: "dambrete",
+        dambreteVariant,
+        expiresAt: exp,
+      });
+    }
+    broadcastBoardOpenSeatsList();
+    socket.emit("board.openSeatPublishOk", { type: gameType });
+  });
+
+  socket.on("board.openSeatCancel", () => {
+    const user = socket.data.user;
+    if (!user) return;
+    removeBoardOpenSeatForUser(user.username);
+    socket.emit("board.openSeatCancelOk", {});
+  });
+
+  socket.on("board.requestOpenSeats", () => {
+    socket.emit("board.openSeats", buildBoardOpenSeatsListPayload());
+  });
+
+  socket.on("board.requestOpenSeatInvite", (payload) => {
+    const joiner = socket.data.user;
+    if (!joiner) return;
+    const hostName = String(payload?.host || "").trim();
+    const gameType = String(payload?.type || "dambrete").toLowerCase();
+    if (!hostName)
+      return socket.emit("board.error", { message: "Nav norādīts saimnieks." });
+    if (gameType !== "dambrete" && gameType !== "chess")
+      return socket.emit("board.error", { message: "Nederīgs spēles tips." });
+    if (String(joiner.username).toLowerCase() === hostName.toLowerCase())
+      return socket.emit("board.error", { message: "Nevari pievienoties sev." });
+    if (userToBoardGame.has(joiner.username))
+      return socket.emit("board.error", { message: "Tu jau esi spēlē." });
+    if (userToBoardGame.has(hostName))
+      return socket.emit("board.error", {
+        message: "Šis spēlētājs jau spēlē — vieta vairs nav brīva.",
+      });
+    const hostKey = hostName.toLowerCase();
+    const open = boardOpenSeatByHost.get(hostKey);
+    const now = Date.now();
+    if (
+      !open ||
+      (open.expiresAt || 0) <= now ||
+      String(open.type || "").toLowerCase() !== gameType
+    ) {
+      return socket.emit("board.error", {
+        message: "Šī vieta vairs nav sarakstā vai ir beigusies.",
+      });
+    }
+    const inviteId = crypto.randomBytes(6).toString("hex");
+    const dambreteVariant =
+      gameType === "dambrete"
+        ? normalizeDambreteVariant(open.dambreteVariant || "russian")
+        : "russian";
+    const chessClockOpts =
+      gameType === "chess"
+        ? open.chessClockOpts || parseChessClockOptsFromPayload(payload)
+        : null;
+    const invExp = Date.now() + BOARD_GAME_INVITE_TIMEOUT_MS;
+    boardInviteVariantByPair.set(
+      boardInvitePairKey(joiner.username, hostName),
+      {
+        type: gameType,
+        dambreteVariant,
+        zoleMode: undefined,
+        expiresAt: invExp,
+        fromUsername: joiner.username,
+        targetUsername: hostName,
+        chessClockOpts: chessClockOpts || undefined,
+      }
+    );
+    setPendingBoardInviteForTarget(hostName, joiner.username, invExp, false);
+    broadcastOnlineList(true);
+    removeBoardOpenSeatForUser(hostName);
+    const hostSocket = getSocketByUsername(hostName);
+    if (hostSocket) {
+      const invPayload = {
+        inviteId,
+        from: joiner.username,
+        type: gameType,
+        dambreteVariant:
+          gameType === "dambrete" ? dambreteVariant : undefined,
+        fromOpenSeatList: true,
+        expiresAt: invExp,
+      };
+      if (gameType === "chess" && chessClockOpts) {
+        invPayload.chessClockPreset = chessClockPresetLabel(chessClockOpts);
+        invPayload.chessInitialMs = chessClockOpts.initialMsPerSide;
+        invPayload.chessIncrementMs = chessClockOpts.incrementMs;
+      }
+      hostSocket.emit("board.invite", invPayload);
+    }
+    socket.emit("board.inviteSent", {
+      inviteId,
+      target: hostName,
+      type: gameType,
+      dambreteVariant:
+        gameType === "dambrete" ? dambreteVariant : undefined,
+      expiresAt: invExp,
+      toHost: true,
+    });
   });
 
   socket.on("board.inviteDecline", (payload) => {
@@ -13036,6 +13238,7 @@ io.on("connection", (socket) => {
       remExp,
       true
     );
+    removeBoardOpenSeatForUser(fromUser.username);
     broadcastOnlineList(true);
     const targetSocket = getSocketByUsername(targetUser.username);
     if (targetSocket) {
@@ -13093,6 +13296,7 @@ io.on("connection", (socket) => {
     };
     zole3pLobbyById.set(id, lobby);
     userToZole3pLobby.set(fromUser.username, id);
+    removeBoardOpenSeatForUser(fromUser.username);
     socket.emit("board.zoleLobby", zole3pLobbyPayload(lobby));
     broadcastZole3pOpenLobbyList();
   });
@@ -13402,6 +13606,9 @@ io.on("connection", (socket) => {
     clearPendingBoardInvite(challengerName);
     clearPendingBoardInvite(opponentName);
     broadcastOnlineList(true);
+    removeBoardOpenSeatForUser(challengerName, false);
+    removeBoardOpenSeatForUser(opponentName, false);
+    broadcastBoardOpenSeatsList();
 
     let game;
     if (gameType === "zole") {
@@ -13541,6 +13748,7 @@ io.on("connection", (socket) => {
         game.type === "chess" ? chessClockPayload(game) : undefined,
     };
     socket.emit("board.start", payloadOut);
+    removeBoardOpenSeatForUser(user.username);
     broadcastOnlineBoardPresence();
     if (game.type === "zole") {
       setImmediate(() => playZoleBotBids(io, game));
@@ -14043,6 +14251,7 @@ io.on("connection", (socket) => {
       const uname2 = u2 && u2.username ? u2.username : null;
       if (uname2) {
         clearPendingBoardInvite(uname2);
+        removeBoardOpenSeatForUser(uname2);
         zole3pClearInvitedSeatIfUser(uname2);
         const lid = userToZole3pLobby.get(uname2);
         if (lid) {

@@ -7694,6 +7694,23 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding: 6px 4px 2px;
 }
 
+.vz-board-open-seat-publish {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+.vz-board-invite-btn--ghost {
+  border-style: dashed;
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 600;
+}
+.vz-board-open-seat-publish__cancel {
+  font-size: 11px;
+  padding: 6px 10px;
+}
+
 /* Vienoti tukšie stāvokļi (draugi, DM, Zole istabas, turnīrs, VIP) */
 .vz-empty-state {
   display: flex;
