@@ -800,7 +800,7 @@ const ZOLE_BOT_USERNAMES = new Set(["ZoleBot1", "ZoleBot2"]);
 
 /** Pēdējais galda rezultāts — revānša pogai */
 let lastBoardResultSnapshot = null;
-/** Lai «[Galds] Tava kārta» nerādītos atkārtoti katram board.move (piem., šaha pulkstenis). */
+/** Lai «[Galda spēles] Tava kārta» nerādītos atkārtoti katram board.move (piem., šaha pulkstenis). */
 let _lastGaldaTurnNotifyKey = null;
 
 let boardInviteOutgoingInterval = null;
@@ -1571,7 +1571,7 @@ function showBoardGameResult(payload) {
     ) {
       title = "Mačs beidzies";
       detail =
-        "Pēdējā partija pret botiem ir izspēlēta. Vari turpināt vārdu spēli vai atvērt Galdu jaunai spēlei.";
+        "Pēdējā partija pret botiem ir izspēlēta. Vari turpināt vārdu spēli vai atvērt «Galda spēles» jaunai spēlei.";
       overlay.classList.add("vz-board-result--draw");
     } else {
       title = "Neizšķirts";
@@ -8339,11 +8339,11 @@ function appendSystemMessage(text) {
   appendChatMessage({ username: "SYSTEM", text: t, ts: now });
 }
 
-/** Publiskā čata sistēmas ziņas par galda spēlēm — ar [Galds], lai atšķirtu no vārdu spēles. */
+/** Publiskā čata sistēmas ziņas par galda spēlēm — ar [Galda spēles], lai atšķirtu no vārdu spēles. */
 function appendGaldaSystemMessage(text) {
   const s = String(text ?? "").trim();
   if (!s) return;
-  const line = `[Galds] ${s}`;
+  const line = `[Galda spēles] ${s}`;
   appendSystemMessage(line);
   if (gameMessageEl) gameMessageEl.textContent = line;
 }

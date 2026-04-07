@@ -138,9 +138,9 @@
             id="board-games-btn"
             class="vz-duel-inbox-btn"
             type="button"
-            title="Dambrete, šahs, zole"
+            title="Dambrete, šahs, zole — galda spēles"
             aria-label="Galda spēles">
-            ♟️ Galda
+            ♟️ Galda spēles
             <span id="board-games-badge" class="vz-duel-badge hidden" aria-label="Tava kārta">!</span>
           </button>
 
@@ -347,7 +347,7 @@
                       <p><strong>Zole:</strong> bez pirkuma; vidus kārtu acis mazo pusē.</p>
                       <p><strong>Mazā zole:</strong> īpaša tabula (+12/−6 uzvarā, −14/+7 zaudējumā).</p>
                       <p><strong>Galdiņš:</strong> zaudē tas, kam <strong>visvairāk acu</strong> stiķos.</p>
-                      <p class="vz-profile-zole-hint__note">Pilni noteikumi un stratēģija — zolei.lv; šeit nav «Galda» un pules.</p>
+                      <p class="vz-profile-zole-hint__note">Pilni noteikumi un stratēģija — zolei.lv; šeit nav līguma «Galds» un pules.</p>
                     </div>
                   </details>
 
@@ -892,7 +892,7 @@
         <div class="profile-row"><span>Punkti:</span><span id="pp-score"></span></div>
         <div class="profile-row"><span>Coins:</span><span id="pp-coins"></span></div>
         <p class="vz-coins-hint vz-coins-hint--popup">
-          Tas pats atlikums: vārdu zona + galds (Zole, dambrete, šahs) pret cilvēkiem; pret botiem
+          Tas pats atlikums: vārdu zona + galda spēles (Zole, dambrete, šahs) pret cilvēkiem; pret botiem
           nemainās; papildināšana ar Stripe, ja ieslēgts.
           <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Īsi par coins</a>
         </p>
@@ -1083,7 +1083,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-29-chat-turn-dedupe"></script>
+    <script defer src="game.js?v=2026-03-29-galda-speles-label"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1292,7 +1292,7 @@
             id="board-back-words-btn"
             type="button"
             class="vz-board-back-words"
-            title="Atgriezties pie vārdu spēles ekrāna. Aktīvā galda spēle turpinās; uzaicinājumi un gājiens arī čatā ar [Galds] un zem «Ziņojumi».">
+            title="Atgriezties pie vārdu spēles ekrāna. Aktīvā galda spēle turpinās; uzaicinājumi un gājiens arī čatā ar [Galda spēles] un zem «Ziņojumi».">
             ← Vārdu zona
           </button>
           <p id="board-modal-context" class="vz-board-modal-context" role="status" aria-live="polite" aria-atomic="true"></p>
