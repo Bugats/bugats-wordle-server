@@ -9601,13 +9601,7 @@ app.post("/chest/open", authMiddleware, async (req, res) => {
     wheelEmitUpdate(true);
   }
 
-  io.emit("chatMessage", {
-    username: "SYSTEM",
-    text: `🎁 ${user.username} atvēra Daily Chest: +${coinsGain} coins, +${xpGain} XP${
-      tokensGain ? `, +${tokensGain} žetons` : ""
-    } (streak ${user.dailyChest.streak})`,
-    ts: Date.now(),
-  });
+  /* Daily Chest apstiprinājums čatā — tikai lokāli klientā pēc /chest/open (nav globāla io.emit). */
 
   return res.json({
     ok: true,
