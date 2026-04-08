@@ -5893,7 +5893,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   container-type: inline-size;
   container-name: vz-chess-board;
   /* Fallback šūnas platums, ja nav cqw (skat. @supports zemāk) */
-  --vz-chess-cell: max(24px, min(96px, calc((100dvw - 96px) / 8)));
+  --vz-chess-cell: max(24px, min(120px, calc((100dvw - 88px) / 8)));
 }
 .vz-board-container { overflow: visible; }
 /* Zole: mazāk augšējās rindas — bez «Vārdu zona» joslas un bez dublikāta «Zole» */
@@ -7934,7 +7934,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   .vz-board-game-area--chess {
     --vz-chess-cell: max(
       24px,
-      min(96px, calc((100cqw - 44px) / 8))
+      min(120px, calc((100cqw - 40px) / 8))
     );
   }
 }
@@ -7955,7 +7955,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-game-area--chess .vz-chess-piece {
   width: max(22px, calc(var(--vz-chess-cell) - 6px));
   height: max(22px, calc(var(--vz-chess-cell) - 6px));
-  font-size: max(18px, min(52px, calc(var(--vz-chess-cell) * 0.62)));
+  font-size: max(18px, min(74px, calc(var(--vz-chess-cell) * 0.62)));
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.28));
 }
 .vz-chess-board {
