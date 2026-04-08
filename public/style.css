@@ -7913,24 +7913,35 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   display: flex;
   justify-content: center;
   width: 100%;
+  max-width: 100%;
   margin: 2px 0 0;
+  box-sizing: border-box;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
-/* Šahs: nedaudz lielāks dēlis uz mobilā — tikai spēles šūnas; rank/file rindas paliek ~18px augstas */
-.vz-board-game-area--chess .vz-chess-board td:not(.vz-chess-co) {
-  width: 50px;
-  height: 50px;
-  min-width: 50px;
-  min-height: 50px;
-}
-.vz-board-game-area--chess .vz-chess-board .vz-chess-co--file {
-  width: 50px;
-  min-width: 50px;
-}
-.vz-board-game-area--chess .vz-chess-piece {
-  width: 42px;
-  height: 42px;
-  font-size: 29px;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.28));
+/* Šahs šauros ekrānos: šūnas pēc 100dvw, lai malas (a–h) neapgriežas */
+@media (max-width: 768px) {
+  /* ~40px rank kolonnas + 4px apmale + modāļa padding — atlikušais /8 = lauka platums */
+  .vz-board-game-area--chess .vz-chess-board td:not(.vz-chess-co) {
+    width: min(48px, max(24px, calc((100dvw - 120px) / 8)));
+    height: min(48px, max(24px, calc((100dvw - 120px) / 8)));
+    min-width: 0;
+    min-height: 0;
+  }
+  .vz-board-game-area--chess .vz-chess-board .vz-chess-co--file {
+    width: min(48px, max(24px, calc((100dvw - 120px) / 8)));
+    min-width: 0;
+  }
+  .vz-board-game-area--chess .vz-chess-board .vz-chess-co--rank {
+    height: min(48px, max(24px, calc((100dvw - 120px) / 8)));
+    min-height: 0;
+  }
+  .vz-board-game-area--chess .vz-chess-piece {
+    width: min(42px, max(22px, calc((100dvw - 120px) / 8 - 6px)));
+    height: min(42px, max(22px, calc((100dvw - 120px) / 8 - 6px)));
+    font-size: min(28px, max(18px, calc((100dvw - 120px) / 8 * 0.56)));
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.28));
+  }
 }
 .vz-chess-board {
   table-layout: fixed;
@@ -7946,6 +7957,9 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
+}
+.vz-board-game-area--chess .vz-chess-board {
+  max-width: 100%;
 }
 .vz-chess-board .vz-chess-co {
   width: 18px;
