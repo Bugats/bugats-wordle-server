@@ -11677,6 +11677,20 @@ function renderBoardGame() {
     gameAreaEl.classList.remove("vz-board-zole-header-meta--hide");
   }
   const hintEl = document.getElementById("board-game-hint");
+  const hintWrap = document.getElementById("board-game-hint-wrap");
+  const hintSum = document.getElementById("board-game-hint-summary");
+  if (hintWrap && hintSum) {
+    if (boardState.type === "chess" || boardState.type === "dambrete") {
+      hintSum.textContent = "Īsi par gājienu";
+      hintWrap.removeAttribute("open");
+    } else if (boardState.type === "zole") {
+      hintSum.textContent = "Palīdzība";
+      hintWrap.setAttribute("open", "");
+    } else {
+      hintSum.textContent = "Palīdzība";
+      hintWrap.removeAttribute("open");
+    }
+  }
   if (hintEl) {
     if (boardState.type === "zole") {
       if (boardState.zole?.phase === "bid") {
@@ -11731,24 +11745,24 @@ function renderBoardGame() {
       const sel = boardState.selectedCell;
       if (jumpsOn && !sel) {
         hintEl.innerHTML =
-          "<strong>Jālēkt.</strong> Spied uz sava kauliņa ar <strong class=\"vz-hint-mark vz-hint-mark--gold\">zelta aplīti</strong> — tad parādīsies <strong class=\"vz-hint-mark vz-hint-mark--green\">zaļie</strong> mērķa lauki. Citus savus kauliņus šajā brīdī nevar izvēlēties.";
+          "<strong>Jālēkt.</strong> Spied uz sava kauliņa ar <strong class=\"vz-hint-mark vz-hint-mark--gold\">zelta aplīti</strong> — tad parādīsies <strong class=\"vz-hint-mark vz-hint-mark--move\">atļauto</strong> mērķa lauki. Citus savus kauliņus šajā brīdī nevar izvēlēties.";
       } else if (jumpsOn && sel) {
         const sq = dambreteHintSquare(sel[0], sel[1]);
         const n = countDambreteValidDestinations(sel[0], sel[1], boardState.legalMoves);
         hintEl.innerHTML =
           n > 0
-            ? `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Tagad spied <strong class="vz-hint-mark vz-hint-mark--green">zaļo</strong> lauciņu (${n} ${n === 1 ? "iespēja" : "iespējas"}) — lēciena beigas. Citur — citu sākuma kauliņu.`
-            : `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied citu kauliņu ar <strong class="vz-hint-mark vz-hint-mark--gold">zelta aplīti</strong> vai zaļo mērķi.`;
+            ? `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Tagad spied <strong class="vz-hint-mark vz-hint-mark--move">atļauto</strong> lauciņu (${n} ${n === 1 ? "iespēja" : "iespējas"}) — lēciena beigas. Citur — citu sākuma kauliņu.`
+            : `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied citu kauliņu ar <strong class="vz-hint-mark vz-hint-mark--gold">zelta aplīti</strong> vai atļauto mērķi.`;
       } else if (sel) {
         const sq = dambreteHintSquare(sel[0], sel[1]);
         const n = countDambreteValidDestinations(sel[0], sel[1], boardState.legalMoves);
         hintEl.innerHTML =
           n > 0
-            ? `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied <strong class="vz-hint-mark vz-hint-mark--green">zaļo</strong> lauciņu (${n} ${n === 1 ? "gājiens" : "gājieni"}). Citur — maini figūru.`
+            ? `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied <strong class="vz-hint-mark vz-hint-mark--move">atļauto</strong> lauciņu (${n} ${n === 1 ? "gājiens" : "gājieni"}). Citur — maini figūru.`
             : `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Nav derīgu lauku — izvēlies citu savu kauliņu.`;
       } else {
         hintEl.innerHTML =
-          "Spied savu kauliņu, tad <strong class=\"vz-hint-mark vz-hint-mark--green\">zaļo</strong> lauciņu. Mainīt izvēli — spied citu savu kauliņu.";
+          "Spied savu kauliņu, tad <strong class=\"vz-hint-mark vz-hint-mark--move\">atļauto</strong> lauciņu. Mainīt izvēli — spied citu savu kauliņu.";
       }
     } else if (boardState.type === "chess") {
       const clockNote = (() => {
@@ -11775,11 +11789,11 @@ function renderBoardGame() {
         const n = countChessValidDestinations(sel[0], sel[1], boardState.legalMoves);
         hintEl.innerHTML =
           n > 0
-            ? `Izvēlēta figūra <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied <strong class="vz-hint-mark vz-hint-mark--green">zaļo</strong> lauciņu (${n} ${n === 1 ? "gājiens" : "gājieni"}). Citur — atcelt vai citu figūru.${clockNote}`
+            ? `Izvēlēta figūra <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied <strong class="vz-hint-mark vz-hint-mark--move">atļauto</strong> lauciņu (${n} ${n === 1 ? "gājiens" : "gājieni"}). Citur — atcelt vai citu figūru.${clockNote}`
             : `Izvēlēta <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Nav derīgu lauku — izvēlies citu savu figūru.${clockNote}`;
       } else {
         hintEl.innerHTML =
-          `Spied savu figūru, tad <strong class="vz-hint-mark vz-hint-mark--green">zaļo</strong> lauciņu. Mainīt — spied citu savu figūru.${clockNote}`;
+          `Spied savu figūru, tad <strong class="vz-hint-mark vz-hint-mark--move">atļauto</strong> lauciņu (uz dēļa iezīmēts zaļi). Mainīt — spied citu savu figūru.${clockNote}`;
       }
     } else {
       hintEl.textContent =

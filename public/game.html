@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-04-07-design-polish" />
+  <link rel="stylesheet" href="style.css?v=2026-04-08-chess-ui" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1083,7 +1083,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-04-07-open-seats-sync-buttons"></script>
+    <script defer src="game.js?v=2026-04-08-chess-ui"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1611,7 +1611,14 @@
               <span id="board-chess-clock-1" class="vz-board-chess-clock__time" aria-live="polite">—</span>
             </div>
           </div>
-          <p id="board-game-hint" class="vz-board-game-hint">Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt</p>
+          <details id="board-game-hint-wrap" class="vz-board-hint-wrap" open>
+            <summary id="board-game-hint-summary" class="vz-board-hint-summary">
+              Palīdzība
+            </summary>
+            <div id="board-game-hint" class="vz-board-game-hint vz-board-game-hint--body" role="status">
+              Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt
+            </div>
+          </details>
           <div id="board-dambrete-container" class="vz-board-container hidden"></div>
           <div id="board-chess-container" class="vz-board-container hidden"></div>
           <div id="board-zole-container" class="vz-board-container hidden"></div>
