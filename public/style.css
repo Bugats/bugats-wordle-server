@@ -7915,28 +7915,25 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   width: 100%;
   margin: 2px 0 0;
 }
-/* Šahs: nedaudz lielāks dēlis uz mobilā (vairāk vietas, kad palīdzība salocīta) */
-#board-game-area:has(#board-chess-container:not(.hidden)) .vz-chess-board td:not(.vz-chess-co) {
+/* Šahs: nedaudz lielāks dēlis uz mobilā — tikai spēles šūnas; rank/file rindas paliek ~18px augstas */
+.vz-board-game-area--chess .vz-chess-board td:not(.vz-chess-co) {
   width: 50px;
   height: 50px;
   min-width: 50px;
   min-height: 50px;
 }
-#board-game-area:has(#board-chess-container:not(.hidden)) .vz-chess-board .vz-chess-co--file {
+.vz-board-game-area--chess .vz-chess-board .vz-chess-co--file {
   width: 50px;
   min-width: 50px;
 }
-#board-game-area:has(#board-chess-container:not(.hidden)) .vz-chess-board .vz-chess-co--rank {
-  height: 50px;
-  min-height: 50px;
-}
-#board-game-area:has(#board-chess-container:not(.hidden)) .vz-chess-piece {
+.vz-board-game-area--chess .vz-chess-piece {
   width: 42px;
   height: 42px;
   font-size: 29px;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.28));
 }
 .vz-chess-board {
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   margin: 0 auto;

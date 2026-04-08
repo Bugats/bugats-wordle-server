@@ -11589,6 +11589,17 @@ function renderBoardGame() {
   const chessContainer = document.getElementById("board-chess-container");
   const zoleContainer = document.getElementById("board-zole-container");
   const gameAreaEl = document.getElementById("board-game-area");
+  if (gameAreaEl) {
+    const ingame = !!boardState.gameId;
+    gameAreaEl.classList.toggle(
+      "vz-board-game-area--chess",
+      ingame && boardState.type === "chess"
+    );
+    gameAreaEl.classList.toggle(
+      "vz-board-game-area--dambrete",
+      ingame && boardState.type === "dambrete"
+    );
+  }
   const modalTopbar = document.getElementById("board-modal-topbar");
   const compactBackBtn = document.getElementById("board-compact-back-words-btn");
   const zoleCompactTop =
