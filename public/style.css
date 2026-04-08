@@ -5892,6 +5892,8 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 .vz-board-game-area--chess {
   container-type: inline-size;
   container-name: vz-chess-board;
+  /* Fallback šūnas platums, ja nav cqw (skat. @supports zemāk) */
+  --vz-chess-cell: max(24px, min(96px, calc((100dvw - 96px) / 8)));
 }
 .vz-board-container { overflow: visible; }
 /* Zole: mazāk augšējās rindas — bez «Vārdu zona» joslas un bez dublikāta «Zole» */
@@ -7924,38 +7926,37 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
-/* Šahs šauros ekrānos: šūnas mērogo pēc spēles zonas (container), nevis pilna viewport */
-@media (max-width: 768px) {
+/*
+ * Šahs: pēc iespējas liels dēlis, bet pilnībā iekš spēles zonas.
+ * 100cqw = modāļa satura platums; atņem rank kolonnas (~40px) + apmale (~4px).
+ */
+@supports (width: 1cqw) {
   .vz-board-game-area--chess {
-    --vz-chess-cell: max(22px, calc((100dvw - 148px) / 8));
-  }
-  .vz-board-game-area--chess .vz-chess-board td:not(.vz-chess-co) {
-    width: min(48px, var(--vz-chess-cell));
-    height: min(48px, var(--vz-chess-cell));
-    min-width: 0;
-    min-height: 0;
-  }
-  .vz-board-game-area--chess .vz-chess-board .vz-chess-co--file {
-    width: min(48px, var(--vz-chess-cell));
-    min-width: 0;
-  }
-  .vz-board-game-area--chess .vz-chess-board .vz-chess-co--rank {
-    height: min(48px, var(--vz-chess-cell));
-    min-height: 0;
-  }
-  .vz-board-game-area--chess .vz-chess-piece {
-    width: min(42px, max(20px, calc(var(--vz-chess-cell) - 6px)));
-    height: min(42px, max(20px, calc(var(--vz-chess-cell) - 6px)));
-    font-size: min(28px, max(17px, calc(var(--vz-chess-cell) * 0.56)));
-    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.28));
+    --vz-chess-cell: max(
+      24px,
+      min(96px, calc((100cqw - 44px) / 8))
+    );
   }
 }
-@supports (width: 1cqw) {
-  @media (max-width: 768px) {
-    .vz-board-game-area--chess {
-      --vz-chess-cell: max(22px, calc((min(100cqw, 100dvw) - 128px) / 8));
-    }
-  }
+.vz-board-game-area--chess .vz-chess-board td:not(.vz-chess-co) {
+  width: var(--vz-chess-cell);
+  height: var(--vz-chess-cell);
+  min-width: 0;
+  min-height: 0;
+}
+.vz-board-game-area--chess .vz-chess-board .vz-chess-co--file {
+  width: var(--vz-chess-cell);
+  min-width: 0;
+}
+.vz-board-game-area--chess .vz-chess-board .vz-chess-co--rank {
+  height: var(--vz-chess-cell);
+  min-height: 0;
+}
+.vz-board-game-area--chess .vz-chess-piece {
+  width: max(22px, calc(var(--vz-chess-cell) - 6px));
+  height: max(22px, calc(var(--vz-chess-cell) - 6px));
+  font-size: max(18px, min(52px, calc(var(--vz-chess-cell) * 0.62)));
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.28));
 }
 .vz-chess-board {
   table-layout: fixed;
