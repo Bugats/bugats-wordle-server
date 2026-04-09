@@ -761,7 +761,17 @@ function queueBoardLegalMovesFetch(clickedCell, gameType) {
           boardState.selectedCell[1] === clickedCell[1]
         ) {
           if (gameType === "chess") {
-            boardState.legalMoves = data || { moves: [] };
+            const base = data && typeof data === "object" ? data : {};
+            boardState.legalMoves = {
+              moves: Array.isArray(base.moves) ? base.moves : [],
+              promotionGroups:
+                base.promotionGroups && typeof base.promotionGroups === "object"
+                  ? base.promotionGroups
+                  : {},
+            };
+            if (base.chessDrawState) {
+              boardState.chessDrawState = base.chessDrawState;
+            }
           } else {
             boardState.legalMoves = data || { jumps: [], moves: [] };
           }
@@ -793,6 +803,10 @@ let boardState = {
   zole3pCoinsPerPoint: 0,
   /** Šahs: servera pulksteņa momentuzņēmums + lokāla ekstrapolācija */
   chessClock: null,
+  /** Šahs: neizšķirta piedāvājums / pieteikumu indikatori no servera */
+  chessDrawState: null,
+  /** Šahs: gaida promocijas SAN izvēli (vairāki derīgi uz vienu lauku) */
+  chessPromotionPick: null,
 };
 
 const BOARD_BOT_DISPLAY_NAME = "VZBot";
@@ -963,6 +977,85 @@ function ingestChessClockPayload(payload) {
     lastServerNow: Number(c.serverNow) || now,
     clientReceivedAt: now,
   };
+}
+
+function ingestChessDrawStatePayload(s) {
+  if (!s || typeof s !== "object") {
+    boardState.chessDrawState = null;
+    return;
+  }
+  boardState.chessDrawState = {
+    drawOfferFrom: s.drawOfferFrom || null,
+    claimFifty: !!s.claimFifty,
+    claimThreefold: !!s.claimThreefold,
+    halfMoveClock:
+      typeof s.halfMoveClock === "number"
+        ? s.halfMoveClock
+        : Math.max(0, Math.floor(Number(s.halfMoveClock) || 0)),
+  };
+}
+
+function syncChessDrawControls() {
+  const wrap = document.getElementById("board-chess-draw-ui");
+  const hint = document.getElementById("board-chess-draw-hint");
+  const offerBtn = document.getElementById("board-chess-draw-offer");
+  const acceptBtn = document.getElementById("board-chess-draw-accept");
+  const claimBtn = document.getElementById("board-chess-claim-draw");
+  if (!wrap || !offerBtn || !acceptBtn || !claimBtn) return;
+
+  const ingame =
+    boardState.gameId &&
+    boardState.type === "chess" &&
+    boardState.fen &&
+    !boardState.vsBot;
+  wrap.classList.toggle("hidden", !ingame);
+  if (!ingame) {
+    if (hint) hint.classList.add("hidden");
+    return;
+  }
+
+  const ds = boardState.chessDrawState;
+  const myIdx = boardGamePlayerIndex(boardState.players, state.username);
+  const myTurn = myIdx === boardState.turn;
+  const offerFrom = ds?.drawOfferFrom
+    ? String(ds.drawOfferFrom).trim()
+    : "";
+  const me = String(state.username || "").trim();
+  const offeredToMe =
+    offerFrom &&
+    me &&
+    offerFrom.toLowerCase() !== me.toLowerCase();
+
+  offerBtn.classList.toggle("hidden", !myTurn);
+  acceptBtn.classList.toggle("hidden", !(myTurn && offeredToMe));
+  const canClaim =
+    myTurn &&
+    !!(ds?.claimFifty || ds?.claimThreefold);
+  claimBtn.classList.toggle("hidden", !canClaim);
+
+  if (hint) {
+    const parts = [];
+    if (offerFrom) {
+      parts.push(
+        offeredToMe && myTurn
+          ? `${offerFrom} piedāvā neizšķirtu — vari pieņemt.`
+          : offerFrom.toLowerCase() === me.toLowerCase()
+            ? "Tu piedāvāji neizšķirtu — gaida pretinieka atbildi."
+            : `${offerFrom} piedāvā neizšķirtu.`
+      );
+    }
+    if (typeof ds?.halfMoveClock === "number") {
+      parts.push(`Pusgājienu skaitītājs (50 gāj. likums): ${ds.halfMoveClock}/100.`);
+    }
+    if (ds?.claimThreefold && myTurn) {
+      parts.push("Ir trīskāršs atkārtojums — savā gājienā vari pieteikt neizšķirtu.");
+    }
+    if (ds?.claimFifty && myTurn) {
+      parts.push("Ir izpildīts 50 gājienu likums — savā gājienā vari pieteikt neizšķirtu.");
+    }
+    hint.textContent = parts.join(" ");
+    hint.classList.toggle("hidden", parts.length === 0);
+  }
 }
 
 function formatChessClockMs(ms) {
@@ -1746,10 +1839,25 @@ function showBoardGameResult(payload) {
       overlay.classList.add("vz-board-result--draw");
     } else {
       title = "Neizšķirts";
-      detail =
-        reason === "draw"
-          ? "Partija beidzās neizšķirti."
-          : "Spēle beigusies bez uzvarētāja.";
+      if (gameType === "chess" && reason === "draw_agreement") {
+        const by = payload?.agreedBy;
+        const from = payload?.offeredBy;
+        detail =
+          by && from
+            ? `Abas puses vienojās par neizšķirtu (${from} piedāvāja, ${by} pieņēma).`
+            : "Abas puses vienojās par neizšķirtu.";
+      } else if (gameType === "chess" && reason === "draw_claim_fifty") {
+        detail = `${payload?.claimedBy || "Spēlētājs"} pieteica neizšķirtu pēc 50 gājienu likuma.`;
+      } else if (gameType === "chess" && reason === "draw_claim_threefold") {
+        detail = `${payload?.claimedBy || "Spēlētājs"} pieteica neizšķirtu pēc trīskārša atkārtojuma.`;
+      } else if (gameType === "chess" && reason === "draw_claim_both") {
+        detail = `${payload?.claimedBy || "Spēlētājs"} pieteica neizšķirtu (50 gājienu likums un trīskāršs atkārtojums).`;
+      } else {
+        detail =
+          reason === "draw"
+            ? "Partija beidzās neizšķirti."
+            : "Spēle beigusies bez uzvarētāja.";
+      }
       overlay.classList.add("vz-board-result--draw");
     }
   } else if (iWon) {
@@ -10854,6 +10962,12 @@ function initSocket() {
   socket.on("board.error", (payload) => {
     appendGaldaSystemMessage(payload?.message || "Galda spēles kļūda.");
   });
+  socket.on("board.chessDrawState", (payload) => {
+    if (payload?.gameId !== boardState.gameId) return;
+    if (boardState.type !== "chess") return;
+    ingestChessDrawStatePayload(payload?.chessDrawState);
+    syncChessDrawControls();
+  });
   socket.on("board.start", (payload) => {
     stopBoardInviteOutgoingWait();
     lastBoardResultSnapshot = null;
@@ -10955,7 +11069,11 @@ function initSocket() {
     if (boardState.type === "chess" && payload?.chessClock) {
       ingestChessClockPayload(payload);
     }
+    if (boardState.type === "chess" && payload?.chessDrawState) {
+      ingestChessDrawStatePayload(payload.chessDrawState);
+    }
     boardState.selectedCell = null;
+    boardState.chessPromotionPick = null;
     // Obligāti notīrīt — pretējā gadījumā paliek iepriekšējās kārtas jumps/moves
     // pret jauno laukumu (piem. pēc bota gājiena) un neviens kauliņš nav klikšķināms līdz refresh.
     boardState.legalMoves = { jumps: [], moves: [] };
@@ -11447,8 +11565,11 @@ function startBoardGame(payload) {
       return Math.max(0, Math.min(5, c));
     })(),
     chessClock: null,
+    chessDrawState: null,
+    chessPromotionPick: null,
   };
   ingestChessClockPayload(payload);
+  ingestChessDrawStatePayload(payload?.chessDrawState);
   const gameArea = document.getElementById("board-game-area");
   const lobby = document.getElementById("board-games-lobby");
   const modal = document.getElementById("board-games-modal");
@@ -11895,6 +12016,18 @@ function renderBoardGame() {
     }
     if (dambreteContainer) dambreteContainer.classList.add("hidden");
     if (chessContainer && window.VZBoardGames) {
+      let promoPick = null;
+      const pp = boardState.chessPromotionPick;
+      if (
+        pp &&
+        boardState.selectedCell &&
+        pp.fromR === boardState.selectedCell[0] &&
+        pp.fromC === boardState.selectedCell[1] &&
+        Array.isArray(pp.sans) &&
+        pp.sans.length > 1
+      ) {
+        promoPick = { sans: pp.sans };
+      }
       window.VZBoardGames.renderChessBoard(
         boardState.fen,
         boardState.turn,
@@ -11902,7 +12035,9 @@ function renderBoardGame() {
         myIdx,
         (r, c, isPiece) => handleChessCellClick(r, c, isPiece),
         boardState.selectedCell,
-        boardState.legalMoves
+        boardState.legalMoves,
+        promoPick,
+        emitChessPromotionSan
       );
     }
   }
@@ -11918,6 +12053,7 @@ function renderBoardGame() {
   syncBoardBrowserFullscreenUi();
   syncBoardModalContext();
   syncChessClockDom();
+  syncChessDrawControls();
 }
 
 async function handleChessCellClick(r, c, isPiece) {
@@ -11942,11 +12078,13 @@ async function handleChessCellClick(r, c, isPiece) {
       boardState.selectedCell[1] === c
     ) {
       boardState.selectedCell = null;
+      boardState.chessPromotionPick = null;
       renderBoardGame();
       return;
     }
     const clickedCell = [r, c];
     boardState.selectedCell = clickedCell;
+    boardState.chessPromotionPick = null;
     renderBoardGame();
     const hasServerMoves = (boardState.legalMoves?.moves || []).length > 0;
     if (!hasServerMoves) {
@@ -11956,19 +12094,52 @@ async function handleChessCellClick(r, c, isPiece) {
   }
 
   if (!boardState.selectedCell) return;
-  const move = window.VZBoardGames?.findChessMove(
+  const multi = window.VZBoardGames?.findChessMovesFromTo?.(
     boardState.selectedCell,
     r,
     c,
     boardState.legalMoves
   );
-  if (!move) {
+  const list = Array.isArray(multi) ? multi : [];
+  if (list.length === 0) {
     boardState.selectedCell = null;
+    boardState.chessPromotionPick = null;
     renderBoardGame();
     return;
   }
-  state.socket.emit("board.move", { gameId: boardState.gameId, san: move.san });
+  if (list.length === 1) {
+    state.socket.emit("board.move", {
+      gameId: boardState.gameId,
+      san: list[0].san,
+    });
+    boardState.selectedCell = null;
+    boardState.chessPromotionPick = null;
+    return;
+  }
+  const uniq = [...new Set(list.map((m) => m.san).filter(Boolean))];
+  const promoOrder = { q: 0, r: 1, b: 2, n: 3 };
+  uniq.sort((a, b) => {
+    const ca = String(a).slice(-1).toLowerCase();
+    const cb = String(b).slice(-1).toLowerCase();
+    return (promoOrder[ca] ?? 99) - (promoOrder[cb] ?? 99);
+  });
+  const sans = uniq;
+  boardState.chessPromotionPick = {
+    fromR: boardState.selectedCell[0],
+    fromC: boardState.selectedCell[1],
+    toR: r,
+    toC: c,
+    sans,
+  };
+  renderBoardGame();
+}
+
+function emitChessPromotionSan(san) {
+  if (!state.socket || !boardState.gameId || !san) return;
+  state.socket.emit("board.move", { gameId: boardState.gameId, san });
   boardState.selectedCell = null;
+  boardState.chessPromotionPick = null;
+  renderBoardGame();
 }
 
 async function handleDambreteCellClick(r, c, isPiece) {
@@ -12297,6 +12468,18 @@ function bindBoardGames() {
       if (!boardState.gameId || !state.socket) return;
       state.socket.emit("board.resign", { gameId: boardState.gameId });
     });
+  document.getElementById("board-chess-draw-offer")?.addEventListener("click", () => {
+    if (!boardState.gameId || !state.socket || boardState.type !== "chess") return;
+    state.socket.emit("board.chessDrawOffer", { gameId: boardState.gameId });
+  });
+  document.getElementById("board-chess-draw-accept")?.addEventListener("click", () => {
+    if (!boardState.gameId || !state.socket || boardState.type !== "chess") return;
+    state.socket.emit("board.chessDrawAccept", { gameId: boardState.gameId });
+  });
+  document.getElementById("board-chess-claim-draw")?.addEventListener("click", () => {
+    if (!boardState.gameId || !state.socket || boardState.type !== "chess") return;
+    state.socket.emit("board.chessClaimDraw", { gameId: boardState.gameId });
+  });
   const boardFsBtn = document.getElementById("board-browser-fs-btn");
   if (boardFsBtn) {
     boardFsBtn.addEventListener("click", async () => {

@@ -1213,6 +1213,40 @@ function chessClockPayload(game) {
   };
 }
 
+/** Šahs: neizšķirta piedāvājums, pieteikumi (50 gāj./trīskāršs), pusgājienu skaitītājs no FEN. */
+function chessDrawStatePayload(game) {
+  if (!game || game.type !== "chess" || game.status !== "active") return null;
+  const fenStr = String(game.fen || "");
+  const parts = fenStr.trim().split(/\s+/);
+  const halfMoves = Math.max(0, Math.floor(Number(parts[4]) || 0));
+  let claimFifty = false;
+  let claimThreefold = false;
+  try {
+    const ch = new Chess(fenStr || undefined);
+    claimFifty = ch.isDrawByFiftyMoves();
+    claimThreefold = ch.isThreefoldRepetition();
+  } catch (_) {}
+  return {
+    drawOfferFrom: game.chessDrawOfferFrom || null,
+    claimFifty,
+    claimThreefold,
+    halfMoveClock: halfMoves,
+  };
+}
+
+function emitChessDrawState(io, game) {
+  if (!game || game.type !== "chess" || game.status !== "active") return;
+  const payload = {
+    gameId: game.id,
+    chessDrawState: chessDrawStatePayload(game),
+  };
+  if (game.vsBot) {
+    getSocketByUsername(game.players[0])?.emit("board.chessDrawState", payload);
+  } else {
+    io.to(`board:${game.id}`).emit("board.chessDrawState", payload);
+  }
+}
+
 function emitChessEnd(io, game, endBase, vsBot) {
   if (vsBot) {
     const human = game.players[0];
@@ -1344,6 +1378,7 @@ function playBoardBotMove(io, game) {
     game.fen = chess.fen();
     game.turn = 1 - game.turn;
     game.moves.push({ san: m.san, by: BOARD_BOT_USERNAME, ts: Date.now() });
+    game.chessDrawOfferFrom = null;
     if (chess.isCheckmate() || chess.isStalemate() || chess.isDraw()) {
       const winner = chess.isCheckmate()
         ? game.players[chess.turn() === "w" ? 1 : 0]
@@ -1368,6 +1403,7 @@ function playBoardBotMove(io, game) {
         turn: game.turn,
         move: m.san,
         chessClock: chessClockPayload(game),
+        chessDrawState: chessDrawStatePayload(game),
       });
     }
   }
@@ -8563,7 +8599,19 @@ app.get("/board/:gameId/moves", authMiddleware, (req, res) => {
   if (game.type === "chess") {
     const chess = new Chess(game.fen);
     const moves = chess.moves({ verbose: true });
-    return res.json({ moves });
+    const promotionGroups = {};
+    for (const m of moves) {
+      if (m.promotion) {
+        const k = `${m.from}|${m.to}`;
+        if (!promotionGroups[k]) promotionGroups[k] = [];
+        promotionGroups[k].push(m.san);
+      }
+    }
+    return res.json({
+      moves,
+      chessDrawState: chessDrawStatePayload(game),
+      promotionGroups,
+    });
   }
   return res.json({ jumps: [], moves: [] });
 });
@@ -11909,6 +11957,10 @@ io.on("connection", (socket) => {
           boardGame.type === "chess"
             ? chessClockPayload(boardGame)
             : undefined,
+        chessDrawState:
+          boardGame.type === "chess"
+            ? chessDrawStatePayload(boardGame)
+            : undefined,
       });
     }
   } catch {}
@@ -13690,6 +13742,8 @@ io.on("connection", (socket) => {
         dambreteVariant: game.dambreteVariant,
         chessClock:
           game.type === "chess" ? chessClockPayload(game) : undefined,
+        chessDrawState:
+          game.type === "chess" ? chessDrawStatePayload(game) : undefined,
       };
       io.to(room).emit("board.start", payloadOut);
     }
@@ -13740,6 +13794,8 @@ io.on("connection", (socket) => {
       zoleMode: game.type === "zole" ? game.zoleMode : undefined,
       chessClock:
         game.type === "chess" ? chessClockPayload(game) : undefined,
+      chessDrawState:
+        game.type === "chess" ? chessDrawStatePayload(game) : undefined,
     };
     socket.emit("board.start", payloadOut);
     removeBoardOpenSeatForUser(user.username);
@@ -13965,6 +14021,7 @@ io.on("connection", (socket) => {
       game.moves.push({ san: m.san, by: user.username, ts: Date.now() });
       game.turn = 1 - game.turn;
       game.lastMoveAt = Date.now();
+      game.chessDrawOfferFrom = null;
       const chessEmit = game.vsBot
         ? (ev, p) => getSocketByUsername(game.players[0])?.emit(ev, p)
         : (ev, p) => io.to(`board:${gameId}`).emit(ev, p);
@@ -14014,6 +14071,7 @@ io.on("connection", (socket) => {
           turn: game.turn,
           move: m.san,
           chessClock: chessClockPayload(game),
+          chessDrawState: chessDrawStatePayload(game),
         });
         if (game.vsBot && game.turn === 1)
           setImmediate(() => playBoardBotMove(io, game));
@@ -14148,6 +14206,117 @@ io.on("connection", (socket) => {
     });
     broadcastOnlineBoardPresence();
     setImmediate(() => playZoleBotBids(io, game));
+  });
+
+  socket.on("board.chessDrawOffer", (payload) => {
+    const user = socket.data.user;
+    if (!user) return;
+    const gameId = payload?.gameId;
+    const game = gameId ? boardGames.get(gameId) : null;
+    if (!game || game.status !== "active" || game.type !== "chess") return;
+    if (game.vsBot)
+      return socket.emit("board.error", {
+        message: "Pret botu neizšķirtu nevar piedāvāt.",
+      });
+    if (!game.players.includes(user.username)) return;
+    const turnIdx = game.turn;
+    const currentPlayer = game.players[turnIdx];
+    if (currentPlayer !== user.username)
+      return socket.emit("board.error", {
+        message: "Neizšķirtu var piedāvāt tikai savā gājienā.",
+      });
+    game.chessDrawOfferFrom = user.username;
+    game.lastMoveAt = Date.now();
+    emitChessDrawState(io, game);
+  });
+
+  socket.on("board.chessDrawAccept", (payload) => {
+    const user = socket.data.user;
+    if (!user) return;
+    const gameId = payload?.gameId;
+    const game = gameId ? boardGames.get(gameId) : null;
+    if (!game || game.status !== "active" || game.type !== "chess") return;
+    if (game.vsBot) return;
+    if (!game.players.includes(user.username)) return;
+    const from = game.chessDrawOfferFrom;
+    if (!from || String(from).toLowerCase() === String(user.username).toLowerCase())
+      return socket.emit("board.error", {
+        message: "Nav aktīva neizšķirta piedāvājuma no pretinieka.",
+      });
+    finishBoardGame(game, null, "draw_agreement");
+    const endBase = {
+      gameId,
+      type: game.type,
+      players: game.players,
+      vsBot: false,
+      dambreteVariant: game.dambreteVariant,
+      winner: null,
+      reason: "draw_agreement",
+      fen: game.fen,
+      agreedBy: user.username,
+      offeredBy: from,
+    };
+    for (const p of game.players) {
+      const sock = getSocketByUsername(p);
+      if (!sock) continue;
+      sock.emit("board.end", {
+        ...endBase,
+        ...boardEndCoinsForPlayer(game, null, p),
+      });
+    }
+    io.emit("board:leaderboard", { type: "chess" });
+  });
+
+  socket.on("board.chessClaimDraw", (payload) => {
+    const user = socket.data.user;
+    if (!user) return;
+    const gameId = payload?.gameId;
+    const game = gameId ? boardGames.get(gameId) : null;
+    if (!game || game.status !== "active" || game.type !== "chess") return;
+    if (game.vsBot)
+      return socket.emit("board.error", {
+        message: "Pieteikums pret botu nav pieejams.",
+      });
+    if (!game.players.includes(user.username)) return;
+    const turnIdx = game.turn;
+    if (game.players[turnIdx] !== user.username)
+      return socket.emit("board.error", {
+        message: "Pieteikumu var izdarīt tikai savā gājienā.",
+      });
+    let ch;
+    try {
+      ch = new Chess(game.fen);
+    } catch (_) {
+      return socket.emit("board.error", { message: "Neizdevās pārbaudīt pozīciju." });
+    }
+    const fifty = ch.isDrawByFiftyMoves();
+    const three = ch.isThreefoldRepetition();
+    if (!fifty && !three)
+      return socket.emit("board.error", {
+        message: "Šobrīd nav pamata pieteikt neizšķirtu (50 gājienu likums vai trīskāršs atkārtojums).",
+      });
+    const reason = fifty && three ? "draw_claim_both" : fifty ? "draw_claim_fifty" : "draw_claim_threefold";
+    finishBoardGame(game, null, reason);
+    const endBase = {
+      gameId,
+      type: game.type,
+      players: game.players,
+      vsBot: false,
+      dambreteVariant: game.dambreteVariant,
+      winner: null,
+      reason,
+      fen: game.fen,
+      claimedBy: user.username,
+    };
+    for (const p of game.players) {
+      const sock = getSocketByUsername(p);
+      if (!sock) continue;
+      sock.emit("board.end", {
+        ...endBase,
+        ...boardEndCoinsForPlayer(game, null, p),
+      });
+    }
+    io.emit("board:leaderboard", { type: "chess" });
   });
 
   socket.on("board.resign", (payload) => {

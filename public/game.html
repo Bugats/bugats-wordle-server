@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-27-chess-bigger-cell" />
+  <link rel="stylesheet" href="style.css?v=2026-03-27-chess-draw-promo" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1077,13 +1077,13 @@
     <script defer src="modules/ui.js?v=2026-03-16-modsplit-1"></script>
     <script defer src="modules/chat.js?v=2026-03-16-modsplit-1"></script>
     <script defer src="modules/duel.js?v=2026-03-16-modsplit-1"></script>
-    <script defer src="modules/board-games.js?v=2026-03-29-dambrete-white-pov"></script>
+    <script defer src="modules/board-games.js?v=2026-03-27-chess-draw-promo"></script>
     <script defer src="modules/zole-legal.js?v=2026-03-24-zole-discard"></script>
     <script defer src="modules/zole-board.js?v=2026-03-29-chat-turn-dedupe"></script>
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-04-08-chess-grid-fix"></script>
+    <script defer src="game.js?v=2026-03-27-chess-draw-promo"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1609,6 +1609,31 @@
             <div class="vz-board-chess-clock">
               <span id="board-chess-clock-1-label" class="vz-board-chess-clock__who"></span>
               <span id="board-chess-clock-1" class="vz-board-chess-clock__time" aria-live="polite">—</span>
+            </div>
+          </div>
+          <div
+            id="board-chess-draw-ui"
+            class="vz-board-chess-draw-ui hidden"
+            role="group"
+            aria-label="Šaha neizšķirts">
+            <p id="board-chess-draw-hint" class="vz-board-chess-draw-hint hidden" aria-live="polite"></p>
+            <div class="vz-board-chess-draw-btns">
+              <button type="button" id="board-chess-draw-offer" class="vz-board-chess-draw-btn">
+                Piedāvāt neizšķirtu
+              </button>
+              <button
+                type="button"
+                id="board-chess-draw-accept"
+                class="vz-board-chess-draw-btn vz-board-chess-draw-btn--accept hidden">
+                Pieņemt neizšķirtu
+              </button>
+              <button
+                type="button"
+                id="board-chess-claim-draw"
+                class="vz-board-chess-draw-btn vz-board-chess-draw-btn--claim hidden"
+                title="Ja ir izpildīts 50 gājienu likums vai trīskāršs atkārtojums, vari pieteikt neizšķirtu savā gājienā.">
+                Pieteikt neizšķirtu (50 gāj. / trīskāršs)
+              </button>
             </div>
           </div>
           <details id="board-game-hint-wrap" class="vz-board-hint-wrap" open>

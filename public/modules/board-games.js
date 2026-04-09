@@ -421,13 +421,19 @@
     return moves.some((m) => m.from === fromSq && m.to === toSq);
   }
 
-  function findChessMove(selectedCell, toRow, toCol, legalMoves) {
-    if (!selectedCell || !legalMoves) return null;
+  function findChessMovesFromTo(selectedCell, toRow, toCol, legalMoves) {
+    if (!selectedCell || !legalMoves) return [];
     const [fr, fc] = selectedCell;
     const fromSq = rowColToSquare(fr, fc);
     const toSq = rowColToSquare(toRow, toCol);
     const moves = legalMoves.moves || [];
-    return moves.find((m) => m.from === fromSq && m.to === toSq);
+    return moves.filter((m) => m.from === fromSq && m.to === toSq);
+  }
+
+  function findChessMove(selectedCell, toRow, toCol, legalMoves) {
+    const list = findChessMovesFromTo(selectedCell, toRow, toCol, legalMoves);
+    if (list.length === 1) return list[0];
+    return null;
   }
 
   function chessPieceLabel(ch) {
@@ -447,6 +453,13 @@
     return (isW ? "Balts " : "Melns ") + n;
   }
 
+  const CHESS_PROMOTION_LABELS = {
+    q: "Dāma",
+    r: "Tornis",
+    b: "Laidnis",
+    n: "Zirgs",
+  };
+
   function renderChessBoard(
     fen,
     turnIdx,
@@ -454,7 +467,9 @@
     myPlayerIdx,
     onCellClick,
     selectedCell,
-    legalMoves
+    legalMoves,
+    promotionPicker,
+    onPromotionSan
   ) {
     const container = document.getElementById("board-chess-container");
     if (!container) return;
@@ -581,6 +596,35 @@
     }
     bindBoardCellInput(table, handleChessCellEvent);
     wrap.appendChild(table);
+    if (
+      promotionPicker &&
+      Array.isArray(promotionPicker.sans) &&
+      promotionPicker.sans.length > 1 &&
+      typeof onPromotionSan === "function"
+    ) {
+      const bar = document.createElement("div");
+      bar.className = "vz-chess-promotion-bar";
+      bar.setAttribute("role", "group");
+      bar.setAttribute("aria-label", "Izvēlies promocijas figūru");
+      const cap = document.createElement("div");
+      cap.className = "vz-chess-promotion-bar__cap";
+      cap.textContent = "Promocija — izvēlies figūru:";
+      bar.appendChild(cap);
+      const row = document.createElement("div");
+      row.className = "vz-chess-promotion-bar__btns";
+      for (const san of promotionPicker.sans) {
+        const piece = san.slice(-1).toLowerCase();
+        const label = CHESS_PROMOTION_LABELS[piece] || san;
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "vz-chess-promotion-bar__btn";
+        b.textContent = label;
+        b.addEventListener("click", () => onPromotionSan(san));
+        row.appendChild(b);
+      }
+      bar.appendChild(row);
+      wrap.appendChild(bar);
+    }
     container.appendChild(wrap);
   }
 
@@ -603,5 +647,6 @@
     squareToRowCol,
     rowColToSquare,
     findChessMove,
+    findChessMovesFromTo,
   });
 })(window);
