@@ -1754,18 +1754,30 @@ function sendBoardRematchInvite() {
 
 function zoleResultExtraLine(snap) {
   const lr = snap?.lastResult;
+  const players = Array.isArray(snap?.players) ? snap.players : [];
+  const nm = (i) =>
+    typeof i === "number" && i >= 0 && players[i]
+      ? String(players[i])
+      : "?";
+  const mazoPair = (cidx) => {
+    if (typeof cidx !== "number") return "?";
+    return [0, 1, 2]
+      .filter((i) => i !== cidx)
+      .map((i) => nm(i))
+      .join(" un ");
+  };
   if (!lr || !lr.kind) return "";
   if (lr.kind === "galdins" && !lr.tie && lr.loserNoTricks)
-    return " Galdiņš: zaudētājam bezstiķis.";
+    return ` Galdiņš: bezstiķis — ${nm(lr.loserIdx)} (0 stiķi).`;
   if (lr.kind === "galds" && lr.loserNoTricks)
-    return " Galds: zaudētājam bezstiķis.";
+    return ` Galds: bezstiķis — ${nm(lr.loserIdx)} (0 stiķi).`;
   if (lr.kind === "big" && lr.win && lr.opponentsNoTricks)
-    return " Mazajiem bezstiķis.";
+    return ` Mazajiem bezstiķis (${mazoPair(lr.contractorIdx)} — kopā 0 stiķu).`;
   if (lr.kind === "big" && !lr.win && lr.contractorNoTricks)
-    return " Lielajam bezstiķis.";
+    return ` Lielajam bezstiķis (${nm(lr.contractorIdx)} — 0 stiķi).`;
   if (lr.kind === "zole" && lr.win && lr.allTricks) return " Visi stiķi.";
   if (lr.kind === "zole" && !lr.win && lr.contractorNoTricks)
-    return " Lielajam bezstiķis.";
+    return ` Lielajam bezstiķis (${nm(lr.contractorIdx)} — 0 stiķi).`;
   return "";
 }
 

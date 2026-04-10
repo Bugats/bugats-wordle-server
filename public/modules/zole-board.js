@@ -948,44 +948,73 @@
     return dock;
   }
 
+  function zolePlayerName(zole, idx) {
+    if (typeof idx !== "number" || idx < 0) return "?";
+    return zole.players?.[idx] || "?";
+  }
+
+  function zoleMazoNames(zole, contractorIdx) {
+    if (typeof contractorIdx !== "number") return "";
+    const a = [0, 1, 2].filter((i) => i !== contractorIdx);
+    return a.map((i) => zolePlayerName(zole, i)).join(" un ");
+  }
+
   function lastResultText(zole) {
     const lr = zole.lastResult;
     if (!lr || !lr.kind) return "";
     if (lr.kind === "galdins") {
       if (lr.tie) return "Galdiņš: trīs vienādi — bez izmaksām.";
-      const bs =
-        lr.loserNoTricks === true ? " Bezstiķis — maksā pa 3 p." : "";
       const li = lr.loserIdx;
+      const loserNm = zolePlayerName(zole, li);
+      const bs =
+        lr.loserNoTricks === true
+          ? ` Bezstiķis: ${loserNm} — 0 stiķi; maksā pa 3 p. katram uzvarētājam.`
+          : "";
       const le =
         Array.isArray(lr.eyes) && li != null ? lr.eyes[li] : null;
       const ac = le != null ? ` (${le} acis)` : "";
-      return `Galdiņš: zaudē ${zole.players?.[li] || "?"}${ac}, maksā katram uzvarētājam ${lr.payEach} p.${bs}`;
+      return `Galdiņš: zaudē ${loserNm}${ac}, maksā katram uzvarētājam ${lr.payEach} p.${bs}`;
     }
     if (lr.kind === "galds") {
-      const bs =
-        lr.loserNoTricks === true ? " Bezstiķis — maksā pa 3 p." : "";
       const li = lr.loserIdx;
+      const loserNm = zolePlayerName(zole, li);
+      const bs =
+        lr.loserNoTricks === true
+          ? ` Bezstiķis: ${loserNm} — 0 stiķi; maksā pa 3 p. katram.`
+          : "";
       const le =
         Array.isArray(lr.eyes) && li != null ? lr.eyes[li] : null;
       const ac = le != null ? ` (${le} acis)` : "";
-      return `Galds: zaudē ${zole.players?.[li] || "?"}${ac}, maksā katram ${lr.payEach} p.${bs}`;
+      return `Galds: zaudē ${loserNm}${ac}, maksā katram ${lr.payEach} p.${bs}`;
     }
     if (lr.kind === "big") {
+      const cidx = lr.contractorIdx;
+      const bigNm = zolePlayerName(zole, cidx);
+      const maz = zoleMazoNames(zole, cidx);
       if (lr.win) {
-        const bs = lr.opponentsNoTricks === true ? " Mazajiem bezstiķis." : "";
+        const bs =
+          lr.opponentsNoTricks === true
+            ? ` Mazajiem bezstiķis (${maz} — kopā 0 stiķu).`
+            : "";
         return `Lielais uzvarēja (${lr.tier} p. no katra mazā).${bs}`;
       }
       const bs =
-        lr.contractorNoTricks === true ? " Lielajam bezstiķis." : "";
+        lr.contractorNoTricks === true
+          ? ` Lielajam bezstiķis (${bigNm} — 0 stiķu).`
+          : "";
       return `Lielais zaudēja (${lr.tier} p. katram mazajam).${bs}`;
     }
     if (lr.kind === "zole") {
+      const cidx = lr.contractorIdx;
+      const bigNm = zolePlayerName(zole, cidx);
       if (lr.win) {
         const vs = lr.allTricks === true ? " Visi stiķi." : "";
         return `Zole uzvarēta (${lr.tier} p. no katra).${vs}`;
       }
       const bs =
-        lr.contractorNoTricks === true ? " Lielajam bezstiķis." : "";
+        lr.contractorNoTricks === true
+          ? ` Lielajam bezstiķis (${bigNm} — 0 stiķu).`
+          : "";
       return `Zole zaudēta (${lr.tier} p. katram pretiniekam).${bs}`;
     }
     if (lr.kind === "maza_zole") {
