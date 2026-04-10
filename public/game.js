@@ -1752,6 +1752,53 @@ function sendBoardRematchInvite() {
   appendGaldaSystemMessage(`Revānšs: uzaicinājums nosūtīts ${opp}.`);
 }
 
+function formatZoleTablePts(n) {
+  if (n == null || n === "") return "0";
+  const v = Number(n);
+  if (!Number.isFinite(v)) return String(n);
+  if (v > 0) return `+${v}`;
+  return String(v);
+}
+
+/** Zole 3P: aprēķinātie coins pēc likmes (tabulas p. × coins par punktu). */
+function zole3pCoinsFromTableLine(snap, username, coinsPerTablePoint) {
+  const cpp = Math.floor(Number(coinsPerTablePoint) || 0);
+  if (cpp <= 0 || !snap || !Array.isArray(snap.tableDelta)) return "";
+  const pl = Array.isArray(snap.players) ? snap.players : [];
+  const myI = boardGamePlayerIndex(pl, username);
+  if (myI < 0) return "";
+  const t = Number(snap.tableDelta[myI]);
+  if (!Number.isFinite(t) || t === 0) return "";
+  const coins = t * cpp;
+  if (!Number.isFinite(coins) || coins === 0) return "";
+  const sign = coins > 0 ? "+" : "";
+  return ` Coins (likme ${cpp} uz tabulas punktu): ${sign}${coins}.`;
+}
+
+/** Zole: skaidra rindiņa «cik tabulas punktu man šajā partijā / kopā mačā». */
+function zoleMyTablePtsLine(snap, username) {
+  if (!snap || !Array.isArray(snap.tableDelta) || snap.tableDelta.length < 3)
+    return "";
+  const players = Array.isArray(snap.players) ? snap.players : [];
+  const me = String(username || "").trim().toLowerCase();
+  if (!me) return "";
+  let myI = -1;
+  for (let i = 0; i < players.length; i++) {
+    if (String(players[i] || "").trim().toLowerCase() === me) {
+      myI = i;
+      break;
+    }
+  }
+  if (myI < 0) return "";
+  const p = Number(snap.tableDelta[myI]);
+  const part = `Tavai tabulai šajā partijā: ${formatZoleTablePts(p)} p.`;
+  const cumArr = snap.cumulativeTableDelta;
+  if (!Array.isArray(cumArr) || cumArr.length <= myI) return ` ${part}`;
+  const k = Number(cumArr[myI]);
+  if (!Number.isFinite(k)) return ` ${part}`;
+  return ` ${part} Kopā šajā mačā: ${formatZoleTablePts(k)} p.`;
+}
+
 function zoleResultExtraLine(snap) {
   const lr = snap?.lastResult;
   const players = Array.isArray(snap?.players) ? snap.players : [];
@@ -1909,15 +1956,12 @@ function showBoardGameResult(payload) {
       detail = `Tu uzvarēji ar matu ${oppPhrase}.`;
     } else if (gameType === "zole") {
       const snap = payload?.zole || boardState.zole;
-      const td = snap?.tableDelta;
-      const myI = boardGamePlayerIndex(players, me);
-      const tab =
-        td &&
-        myI >= 0 &&
-        typeof td[myI] === "number" &&
-        td[myI] !== 0
-          ? ` Tabulā šai partijai: ${td[myI] > 0 ? "+" : ""}${td[myI]} p.`
-          : "";
+      const tab = zoleMyTablePtsLine(snap, me);
+      const cppStake = Math.floor(
+        Number(payload?.zole3pCoinsPerPoint ?? boardState.zole3pCoinsPerPoint) ||
+          0
+      );
+      const coinStake = zole3pCoinsFromTableLine(snap, me, cppStake);
       detail =
         (boardState.zoleMode === "online_3p"
           ? "Labākais tabulas rezultāts (3 cilvēki, bez bota)."
@@ -1925,6 +1969,7 @@ function showBoardGameResult(payload) {
             ? "Labākais tabulas rezultāts (2 cilvēki + bots)."
             : "Labākais tabulas rezultāts (pret botiem).") +
         tab +
+        coinStake +
         zoleResultExtraLine(snap);
     } else {
       detail = `Tu uzvarēji ${oppPhrase}.`;
@@ -1948,17 +1993,15 @@ function showBoardGameResult(payload) {
         : `Tu zaudēji — ${String(winner)} uzvarēja ar matu.`;
     } else if (gameType === "zole") {
       const snap = payload?.zole || boardState.zole;
-      const td = snap?.tableDelta;
-      const myI = boardGamePlayerIndex(players, me);
-      const tab =
-        td &&
-        myI >= 0 &&
-        typeof td[myI] === "number" &&
-        td[myI] !== 0
-          ? ` Tabulā: ${td[myI] > 0 ? "+" : ""}${td[myI]} p.`
-          : "";
+      const tab = zoleMyTablePtsLine(snap, me);
+      const cppStake = Math.floor(
+        Number(payload?.zole3pCoinsPerPoint ?? boardState.zole3pCoinsPerPoint) ||
+          0
+      );
+      const coinStake = zole3pCoinsFromTableLine(snap, me, cppStake);
       detail =
         `Uz tabulas uzvarēja ${String(winner)}.${tab}` +
+        coinStake +
         zoleResultExtraLine(snap);
     } else {
       detail = vsBot
@@ -11187,6 +11230,20 @@ function initSocket() {
     const winner = payload?.winner;
     const coinsGain = payload?.coinsGain || 0;
     const coinsLoss = payload?.coinsLoss || 0;
+    const meChat = state.username;
+    const zoleSnapForEnd = payload?.zole || boardState.zole;
+    let resultPayload = payload;
+    if (payload?.type === "zole") {
+      resultPayload = { ...payload };
+      if (!resultPayload.zole && boardState.zole)
+        resultPayload.zole = boardState.zole;
+      if (
+        resultPayload.zole3pCoinsPerPoint == null &&
+        boardState.zole3pCoinsPerPoint > 0
+      ) {
+        resultPayload.zole3pCoinsPerPoint = boardState.zole3pCoinsPerPoint;
+      }
+    }
     boardState.gameId = null;
     _lastGaldaTurnNotifyKey = null;
     const won =
@@ -11203,8 +11260,19 @@ function initSocket() {
     } else {
       msg = "♟️ Spēle beidzās (neizšķirts).";
     }
+    if (payload?.type === "zole" && zoleSnapForEnd) {
+      const cppChat = Math.floor(
+        Number(payload?.zole3pCoinsPerPoint ?? boardState.zole3pCoinsPerPoint) ||
+          0
+      );
+      const zExtra = (
+        zoleMyTablePtsLine(zoleSnapForEnd, meChat) +
+        zole3pCoinsFromTableLine(zoleSnapForEnd, meChat, cppChat)
+      ).trim();
+      if (zExtra) msg += " " + zExtra;
+    }
     appendGaldaSystemMessage(msg.replace(/^♟️\s*/, ""));
-    showBoardGameResult(payload);
+    showBoardGameResult(resultPayload);
     hideBoardGameArea();
     updateBoardGameBadge(false);
     apiGet("/me")

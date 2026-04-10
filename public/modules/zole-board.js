@@ -772,6 +772,32 @@
     return c;
   }
 
+  /** Beigu ekrānā — skaidri «cik tabulas punktu man šajā partijā / kopā mačā». */
+  function buildEndMyTablePtsLine(zole, myIdx) {
+    const td = zole.tableDelta;
+    const cum = zole.cumulativeTableDelta;
+    if (
+      !Array.isArray(td) ||
+      typeof myIdx !== "number" ||
+      myIdx < 0 ||
+      myIdx >= td.length
+    ) {
+      return null;
+    }
+    const p = Number(td[myIdx]);
+    if (!Number.isFinite(p)) return null;
+    const wrap = el("div", "vz-zole-end__my-pts");
+    wrap.setAttribute("role", "status");
+    wrap.setAttribute("aria-live", "polite");
+    let t = `Tava tabula šai partijai: ${formatPts(p)} p.`;
+    if (Array.isArray(cum) && cum.length > myIdx) {
+      const k = Number(cum[myIdx]);
+      if (Number.isFinite(k)) t += ` · Kopā šajā mačā: ${formatPts(k)} p.`;
+    }
+    wrap.textContent = t;
+    return wrap;
+  }
+
   const ZOLE_HAND_DESIGN_W = 108;
   const ZOLE_HAND_DESIGN_H = 168;
   const ZOLE_HAND_MIN_SCALE = 0.28;
@@ -1105,6 +1131,8 @@
       const endBox = el("div", "vz-zole-classic__end");
       const endMain = el("div", "vz-zole-end__main");
       endMain.appendChild(buildMatchScoreStrip(zole, myIdx));
+      const myPtsLine = buildEndMyTablePtsLine(zole, myIdx);
+      if (myPtsLine) endMain.appendChild(myPtsLine);
       endMain.appendChild(buildEndCenter(zole, zm));
       let deltaLine = "";
       if (zole.tableDelta) {

@@ -791,6 +791,22 @@ function clampZole3pCoinsPerPoint(raw) {
   return n;
 }
 
+/** Klientam: Zole 3P likme (coins par vienu tabulas punktu), lai var rādīt «≈ X coins». */
+function zole3pStakePayloadForBoardEnd(game) {
+  if (
+    !game ||
+    game.type !== "zole" ||
+    !Array.isArray(game.players) ||
+    game.players.length !== 3 ||
+    game.vsBot
+  ) {
+    return {};
+  }
+  const cpp = clampZole3pCoinsPerPoint(game.zole3pCoinsPerPoint);
+  if (cpp <= 0) return {};
+  return { zole3pCoinsPerPoint: cpp };
+}
+
 /** Pēc partijas: katram cilvēkam coins += tableDelta[i] * cpp (nulles summa tabulā). */
 function applyZole3pTableStakeCoins(game) {
   if (!game?.zole?.tableDelta || !Array.isArray(game.players)) return;
@@ -1840,6 +1856,7 @@ function endZoleVsBotSeries(io, game, reason) {
     coinsGain: 0,
     coinsLoss: 0,
     zoleMode: game.zoleMode,
+    ...zole3pStakePayloadForBoardEnd(game),
   });
 }
 
@@ -1931,6 +1948,7 @@ function playZoleBotTurns(io, game) {
         coinsGain,
         coinsLoss,
         zoleMode: game.zoleMode,
+        ...zole3pStakePayloadForBoardEnd(game),
       });
     }
     return;
@@ -13859,6 +13877,7 @@ io.on("connection", (socket) => {
             coinsGain,
             coinsLoss,
             zoleMode: game.zoleMode,
+            ...zole3pStakePayloadForBoardEnd(game),
           });
         }
         return;
@@ -14117,6 +14136,7 @@ io.on("connection", (socket) => {
             coinsGain,
             coinsLoss,
             zoleMode: game.zoleMode,
+            ...zole3pStakePayloadForBoardEnd(game),
           });
         }
         return;
@@ -14351,6 +14371,7 @@ io.on("connection", (socket) => {
           coinsGain,
           coinsLoss,
           zoleMode: game.zoleMode,
+          ...zole3pStakePayloadForBoardEnd(game),
         });
       }
     } else {
