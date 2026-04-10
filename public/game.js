@@ -2733,7 +2733,7 @@ function showConnectionIssueOverlay(info, opts = {}) {
   if (!silent && key && key !== _vzConnIssueLastKey) {
     _vzConnIssueLastKey = key;
     const galLine = `${title}: ${text}${hint ? ` — ${hint}` : ""}`;
-    appendGaldaSystemMessage(galLine);
+    appendVzStatusMessage(galLine);
   }
   if (_vzConnIssueOverlayTimer != null) {
     clearTimeout(_vzConnIssueOverlayTimer);
@@ -8627,6 +8627,16 @@ function appendGaldaSystemMessage(text) {
   if (gameMessageEl) gameMessageEl.textContent = line;
 }
 
+/** Vienots statusa kanāls: čats + #game-message (vārdu zona + sinhr. ar galdu). */
+const VZ_STATUS_PREFIX = "[VĀRDU ZONA]";
+function appendVzStatusMessage(detail) {
+  const s = String(detail ?? "").trim();
+  if (!s) return;
+  const line = `${VZ_STATUS_PREFIX} ${s}`;
+  appendSystemMessage(line);
+  if (gameMessageEl) gameMessageEl.textContent = line;
+}
+
 function clearUnreadIfNeeded() {
   if (!chatMessagesEl) return;
   if (!document.hidden && isChatNearBottom()) {
@@ -10258,9 +10268,17 @@ function initSocket() {
     showDuelInvite(payload);
   });
   socket.on("connect", () => {
-    if (_socketEverConnected) appendSystemMessage("Savienojums atjaunots.");
-    else appendSystemMessage("Pieslēgts VĀRDU ZONAS serverim.");
+    const hadPrior = _socketEverConnected;
     _socketEverConnected = true;
+    if (hadPrior) {
+      appendVzStatusMessage(
+        "Savienojums atjaunots — čats, duēļi un galda spēles sinhronizējas ar serveri."
+      );
+    } else {
+      appendVzStatusMessage(
+        "Pieslēgts serverim — viss (vārdi, čats, galds) darbojas reāllaikā."
+      );
+    }
     if (navigator.onLine) {
       if (_vzConnIssueOverlayTimer != null) {
         clearTimeout(_vzConnIssueOverlayTimer);
@@ -10302,8 +10320,8 @@ function initSocket() {
         },
         { silent: true }
       );
-      appendGaldaSystemMessage(
-        "Sesija nav derīga čatam un galdam — ielogojies vēlreiz."
+      appendVzStatusMessage(
+        "Sesija nav derīga reāllaikam — ielogojies vēlreiz vai atjauno lapu (čats un galds)."
       );
     } else {
       showConnectionIssueOverlay(
@@ -10317,20 +10335,21 @@ function initSocket() {
         },
         { autoHideMs: 7000, silent: true }
       );
-      appendGaldaSystemMessage(
-        "Reāllaika serveris nav pieejams — mēģina atkārtoti pieslēgties…"
+      appendVzStatusMessage(
+        "Īslaicīgi zudis reāllaika savienojums — mēģinu atkal; pēc atjaunošanās viss sinhronizēsies."
       );
     }
   });
 
   socket.on("disconnect", (reason) => {
     if (reason === "io client disconnect") return;
-    appendSystemMessage("Atvienots no servera.");
-    if (boardState?.gameId || zole3pLobbySnapshot?.zoleLobby) {
-      appendGaldaSystemMessage(
-        "Īslaicīgs atvienojums — pēc atkārtotas pieslēgšanās galds un istaba sinhronizēsies automātiski."
-      );
-    }
+    const inGalds =
+      !!(boardState?.gameId || zole3pLobbySnapshot?.zoleLobby);
+    appendVzStatusMessage(
+      inGalds
+        ? "Atvienots no servera — neaizver modāļus; pēc atkārtotas pieslēgšanās galds un istaba ielādēsies no servera."
+        : "Atvienots no servera — pēc atkārtotas pieslēgšanās čats un spēle sinhronizēsies."
+    );
   });
 
   socket.on("chatHistory", (payload) => {
@@ -10582,7 +10601,11 @@ function initSocket() {
   });
 
   socket.on("forceDisconnect", ({ reason }) => {
-    appendSystemMessage("Tevi atvienoja: " + (reason || ""));
+    appendVzStatusMessage(
+      "Serveris atvienoja sesiju" +
+        (reason ? `: ${reason}` : "") +
+        ". Atjauno lapu vai ielogojies vēlreiz."
+    );
     socket.disconnect();
   });
 
@@ -10995,8 +11018,8 @@ function initSocket() {
   });
   socket.on("board.resume", (payload) => {
     startBoardGame(payload);
-    appendGaldaSystemMessage(
-      "Atjaunoju galda spēli — stāvoklis ielādēts no servera. Vari turpināt."
+    appendVzStatusMessage(
+      "Galda spēle atjaunota no servera — vari turpināt (tas pats savienojums kā čatam un vārdiem)."
     );
     const myIdx = boardGamePlayerIndex(payload?.players || [], state.username);
     const t = payload?.type || "dambrete";
@@ -13594,10 +13617,16 @@ async function initGame() {
   window.addEventListener("offline", () => {
     resetOfflineOverlayToBrowserDefault();
     setOfflineOverlay(true);
+    appendVzStatusMessage(
+      "Pārlūks ziņo: nav interneta. Kad tīkls atgriežas, atjaunosies automātiski vai atsvaidzini lapu."
+    );
   });
   window.addEventListener("online", () => {
     setOfflineOverlay(false);
     _vzConnIssueLastKey = "";
+    appendVzStatusMessage(
+      "Pārlūks ziņo: internets atkal pieejams — gaidu servera savienojumu…"
+    );
   });
   if (offlineRetryBtn) {
     offlineRetryBtn.addEventListener("click", () => {
