@@ -7932,6 +7932,78 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   font-size: 11px;
   max-width: 100%;
 }
+.vz-empty-state__link-wrap {
+  margin: 4px 0 0;
+}
+.vz-empty-state__link {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fecaca;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.vz-empty-state__link:hover {
+  color: #fff;
+}
+.vz-empty-state--compact .vz-empty-state__link {
+  font-size: 11px;
+}
+
+.vz-offline-trust {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.82);
+}
+.vz-offline-trust a {
+  color: #fecaca;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.vz-offline-trust a:hover {
+  color: #fff;
+}
+
+.vz-trust-quick-links {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.78);
+}
+.vz-trust-quick-links--popup {
+  margin-bottom: 6px;
+}
+.vz-trust-quick-links a {
+  color: #fecaca;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.vz-trust-quick-links a:hover {
+  color: #fff;
+}
+.vz-trust-quick-links__sep {
+  margin: 0 0.35em;
+  opacity: 0.55;
+}
+
+.vz-stripe-coins__trust-line {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.72);
+}
+.vz-stripe-coins__trust-line a {
+  color: #fecaca;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.vz-stripe-coins__trust-line a:hover {
+  color: #fff;
+}
 
 .vz-board-invite-stake {
   margin: 8px 0 0;

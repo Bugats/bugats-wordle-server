@@ -43,13 +43,29 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-/** Vienots mīksts tukšā stāvokļa bloks (īss virsraksts + 1 rindiņa). */
+/** Tikai lokālās statiskās lapas tukšo bloku saitēm (XSS riska mazināšana). */
+function vzSafeTrustPageHref(href) {
+  const base = String(href || "").trim().split("#")[0].toLowerCase();
+  const allowed = new Set([
+    "coins-vip-turniri.html",
+    "privacy.html",
+    "terms.html",
+  ]);
+  if (!allowed.has(base)) return "";
+  const raw = String(href || "").trim();
+  if (raw.includes("..") || raw.includes("\\")) return "";
+  return raw;
+}
+
+/** Vienots mīksts tukšā stāvokļa bloks (īss virsraksts + 1 rindiņa + opcionāla saite). */
 function fillVzEmptyState(el, options = {}) {
   if (!el) return;
   const glyph = String(options.glyph ?? "✦").trim() || "✦";
   const title = String(options.title || "").trim();
   const text = String(options.text || "").trim();
   const compact = !!options.compact;
+  const linkHref = vzSafeTrustPageHref(options.linkHref);
+  const linkLabel = String(options.linkLabel || "").trim();
   const extra = String(options.extraClass || "")
     .trim()
     .split(/\s+/)
@@ -64,7 +80,11 @@ function fillVzEmptyState(el, options = {}) {
   const g = escapeHtml(glyph);
   const t = title ? `<p class="vz-empty-state__title">${escapeHtml(title)}</p>` : "";
   const x = text ? `<p class="vz-empty-state__text">${escapeHtml(text)}</p>` : "";
-  el.innerHTML = `<div class="vz-empty-state__glyph" aria-hidden="true">${g}</div>${t}${x}`;
+  const link =
+    linkHref && linkLabel
+      ? `<p class="vz-empty-state__link-wrap"><a class="vz-empty-state__link" href="${escapeHtml(linkHref)}" target="_blank" rel="noopener">${escapeHtml(linkLabel)}</a></p>`
+      : "";
+  el.innerHTML = `<div class="vz-empty-state__glyph" aria-hidden="true">${g}</div>${t}${x}${link}`;
 }
 const {
   dmNormalizeMessageForStore,
@@ -2456,7 +2476,8 @@ function fillStripeCoinPackList(container) {
         await startStripeCoinCheckout(p.id);
       } catch (e) {
         appendSystemMessage(
-          (e && e.message) || "Neizdevās atvērt maksājumu. Pamēģini vēlāk."
+          ((e && e.message) || "Neizdevās atvērt maksājumu.") +
+            " Īsi par coins: «⋯ Vairāk» → «Coins / VIP / turnīri»."
         );
         btn.disabled = false;
       }
@@ -2919,7 +2940,7 @@ function handleRatePromptFeedback() {
 }
 
 // ==================== TUTORIAL ====================
-const TUTORIAL_STORAGE_KEY = "vz_tutorial_seen_v3";
+const TUTORIAL_STORAGE_KEY = "vz_tutorial_seen_v4";
 const LV_KEYBOARD_HINT_STORAGE = "vz_lv_keyboard_hint_shown";
 const TUTORIAL_STEPS = [
   {
@@ -2933,6 +2954,14 @@ const TUTORIAL_STEPS = [
   {
     title: "Latviešu tastatūra (QWERTY)",
     body: "Burti kā uz latviešu QWERTY, tikai bez Q, W, X un Y — latviešu vārdos tie parasti nav. Nospied SHIFT (oranžs), lai iegūtu Ā, Č, Ē, Ģ, Ī, Ķ, Ļ, Ņ, Š, Ū, Ž. Atkārtoti SHIFT — atpakaļ uz parastajiem burtiem.",
+  },
+  {
+    title: "Draugi, duelis, galds",
+    body: "Šajā pašā lapā: profilā pievieno draugus un vari uzaicināt uz dueli. Augšā ♟️ «Galda spēles» — šahs, dambrete, zole. Lejā «Sacensības un rangi» — TOP, misijas, turnīri.",
+  },
+  {
+    title: "Coins un uzticība",
+    body: "Viens virtuālais atlikums visās spēlēs. Īss skaidrojums: izvēlnē «⋯ Vairāk» → «Coins / VIP / turnīri». Pirms naudas pirkuma — saite «Privātums un maksājumi» pie Stripe pakotnēm.",
   },
   {
     title: "Kā minēt",
@@ -5322,7 +5351,9 @@ function renderFriends() {
     fillVzEmptyState(empty, {
       glyph: "🤝",
       title: "Draugu saraksts ir tukšs",
-      text: "Augšā ievadi vārdu un spied «Pievienot».",
+      text: "Ievadi spēlētāja vārdu augšā un spied «Pievienot» — tad vari uzaicināt uz dueli vai galdu.",
+      linkHref: "coins-vip-turniri.html",
+      linkLabel: "Kas ir coins / VIP / turnīri",
     });
     friendsInvitesEl.appendChild(empty);
     return;

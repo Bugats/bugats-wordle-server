@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-27-chess-draw-promo" />
+  <link rel="stylesheet" href="style.css?v=2026-03-27-trust-empty-states" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -77,6 +77,11 @@
         <p id="vz-offline-title" class="vz-offline-title">Nav interneta</p>
         <p id="vz-offline-text" class="vz-offline-text">Pārbaudi savienojumu un mēģini vēlreiz.</p>
         <p id="vz-offline-hint" class="vz-offline-hint hidden"></p>
+        <p class="vz-offline-trust">
+          <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Coins / VIP / turnīri</a>
+          <span aria-hidden="true"> · </span>
+          <a href="privacy.html#stripe-maksajumi" target="_blank" rel="noopener">Maksājumi un privātums</a>
+        </p>
         <div class="vz-offline-actions">
           <button id="vz-offline-retry-btn" type="button" class="vz-offline-retry">Mēģināt vēlreiz</button>
           <button id="vz-offline-login-btn" type="button" class="vz-offline-secondary hidden">Uz pieslēgšanos</button>
@@ -322,6 +327,11 @@
                     caur Stripe, ja ieslēgts.
                     <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Īss skaidrojums</a>
                   </p>
+                  <p class="vz-trust-quick-links" role="navigation" aria-label="Uzticība un skaidrība">
+                    <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Kas ir coins / VIP / turnīri</a>
+                    <span class="vz-trust-quick-links__sep" aria-hidden="true">·</span>
+                    <a href="privacy.html#stripe-maksajumi" target="_blank" rel="noopener">Pirms maksājuma — privātums</a>
+                  </p>
                   <div id="vz-stripe-coins-buy" class="vz-stripe-coins hidden">
                     <div class="vz-stripe-coins__label">Pirkt coins (Stripe)</div>
                     <div id="vz-stripe-coins-pack-list" class="vz-stripe-coins__packs"></div>
@@ -330,6 +340,12 @@
                       <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Kas ir coins / VIP / turnīri</a>
                       ·
                       <a href="privacy.html#stripe-maksajumi" target="_blank" rel="noopener">Privātums un maksājumi</a>.
+                    </p>
+                    <p class="vz-stripe-coins__trust-line">
+                      Pirms pirkuma vari īsi izlasīt
+                      <a href="coins-vip-turniri.html" target="_blank" rel="noopener">«Kas ir coins»</a>
+                      un
+                      <a href="privacy.html#stripe-maksajumi" target="_blank" rel="noopener">kā apstrādā maksājumu</a>.
                     </p>
                   </div>
                   <div class="vz-card-row"><span>Žetoni:</span><span id="player-tokens"></span></div>
@@ -896,6 +912,11 @@
           nemainās; papildināšana ar Stripe, ja ieslēgts.
           <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Īsi par coins</a>
         </p>
+        <p class="vz-trust-quick-links vz-trust-quick-links--popup" role="navigation" aria-label="Uzticība un skaidrība">
+          <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Coins / VIP / turnīri</a>
+          <span class="vz-trust-quick-links__sep" aria-hidden="true">·</span>
+          <a href="privacy.html#stripe-maksajumi" target="_blank" rel="noopener">Pirms maksājuma</a>
+        </p>
         <div id="pp-stripe-coins-buy" class="vz-stripe-coins vz-stripe-coins--popup hidden">
           <div class="vz-stripe-coins__label">Pirkt coins</div>
           <div id="pp-stripe-coins-pack-list" class="vz-stripe-coins__packs"></div>
@@ -904,6 +925,12 @@
             <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Coins / VIP / turnīri</a>
             ·
             <a href="privacy.html#stripe-maksajumi" target="_blank" rel="noopener">Kā apstrādā maksājumu</a>.
+          </p>
+          <p class="vz-stripe-coins__trust-line">
+            Pirms pirkuma:
+            <a href="coins-vip-turniri.html" target="_blank" rel="noopener">kas ir coins</a>
+            ·
+            <a href="privacy.html#stripe-maksajumi" target="_blank" rel="noopener">maksājums un dati</a>
           </p>
         </div>
         <div class="profile-row"><span>Žetoni:</span><span id="pp-tokens"></span></div>
@@ -1083,7 +1110,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-27-vz-status-unified"></script>
+    <script defer src="game.js?v=2026-03-27-trust-empty-states"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
