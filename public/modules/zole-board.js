@@ -799,7 +799,6 @@
   }
 
   const ZOLE_HAND_DESIGN_W = 108;
-  const ZOLE_HAND_DESIGN_H = 168;
   const ZOLE_HAND_MIN_SCALE = 0.28;
 
   function fitZoleHandOverlap(dock) {

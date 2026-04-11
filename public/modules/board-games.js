@@ -20,11 +20,6 @@
    * Servera masīvā baltie ir rindās 0–2 (augšā) — apgriežam skatu 180° + apmainām
    * kolonnas, lai «a» paliek kreisajā pusē (kā šahā melnajam).
    */
-  function viewRCFromData(r, c, myPlayerIdx) {
-    if (myPlayerIdx !== 0) return [r, c];
-    return [7 - r, 7 - c];
-  }
-
   function dataRCFromView(vr, vc, myPlayerIdx) {
     if (myPlayerIdx !== 0) return [vr, vc];
     return [7 - vr, 7 - vc];
@@ -57,7 +52,7 @@
           if (hasPointer) {
             try {
               table.setPointerCapture(e.pointerId);
-            } catch (_) {}
+            } catch {}
             handleCell(e);
           }
           return;

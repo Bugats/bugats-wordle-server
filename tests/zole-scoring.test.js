@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  zoleAugmentLastResultEyeMeta,
   zoleCardEyes,
   zoleComputeTableDeltas,
   zoleGaldsLoserIdx,
@@ -13,6 +14,29 @@ describe("zoleCardEyes", () => {
     expect(zoleCardEyes({ s: 0, r: 12 })).toBe(3);
     expect(zoleCardEyes({ s: 0, r: 11 })).toBe(2);
     expect(zoleCardEyes({ s: 0, r: 9 })).toBe(0);
+  });
+});
+
+describe("zoleAugmentLastResultEyeMeta", () => {
+  it("adds buried eyes for big contract", () => {
+    const summary = { kind: "big", win: true, tier: 1 };
+    zoleAugmentLastResultEyeMeta(summary, "big", [
+      { s: 0, r: 14 },
+      { s: 0, r: 10 },
+    ]);
+    expect(summary.buriedEyesTotal).toBe(21);
+  });
+
+  it("adds kitty eyes for zole contract", () => {
+    const summary = { kind: "zole", win: false, tier: 6 };
+    zoleAugmentLastResultEyeMeta(summary, "zole", [], 17);
+    expect(summary.kittyEyesToOpponents).toBe(17);
+  });
+
+  it("does not set kitty meta for galdins", () => {
+    const summary = { kind: "galdins", loserIdx: 0 };
+    zoleAugmentLastResultEyeMeta(summary, "galdins", [], 10);
+    expect(summary.kittyEyesToOpponents).toBeUndefined();
   });
 });
 
