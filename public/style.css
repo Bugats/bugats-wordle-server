@@ -6976,6 +6976,13 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   opacity: 0.88;
   padding: 0 6px 2px;
 }
+#board-zole-container .vz-zole-end__main .vz-zole-end__buried-kitty {
+  font-size: 11px;
+  line-height: 1.45;
+  font-weight: 600;
+  color: rgba(254, 243, 199, 0.95);
+  padding: 4px 6px 2px;
+}
 #board-zole-container .vz-zole-end__details {
   width: 100%;
   max-width: 320px;

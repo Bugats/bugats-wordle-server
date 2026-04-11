@@ -1799,6 +1799,25 @@ function zoleMyTablePtsLine(snap, username) {
   return ` ${part} Kopā šajā mačā: ${formatZoleTablePts(k)} p.`;
 }
 
+function zoleBuriedKittyEyesLine(snap) {
+  const lr = snap?.lastResult;
+  if (!lr || typeof lr !== "object") return "";
+  const parts = [];
+  if (typeof lr.buriedEyesTotal === "number" && lr.buriedEyesTotal > 0) {
+    parts.push(`Noraktās 2 kārtis lielajam: +${lr.buriedEyesTotal} acis tabulā.`);
+  }
+  if (
+    typeof lr.kittyEyesToOpponents === "number" &&
+    lr.kittyEyesToOpponents > 0
+  ) {
+    parts.push(
+      `Divas vidus kārtis: kopā ${lr.kittyEyesToOpponents} acis mazajiem (pret līgumdevēju).`
+    );
+  }
+  if (!parts.length) return "";
+  return " " + parts.join(" ");
+}
+
 function zoleResultExtraLine(snap) {
   const lr = snap?.lastResult;
   const players = Array.isArray(snap?.players) ? snap.players : [];
@@ -1970,6 +1989,7 @@ function showBoardGameResult(payload) {
             : "Labākais tabulas rezultāts (pret botiem).") +
         tab +
         coinStake +
+        zoleBuriedKittyEyesLine(snap) +
         zoleResultExtraLine(snap);
     } else {
       detail = `Tu uzvarēji ${oppPhrase}.`;
@@ -2002,6 +2022,7 @@ function showBoardGameResult(payload) {
       detail =
         `Uz tabulas uzvarēja ${String(winner)}.${tab}` +
         coinStake +
+        zoleBuriedKittyEyesLine(snap) +
         zoleResultExtraLine(snap);
     } else {
       detail = vsBot
@@ -11267,7 +11288,8 @@ function initSocket() {
       );
       const zExtra = (
         zoleMyTablePtsLine(zoleSnapForEnd, meChat) +
-        zole3pCoinsFromTableLine(zoleSnapForEnd, meChat, cppChat)
+        zole3pCoinsFromTableLine(zoleSnapForEnd, meChat, cppChat) +
+        zoleBuriedKittyEyesLine(zoleSnapForEnd)
       ).trim();
       if (zExtra) msg += " " + zExtra;
     }

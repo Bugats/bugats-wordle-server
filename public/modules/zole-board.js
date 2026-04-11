@@ -1069,6 +1069,26 @@
     return `${nm} visvairāk acu šajā izspēlē: ${e}`;
   }
 
+  /** Acis no noraktajām (lielais) un no divām vidus kārtīm (zole / mazā zole). */
+  function endBuriedKittyEyesLine(zole) {
+    const lr = zole.lastResult;
+    if (!lr || typeof lr !== "object") return "";
+    const parts = [];
+    const be = lr.buriedEyesTotal;
+    if (typeof be === "number" && be > 0) {
+      parts.push(
+        `No noraktajām 2 kārtīm lielajam tabulā pieskaitītas ${be} acis.`
+      );
+    }
+    const ke = lr.kittyEyesToOpponents;
+    if (typeof ke === "number" && ke > 0) {
+      parts.push(
+        `No divām vidus kārtīm kopā ${ke} acis (sadalītas starp abiem mazajiem pret līgumdevēju).`
+      );
+    }
+    return parts.join(" ");
+  }
+
   function renderZoleBoard(zole, isMyTurn, onPlayCard, opts) {
     const container = document.getElementById("board-zole-container");
     if (!container) return;
@@ -1146,7 +1166,8 @@
       }
       const story = lastResultText(zole);
       const eyesLine = endEyesWinnerLine(zole);
-      if (deltaLine || story || eyesLine) {
+      const buriedKittyLine = endBuriedKittyEyesLine(zole);
+      if (deltaLine || story || eyesLine || buriedKittyLine) {
         const details = document.createElement("details");
         details.className = "vz-zole-end__details";
         const sum = el(
@@ -1157,6 +1178,10 @@
         details.appendChild(sum);
         const body = el("div", "vz-zole-end__details-body");
         if (deltaLine) body.appendChild(el("div", "vz-zole-end__delta", deltaLine));
+        if (buriedKittyLine)
+          body.appendChild(
+            el("div", "vz-zole-end__buried-kitty", buriedKittyLine)
+          );
         if (story) body.appendChild(el("div", "vz-zole-end__story", story));
         if (eyesLine) body.appendChild(el("div", "vz-zole-end__eyes", eyesLine));
         details.appendChild(body);
