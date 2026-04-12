@@ -991,8 +991,13 @@ function tickExpiredBoardInvites(io) {
       rematch: !!v.rematch,
       inviteTimeoutMs: boardGameInviteTimeoutMs,
     };
-    if (from) getSocketByUsername(from)?.emit("board.inviteTimedOut", payload);
-    if (target) getSocketByUsername(target)?.emit("board.inviteTimedOut", payload);
+    if (v.rematch) {
+      if (from) getSocketByUsername(from)?.emit("board.rematchTimedOut", payload);
+      if (target) getSocketByUsername(target)?.emit("board.rematchTimedOut", payload);
+    } else {
+      if (from) getSocketByUsername(from)?.emit("board.inviteTimedOut", payload);
+      if (target) getSocketByUsername(target)?.emit("board.inviteTimedOut", payload);
+    }
   }
 }
 
@@ -1445,6 +1450,18 @@ function getZoleResignWinner(game, resignUsername) {
   if (!game?.zole || !Array.isArray(game.players)) return null;
   const idx = boardGameSeatIndex(game, resignUsername);
   if (idx < 0) return null;
+  const humans = game.players
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => p && !isZoleBotUsername(p));
+  if (humans.length === 3) {
+    const opp = humans.filter(
+      ({ p }) =>
+        String(p).toLowerCase() !== String(resignUsername || "").toLowerCase()
+    );
+    if (opp.length !== 2) return null;
+    opp.sort((a, b) => a.i - b.i);
+    return opp[0].p;
+  }
   const others = [0, 1, 2].filter((i) => i !== idx);
   return game.players[others[0]] || null;
 }

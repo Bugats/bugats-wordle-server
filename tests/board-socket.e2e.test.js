@@ -68,6 +68,42 @@ function waitBoardMove(socket, gameId, pred, timeoutMs = 15000) {
   });
 }
 
+/** Gaida pirmo `board.move`, kas atbilst `pred`, no jebkura socket saraksta. */
+function waitBoardMoveFromAny(sockets, gameId, pred, timeoutMs = 20000) {
+  return new Promise((resolve, reject) => {
+    const to = setTimeout(() => {
+      for (const s of sockets) s.removeListener("board.move", onMove);
+      reject(new Error("board.move (any) wait timeout"));
+    }, timeoutMs);
+    function onMove(p) {
+      if (p?.gameId !== gameId) return;
+      if (!pred(p)) return;
+      clearTimeout(to);
+      for (const s of sockets) s.removeListener("board.move", onMove);
+      resolve(p);
+    }
+    for (const s of sockets) s.on("board.move", onMove);
+  });
+}
+
+function waitZoleBidTurn(sockets, gameId, bidTurn, timeoutMs = 25000) {
+  return new Promise((resolve, reject) => {
+    const to = setTimeout(() => {
+      for (const s of sockets) s.removeListener("board.move", onMove);
+      reject(new Error("waitZoleBidTurn timeout"));
+    }, timeoutMs);
+    function onMove(p) {
+      if (p?.gameId !== gameId) return;
+      if (p?.zole?.phase !== "bid") return;
+      if (p.zole.bidTurn !== bidTurn) return;
+      clearTimeout(to);
+      for (const s of sockets) s.removeListener("board.move", onMove);
+      resolve(p);
+    }
+    for (const s of sockets) s.on("board.move", onMove);
+  });
+}
+
 function waitBoardEnd(socket, gameId, timeoutMs = 20000) {
   return new Promise((resolve, reject) => {
     const to = setTimeout(() => {
@@ -110,11 +146,14 @@ describe("Board socket E2E", () => {
     __testHooks.resetBoardTimeoutsForTestOnly();
   });
 
-  afterAll(async () => {
-    await new Promise((resolve) => {
-      httpServer.close(() => resolve());
-    });
-  });
+  afterAll(
+    async () => {
+      await new Promise((resolve) => {
+        httpServer.close(() => resolve());
+      });
+    },
+    45000
+  );
 
   it("PvP accepts draw agreement when accepter is not on move (FIDE-style)", async () => {
     const u1 = await signupUser(`w${Date.now()}`);
@@ -386,8 +425,238 @@ describe("Board socket E2E", () => {
     });
 
     expect(payload?.inviteTimeoutMs).toBe(800);
+    expect(payload?.rematch).toBeFalsy();
 
     s1.close();
     s2.close();
   });
+
+  it("rematch timeout emits board.rematchTimedOut (not inviteTimedOut)", async () => {
+    __testHooks.setBoardTimeoutsForTestOnly(800, 800);
+
+    const u1 = await signupUser(`rm${Date.now()}`);
+    const u2 = await signupUser(`rm2${Date.now()}`);
+
+    const s1 = await connectClient(port, u1.token);
+    const s2 = await connectClient(port, u2.token);
+
+    const inviteId = await new Promise((resolve, reject) => {
+      const to = setTimeout(() => reject(new Error("invite timeout")), 10000);
+      s2.once("board.invite", (p) => {
+        clearTimeout(to);
+        resolve(String(p?.inviteId || "").trim());
+      });
+      s1.emit("board.invite", { target: u2.username, type: "chess" });
+    });
+
+    const startRm = await new Promise((resolve, reject) => {
+      const to = setTimeout(() => reject(new Error("board.start s1")), 10000);
+      s1.once("board.start", (p) => {
+        clearTimeout(to);
+        resolve(p);
+      });
+      s2.emit("board.accept", {
+        inviteId,
+        from: u1.username,
+        type: "chess",
+      });
+    });
+    const gid = startRm?.gameId;
+    expect(typeof gid).toBe("string");
+
+    await new Promise((resolve, reject) => {
+      const to = setTimeout(() => reject(new Error("board.end s2 timeout")), 10000);
+      s2.once("board.end", () => {
+        clearTimeout(to);
+        resolve();
+      });
+      s2.emit("board.resign", { gameId: gid });
+    });
+
+    let sawWrong = false;
+    s1.once("board.inviteTimedOut", () => {
+      sawWrong = true;
+    });
+
+    s1.emit("board.rematchRequest", {
+      type: "chess",
+      opponentUsername: u2.username,
+    });
+
+    const remPayload = await new Promise((resolve, reject) => {
+      const to = setTimeout(() => reject(new Error("rematchTimedOut timeout")), 8000);
+      s1.once("board.rematchTimedOut", (p) => {
+        clearTimeout(to);
+        resolve(p);
+      });
+      setTimeout(() => __testHooks.processBoardIdleTimersForTestOnly(), 950);
+    });
+
+    expect(sawWrong).toBe(false);
+    expect(remPayload?.rematch).toBe(true);
+    expect(remPayload?.inviteTimeoutMs).toBe(800);
+
+    s1.close();
+    s2.close();
+  });
+
+  it(
+    "chess PvP: resign awards coinsGain / coinsLoss on board.end",
+    async () => {
+      const u1 = await signupUser(`cr${Date.now()}`);
+      const u2 = await signupUser(`cr2${Date.now()}`);
+
+      const s1 = await connectClient(port, u1.token);
+      const s2 = await connectClient(port, u2.token);
+
+      const inviteId = await new Promise((resolve, reject) => {
+        const to = setTimeout(() => reject(new Error("invite timeout")), 10000);
+        s2.once("board.invite", (p) => {
+          clearTimeout(to);
+          resolve(String(p?.inviteId || "").trim());
+        });
+        s1.emit("board.invite", { target: u2.username, type: "chess" });
+      });
+
+      const start = await new Promise((resolve, reject) => {
+        const to = setTimeout(() => reject(new Error("board.start")), 10000);
+        s1.once("board.start", (p) => {
+          clearTimeout(to);
+          resolve(p);
+        });
+        s2.emit("board.accept", {
+          inviteId,
+          from: u1.username,
+          type: "chess",
+        });
+      });
+
+      const gameId = start.gameId;
+      const movesRes = await request(app)
+        .get(`/board/${gameId}/moves`)
+        .set("Authorization", `Bearer ${u1.token}`);
+      expect(movesRes.status).toBe(200);
+      const m0 = movesRes.body?.moves?.[0];
+      expect(m0?.san).toBeTruthy();
+
+      const afterMove = waitBoardMoveFromAny(
+        [s1, s2],
+        gameId,
+        (p) => p?.turn === 1 && p?.fen
+      );
+      s1.emit("board.move", { gameId, san: m0.san });
+      await afterMove;
+
+      const endW = waitBoardEnd(s1, gameId);
+      s2.emit("board.resign", { gameId });
+      const end = await endW;
+      expect(end?.reason).toBe("resign");
+      expect(end?.winner).toBe(u1.username);
+      expect(end?.coinsGain).toBe(8);
+      expect(end?.coinsLoss).toBe(0);
+
+      const endL = await new Promise((resolve, reject) => {
+        const to = setTimeout(() => reject(new Error("loser board.end")), 8000);
+        s2.once("board.end", (p) => {
+          clearTimeout(to);
+          resolve(p);
+        });
+      });
+      expect(endL?.coinsGain).toBe(0);
+      expect(endL?.coinsLoss).toBe(3);
+
+      s1.close();
+      s2.close();
+    },
+    45000
+  );
+
+  it(
+    "zole 3P: lobby, third seat, stake on board.end after resign",
+    async () => {
+      const h = await signupUser(`z3h${Date.now()}`);
+      const j1 = await signupUser(`z3a${Date.now()}`);
+      const j2 = await signupUser(`z3b${Date.now()}`);
+
+      const sh = await connectClient(port, h.token);
+      const s1 = await connectClient(port, j1.token);
+      const s2 = await connectClient(port, j2.token);
+
+      const lobbyP = new Promise((resolve, reject) => {
+        const to = setTimeout(() => reject(new Error("board.zoleLobby")), 10000);
+        sh.once("board.zoleLobby", (p) => {
+          clearTimeout(to);
+          resolve(p);
+        });
+      });
+      sh.emit("board.zoleCreateLobby", { zole3pCoinsPerPoint: 2 });
+      const lob0 = await lobbyP;
+      const lobbyId = lob0?.lobbyId;
+      expect(typeof lobbyId).toBe("string");
+
+      s1.emit("board.zoleJoinOpenLobby", { lobbyId });
+
+      const inviteId = await new Promise((resolve, reject) => {
+        const to = setTimeout(
+          () => reject(new Error("third board.invite")),
+          10000
+        );
+        s2.once("board.invite", (p) => {
+          clearTimeout(to);
+          resolve(String(p?.inviteId || "").trim());
+        });
+        sh.emit("board.zoleInviteThird", { target: j2.username });
+      });
+      expect(inviteId.length).toBeGreaterThan(4);
+
+      const startP = new Promise((resolve, reject) => {
+        const to = setTimeout(() => reject(new Error("board.start h")), 15000);
+        sh.once("board.start", (p) => {
+          clearTimeout(to);
+          resolve(p);
+        });
+      });
+      s2.emit("board.zoleAcceptThird", {
+        inviteId,
+        from: h.username,
+        lobbyId,
+      });
+      const st = await startP;
+      const gameId = st.gameId;
+      const players = st.players;
+      expect(players?.length).toBe(3);
+      expect(st.zole3pCoinsPerPoint).toBe(2);
+
+      const socks = { [h.username]: sh, [j1.username]: s1, [j2.username]: s2 };
+      const allSocks = [sh, s1, s2];
+
+      let bidTurn = st.zole?.bidTurn ?? 0;
+      for (let step = 0; step < 6; step++) {
+        if (step > 0) {
+          await waitZoleBidTurn(allSocks, gameId, bidTurn);
+        }
+        socks[players[bidTurn]].emit("board.move", { gameId, bid: "pass" });
+        if (step < 5) bidTurn = (bidTurn + 1) % 3;
+      }
+
+      await waitBoardMoveFromAny(
+        allSocks,
+        gameId,
+        (p) => p?.zole?.phase === "play" && p?.zole?.contract === "galdins",
+        25000
+      );
+
+      const endH = waitBoardEnd(sh, gameId);
+      s2.emit("board.resign", { gameId });
+      const end = await endH;
+      expect(end?.reason).toBe("resign");
+      expect(end?.zole3pCoinsPerPoint).toBe(2);
+      expect(end?.winner).toBe(h.username);
+
+      s1.close();
+      s2.close();
+      sh.close();
+    },
+    60000
+  );
 });

@@ -11132,11 +11132,13 @@ function initSocket() {
     stopBoardInviteOutgoingWait();
     appendGaldaSystemMessage("Uzaicinājums atcelts.");
   });
-  socket.on("board.inviteTimedOut", (payload) => {
+  function handleBoardInviteOrRematchTimedOut(payload, rematchOnly) {
     stopBoardInviteOutgoingWait();
     const from = String(payload?.from || "").trim();
     const target = String(payload?.target || "").trim();
     const rem = !!payload?.rematch;
+    if (rematchOnly && !rem) return;
+    if (!rematchOnly && rem) return;
     const me = String(state.username || "").trim().toLowerCase();
     const invSec = Math.max(
       1,
@@ -11150,12 +11152,23 @@ function initSocket() {
       appendVzStatusMessage(line);
     } else if (target && me === target.toLowerCase()) {
       appendGaldaSystemMessage(
-        `Uzaicinājuma termiņš beidzies (${invSec}s) — vari sūtīt jaunu vai gaidīt citu.`
+        rem
+          ? `Revānša uzaicinājuma termiņš beidzies (${invSec}s) — vari sūtīt jaunu.`
+          : `Uzaicinājuma termiņš beidzies (${invSec}s) — vari sūtīt jaunu vai gaidīt citu.`
       );
       appendVzStatusMessage(
-        `Galda uzaicinājums beidzies (${invSec}s) — vari mēģināt vēlreiz.`
+        rem
+          ? `Galda revānšs beidzies (${invSec}s) — vari mēģināt vēlreiz.`
+          : `Galda uzaicinājums beidzies (${invSec}s) — vari mēģināt vēlreiz.`
       );
     }
+  }
+
+  socket.on("board.inviteTimedOut", (payload) => {
+    handleBoardInviteOrRematchTimedOut(payload, false);
+  });
+  socket.on("board.rematchTimedOut", (payload) => {
+    handleBoardInviteOrRematchTimedOut(payload, true);
   });
   socket.on("board.zoleThirdInviteTimedOut", (payload) => {
     const t = String(payload?.target || "").trim();
