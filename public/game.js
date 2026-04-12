@@ -889,11 +889,27 @@ function syncBoardInvitePendingUi() {
   const exp = Number(pending.dataset.expiresAt) || 0;
   const target = String(pending.dataset.waitTarget || "").trim();
   const toHost = pending.dataset.waitMode === "to_host";
+  const rematch = pending.dataset.pendingRematch === "1";
+  const gameType = String(pending.dataset.pendingGameType || "").toLowerCase();
+  const chessLine = String(pending.dataset.pendingChessLine || "").trim();
+  const invSec = Math.max(
+    0,
+    Math.floor(Number(pending.dataset.pendingInviteSec) || 0)
+  );
   const left = Math.max(0, Math.ceil((exp - Date.now()) / 1000));
   if (left > 0 && target) {
-    text.textContent = toHost
-      ? `Gaidām, kad ${target} pieņems pievienošanos… (${left}s)`
-      : `Gaidām atbildi no ${target}… (${left}s)`;
+    let line = "";
+    if (toHost) {
+      line = `Gaidām, kad ${target} pieņems pievienošanos no saraksta… Atlikušas ${left}s`;
+    } else if (rematch) {
+      line = `Revānšs nosūtīts: ${target}. Atlikušas ${left}s`;
+    } else {
+      line = `Uzaicinājums nosūtīts: ${target}. Atlikušas ${left}s`;
+    }
+    if (invSec > 0) line += ` (maks. ${invSec}s).`;
+    else line += ".";
+    if (gameType === "chess" && chessLine) line += ` ${chessLine}`;
+    text.textContent = line;
     if (cancelBtn) cancelBtn.classList.remove("hidden");
   } else if (target) {
     text.textContent = "Termiņš beidzies.";
@@ -908,6 +924,14 @@ function startBoardInviteOutgoingWait(expiresAt, targetUsername, opts = {}) {
   pending.dataset.expiresAt = String(Number(expiresAt) || 0);
   pending.dataset.waitTarget = String(targetUsername || "").trim();
   pending.dataset.waitMode = opts.toHost ? "to_host" : "";
+  pending.dataset.pendingRematch = opts.rematch ? "1" : "";
+  pending.dataset.pendingGameType = String(opts.gameType || "").trim();
+  pending.dataset.pendingChessLine = String(opts.chessClockLine || "").trim();
+  const sec = Math.max(
+    0,
+    Math.round(Number(opts.inviteTimeoutMs) / 1000) || 0
+  );
+  pending.dataset.pendingInviteSec = sec > 0 ? String(sec) : "";
   pending.classList.remove("hidden");
   syncBoardInvitePendingUi();
   boardInviteOutgoingInterval = setInterval(() => {
@@ -929,6 +953,10 @@ function stopBoardInviteOutgoingWait() {
     pending.dataset.expiresAt = "";
     pending.dataset.waitTarget = "";
     pending.dataset.waitMode = "";
+    pending.dataset.pendingRematch = "";
+    pending.dataset.pendingGameType = "";
+    pending.dataset.pendingChessLine = "";
+    pending.dataset.pendingInviteSec = "";
   }
   if (cancelBtn) cancelBtn.classList.add("hidden");
 }
@@ -1684,6 +1712,24 @@ function getChessClockPresetForPvp() {
 function getChessClockPresetForVsBot() {
   const sel = document.getElementById("board-chess-time-preset-vsbot");
   return String(sel?.value || "10+0").trim() || "10+0";
+}
+
+/** Viena rindiņa par šaha laiku (uzaicinājums / gaidīšana) — tā pati loģika kā ienākošā modālī. */
+function formatChessClockHumanLine(payload) {
+  if (!payload || typeof payload !== "object") return "";
+  const pr =
+    String(payload.chessClockPreset || "").trim() ||
+    (payload.chessInitialMs != null
+      ? `${Math.round(Number(payload.chessInitialMs) / 60000)}+${Math.round(
+          Number(payload.chessIncrementMs || 0) / 1000
+        )}`
+      : "");
+  if (!pr) return "";
+  const [a, b] = pr.split("+");
+  const inc = String(b ?? "0").trim();
+  return inc !== "0" && inc !== ""
+    ? `Šaha laiks: ${a} min katram + ${inc} s pēc gājiena.`
+    : `Šaha laiks: ${a} min katram (bez pielikuma).`;
 }
 
 function syncBoardChessTimeRowVisibility() {
@@ -11095,17 +11141,29 @@ function initSocket() {
   socket.on("board.inviteSent", (payload) => {
     const target = String(payload?.target || "").trim();
     const exp = Number(payload?.expiresAt) || Date.now() + 60 * 1000;
+    const gt = String(payload?.type || "").toLowerCase();
+    const chessLine =
+      gt === "chess" ? formatChessClockHumanLine(payload) : "";
     if (target)
       startBoardInviteOutgoingWait(exp, target, {
         toHost: !!payload?.toHost,
+        rematch: !!payload?.rematch,
+        gameType: gt,
+        chessClockLine: chessLine,
+        inviteTimeoutMs: payload?.inviteTimeoutMs,
       });
-    appendGaldaSystemMessage(
-      payload?.rematch
-        ? "Revānša uzaicinājums nosūtīts."
-        : payload?.toHost
-          ? "Pieprasījums nosūtīts saimniekam — gaidi atbildi."
-          : "Uzaicinājums nosūtīts."
+    const sec = Math.max(
+      1,
+      Math.round(Number(payload?.inviteTimeoutMs) / 1000) || 60
     );
+    let sys = payload?.rematch
+      ? `Revānšs nosūtīts — gaidām ${target} līdz ${sec}s.`
+      : payload?.toHost
+        ? `Pieprasījums saimniekam — gaidām līdz ${sec}s.`
+        : `Uzaicinājums nosūtīts — gaidām ${target} līdz ${sec}s.`;
+    if (gt === "chess" && chessLine) sys += ` ${chessLine}`;
+    appendGaldaSystemMessage(sys);
+    appendVzStatusMessage(sys);
   });
   socket.on("board.inviteDeclined", (payload) => {
     stopBoardInviteOutgoingWait();
@@ -11743,20 +11801,9 @@ function showBoardInviteModal(from, type, payload) {
     }
     if (chessTimeEl) {
       if (type === "chess") {
-        const pr =
-          String(payload?.chessClockPreset || "").trim() ||
-          (payload?.chessInitialMs != null
-            ? `${Math.round(Number(payload.chessInitialMs) / 60000)}+${Math.round(
-                Number(payload.chessIncrementMs || 0) / 1000
-              )}`
-            : "");
-        if (pr) {
-          const [a, b] = pr.split("+");
-          const inc = String(b ?? "0").trim();
-          chessTimeEl.textContent =
-            inc !== "0" && inc !== ""
-              ? `Šaha laiks: ${a} min katram + ${inc} s pēc gājiena.`
-              : `Šaha laiks: ${a} min katram (bez pielikuma).`;
+        const line = formatChessClockHumanLine(payload);
+        if (line) {
+          chessTimeEl.textContent = line;
           chessTimeEl.classList.remove("hidden");
         } else {
           chessTimeEl.textContent = "";

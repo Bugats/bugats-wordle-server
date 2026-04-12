@@ -758,6 +758,16 @@ function chessClockPresetLabel(opts) {
   const b = Math.round((Number(opts.incrementMs) || 0) / 1000);
   return `${a}+${b}`;
 }
+
+/** Klientam `board.inviteSent` — tā pati šaha laika informācija kā `board.invite`. */
+function chessClockFieldsForSocket(opts) {
+  if (!opts || typeof opts !== "object") return {};
+  return {
+    chessClockPreset: chessClockPresetLabel(opts),
+    chessInitialMs: opts.initialMsPerSide,
+    chessIncrementMs: opts.incrementMs,
+  };
+}
 const BOARD_GAME_REWARD_XP = 3;
 /** Coins tikai PvP (ne pret botu); 2 spēlētāji — mazāks risks, 3P zole — nedaudz lielāka izmaksa. */
 const BOARD_GAME_REWARD_COINS_2P = 8;
@@ -13113,6 +13123,10 @@ io.on("connection", (socket) => {
       dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
       zoleMode: gameType === "zole" ? zoleMode : undefined,
       expiresAt: invite.expiresAt,
+      inviteTimeoutMs: boardGameInviteTimeoutMs,
+      ...(gameType === "chess" && chessClockOpts
+        ? chessClockFieldsForSocket(chessClockOpts)
+        : {}),
     });
     removeBoardOpenSeatForUser(fromUser.username);
   });
@@ -13242,6 +13256,10 @@ io.on("connection", (socket) => {
         gameType === "dambrete" ? dambreteVariant : undefined,
       expiresAt: invExp,
       toHost: true,
+      inviteTimeoutMs: boardGameInviteTimeoutMs,
+      ...(gameType === "chess" && chessClockOpts
+        ? chessClockFieldsForSocket(chessClockOpts)
+        : {}),
     });
   });
 
@@ -13399,6 +13417,10 @@ io.on("connection", (socket) => {
       zoleMode: gameType === "zole" ? zoleMode : undefined,
       rematch: true,
       expiresAt: remExp,
+      inviteTimeoutMs: boardGameInviteTimeoutMs,
+      ...(gameType === "chess" && remChessOpts
+        ? chessClockFieldsForSocket(remChessOpts)
+        : {}),
     });
   });
 

@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-27-chess-clock-draw-note" />
+  <link rel="stylesheet" href="style.css?v=2026-03-27-board-ux-chess-invite" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1110,7 +1110,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-27-zole3p-rematch-resign-e2e"></script>
+    <script defer src="game.js?v=2026-03-27-board-ux-chess-invite"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1535,7 +1535,7 @@
           <div class="vz-board-invite-form">
             <label for="board-invite-username" class="vz-board-label">Pretinieka lietotājvārds</label>
             <input id="board-invite-username" type="text" placeholder="piemēram: spēlētājs123" autocomplete="username" aria-describedby="board-invite-hint" />
-            <span id="board-invite-hint" class="vz-board-hint">Ievadi tieši tā, kā parādās čatā vai TOP sarakstā. Zolei 3 cilvēkiem vispirms «Izveidot zoles istabu».</span>
+            <span id="board-invite-hint" class="vz-board-hint">Ievadi tieši tā, kā parādās čatā vai TOP sarakstā. Zolei 3 cilvēkiem vispirms «Izveidot zoles istabu». Šaham PvP laiks ir <strong>tā pati izvēle</strong> zemāk — arī profila pogai «Šahs», revānšam un publicētajai vietai.</span>
             <div class="vz-board-chess-time-row" id="board-chess-time-row">
               <label for="board-chess-time-preset" class="vz-board-label">Šaha laiks (PvP)</label>
               <select id="board-chess-time-preset" class="vz-board-chess-time-select" title="Tiek lietots uzaicinājumam, revānšam, atvērtai vietai un profila «Šahs». Izvēle tiek atcerēta šajā ierīcē.">
@@ -1602,7 +1602,7 @@
           </p>
           <p id="board-invite-zole-stake" class="vz-board-invite-stake hidden"></p>
           <p id="board-invite-chess-time" class="vz-board-invite-stake hidden"></p>
-          <p class="vz-board-invite-sub">Uzvaras dod novada un klana punktus</p>
+          <p class="vz-board-invite-sub">Uzvaras dod novada un klana punktus. Šaham augšā redzamais laiks ir tas pats, kas spēlē.</p>
           <p id="board-invite-expires" class="vz-board-invite-expires hidden" aria-live="polite"></p>
           <div class="vz-board-invite-actions">
             <button id="board-invite-accept" type="button">Pieņemt</button>
