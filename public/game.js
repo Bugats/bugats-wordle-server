@@ -1009,6 +1009,7 @@ function syncChessDrawControls() {
   const hint = document.getElementById("board-chess-draw-hint");
   const offerBtn = document.getElementById("board-chess-draw-offer");
   const acceptBtn = document.getElementById("board-chess-draw-accept");
+  const declineBtn = document.getElementById("board-chess-draw-decline");
   const claimBtn = document.getElementById("board-chess-claim-draw");
   if (!wrap || !offerBtn || !acceptBtn || !claimBtn) return;
 
@@ -1036,7 +1037,10 @@ function syncChessDrawControls() {
     offerFrom.toLowerCase() !== me.toLowerCase();
 
   offerBtn.classList.toggle("hidden", !myTurn);
-  acceptBtn.classList.toggle("hidden", !(myTurn && offeredToMe));
+  /** Pieņemt / noraidīt drīkst jebkurā brīdī, kamēr piedāvājums ir aktīvs (FIDE). */
+  acceptBtn.classList.toggle("hidden", !offeredToMe);
+  if (declineBtn)
+    declineBtn.classList.toggle("hidden", !offeredToMe);
   const canClaim =
     myTurn &&
     !!(ds?.claimFifty || ds?.claimThreefold);
@@ -1045,13 +1049,17 @@ function syncChessDrawControls() {
   if (hint) {
     const parts = [];
     if (offerFrom) {
-      parts.push(
-        offeredToMe && myTurn
-          ? `${offerFrom} piedāvā neizšķirtu — vari pieņemt.`
-          : offerFrom.toLowerCase() === me.toLowerCase()
-            ? "Tu piedāvāji neizšķirtu — gaida pretinieka atbildi."
-            : `${offerFrom} piedāvā neizšķirtu.`
-      );
+      let offerLine;
+      if (offeredToMe && myTurn) {
+        offerLine = `${offerFrom} piedāvā neizšķirtu — vari pieņemt vai noraidīt.`;
+      } else if (offeredToMe && !myTurn) {
+        offerLine = `${offerFrom} piedāvā neizšķirtu — vari pieņemt vai noraidīt arī ārpus sava gājiena.`;
+      } else if (offerFrom.toLowerCase() === me.toLowerCase()) {
+        offerLine = "Tu piedāvāji neizšķirtu — gaida pretinieka atbildi.";
+      } else {
+        offerLine = `${offerFrom} piedāvā neizšķirtu.`;
+      }
+      parts.push(offerLine);
     }
     if (typeof ds?.halfMoveClock === "number") {
       parts.push(`Pusgājienu skaitītājs (50 gāj. likums): ${ds.halfMoveClock}/100.`);
@@ -1841,6 +1849,7 @@ function showBoardGameResult(payload) {
   const eyebrow = document.getElementById("board-result-eyebrow");
   const titleEl = document.getElementById("board-result-title");
   const detailEl = document.getElementById("board-result-detail");
+  const zoleNoteEl = document.getElementById("board-result-zole-note");
   const coinsEl = document.getElementById("board-result-coins");
   if (!overlay || !titleEl || !detailEl) return;
 
@@ -2018,6 +2027,21 @@ function showBoardGameResult(payload) {
   if (eyebrow) eyebrow.textContent = eyebrowText;
   titleEl.textContent = title;
   detailEl.textContent = detail;
+
+  if (zoleNoteEl) {
+    if (
+      gameType === "zole" &&
+      !vsBot &&
+      boardState.zoleMode === "online_2p"
+    ) {
+      zoleNoteEl.textContent =
+        "Tabula — zoles punkti mačā. Coins — virtuālā bilance profilā; šeit tās uzvarai vai zaudējumam aprēķina pēc tabulas iznākuma (nav atsevišķas likmes par punktu kā 3 cilvēku istabā).";
+      zoleNoteEl.classList.remove("hidden");
+    } else {
+      zoleNoteEl.textContent = "";
+      zoleNoteEl.classList.add("hidden");
+    }
+  }
 
   if (coinsEl) {
     if (vsBot) {
@@ -10361,6 +10385,11 @@ function initSocket() {
       appendVzStatusMessage(
         "Savienojums atjaunots — čats, duēļi un galda spēles sinhronizējas ar serveri."
       );
+      if (boardState?.gameId) {
+        appendVzStatusMessage(
+          "Ja esi vidū galda spēlē, gaidi īsu brīdi — serveris var nosūtīt atjauninātu stāvokli (board.resume)."
+        );
+      }
     } else {
       appendVzStatusMessage(
         "Pieslēgts serverim — viss (vārdi, čats, galds) darbojas reāllaikā."
@@ -11106,7 +11135,7 @@ function initSocket() {
   socket.on("board.resume", (payload) => {
     startBoardGame(payload);
     appendVzStatusMessage(
-      "Galda spēle atjaunota no servera — vari turpināt (tas pats savienojums kā čatam un vārdiem)."
+      "Galda spēle sinhronizēta ar serveri — vari turpināt. Ja iepriekš nebija «atvienots» ziņojuma, tas ir normāli pēc pārlādēšanas vai tīkla pārslēgšanās."
     );
     const myIdx = boardGamePlayerIndex(payload?.players || [], state.username);
     const t = payload?.type || "dambrete";
@@ -12611,6 +12640,10 @@ function bindBoardGames() {
   document.getElementById("board-chess-draw-accept")?.addEventListener("click", () => {
     if (!boardState.gameId || !state.socket || boardState.type !== "chess") return;
     state.socket.emit("board.chessDrawAccept", { gameId: boardState.gameId });
+  });
+  document.getElementById("board-chess-draw-decline")?.addEventListener("click", () => {
+    if (!boardState.gameId || !state.socket || boardState.type !== "chess") return;
+    state.socket.emit("board.chessDrawDecline", { gameId: boardState.gameId });
   });
   document.getElementById("board-chess-claim-draw")?.addEventListener("click", () => {
     if (!boardState.gameId || !state.socket || boardState.type !== "chess") return;

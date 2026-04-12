@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-04-07-zole-buried-kitty-eyes" />
+  <link rel="stylesheet" href="style.css?v=2026-03-27-backlog-chess-zole-metrics" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1110,7 +1110,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-04-07-zole-buried-kitty-eyes"></script>
+    <script defer src="game.js?v=2026-03-27-backlog-chess-zole-metrics"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1656,6 +1656,12 @@
               </button>
               <button
                 type="button"
+                id="board-chess-draw-decline"
+                class="vz-board-chess-draw-btn vz-board-chess-draw-btn--decline hidden">
+                Noraidīt neizšķirtu
+              </button>
+              <button
+                type="button"
                 id="board-chess-claim-draw"
                 class="vz-board-chess-draw-btn vz-board-chess-draw-btn--claim hidden"
                 title="Ja ir izpildīts 50 gājienu likums vai trīskāršs atkārtojums, vari pieteikt neizšķirtu savā gājienā.">
@@ -1690,6 +1696,7 @@
         <p id="board-result-eyebrow" class="vz-board-result-eyebrow"></p>
         <p id="board-result-title" class="vz-board-result-title"></p>
         <p id="board-result-detail" class="vz-board-result-detail"></p>
+        <p id="board-result-zole-note" class="vz-board-result-zole-note hidden" aria-live="polite"></p>
         <p id="board-result-coins" class="vz-board-result-coins hidden"></p>
         <p id="board-result-rematch-status" class="vz-board-result-rematch-status hidden" aria-live="polite"></p>
         <div class="vz-board-result-actions">

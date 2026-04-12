@@ -6507,7 +6507,9 @@ const logger = pino(
 app.use(
   pinoHttp({
     logger,
-    autoLogging: { ignore: (req) => req.url === "/health" },
+    autoLogging: {
+      ignore: (req) => req.url === "/health" || req.url === "/metrics",
+    },
     redact: ["req.headers.authorization"],
   })
 );
@@ -6859,6 +6861,41 @@ const io = new Server(httpServer, {
       : { origin: CORS_ORIGINS, methods: ["GET", "POST"], credentials: true },
 });
 ioServerRef = io;
+
+/** Viegls monitoringa punkts (aktīvas galda spēles u.c.). Ražošanā iestatiet METRICS_TOKEN un sūtiet Authorization: Bearer <token>. */
+app.get("/metrics", (req, res) => {
+  const secret = String(process.env.METRICS_TOKEN || "").trim();
+  if (secret) {
+    const h = String(req.headers.authorization || "")
+      .replace(/^Bearer\s+/i, "")
+      .trim();
+    if (h !== secret) {
+      return res.status(401).json({ message: "Nav piekļuves." });
+    }
+  } else if (process.env.NODE_ENV === "production") {
+    return res.status(404).json({ message: "Nav atrasts." });
+  }
+  let activeBoardGames = 0;
+  let activeChess = 0;
+  let activeZole = 0;
+  let activeDambrete = 0;
+  for (const g of boardGames.values()) {
+    if (!g || g.status !== "active") continue;
+    activeBoardGames++;
+    if (g.type === "chess") activeChess++;
+    else if (g.type === "zole") activeZole++;
+    else if (g.type === "dambrete") activeDambrete++;
+  }
+  res.json({
+    ok: true,
+    now: Date.now(),
+    activeBoardGames,
+    activeChess,
+    activeZole,
+    activeDambrete,
+    onlineUsers: onlineBySocket.size,
+  });
+});
 
 if (process.env.NODE_ENV !== "test") {
   setInterval(() => {
@@ -14237,6 +14274,7 @@ io.on("connection", (socket) => {
         message: "Pret botu neizšķirtu nevar piedāvāt.",
       });
     if (!game.players.includes(user.username)) return;
+    /** Piedāvāt drīkst savā gājienā (FIDE: piedāvā gājiena laikā). */
     const turnIdx = game.turn;
     const currentPlayer = game.players[turnIdx];
     if (currentPlayer !== user.username)
@@ -14244,6 +14282,27 @@ io.on("connection", (socket) => {
         message: "Neizšķirtu var piedāvāt tikai savā gājienā.",
       });
     game.chessDrawOfferFrom = user.username;
+    game.lastMoveAt = Date.now();
+    emitChessDrawState(io, game);
+  });
+
+  socket.on("board.chessDrawDecline", (payload) => {
+    const user = socket.data.user;
+    if (!user) return;
+    const gameId = payload?.gameId;
+    const game = gameId ? boardGames.get(gameId) : null;
+    if (!game || game.status !== "active" || game.type !== "chess") return;
+    if (game.vsBot) return;
+    if (!game.players.includes(user.username)) return;
+    const from = game.chessDrawOfferFrom;
+    if (
+      !from ||
+      String(from).toLowerCase() === String(user.username).toLowerCase()
+    )
+      return socket.emit("board.error", {
+        message: "Nav aktīva neizšķirta piedāvājuma, ko noraidīt.",
+      });
+    game.chessDrawOfferFrom = null;
     game.lastMoveAt = Date.now();
     emitChessDrawState(io, game);
   });
