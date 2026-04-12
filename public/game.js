@@ -1007,6 +1007,7 @@ function ingestChessDrawStatePayload(s) {
 function syncChessDrawControls() {
   const wrap = document.getElementById("board-chess-draw-ui");
   const hint = document.getElementById("board-chess-draw-hint");
+  const moveRule = document.getElementById("board-chess-draw-move-rule");
   const offerBtn = document.getElementById("board-chess-draw-offer");
   const acceptBtn = document.getElementById("board-chess-draw-accept");
   const declineBtn = document.getElementById("board-chess-draw-decline");
@@ -1019,6 +1020,7 @@ function syncChessDrawControls() {
     boardState.fen &&
     !boardState.vsBot;
   wrap.classList.toggle("hidden", !ingame);
+  if (moveRule) moveRule.classList.toggle("hidden", !ingame);
   if (!ingame) {
     if (hint) hint.classList.add("hidden");
     return;
@@ -1616,6 +1618,35 @@ function getSelectedBoardZoleMode() {
   if (v === "vs_bot") return "vs_bot";
   if (v === "online_2p") return "online_2p";
   return "online_3p";
+}
+
+const CHESS_PVP_PRESET_STORAGE = "vz_chess_pvp_preset_v1";
+const CHESS_BOT_PRESET_STORAGE = "vz_chess_bot_preset_v1";
+
+function persistChessPresetSelect(sel, storageKey) {
+  if (!sel || !storageKey) return;
+  try {
+    localStorage.setItem(storageKey, String(sel.value || "").trim());
+  } catch {}
+}
+
+function chessSelectHasPreset(selectEl, preset) {
+  const v = String(preset || "").trim();
+  if (!selectEl || !v) return false;
+  return Array.from(selectEl.options || []).some((o) => o.value === v);
+}
+
+function applyChessPresetFromStorage() {
+  const pvp = document.getElementById("board-chess-time-preset");
+  const bot = document.getElementById("board-chess-time-preset-vsbot");
+  try {
+    const pv = String(localStorage.getItem(CHESS_PVP_PRESET_STORAGE) || "").trim();
+    if (pvp && chessSelectHasPreset(pvp, pv)) pvp.value = pv;
+  } catch {}
+  try {
+    const bv = String(localStorage.getItem(CHESS_BOT_PRESET_STORAGE) || "").trim();
+    if (bot && chessSelectHasPreset(bot, bv)) bot.value = bv;
+  } catch {}
 }
 
 function getChessClockPresetForPvp() {
@@ -11211,6 +11242,15 @@ function initSocket() {
     if (boardState.type === "chess" && payload?.chessDrawState) {
       ingestChessDrawStatePayload(payload.chessDrawState);
     }
+    if (
+      boardState.type === "chess" &&
+      !boardState.vsBot &&
+      payload?.chessDrawInvalidatedByMove
+    ) {
+      appendGaldaSystemMessage(
+        "Neizšķirta piedāvājums atcelts — pēc gājiena tas vairs nav spēkā (vari piedāvāt no jauna savā gājienā)."
+      );
+    }
     boardState.selectedCell = null;
     boardState.chessPromotionPick = null;
     // Obligāti notīrīt — pretējā gadījumā paliek iepriekšējās kārtas jumps/moves
@@ -12525,6 +12565,17 @@ function bindBoardGames() {
     inviteChess.addEventListener("click", () => doInvite("chess"));
   const inviteZole = document.getElementById("board-invite-zole");
   if (inviteZole) inviteZole.addEventListener("click", () => doInvite("zole"));
+  applyChessPresetFromStorage();
+  document
+    .getElementById("board-chess-time-preset")
+    ?.addEventListener("change", (ev) => {
+      persistChessPresetSelect(ev.target, CHESS_PVP_PRESET_STORAGE);
+    });
+  document
+    .getElementById("board-chess-time-preset-vsbot")
+    ?.addEventListener("change", (ev) => {
+      persistChessPresetSelect(ev.target, CHESS_BOT_PRESET_STORAGE);
+    });
   const vsBotDambrete = document.getElementById("board-vsbot-dambrete");
   const vsBotChess = document.getElementById("board-vsbot-chess");
   const doVsBot = (type) => {
@@ -12693,7 +12744,11 @@ function bindBoardGames() {
       if (target && state.socket) {
         showBoardModal();
         if (inviteUsername) inviteUsername.value = target;
-        state.socket.emit("board.invite", { target, type: "chess" });
+        state.socket.emit("board.invite", {
+          target,
+          type: "chess",
+          chessClockPreset: getChessClockPresetForPvp(),
+        });
       }
     });
   if (ppInviteZole)

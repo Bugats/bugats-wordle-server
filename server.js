@@ -713,12 +713,24 @@ function parseChessClockOptsFromPayload(payload) {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "");
+  if (preset === "1+0" || preset === "1_0")
+    return { initialMsPerSide: 60 * 1000, incrementMs: 0 };
+  if (preset === "2+1" || preset === "2_1")
+    return { initialMsPerSide: 2 * 60 * 1000, incrementMs: 1000 };
+  if (preset === "3+0" || preset === "3_0")
+    return { initialMsPerSide: 3 * 60 * 1000, incrementMs: 0 };
+  if (preset === "5+0" || preset === "5_0")
+    return { initialMsPerSide: 5 * 60 * 1000, incrementMs: 0 };
+  if (preset === "5+3" || preset === "5_3")
+    return { initialMsPerSide: 5 * 60 * 1000, incrementMs: 3 * 1000 };
   if (preset === "5+5" || preset === "5_5")
     return { initialMsPerSide: 5 * 60 * 1000, incrementMs: 5 * 1000 };
   if (preset === "10+5" || preset === "10_5")
     return { initialMsPerSide: 10 * 60 * 1000, incrementMs: 5 * 1000 };
   if (preset === "15+10" || preset === "15_10")
     return { initialMsPerSide: 15 * 60 * 1000, incrementMs: 10 * 1000 };
+  if (preset === "25+10" || preset === "25_10")
+    return { initialMsPerSide: 25 * 60 * 1000, incrementMs: 10 * 1000 };
   if (preset === "3+2" || preset === "3_2")
     return { initialMsPerSide: 3 * 60 * 1000, incrementMs: 2 * 1000 };
   if (preset === "10+0" || preset === "10_0")
@@ -1393,6 +1405,7 @@ function playBoardBotMove(io, game) {
     game.fen = chess.fen();
     game.turn = 1 - game.turn;
     game.moves.push({ san: m.san, by: BOARD_BOT_USERNAME, ts: Date.now() });
+    const botHadDrawOffer = !!game.chessDrawOfferFrom;
     game.chessDrawOfferFrom = null;
     if (chess.isCheckmate() || chess.isStalemate() || chess.isDraw()) {
       const winner = chess.isCheckmate()
@@ -1417,6 +1430,7 @@ function playBoardBotMove(io, game) {
         fen: game.fen,
         turn: game.turn,
         move: m.san,
+        chessDrawInvalidatedByMove: botHadDrawOffer || undefined,
         chessClock: chessClockPayload(game),
         chessDrawState: chessDrawStatePayload(game),
       });
@@ -14075,6 +14089,7 @@ io.on("connection", (socket) => {
       game.moves.push({ san: m.san, by: user.username, ts: Date.now() });
       game.turn = 1 - game.turn;
       game.lastMoveAt = Date.now();
+      const hadChessDrawOffer = !!game.chessDrawOfferFrom;
       game.chessDrawOfferFrom = null;
       const chessEmit = game.vsBot
         ? (ev, p) => getSocketByUsername(game.players[0])?.emit(ev, p)
@@ -14126,6 +14141,7 @@ io.on("connection", (socket) => {
           move: m.san,
           chessClock: chessClockPayload(game),
           chessDrawState: chessDrawStatePayload(game),
+          chessDrawInvalidatedByMove: hadChessDrawOffer || undefined,
         });
         if (game.vsBot && game.turn === 1)
           setImmediate(() => playBoardBotMove(io, game));

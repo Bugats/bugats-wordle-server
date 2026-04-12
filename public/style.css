@@ -6100,6 +6100,13 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   line-height: 1.4;
   color: rgba(244, 244, 245, 0.88);
 }
+.vz-board-chess-draw-move-rule {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(244, 244, 245, 0.72);
+  font-style: italic;
+}
 .vz-board-chess-draw-btns {
   display: flex;
   flex-wrap: wrap;

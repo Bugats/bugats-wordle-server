@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-27-backlog-chess-zole-metrics" />
+  <link rel="stylesheet" href="style.css?v=2026-03-27-chess-clock-draw-note" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1110,7 +1110,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-27-backlog-chess-zole-metrics"></script>
+    <script defer src="game.js?v=2026-03-27-chess-clock-draw-note"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1444,12 +1444,18 @@
             <div class="vz-board-chess-time-row vz-board-chess-time-row--vsbot" id="board-chess-time-row-vsbot">
               <label for="board-chess-time-preset-vsbot" class="vz-board-label">Šaha laiks (pret botu)</label>
               <select id="board-chess-time-preset-vsbot" class="vz-board-chess-time-select">
-                <option value="10+0">10 min + 0 s</option>
-                <option value="15+0">15 min + 0 s</option>
-                <option value="5+5">5 min + 5 s</option>
-                <option value="10+5">10 min + 5 s</option>
-                <option value="15+10">15 min + 10 s</option>
+                <option value="1+0">1 min + 0 s (bullet)</option>
+                <option value="2+1">2 min + 1 s</option>
+                <option value="3+0">3 min + 0 s</option>
                 <option value="3+2">3 min + 2 s</option>
+                <option value="5+0">5 min + 0 s</option>
+                <option value="5+3">5 min + 3 s</option>
+                <option value="5+5">5 min + 5 s</option>
+                <option value="10+0">10 min + 0 s</option>
+                <option value="10+5">10 min + 5 s</option>
+                <option value="15+0">15 min + 0 s</option>
+                <option value="15+10">15 min + 10 s</option>
+                <option value="25+10">25 min + 10 s</option>
               </select>
             </div>
           </div>
@@ -1532,13 +1538,19 @@
             <span id="board-invite-hint" class="vz-board-hint">Ievadi tieši tā, kā parādās čatā vai TOP sarakstā. Zolei 3 cilvēkiem vispirms «Izveidot zoles istabu».</span>
             <div class="vz-board-chess-time-row" id="board-chess-time-row">
               <label for="board-chess-time-preset" class="vz-board-label">Šaha laiks (PvP)</label>
-              <select id="board-chess-time-preset" class="vz-board-chess-time-select" title="Tiek lietots, kad izsūti šaha uzaicinājumu vai revānšu.">
-                <option value="10+0">10 min + 0 s (klasika)</option>
-                <option value="15+0">15 min + 0 s</option>
+              <select id="board-chess-time-preset" class="vz-board-chess-time-select" title="Tiek lietots uzaicinājumam, revānšam, atvērtai vietai un profila «Šahs». Izvēle tiek atcerēta šajā ierīcē.">
+                <option value="1+0">1 min + 0 s (bullet)</option>
+                <option value="2+1">2 min + 1 s</option>
+                <option value="3+0">3 min + 0 s</option>
+                <option value="3+2">3 min + 2 s</option>
+                <option value="5+0">5 min + 0 s</option>
+                <option value="5+3">5 min + 3 s</option>
                 <option value="5+5">5 min + 5 s</option>
+                <option value="10+0">10 min + 0 s (klasika)</option>
                 <option value="10+5">10 min + 5 s</option>
+                <option value="15+0">15 min + 0 s</option>
                 <option value="15+10">15 min + 10 s</option>
-                <option value="3+2">3 min + 2 s (ātri)</option>
+                <option value="25+10">25 min + 10 s</option>
               </select>
             </div>
             <div class="vz-board-invite-btns">
@@ -1644,6 +1656,9 @@
             role="group"
             aria-label="Šaha neizšķirts">
             <p id="board-chess-draw-hint" class="vz-board-chess-draw-hint hidden" aria-live="polite"></p>
+            <p id="board-chess-draw-move-rule" class="vz-board-chess-draw-move-rule hidden">
+              Pēc katra gājiena aktivais neizšķirta piedāvājums tiek atcelts — ja gribi vēlreiz, piedāvā no jauna pēc tam, kad atkal ir tavs gājiens.
+            </p>
             <div class="vz-board-chess-draw-btns">
               <button type="button" id="board-chess-draw-offer" class="vz-board-chess-draw-btn">
                 Piedāvāt neizšķirtu
