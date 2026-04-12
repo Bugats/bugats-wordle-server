@@ -11138,25 +11138,36 @@ function initSocket() {
     const target = String(payload?.target || "").trim();
     const rem = !!payload?.rematch;
     const me = String(state.username || "").trim().toLowerCase();
+    const invSec = Math.max(
+      1,
+      Math.round(Number(payload?.inviteTimeoutMs) / 1000) || 60
+    );
     if (from && me === from.toLowerCase()) {
-      appendGaldaSystemMessage(
-        rem
-          ? `${target || "Pretinieks"} neatbildēja uz revānšu (60s).`
-          : `${target || "Pretinieks"} neatbildēja uz uzaicinājumu (60s).`
-      );
+      const line = rem
+        ? `${target || "Pretinieks"} neatbildēja uz revānšu (${invSec}s).`
+        : `${target || "Pretinieks"} neatbildēja uz uzaicinājumu (${invSec}s).`;
+      appendGaldaSystemMessage(line);
+      appendVzStatusMessage(line);
     } else if (target && me === target.toLowerCase()) {
       appendGaldaSystemMessage(
-        "Uzaicinājuma termiņš beidzies — vari sūtīt jaunu vai gaidīt citu."
+        `Uzaicinājuma termiņš beidzies (${invSec}s) — vari sūtīt jaunu vai gaidīt citu.`
+      );
+      appendVzStatusMessage(
+        `Galda uzaicinājums beidzies (${invSec}s) — vari mēģināt vēlreiz.`
       );
     }
   });
   socket.on("board.zoleThirdInviteTimedOut", (payload) => {
     const t = String(payload?.target || "").trim();
-    appendGaldaSystemMessage(
-      t
-        ? `Trešā vieta (${t}) neatbildēja 90s — vari uzaicināt citu.`
-        : "Trešā vieta neatbildēja 90s — vari uzaicināt citu."
+    const sec = Math.max(
+      1,
+      Math.round(Number(payload?.thirdInviteTtlMs) / 1000) || 90
     );
+    const line = t
+      ? `Trešā vieta (${t}) neatbildēja ${sec}s — vari uzaicināt citu.`
+      : `Trešā vieta neatbildēja ${sec}s — vari uzaicināt citu.`;
+    appendGaldaSystemMessage(line);
+    appendVzStatusMessage(line);
   });
   socket.on("board.zoleThirdInviteSent", () => {
     appendGaldaSystemMessage("Zoles uzaicinājums trešajam spēlētājam nosūtīts.");

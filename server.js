@@ -683,7 +683,8 @@ function getDuelOpponent(duel, username) {
 }
 
 // ======== GALDA SPĒLES (dambrete, šahs) ========
-const BOARD_GAME_INVITE_TIMEOUT_MS = 60 * 1000; // 60s
+/** Testos var samazināt ar __testHooks.setBoardTimeoutsForTestOnly */
+let boardGameInviteTimeoutMs = 60 * 1000; // 60s
 const _BOARD_GAME_MOVE_TIMEOUT_MS = 5 * 60 * 1000; // 5 min per move (resign if exceeded) — rezervei
 /** Šahs PvP / vs bot (tikai cilvēkam): atlikušais laiks katram spēlētājam (ms). */
 const CHESS_CLOCK_DEFAULT_MS = 10 * 60 * 1000; // 10 min katram (noklusējums)
@@ -988,6 +989,7 @@ function tickExpiredBoardInvites(io) {
       from,
       target,
       rematch: !!v.rematch,
+      inviteTimeoutMs: boardGameInviteTimeoutMs,
     };
     if (from) getSocketByUsername(from)?.emit("board.inviteTimedOut", payload);
     if (target) getSocketByUsername(target)?.emit("board.inviteTimedOut", payload);
@@ -1020,6 +1022,7 @@ function expireZole3pThirdSeatInvites(io) {
       getSocketByUsername(host)?.emit("board.zoleThirdInviteTimedOut", {
         target,
         lobbyId: lobby.id,
+        thirdInviteTtlMs: zole3pThirdInviteTtlMs,
       });
     }
   }
@@ -1049,8 +1052,8 @@ const userToZole3pLobby = new Map();
 const zole3pSeatInviteById = new Map();
 
 const ZOLE_3P_LOBBY_TTL_MS = 30 * 60 * 1000;
-/** Trešā spēlētāja uzaicinājuma noildze (atsevišķi no istabas TTL). */
-const ZOLE_3P_THIRD_INVITE_TTL_MS = 90 * 1000;
+/** Trešā spēlētāja uzaicinājuma noildze (atsevišķi no istabas TTL). Testos — __testHooks. */
+let zole3pThirdInviteTtlMs = 90 * 1000;
 
 /** Set when Socket.IO server is created; used to broadcast open Zole 3P lobby list */
 let ioServerRef = null;
@@ -13046,7 +13049,7 @@ io.on("connection", (socket) => {
       from: fromUser.username,
       target: targetUser.username,
       type: gameType,
-      expiresAt: Date.now() + BOARD_GAME_INVITE_TIMEOUT_MS,
+      expiresAt: Date.now() + boardGameInviteTimeoutMs,
     };
     const chessClockOpts =
       gameType === "chess" ? parseChessClockOptsFromPayload(payload) : null;
@@ -13180,7 +13183,7 @@ io.on("connection", (socket) => {
       gameType === "chess"
         ? open.chessClockOpts || parseChessClockOptsFromPayload(payload)
         : null;
-    const invExp = Date.now() + BOARD_GAME_INVITE_TIMEOUT_MS;
+    const invExp = Date.now() + boardGameInviteTimeoutMs;
     boardInviteVariantByPair.set(
       boardInvitePairKey(joiner.username, hostName),
       {
@@ -13329,7 +13332,7 @@ io.on("connection", (socket) => {
       gameType === "dambrete"
         ? parseDambreteVariantFromPayload(payload)
         : "russian";
-    const remExp = Date.now() + BOARD_GAME_INVITE_TIMEOUT_MS;
+    const remExp = Date.now() + boardGameInviteTimeoutMs;
     const remChessOpts =
       gameType === "chess" ? parseChessClockOptsFromPayload(payload) : null;
     boardInviteVariantByPair.set(
@@ -13548,7 +13551,7 @@ io.on("connection", (socket) => {
       });
     const inviteId3 = crypto.randomBytes(6).toString("hex");
     lobby.invitedSeat = targetUser.username;
-    lobby.thirdInviteExpiresAt = Date.now() + ZOLE_3P_THIRD_INVITE_TTL_MS;
+    lobby.thirdInviteExpiresAt = Date.now() + zole3pThirdInviteTtlMs;
     zole3pSeatInviteById.set(inviteId3, {
       lobbyId,
       inviteeUsername: targetUser.username,
@@ -13565,7 +13568,8 @@ io.on("connection", (socket) => {
         zoleLobbyId: lobbyId,
         zoleLobbyPlayers: lobby.players.slice(),
         zole3pCoinsPerPoint: clampZole3pCoinsPerPoint(lobby.zole3pCoinsPerPoint),
-        expiresAt: lobby.thirdInviteExpiresAt || Date.now() + ZOLE_3P_THIRD_INVITE_TTL_MS,
+        expiresAt:
+          lobby.thirdInviteExpiresAt || Date.now() + zole3pThirdInviteTtlMs,
       });
     }
     socket.emit("board.zoleThirdInviteSent", {
@@ -14603,6 +14607,27 @@ const __testHooks = {
     grantRegionRewardForCompetitiveWin(u, basePoints);
     saveUsers(USERS);
     return true;
+  },
+  /** E2E: īsāki uzaicinājumu termiņi (ms). */
+  setBoardTimeoutsForTestOnly(inviteMs, zoleThirdMs) {
+    if (process.env.NODE_ENV !== "test") return;
+    const i = Math.floor(Number(inviteMs) || 0);
+    const z = Math.floor(Number(zoleThirdMs) || 0);
+    if (i >= 500) boardGameInviteTimeoutMs = i;
+    if (z >= 500) zole3pThirdInviteTtlMs = z;
+  },
+  resetBoardTimeoutsForTestOnly() {
+    if (process.env.NODE_ENV !== "test") return;
+    boardGameInviteTimeoutMs = 60 * 1000;
+    zole3pThirdInviteTtlMs = 90 * 1000;
+  },
+  /** E2E: tā kā test vidē nav 1s setInterval, manuāli izpilda uzaicinājumu noildzi. */
+  processBoardIdleTimersForTestOnly() {
+    if (process.env.NODE_ENV !== "test") return;
+    const io = ioServerRef;
+    if (!io) return;
+    tickExpiredBoardInvites(io);
+    expireZole3pThirdSeatInvites(io);
   },
 };
 
