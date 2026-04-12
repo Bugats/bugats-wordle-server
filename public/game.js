@@ -826,6 +826,33 @@ let lastBoardResultSnapshot = null;
 /** Lai «[Galda spēles] Tava kārta» nerādītos atkārtoti katram board.move (piem., šaha pulkstenis). */
 let _lastGaldaTurnNotifyKey = null;
 
+/** Pēc nosūtīta gājiena: ja ilgi nav `board.move`, vienu reizi statusa kanālā (tīkla glitch bez disconnect). */
+let _boardMoveResponseWaitGen = 0;
+let _boardMoveResponseWaitTimer = null;
+const BOARD_MOVE_RESPONSE_WAIT_MS = 4500;
+
+function disarmBoardMoveResponseWait() {
+  if (_boardMoveResponseWaitTimer != null) {
+    clearTimeout(_boardMoveResponseWaitTimer);
+    _boardMoveResponseWaitTimer = null;
+  }
+  _boardMoveResponseWaitGen++;
+}
+
+function armBoardMoveResponseWait() {
+  if (!state.socket?.connected || !boardState.gameId) return;
+  disarmBoardMoveResponseWait();
+  const capturedGen = _boardMoveResponseWaitGen;
+  _boardMoveResponseWaitTimer = setTimeout(() => {
+    _boardMoveResponseWaitTimer = null;
+    if (capturedGen !== _boardMoveResponseWaitGen) return;
+    if (!boardState.gameId) return;
+    appendVzStatusMessage(
+      "Gājiens nosūtīts — vēl nav servera atbildes. Ja laukums ilgi nemainās, pārbaudi tīklu; pēc atjaunošanās spēle parasti sinhronizējas (piem. board.resume)."
+    );
+  }, BOARD_MOVE_RESPONSE_WAIT_MS);
+}
+
 let boardInviteOutgoingInterval = null;
 let boardInviteIncomingInterval = null;
 let boardResultAutoCloseTimer = null;
@@ -10511,6 +10538,7 @@ function initSocket() {
   });
 
   socket.on("disconnect", (reason) => {
+    disarmBoardMoveResponseWait();
     if (reason === "io client disconnect") return;
     const inGalds =
       !!(boardState?.gameId || zole3pLobbySnapshot?.zoleLobby);
@@ -11152,6 +11180,7 @@ function initSocket() {
     syncBoardOpenSeatsPanelVisibility();
   });
   socket.on("board.error", (payload) => {
+    disarmBoardMoveResponseWait();
     appendGaldaSystemMessage(payload?.message || "Galda spēles kļūda.");
   });
   socket.on("board.chessDrawState", (payload) => {
@@ -11206,6 +11235,7 @@ function initSocket() {
   });
   socket.on("board.move", (payload) => {
     if (payload?.gameId !== boardState.gameId) return;
+    disarmBoardMoveResponseWait();
     boardLegalMovesFetchId++;
     boardMovesFetchChain = Promise.resolve();
     boardState.board = payload?.board || boardState.board;
@@ -11336,6 +11366,7 @@ function initSocket() {
         resultPayload.zole3pCoinsPerPoint = boardState.zole3pCoinsPerPoint;
       }
     }
+    disarmBoardMoveResponseWait();
     boardState.gameId = null;
     _lastGaldaTurnNotifyKey = null;
     const won =
@@ -11758,6 +11789,7 @@ function hideBoardInviteModal() {
 }
 
 function startBoardGame(payload) {
+  disarmBoardMoveResponseWait();
   _lastGaldaTurnNotifyKey = null;
   hideBoardResultOverlay();
   boardLegalMovesFetchId++;
@@ -11823,6 +11855,7 @@ function startBoardGame(payload) {
 }
 
 function hideBoardGameArea() {
+  disarmBoardMoveResponseWait();
   stopChessClockTick();
   if (window.VZZoleBoardTrickHold?.reset) {
     window.VZZoleBoardTrickHold.reset();
@@ -12187,6 +12220,7 @@ function renderBoardGame() {
             gameId: boardState.gameId,
             card,
           });
+          armBoardMoveResponseWait();
         },
         {
           zoleMode: boardState.zoleMode,
@@ -12213,6 +12247,7 @@ function renderBoardGame() {
               gameId: boardState.gameId,
               bid,
             });
+            armBoardMoveResponseWait();
           },
           onDiscard: (pair) => {
             if (!state.socket || !boardState.gameId || pair.length !== 2) return;
@@ -12220,6 +12255,7 @@ function renderBoardGame() {
               gameId: boardState.gameId,
               discard: pair,
             });
+            armBoardMoveResponseWait();
           },
         }
       );
@@ -12350,6 +12386,7 @@ async function handleChessCellClick(r, c, isPiece) {
       gameId: boardState.gameId,
       san: list[0].san,
     });
+    armBoardMoveResponseWait();
     boardState.selectedCell = null;
     boardState.chessPromotionPick = null;
     return;
@@ -12375,6 +12412,7 @@ async function handleChessCellClick(r, c, isPiece) {
 function emitChessPromotionSan(san) {
   if (!state.socket || !boardState.gameId || !san) return;
   state.socket.emit("board.move", { gameId: boardState.gameId, san });
+  armBoardMoveResponseWait();
   boardState.selectedCell = null;
   boardState.chessPromotionPick = null;
   renderBoardGame();
@@ -12460,6 +12498,7 @@ async function handleDambreteCellClick(r, c, isPiece) {
     return;
   }
   state.socket.emit("board.move", { gameId: boardState.gameId, move });
+  armBoardMoveResponseWait();
   boardState.selectedCell = null;
 }
 
