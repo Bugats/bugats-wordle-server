@@ -15,3 +15,13 @@
 /twa/app-release-*.apk
 /twa/app-release-*.apk.idsig
 /twa/app-release-unsigned-aligned.apk
+
+# Node (atkarības necommitojam — izmanto `npm ci` / `npm install`)
+node_modules/
+
+# Lokālie / izvilkumi no servera (datu faili paliek uz diska, bet ne PR)
+/users.json
+/seasons.json
+/wheel.json
+/tournaments.json
+/tournaments.brackets.json
