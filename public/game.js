@@ -20,7 +20,6 @@ const VZDuel = window.VZDuel || {};
 const VZTournaments = window.VZTournaments || {};
 
 const {
-  ADMIN_SET,
   AUTH_KEYS,
   DISALLOWED_KEYS,
   REGION_META,
@@ -33,7 +32,7 @@ const {
 } = VZGameCore;
 
 const { createApiBase, fetchWithTimeout, readJsonOrThrow } = VZServices;
-const { $, createEl, safeText, applyRankColor } = VZUI;
+const { $, createEl, applyRankColor } = VZUI;
 
 function escapeHtml(s) {
   return String(s || "")
@@ -86,13 +85,7 @@ function fillVzEmptyState(el, options = {}) {
       : "";
   el.innerHTML = `<div class="vz-empty-state__glyph" aria-hidden="true">${g}</div>${t}${x}${link}`;
 }
-const {
-  dmNormalizeMessageForStore,
-  dmObjectToThreads,
-  dmSanitizeMeta,
-  dmStorageKey,
-  dmThreadsToObject,
-} = VZChat;
+const { dmObjectToThreads, dmStorageKey, dmThreadsToObject } = VZChat;
 const { buildDuelExtraText, isDuelDrawReason } = VZDuel;
 const {
   normalizeTournamentList,
@@ -501,10 +494,6 @@ function getLocalAvatarEntry(username) {
     } catch {}
   }
   return entry;
-}
-function getLocalAvatar(username) {
-  const entry = getLocalAvatarEntry(username);
-  return entry?.url || null;
 }
 function setLocalAvatar(username, dataUrl, expiresAt) {
   const key = avatarStorageKey(username);
@@ -1875,12 +1864,6 @@ function showBoardGameResult(payload) {
           payload?.dambreteVariant ?? boardState.dambreteVariant
         )
       : null;
-  const gameLabel =
-    gameType === "chess"
-      ? "Šahs"
-      : gameType === "zole"
-        ? "Zole"
-        : `Dambrete (${boardDambreteModeLabel(dVar)})`;
 
   let chessPresetSnap = "";
   if (gameType === "chess" && boardState.chessClock) {
@@ -2286,8 +2269,6 @@ const regionAttackCapEl = document.getElementById("region-attack-cap");
 const regionRulesEl = document.getElementById("region-rules");
 
 // Audio MP3
-const sClick = $("#s-click");
-const sType = $("#s-type");
 const sError = $("#s-error");
 const sWin = $("#s-win");
 const sLose = $("#s-lose");
@@ -3237,7 +3218,6 @@ async function startChallengeRound(challengeId) {
 
 function applyCorrectLocksFromHistory(history) {
   if (!Array.isArray(history)) return;
-  const pattern = { correct: 3, present: 2, absent: 1 };
   history.forEach((h, rowIndex) => {
     const p = h?.pattern || [];
     p.forEach((status, colIndex) => {
@@ -13413,7 +13393,6 @@ async function buildShareSticker(data) {
   const cell = Math.floor(Math.min(78, maxGridWidth / cols));
   const gap = Math.max(6, Math.floor(cell * 0.12));
   const gridW = cols * cell + (cols - 1) * gap;
-  const gridH = rows * cell + (rows - 1) * gap;
   const startX = Math.floor((width - gridW) / 2);
   const startY = 300;
 
@@ -13635,8 +13614,6 @@ function setFullscreenBottomButtons(on) {
     }
   }
 }
-let _logoutHome = null;
-
 function keepActionButtonsTogether() {
   if (!newRoundBtn) return;
 
@@ -13644,14 +13621,6 @@ function keepActionButtonsTogether() {
   if (!wrap) return;
 
   if (!wrap.contains(newRoundBtn)) wrap.appendChild(newRoundBtn);
-}
-
-function restoreLogoutButtonHome() {
-  if (!_logoutHome || !logoutBtn) return;
-  const { parent, next } = _logoutHome;
-  if (!parent) return;
-  if (next) parent.insertBefore(logoutBtn, next);
-  else parent.appendChild(logoutBtn);
 }
 async function initGame() {
   const token = getStoredFirst(AUTH_KEYS.token);
@@ -13873,7 +13842,7 @@ async function initGame() {
     appInstallPwaBtn.addEventListener("click", async () => {
       if (!deferredInstallPrompt) return;
       deferredInstallPrompt.prompt();
-      const { outcome } = await deferredInstallPrompt.userChoice;
+      await deferredInstallPrompt.userChoice;
       deferredInstallPrompt = null;
       if (appInstallPwaRow) appInstallPwaRow.style.display = "none";
       if (appInstallModal) appInstallModal.classList.add("hidden");
@@ -14414,16 +14383,4 @@ function showLevelUpAnimation(level, rankTitle) {
     });
   }
   _levelUpDismissTimer = setTimeout(dismiss, 4000);
-}
-
-// Rezerves flash (ja kaut kur gribi izsaukt manuāli)
-function triggerWinFlash() {
-  const flashElement = document.getElementById("screen-flash");
-  if (!flashElement) return;
-
-  flashElement.classList.add("vz-screen-flash-active");
-  setTimeout(
-    () => flashElement.classList.remove("vz-screen-flash-active"),
-    300
-  );
 }

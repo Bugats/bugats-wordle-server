@@ -93,20 +93,6 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(cacheFirst(req));
 });
 
-async function networkFirst(req) {
-  try {
-    const res = await fetch(req);
-    const cache = await caches.open(CACHE_VERSION);
-    cache.put(req, res.clone());
-    return res;
-  } catch {
-    const cache = await caches.open(CACHE_VERSION);
-    const cached = await cache.match(req);
-    if (cached) return cached;
-    return cache.match("./index.html");
-  }
-}
-
 async function networkFirstNoCache(req) {
   try {
     const freshReq = new Request(req, { cache: "no-store" });

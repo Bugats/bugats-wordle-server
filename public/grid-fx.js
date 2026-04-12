@@ -118,7 +118,7 @@
         resolution: Math.min(2, window.devicePixelRatio || 1),
         powerPreference: "low-power",
       });
-    } catch (e) {
+    } catch {
       try { delete grid.dataset.vzGridFxInit; } catch (_) {}
       return;
     }

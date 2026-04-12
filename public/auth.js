@@ -106,7 +106,7 @@ async function apiPost(path, payload) {
   let data;
   try {
     data = JSON.parse(text);
-  } catch (e) {
+  } catch {
     console.error("Non-JSON response:", text);
     throw new Error("Servera kļūda (nav korekts JSON).");
   }

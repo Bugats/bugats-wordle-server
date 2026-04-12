@@ -36,7 +36,6 @@ import {
   findLegalMove,
   normalizeDambreteVariant,
   WHITE,
-  BLACK,
 } from "./lib/draughts.js";
 import { getBestDambreteMove } from "./lib/draughts-bot.js";
 import { getBestChessMove } from "./lib/chess-bot.js";
@@ -685,7 +684,7 @@ function getDuelOpponent(duel, username) {
 
 // ======== GALDA SPĒLES (dambrete, šahs) ========
 const BOARD_GAME_INVITE_TIMEOUT_MS = 60 * 1000; // 60s
-const BOARD_GAME_MOVE_TIMEOUT_MS = 5 * 60 * 1000; // 5 min per move (resign if exceeded)
+const _BOARD_GAME_MOVE_TIMEOUT_MS = 5 * 60 * 1000; // 5 min per move (resign if exceeded) — rezervei
 /** Šahs PvP / vs bot (tikai cilvēkam): atlikušais laiks katram spēlētājam (ms). */
 const CHESS_CLOCK_DEFAULT_MS = 10 * 60 * 1000; // 10 min katram (noklusējums)
 const CHESS_CLOCK_INCREMENT_MS = 0; // noklusējuma Fischer +s
@@ -8921,7 +8920,6 @@ app.post("/clan/kick", authMiddleware, (req, res) => {
   const targetRole = getClanMemberRole(clan, targetName);
   if (targetRole === "leader")
     return res.status(400).json({ message: "Nevar izmest vadītāju." });
-  const isAdmin = canClanManage(clan, user.username);
   if (
     targetRole === "admin" &&
     !(
@@ -12714,7 +12712,7 @@ io.on("connection", (socket) => {
     if (!targetSocket) {
       // Pretinieks offline – saglabājam aicinājumu un sūtām push
       ensurePendingDuelInvites(targetUser);
-      const { word, len } = pickRandomWord();
+      const { len } = pickRandomWord();
       const invite = {
         from: challengerName,
         len,
