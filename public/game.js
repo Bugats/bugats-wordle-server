@@ -1800,7 +1800,7 @@ function zole3pCoinsFromTableLine(snap, username, coinsPerTablePoint) {
   const coins = t * cpp;
   if (!Number.isFinite(coins) || coins === 0) return "";
   const sign = coins > 0 ? "+" : "";
-  return ` Coins (likme ${cpp} uz tabulas punktu): ${sign}${coins}.`;
+  return ` Coins (${cpp} × tabulas punkti šajā partijā): ${sign}${coins}.`;
 }
 
 /** Zole: skaidra rindiņa «cik tabulas punktu man šajā partijā / kopā mačā». */
@@ -1873,6 +1873,17 @@ function zoleResultExtraLine(snap) {
   if (lr.kind === "zole" && !lr.win && lr.contractorNoTricks)
     return ` Lielajam bezstiķis (${nm(lr.contractorIdx)} — 0 stiķi).`;
   return "";
+}
+
+/** Zole 2P PvP: tabula vs coins — modālī un čatā tikai kopā ar +/- coins. */
+const ZOLE_2P_TABULA_VS_COINS_NOTE =
+  "Tabula — zoles punkti mačā. Coins — virtuālā bilance profilā; šeit tās mainās pēc fiksētas summas par uzvaru vai zaudējumu (nav likmes «par tabulas punktu» kā 3 cilvēku istabā).";
+
+/** Zole 3P: skaidro likmes sasaisti ar tabulu (čats + modālis). */
+function zole3pStakeTableCoinsNote(coinsPerPoint) {
+  const c = Math.floor(Number(coinsPerPoint) || 0);
+  if (c <= 0) return "";
+  return ` Likme istabā: ${c} coins par katru tavu tabulas punktu šajā partijā — coins izmaiņa = tabulas punkti × ${c} (tā pati formula čatā un rezultātā).`;
 }
 
 function showBoardGameResult(payload) {
@@ -2059,18 +2070,23 @@ function showBoardGameResult(payload) {
   titleEl.textContent = title;
   detailEl.textContent = detail;
 
+  const zoleCppModal = Math.floor(
+    Number(payload?.zole3pCoinsPerPoint ?? boardState.zole3pCoinsPerPoint) || 0
+  );
   if (zoleNoteEl) {
-    if (
-      gameType === "zole" &&
-      !vsBot &&
-      boardState.zoleMode === "online_2p"
-    ) {
-      zoleNoteEl.textContent =
-        "Tabula — zoles punkti mačā. Coins — virtuālā bilance profilā; šeit tās uzvarai vai zaudējumam aprēķina pēc tabulas iznākuma (nav atsevišķas likmes par punktu kā 3 cilvēku istabā).";
-      zoleNoteEl.classList.remove("hidden");
-    } else {
-      zoleNoteEl.textContent = "";
-      zoleNoteEl.classList.add("hidden");
+    zoleNoteEl.textContent = "";
+    zoleNoteEl.classList.add("hidden");
+    if (gameType === "zole" && !vsBot) {
+      if (boardState.zoleMode === "online_3p") {
+        if (zoleCppModal > 0) {
+          zoleNoteEl.textContent = `Likme istabā: ${zoleCppModal} coins par katru tavu tabulas punktu šajā partijā. Zemāk redzamā coins izmaiņa = tabulas punkti × ${zoleCppModal} (tas pats aprēķins kā čatā).`;
+          zoleNoteEl.classList.remove("hidden");
+        } else {
+          zoleNoteEl.textContent =
+            "Šai istabai nav likmes par tabulas punktu — coins mainās pēc fiksētas PvP summas (tabula joprojām nosaka vietu un uzvarētāju).";
+          zoleNoteEl.classList.remove("hidden");
+        }
+      }
     }
   }
 
@@ -2079,10 +2095,16 @@ function showBoardGameResult(payload) {
       coinsEl.textContent = "Pret botu coins nemainās.";
       coinsEl.classList.remove("hidden");
     } else if (iWon && coinsGain > 0) {
-      coinsEl.textContent = `+${coinsGain} coins`;
+      coinsEl.textContent =
+        gameType === "zole" && boardState.zoleMode === "online_2p"
+          ? `+${coinsGain} coins. ${ZOLE_2P_TABULA_VS_COINS_NOTE}`
+          : `+${coinsGain} coins`;
       coinsEl.classList.remove("hidden");
     } else if (iLost && coinsLoss > 0) {
-      coinsEl.textContent = `−${coinsLoss} coins`;
+      coinsEl.textContent =
+        gameType === "zole" && boardState.zoleMode === "online_2p"
+          ? `−${coinsLoss} coins. ${ZOLE_2P_TABULA_VS_COINS_NOTE}`
+          : `−${coinsLoss} coins`;
       coinsEl.classList.remove("hidden");
     } else {
       coinsEl.textContent = "";
@@ -11320,6 +11342,10 @@ function initSocket() {
       winner &&
       String(winner).trim().toLowerCase() ===
         String(state.username || "").trim().toLowerCase();
+    const zole2pPvP =
+      payload?.type === "zole" &&
+      !payload?.vsBot &&
+      boardState.zoleMode === "online_2p";
     let msg = "";
     if (won) {
       msg = coinsGain
@@ -11341,6 +11367,13 @@ function initSocket() {
         zoleBuriedKittyEyesLine(zoleSnapForEnd)
       ).trim();
       if (zExtra) msg += " " + zExtra;
+      if (zole2pPvP && (Number(coinsGain) > 0 || Number(coinsLoss) > 0)) {
+        msg += " " + ZOLE_2P_TABULA_VS_COINS_NOTE;
+      }
+      if (boardState.zoleMode === "online_3p" && cppChat > 0) {
+        const stakeNote = zole3pStakeTableCoinsNote(cppChat).trim();
+        if (stakeNote) msg += " " + stakeNote;
+      }
     }
     appendGaldaSystemMessage(msg.replace(/^♟️\s*/, ""));
     showBoardGameResult(resultPayload);
