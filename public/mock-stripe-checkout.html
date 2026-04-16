@@ -85,6 +85,7 @@
       const label = params.get("label") || "Pirkums";
       const username = params.get("username") || "";
       const sessionId = params.get("sessionId") || "";
+      const success = params.get("success") || "";
       const cancel = params.get("cancel") || "game.html";
 
       const completeBtn = document.getElementById("complete-btn");
@@ -102,7 +103,7 @@
           const res = await fetch("/api/mock/stripe/complete", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ kind, username, sessionId }),
+            body: JSON.stringify({ kind, username, sessionId, success, cancel }),
           });
           const data = await res.json();
           if (!res.ok) {
