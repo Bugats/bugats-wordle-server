@@ -134,6 +134,63 @@ function buildMockStripeCheckoutUrl({
   return `${baseUrl}/mock-stripe-checkout.html?${params.toString()}`;
 }
 
+function renderMockStripeCheckoutHtml({
+  kind = "checkout",
+  sessionId = "",
+  username = "",
+  label = "Stripe checkout",
+  success = "",
+  cancel = "",
+}) {
+  const safe = (v) =>
+    String(v || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  return `<!DOCTYPE html>
+<html lang="lv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stripe mock checkout</title>
+    <style>
+      body { font-family: Arial, sans-serif; background: #111827; color: #f9fafb; margin: 0; min-height: 100vh; display: grid; place-items: center; }
+      .card { width: min(92vw, 460px); background: #1f2937; border: 1px solid #374151; border-radius: 16px; padding: 24px; box-shadow: 0 24px 64px rgba(0,0,0,.35); }
+      .eyebrow { color: #93c5fd; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 10px; }
+      h1 { margin: 0 0 12px; font-size: 24px; }
+      p { color: #d1d5db; line-height: 1.45; }
+      .meta { background: #111827; border: 1px solid #374151; border-radius: 12px; padding: 12px; margin: 16px 0; font-size: 14px; }
+      .actions { display: flex; gap: 12px; margin-top: 18px; }
+      button, a { appearance: none; border: 0; border-radius: 999px; padding: 12px 18px; font-weight: 700; cursor: pointer; text-decoration: none; text-align: center; }
+      .primary { background: #22c55e; color: #08110c; flex: 1; }
+      .secondary { background: #374151; color: #f9fafb; flex: 1; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="eyebrow">Stripe mock</div>
+      <h1>${safe(label)}</h1>
+      <p>Lokāls demonstrācijas checkout ekrāns ${safe(kind)} pirkumam. Poga zemāk simulē veiksmīgu apmaksu un novirza atpakaļ uz spēli.</p>
+      <div class="meta">
+        <div><strong>Lietotājs:</strong> ${safe(username || "—")}</div>
+        <div><strong>Sesija:</strong> ${safe(sessionId || "—")}</div>
+      </div>
+      <form method="POST" action="/mock/stripe-complete">
+        <input type="hidden" name="kind" value="${safe(kind)}" />
+        <input type="hidden" name="sessionId" value="${safe(sessionId)}" />
+        <input type="hidden" name="success" value="${safe(success)}" />
+        <input type="hidden" name="cancel" value="${safe(cancel)}" />
+        <div class="actions">
+          <button class="primary" type="submit">Apmaksāt</button>
+          <a class="secondary" href="${safe(cancel || "/game.html?vip=cancel")}">Atcelt</a>
+        </div>
+      </form>
+    </div>
+  </body>
+</html>`;
+}
+
 const JWT_SECRET = (() => {
   const configured = String(process.env.JWT_SECRET || "").trim();
   if (configured) return configured;

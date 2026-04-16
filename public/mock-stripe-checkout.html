@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="lv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mock Stripe Checkout</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: #0f172a;
+        color: #e5e7eb;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+      }
+      .card {
+        width: min(92vw, 420px);
+        background: #111827;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 18px;
+        padding: 24px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 24px;
+      }
+      p {
+        margin: 0 0 12px;
+        line-height: 1.45;
+      }
+      .meta {
+        color: #93c5fd;
+        font-size: 14px;
+      }
+      .actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 20px;
+      }
+      button,
+      a {
+        appearance: none;
+        border: 0;
+        border-radius: 12px;
+        padding: 12px 16px;
+        font-size: 16px;
+        cursor: pointer;
+        text-decoration: none;
+        text-align: center;
+      }
+      button {
+        background: #22c55e;
+        color: #052e16;
+        font-weight: 700;
+        flex: 1;
+      }
+      a {
+        background: #374151;
+        color: #e5e7eb;
+        flex: 1;
+      }
+      .status {
+        margin-top: 12px;
+        min-height: 20px;
+        color: #fca5a5;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Mock Stripe Checkout</h1>
+      <p id="label">Ielādējam pirkumu…</p>
+      <p class="meta" id="meta"></p>
+      <div class="actions">
+        <button id="complete-btn" type="button">Apstiprināt pirkumu</button>
+        <a id="cancel-link" href="#">Atcelt</a>
+      </div>
+      <div id="status" class="status"></div>
+    </div>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const kind = params.get("kind") || "checkout";
+      const label = params.get("label") || "Pirkums";
+      const username = params.get("username") || "";
+      const sessionId = params.get("sessionId") || "";
+      const cancel = params.get("cancel") || "game.html";
+
+      const completeBtn = document.getElementById("complete-btn");
+      const cancelLink = document.getElementById("cancel-link");
+      const statusEl = document.getElementById("status");
+      document.getElementById("label").textContent = label;
+      document.getElementById("meta").textContent =
+        `${kind.toUpperCase()} · ${username || "user"} · ${sessionId || "session"}`;
+      cancelLink.href = cancel;
+
+      completeBtn.addEventListener("click", async () => {
+        completeBtn.disabled = true;
+        statusEl.textContent = "";
+        try {
+          const res = await fetch("/api/mock/stripe/complete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kind, username, sessionId }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.message || "Mock checkout failed.");
+          }
+          window.location.href = data.redirectUrl || cancel;
+        } catch (err) {
+          statusEl.textContent = err.message || "Neizdevās pabeigt mock pirkumu.";
+          completeBtn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
