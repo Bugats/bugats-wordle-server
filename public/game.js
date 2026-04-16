@@ -2668,6 +2668,14 @@ async function startStripeCoinCheckout(packId) {
   }
 }
 
+async function startStripeVipCheckout() {
+  const data = await apiPost("/vip/buy", {});
+  const url = data && data.url;
+  if (url && typeof url === "string") {
+    window.location.href = url;
+  }
+}
+
 function fillStripeCoinPackList(container) {
   if (!container) return;
   const packs = state.stripeCoinPacks || [];
@@ -3310,6 +3318,47 @@ function clearChallengeFromUrl() {
   } catch {}
 }
 
+function getVipReturnStatusFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const status = String(params.get("vip") || "").trim().toLowerCase();
+    if (status === "ok" || status === "cancel") return status;
+  } catch {}
+  return "";
+}
+
+function clearVipReturnParams() {
+  try {
+    const u = new URL(window.location.href);
+    u.searchParams.delete("vip");
+    u.searchParams.delete("session_id");
+    const newUrl = u.pathname + (u.search || "") + (u.hash || "");
+    window.history.replaceState({}, "", newUrl);
+  } catch {}
+}
+
+async function handleVipReturnFromUrl() {
+  const status = getVipReturnStatusFromUrl();
+  if (!status) return;
+  if (status === "ok") {
+    setVipBuyStatus("VIP maksājums pieņemts. Atjaunojam statusu…", "");
+    appendSystemMessage("👑 VIP maksājums pieņemts. Pārbaudām statusu…");
+    try {
+      const me = await apiGet("/me");
+      updatePlayerCard(me);
+      setVipBuyStatus("VIP statuss atjaunots.", "ok");
+    } catch (err) {
+      setVipBuyStatus(
+        err?.message || "Maksājums izdevās, bet statusu vēl neizdevās atsvaidzināt.",
+        "error"
+      );
+    }
+  } else {
+    setVipBuyStatus("VIP maksājums atcelts.", "");
+  }
+  clearVipReturnParams();
+}
+
 async function startChallengeRound(challengeId) {
   if (!challengeId || !state.token) return;
   try {
@@ -3923,12 +3972,15 @@ function updateVipUi(me) {
   const until = Number(vip.until || 0);
   const tier = String(vip.tier || "none");
   const purchaseEnabled = !!vip.purchaseEnabled;
+  const offer =
+    vip.offer && typeof vip.offer === "object" ? { ...vip.offer } : null;
   const canCreateTournament = !!me.canCreateTournament;
   const isAdmin = !!me.isAdmin;
 
   state.vipActive = active;
   state.vipUntil = until;
   state.vipTier = tier;
+  state.vipOffer = offer;
   state.canCreateTournament = canCreateTournament;
   state.isAdmin = isAdmin;
 
@@ -3945,12 +3997,21 @@ function updateVipUi(me) {
   }
 
   if (buyVipBtn) {
-    buyVipBtn.textContent = "VIP iegāde drīzumā";
+    buyVipBtn.textContent =
+      purchaseEnabled && offer?.label
+        ? `Pirkt ${offer.label} (Stripe)`
+        : purchaseEnabled
+          ? "Pirkt VIP (Stripe)"
+          : "VIP iegāde drīzumā";
     buyVipBtn.disabled = isAdmin || !purchaseEnabled;
     buyVipBtn.style.display = isAdmin ? "none" : "";
   }
-  if (!isAdmin && !active && !purchaseEnabled) {
-    setVipBuyStatus("VIP pirkšana ar žetoniem nav pieejama.", "");
+  if (!isAdmin && !active) {
+    if (purchaseEnabled && offer?.days) {
+      setVipBuyStatus(`VIP pieejams uz ${offer.days} dienām caur Stripe Checkout.`, "");
+    } else if (!purchaseEnabled) {
+      setVipBuyStatus("VIP pirkšana pašlaik nav pieejama.", "");
+    }
   }
   renderVipRoomPanel();
 }
@@ -13098,10 +13159,20 @@ async function handleBuyToken() {
 
 async function handleBuyVip() {
   if (!state.token || !buyVipBtn) return;
-  setVipBuyStatus("VIP pirkšana ar žetoniem nav pieejama.", "error");
-  appendSystemMessage(
-    "👑 VIP pirkšana ar žetoniem ir izslēgta. Žetoni ir paredzēti laimes ratam."
-  );
+  buyVipBtn.disabled = true;
+  const offerLabel =
+    String(state.vipOffer?.label || "").trim() || "VIP";
+  try {
+    setVipBuyStatus(`Atveram Stripe maksājumu: ${offerLabel}.`, "");
+    await startStripeVipCheckout();
+  } catch (err) {
+    setVipBuyStatus(err?.message || "Neizdevās atvērt VIP maksājumu.", "error");
+    appendSystemMessage(
+      ((err && err.message) || "Neizdevās atvērt VIP maksājumu.") +
+        " Īsi par VIP: «⋯ Vairāk» → «Coins / VIP / turnīri»."
+    );
+    buyVipBtn.disabled = false;
+  }
 }
 
 // ==================== DAILY CHEST (frontend) ====================
@@ -14461,6 +14532,8 @@ async function initGame() {
       setUnreadBadge(false);
     });
   }
+
+  handleVipReturnFromUrl().catch(() => {});
 
   if (profileCloseBtn)
     profileCloseBtn.addEventListener("click", hidePlayerProfile);
