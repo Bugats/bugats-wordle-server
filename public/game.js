@@ -5513,9 +5513,21 @@ function formatSocialPresenceFromPayload(p) {
     parts.push("galds");
     titleBits.push("Spēlē galda spēli");
   }
+  const openSeatType = String(p.boardOpenSeatType || "")
+    .trim()
+    .toLowerCase();
+  const openSeatJoinable = !!p.boardOpenSeatJoinable;
+  const lobbyJoinable = !!p.zoleLobbyJoinable;
+  const lobbyPlayers = Array.isArray(p.zoleLobbyPlayers)
+    ? p.zoleLobbyPlayers.length
+    : 0;
   if (lobby) {
-    parts.push("Zole 3P");
-    titleBits.push("Atvērta Zoles 3 cilvēku istaba");
+    parts.push(lobbyJoinable ? `Zole 3P ${lobbyPlayers || 1}/3` : "Zole 3P");
+    titleBits.push(
+      lobbyJoinable
+        ? "Atvērta Zoles 3 cilvēku istaba — vari pievienoties"
+        : "Atvērta Zoles 3 cilvēku istaba"
+    );
   }
   if (invite && invite.from) {
     if (invite.rematch) {
@@ -5530,13 +5542,67 @@ function formatSocialPresenceFromPayload(p) {
     parts.push("pēdējā partija");
     titleBits.push("Zole pret botiem — pēdējā partija šajā mačā");
   }
+  if (openSeatType === "chess" && openSeatJoinable) {
+    parts.push("šaha vieta");
+    titleBits.push("Atvērta vieta šahā — vari pievienoties");
+  } else if (openSeatType === "dambrete" && openSeatJoinable) {
+    parts.push("dambretes vieta");
+    titleBits.push("Atvērta vieta dambretē — vari pievienoties");
+  }
   if (!parts.length) return null;
   return { text: parts.join(" · "), title: titleBits.join(" · ") };
+}
+
+function socialPresenceActionsFromPayload(name, p) {
+  const username = String(name || "").trim();
+  if (!username || !p || typeof p !== "object") return [];
+  const actions = [];
+  const invite = p.pendingBoardInvite;
+  const lobbyJoinable = !!p.zoleLobbyJoinable;
+  const lobbyId = String(p.zoleLobbyId || "").trim();
+  if (invite?.from) {
+    actions.push({
+      label: invite.rematch ? "Revānšs" : "Atvērt",
+      title: invite.rematch
+        ? `Gaida revānšu no ${invite.from}`
+        : `Gaida galda uzaicinājumu no ${invite.from}`,
+      run: () => {
+        showBoardModal();
+      },
+    });
+  }
+  if (lobbyJoinable && lobbyId) {
+    actions.push({
+      label: "Zole 3P",
+      title: "Pievienoties atvērtajai Zoles 3 cilvēku istabai",
+      run: () => {
+        if (!boardGamesEnsureSocketConnected()) return;
+        showBoardModal();
+        state.socket.emit("board.zoleJoinOpenLobby", { lobbyId });
+      },
+    });
+  }
+  return actions;
 }
 
 function applyFriendsPayload(payload) {
   if (!payload || typeof payload !== "object") return;
   state.friends = Array.isArray(payload.friends) ? payload.friends : [];
+  if (Array.isArray(payload.friendMini) && payload.friendMini.length) {
+    const nextMini = new Map(state.onlineMiniByUser || []);
+    const nextOnline = new Set(state.onlineUsers || []);
+    payload.friendMini.forEach((entry) => {
+      const key = String(entry?.username || "")
+        .trim()
+        .toLowerCase();
+      if (!key) return;
+      nextMini.set(key, entry);
+      if (entry?.isOnline) nextOnline.add(key);
+      else nextOnline.delete(key);
+    });
+    state.onlineMiniByUser = nextMini;
+    state.onlineUsers = nextOnline;
+  }
   state.friendInvitesIn = Array.isArray(payload.incoming)
     ? payload.incoming
     : [];
@@ -5659,6 +5725,14 @@ function renderFriends() {
     row.appendChild(left);
 
     const actions = createEl("div", "vz-friend-actions");
+    const socialActions = socialPresenceActionsFromPayload(name, mini);
+    socialActions.slice(0, 2).forEach((action) => {
+      const btn = document.createElement("button");
+      btn.textContent = action.label;
+      if (action.title) btn.title = action.title;
+      btn.addEventListener("click", action.run);
+      actions.appendChild(btn);
+    });
     const dmBtn = document.createElement("button");
     dmBtn.textContent = "DM";
     dmBtn.addEventListener("click", () => openDmWith(name));

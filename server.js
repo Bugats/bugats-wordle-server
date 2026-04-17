@@ -7155,6 +7155,30 @@ function onlineBoardStatusForUsername(username) {
 function getMiniUserPayload(username) {
   const u = USERS[username];
   const board = onlineBoardStatusForUsername(username);
+  const isOnline = Array.from(onlineBySocket.values()).some(
+    (name) =>
+      String(name || "").trim().toLowerCase() ===
+      String(username || "").trim().toLowerCase()
+  );
+  const zoleLobbyId = userToZole3pLobby.get(String(username || "").trim());
+  const zoleLobby =
+    zoleLobbyId && zole3pLobbyById.has(zoleLobbyId)
+      ? zole3pLobbyById.get(zoleLobbyId)
+      : null;
+  const isJoinableLobby =
+    !!(
+      zoleLobby &&
+      Date.now() <= Number(zoleLobby.expiresAt || 0) &&
+      Array.isArray(zoleLobby.players) &&
+      zoleLobby.players.length < 3 &&
+      !zoleLobby.invitedSeat
+    );
+  const openSeatKey = String(username || "").trim().toLowerCase();
+  const openSeat = boardOpenSeatByHost.get(openSeatKey) || null;
+  const isJoinableOpenSeat =
+    !!openSeat &&
+    Date.now() <= Number(openSeat.expiresAt || 0) &&
+    !userToBoardGame.has(String(username || "").trim());
   if (!u) {
     return {
       username,
@@ -7164,10 +7188,20 @@ function getMiniUserPayload(username) {
       rankColor: "#9CA3AF",
       supporter: false,
       region: "",
+      isOnline,
       inBoardGame: board.inBoardGame,
       zoleVsBotLastHand: board.zoleVsBotLastHand,
       zole3pLobby: !!board.zole3pLobby,
       pendingBoardInvite: board.pendingBoardInvite || null,
+      zoleLobbyId: zoleLobby ? zoleLobby.id : "",
+      zoleLobbyPlayers: Array.isArray(zoleLobby?.players)
+        ? zoleLobby.players.slice()
+        : [],
+      zoleLobbyJoinable: isJoinableLobby,
+      boardOpenSeatType: String(openSeat?.type || "")
+        .trim()
+        .toLowerCase(),
+      boardOpenSeatJoinable: isJoinableOpenSeat,
     };
   }
   const info = ensureRankFields(u);
@@ -7179,10 +7213,20 @@ function getMiniUserPayload(username) {
     rankColor: u.rankColor || info.color || "#9CA3AF",
     supporter: !!u.supporter,
     region: u.region || "",
+    isOnline,
     inBoardGame: board.inBoardGame,
     zoleVsBotLastHand: board.zoleVsBotLastHand,
     zole3pLobby: !!board.zole3pLobby,
     pendingBoardInvite: board.pendingBoardInvite || null,
+    zoleLobbyId: zoleLobby ? zoleLobby.id : "",
+    zoleLobbyPlayers: Array.isArray(zoleLobby?.players)
+      ? zoleLobby.players.slice()
+      : [],
+    zoleLobbyJoinable: isJoinableLobby,
+    boardOpenSeatType: String(openSeat?.type || "")
+      .trim()
+      .toLowerCase(),
+    boardOpenSeatJoinable: isJoinableOpenSeat,
   };
 }
 
@@ -7201,11 +7245,13 @@ function broadcastOnlineList(force = false) {
       (u) =>
         `${u.username}|${u.avatarUrl || ""}|${u.rankLevel || 0}|${
           u.rankTitle || ""
-        }|${u.supporter ? 1 : 0}|${u.region || ""}|${
+        }|${u.supporter ? 1 : 0}|${u.region || ""}|${u.isOnline ? 1 : 0}|${
           u.inBoardGame ? 1 : 0
         }|${u.zoleVsBotLastHand ? 1 : 0}|${u.zole3pLobby ? 1 : 0}|${
           u.pendingBoardInvite?.from || ""
-        }|${u.pendingBoardInvite?.rematch ? 1 : 0}`
+        }|${u.pendingBoardInvite?.rematch ? 1 : 0}|${u.zoleLobbyId || ""}|${
+          u.zoleLobbyJoinable ? 1 : 0
+        }|${u.boardOpenSeatType || ""}|${u.boardOpenSeatJoinable ? 1 : 0}`
     )
     .join(";");
 
@@ -7811,10 +7857,12 @@ function listInvites(map) {
 
 function getFriendsPayload(user) {
   ensureFriends(user);
+  const friends = (user.friends || [])
+    .slice()
+    .sort((a, b) => String(a).localeCompare(String(b)));
   return {
-    friends: (user.friends || [])
-      .slice()
-      .sort((a, b) => String(a).localeCompare(String(b))),
+    friends,
+    friendMini: friends.map((username) => getMiniUserPayload(String(username || "").trim())),
     incoming: listInvites(user.friendInvitesIn),
     outgoing: listInvites(user.friendInvitesOut),
   };
