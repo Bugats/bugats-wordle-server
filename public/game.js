@@ -2668,14 +2668,6 @@ async function startStripeCoinCheckout(packId) {
   }
 }
 
-async function startStripeVipCheckout() {
-  const data = await apiPost("/vip/buy", {});
-  const url = data && data.url;
-  if (url && typeof url === "string") {
-    window.location.href = url;
-  }
-}
-
 function fillStripeCoinPackList(container) {
   if (!container) return;
   const packs = state.stripeCoinPacks || [];
@@ -3318,47 +3310,6 @@ function clearChallengeFromUrl() {
   } catch {}
 }
 
-function getVipReturnStatusFromUrl() {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const status = String(params.get("vip") || "").trim().toLowerCase();
-    if (status === "ok" || status === "cancel") return status;
-  } catch {}
-  return "";
-}
-
-function clearVipReturnParams() {
-  try {
-    const u = new URL(window.location.href);
-    u.searchParams.delete("vip");
-    u.searchParams.delete("session_id");
-    const newUrl = u.pathname + (u.search || "") + (u.hash || "");
-    window.history.replaceState({}, "", newUrl);
-  } catch {}
-}
-
-async function handleVipReturnFromUrl() {
-  const status = getVipReturnStatusFromUrl();
-  if (!status) return;
-  if (status === "ok") {
-    setVipBuyStatus("VIP maksājums pieņemts. Atjaunojam statusu…", "");
-    appendSystemMessage("👑 VIP maksājums pieņemts. Pārbaudām statusu…");
-    try {
-      const me = await apiGet("/me");
-      updatePlayerCard(me);
-      setVipBuyStatus("VIP statuss atjaunots.", "ok");
-    } catch (err) {
-      setVipBuyStatus(
-        err?.message || "Maksājums izdevās, bet statusu vēl neizdevās atsvaidzināt.",
-        "error"
-      );
-    }
-  } else {
-    setVipBuyStatus("VIP maksājums atcelts.", "");
-  }
-  clearVipReturnParams();
-}
-
 async function startChallengeRound(challengeId) {
   if (!challengeId || !state.token) return;
   try {
@@ -3972,15 +3923,12 @@ function updateVipUi(me) {
   const until = Number(vip.until || 0);
   const tier = String(vip.tier || "none");
   const purchaseEnabled = !!vip.purchaseEnabled;
-  const offer =
-    vip.offer && typeof vip.offer === "object" ? { ...vip.offer } : null;
   const canCreateTournament = !!me.canCreateTournament;
   const isAdmin = !!me.isAdmin;
 
   state.vipActive = active;
   state.vipUntil = until;
   state.vipTier = tier;
-  state.vipOffer = offer;
   state.canCreateTournament = canCreateTournament;
   state.isAdmin = isAdmin;
 
@@ -3997,21 +3945,12 @@ function updateVipUi(me) {
   }
 
   if (buyVipBtn) {
-    buyVipBtn.textContent =
-      purchaseEnabled && offer?.label
-        ? `Pirkt ${offer.label} (Stripe)`
-        : purchaseEnabled
-          ? "Pirkt VIP (Stripe)"
-          : "VIP iegāde drīzumā";
+    buyVipBtn.textContent = "VIP iegāde drīzumā";
     buyVipBtn.disabled = isAdmin || !purchaseEnabled;
     buyVipBtn.style.display = isAdmin ? "none" : "";
   }
-  if (!isAdmin && !active) {
-    if (purchaseEnabled && offer?.days) {
-      setVipBuyStatus(`VIP pieejams uz ${offer.days} dienām caur Stripe Checkout.`, "");
-    } else if (!purchaseEnabled) {
-      setVipBuyStatus("VIP pirkšana pašlaik nav pieejama.", "");
-    }
+  if (!isAdmin && !active && !purchaseEnabled) {
+    setVipBuyStatus("VIP pirkšana ar žetoniem nav pieejama.", "");
   }
   renderVipRoomPanel();
 }
@@ -5513,21 +5452,9 @@ function formatSocialPresenceFromPayload(p) {
     parts.push("galds");
     titleBits.push("Spēlē galda spēli");
   }
-  const openSeatType = String(p.boardOpenSeatType || "")
-    .trim()
-    .toLowerCase();
-  const openSeatJoinable = !!p.boardOpenSeatJoinable;
-  const lobbyJoinable = !!p.zoleLobbyJoinable;
-  const lobbyPlayers = Array.isArray(p.zoleLobbyPlayers)
-    ? p.zoleLobbyPlayers.length
-    : 0;
   if (lobby) {
-    parts.push(lobbyJoinable ? `Zole 3P ${lobbyPlayers || 1}/3` : "Zole 3P");
-    titleBits.push(
-      lobbyJoinable
-        ? "Atvērta Zoles 3 cilvēku istaba — vari pievienoties"
-        : "Atvērta Zoles 3 cilvēku istaba"
-    );
+    parts.push("Zole 3P");
+    titleBits.push("Atvērta Zoles 3 cilvēku istaba");
   }
   if (invite && invite.from) {
     if (invite.rematch) {
@@ -5542,67 +5469,13 @@ function formatSocialPresenceFromPayload(p) {
     parts.push("pēdējā partija");
     titleBits.push("Zole pret botiem — pēdējā partija šajā mačā");
   }
-  if (openSeatType === "chess" && openSeatJoinable) {
-    parts.push("šaha vieta");
-    titleBits.push("Atvērta vieta šahā — vari pievienoties");
-  } else if (openSeatType === "dambrete" && openSeatJoinable) {
-    parts.push("dambretes vieta");
-    titleBits.push("Atvērta vieta dambretē — vari pievienoties");
-  }
   if (!parts.length) return null;
   return { text: parts.join(" · "), title: titleBits.join(" · ") };
-}
-
-function socialPresenceActionsFromPayload(name, p) {
-  const username = String(name || "").trim();
-  if (!username || !p || typeof p !== "object") return [];
-  const actions = [];
-  const invite = p.pendingBoardInvite;
-  const lobbyJoinable = !!p.zoleLobbyJoinable;
-  const lobbyId = String(p.zoleLobbyId || "").trim();
-  if (invite?.from) {
-    actions.push({
-      label: invite.rematch ? "Revānšs" : "Atvērt",
-      title: invite.rematch
-        ? `Gaida revānšu no ${invite.from}`
-        : `Gaida galda uzaicinājumu no ${invite.from}`,
-      run: () => {
-        showBoardModal();
-      },
-    });
-  }
-  if (lobbyJoinable && lobbyId) {
-    actions.push({
-      label: "Zole 3P",
-      title: "Pievienoties atvērtajai Zoles 3 cilvēku istabai",
-      run: () => {
-        if (!boardGamesEnsureSocketConnected()) return;
-        showBoardModal();
-        state.socket.emit("board.zoleJoinOpenLobby", { lobbyId });
-      },
-    });
-  }
-  return actions;
 }
 
 function applyFriendsPayload(payload) {
   if (!payload || typeof payload !== "object") return;
   state.friends = Array.isArray(payload.friends) ? payload.friends : [];
-  if (Array.isArray(payload.friendMini) && payload.friendMini.length) {
-    const nextMini = new Map(state.onlineMiniByUser || []);
-    const nextOnline = new Set(state.onlineUsers || []);
-    payload.friendMini.forEach((entry) => {
-      const key = String(entry?.username || "")
-        .trim()
-        .toLowerCase();
-      if (!key) return;
-      nextMini.set(key, entry);
-      if (entry?.isOnline) nextOnline.add(key);
-      else nextOnline.delete(key);
-    });
-    state.onlineMiniByUser = nextMini;
-    state.onlineUsers = nextOnline;
-  }
   state.friendInvitesIn = Array.isArray(payload.incoming)
     ? payload.incoming
     : [];
@@ -5725,14 +5598,6 @@ function renderFriends() {
     row.appendChild(left);
 
     const actions = createEl("div", "vz-friend-actions");
-    const socialActions = socialPresenceActionsFromPayload(name, mini);
-    socialActions.slice(0, 2).forEach((action) => {
-      const btn = document.createElement("button");
-      btn.textContent = action.label;
-      if (action.title) btn.title = action.title;
-      btn.addEventListener("click", action.run);
-      actions.appendChild(btn);
-    });
     const dmBtn = document.createElement("button");
     dmBtn.textContent = "DM";
     dmBtn.addEventListener("click", () => openDmWith(name));
@@ -5997,7 +5862,8 @@ function fitGridToViewport() {
   const maxByW = Math.floor((availW - (cols - 1) * gap) / cols);
   const maxByH = Math.floor((availH - (rows - 1) * gap) / rows);
 
-  const size = Math.max(30, Math.min(68, Math.min(maxByW, maxByH)));
+  /* Līdz 72px: nedaudz lielāki burti, ja ekrānā ir vieta (īpaši 5 buršu raundi) */
+  const size = Math.max(30, Math.min(72, Math.min(maxByW, maxByH)));
 
   gridEl.style.setProperty("--tile-size", size + "px");
   gridEl.style.setProperty("--tile-gap", gap + "px");
@@ -8517,7 +8383,7 @@ async function handleTournamentReportSubmit() {
     return;
   }
   if (score1 === score2) {
-    setTournamentReportStatus("Neizšķirts šobrīd nav atbalstīts.", "error");
+    setTournamentReportStatus("Neizšķirts ��obrīd nav atbalstīts.", "error");
     return;
   }
 
@@ -13233,20 +13099,10 @@ async function handleBuyToken() {
 
 async function handleBuyVip() {
   if (!state.token || !buyVipBtn) return;
-  buyVipBtn.disabled = true;
-  const offerLabel =
-    String(state.vipOffer?.label || "").trim() || "VIP";
-  try {
-    setVipBuyStatus(`Atveram Stripe maksājumu: ${offerLabel}.`, "");
-    await startStripeVipCheckout();
-  } catch (err) {
-    setVipBuyStatus(err?.message || "Neizdevās atvērt VIP maksājumu.", "error");
-    appendSystemMessage(
-      ((err && err.message) || "Neizdevās atvērt VIP maksājumu.") +
-        " Īsi par VIP: «⋯ Vairāk» → «Coins / VIP / turnīri»."
-    );
-    buyVipBtn.disabled = false;
-  }
+  setVipBuyStatus("VIP pirkšana ar žetoniem nav pieejama.", "error");
+  appendSystemMessage(
+    "👑 VIP pirkšana ar žetoniem ir izslēgta. Žetoni ir paredzēti laimes ratam."
+  );
 }
 
 // ==================== DAILY CHEST (frontend) ====================
@@ -14606,8 +14462,6 @@ async function initGame() {
       setUnreadBadge(false);
     });
   }
-
-  handleVipReturnFromUrl().catch(() => {});
 
   if (profileCloseBtn)
     profileCloseBtn.addEventListener("click", hidePlayerProfile);

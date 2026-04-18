@@ -1,8 +1,6 @@
 import request from "supertest";
-import { io as ioc } from "socket.io-client";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { app, __testHooks } from "../server.js";
-import { httpServer } from "../server.js";
 
 async function ensureUserToken({
   username,
@@ -43,28 +41,6 @@ async function ensureUserToken({
 }
 
 describe("Tournament brackets API", () => {
-  let port;
-
-  beforeAll(async () => {
-    await new Promise((resolve, reject) => {
-      const addr = httpServer.address();
-      if (addr) return resolve();
-      httpServer.listen(0, "127.0.0.1", (err) =>
-        err ? reject(err) : resolve()
-      );
-    });
-    const addr = httpServer.address();
-    port = typeof addr === "object" && addr ? addr.port : null;
-    expect(port).toBeTruthy();
-  });
-
-  afterAll(async () => {
-    if (!httpServer.listening) return;
-    await new Promise((resolve) => {
-      httpServer.close(() => resolve());
-    });
-  });
-
   it("rejects tournament creation for non-VIP users", async () => {
     const username = `user${Date.now().toString().slice(-8)}`;
     const token = await ensureUserToken({
@@ -296,106 +272,6 @@ describe("Tournament brackets API", () => {
     expect(Number.isFinite(Number(joinB.body?.tournament?.id))).toBe(true);
     expect(joinB.body?.tournament?.playMode).toBe("survival");
     expect(joinB.body?.tournament?.roomId).toBe(roomId);
-  });
-
-  it("includes joinable social presence for a friend's open zole room", async () => {
-    const suffix = Date.now().toString().slice(-7);
-    const host = `socialhost_${suffix}`;
-    const friend = `socialfr_${suffix}`;
-
-    const hostToken = await ensureUserToken({
-      username: host,
-      password: "Test12345",
-      email: `${host}@example.com`,
-    });
-    const friendToken = await ensureUserToken({
-      username: friend,
-      password: "Test12345",
-      email: `${friend}@example.com`,
-    });
-
-    await request(app)
-      .post("/friends/request")
-      .set("Authorization", `Bearer ${hostToken}`)
-      .send({ to: friend })
-      .expect(200);
-    await request(app)
-      .post("/friends/accept")
-      .set("Authorization", `Bearer ${friendToken}`)
-      .send({ from: host })
-      .expect(200);
-
-    const connect = (token) =>
-      new Promise((resolve, reject) => {
-        const socket = ioc(`http://127.0.0.1:${port}`, {
-          auth: { token },
-          transports: ["websocket"],
-          reconnection: false,
-          timeout: 10000,
-        });
-        const timer = setTimeout(() => {
-          socket.close();
-          reject(new Error("socket connect timeout"));
-        }, 12000);
-        socket.once("connect", () => {
-          clearTimeout(timer);
-          resolve(socket);
-        });
-        socket.once("connect_error", (err) => {
-          clearTimeout(timer);
-          socket.close();
-          reject(err || new Error("connect_error"));
-        });
-      });
-
-    const hostSocket = await connect(hostToken);
-    const friendSocket = await connect(friendToken);
-
-    try {
-      await new Promise((resolve, reject) => {
-        const to = setTimeout(
-          () => reject(new Error("board.zoleLobby timeout")),
-          10000
-        );
-        hostSocket.once("board.zoleLobby", () => {
-          clearTimeout(to);
-          resolve();
-        });
-        hostSocket.emit("board.zoleCreateLobby", {
-          zole3pCoinsPerPoint: 2,
-        });
-      });
-
-      await new Promise((resolve) => setTimeout(resolve, 150));
-
-      const friendsRes = await request(app)
-        .get("/friends")
-        .set("Authorization", `Bearer ${friendToken}`);
-
-      expect(friendsRes.status).toBe(200);
-      const hostMini = Array.isArray(friendsRes.body?.friends)
-        ? friendsRes.body.friends.find(
-            (n) => String(n || "").toLowerCase() === host.toLowerCase()
-          )
-        : null;
-      expect(hostMini).toBe(host);
-
-      const onlineEntry = Array.isArray(friendsRes.body?.friendMini)
-        ? friendsRes.body.friendMini.find(
-            (u) => String(u?.username || "").toLowerCase() === host.toLowerCase()
-          )
-        : null;
-
-      expect(onlineEntry).toBeTruthy();
-      expect(onlineEntry?.isOnline).toBe(true);
-      expect(onlineEntry?.zole3pLobby).toBe(true);
-      expect(onlineEntry?.zoleLobbyJoinable).toBe(true);
-      expect(String(onlineEntry?.zoleLobbyId || "")).not.toBe("");
-      expect(Array.isArray(onlineEntry?.zoleLobbyPlayers)).toBe(true);
-    } finally {
-      hostSocket.close();
-      friendSocket.close();
-    }
   });
 
   it("allows VIP room owner to cancel and delete room lifecycle", async () => {

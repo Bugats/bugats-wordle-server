@@ -61,78 +61,17 @@ import {
   findPackById,
   grantCoinsForCheckoutSession,
 } from "./lib/stripe-coins.js";
-import {
-  getStripeVipOfferConfig,
-  getStripeVipOfferPublic,
-  grantVipForCheckoutSession,
-  isStripeVipConfigured,
-} from "./lib/stripe-vip.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ======== Konstantes ========
 const PORT = process.env.PORT || 10080;
-let stripeClientCache = null;
-let stripeClientCacheKey = "";
-let stripeClientOverrideForTest = null;
-
-function getStripeSecretKey() {
-  return String(process.env.STRIPE_SECRET_KEY || "").trim();
-}
-
-function getStripeWebhookSecret() {
-  return String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
-}
-
-function getStripeClient() {
-  if (process.env.NODE_ENV === "test" && stripeClientOverrideForTest) {
-    return stripeClientOverrideForTest;
-  }
-  const key = getStripeSecretKey();
-  if (!key) return null;
-  if (stripeClientCache && stripeClientCacheKey === key) return stripeClientCache;
-  stripeClientCache = new Stripe(key);
-  stripeClientCacheKey = key;
-  return stripeClientCache;
-}
-
-function isStripeMockCheckoutEnabled() {
-  return (
-    process.env.NODE_ENV !== "production" &&
-    String(process.env.STRIPE_MOCK_CHECKOUT || "").trim() === "1"
-  );
-}
-
-function buildCheckoutUrlWithSessionId(url, sessionId) {
-  const base = String(url || "").trim();
-  if (!base) return "";
-  if (base.includes("{CHECKOUT_SESSION_ID}")) {
-    return base.replaceAll("{CHECKOUT_SESSION_ID}", encodeURIComponent(sessionId));
-  }
-  return `${base}${base.includes("?") ? "&" : "?"}session_id=${encodeURIComponent(sessionId)}`;
-}
-
-function buildMockStripeCheckoutUrl({
-  kind,
-  successUrl,
-  cancelUrl,
-  sessionId,
-  username,
-  label,
-}) {
-  const baseUrl = String(process.env.BASE_URL || "").trim().replace(/\/$/, "");
-  if (!baseUrl) return "";
-  const params = new URLSearchParams({
-    kind: String(kind || "").trim() || "checkout",
-    success: buildCheckoutUrlWithSessionId(successUrl, sessionId),
-    cancel: String(cancelUrl || "").trim(),
-    sessionId: String(sessionId || "").trim(),
-    username: String(username || "").trim(),
-    label: String(label || "").trim() || "Stripe checkout",
-  });
-  return `${baseUrl}/mock-stripe-checkout.html?${params.toString()}`;
-}
+const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || "").trim();
+const STRIPE_WEBHOOK_SECRET = String(
+  process.env.STRIPE_WEBHOOK_SECRET || ""
+).trim();
+const stripeClient = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
 const JWT_SECRET = (() => {
   const configured = String(process.env.JWT_SECRET || "").trim();
@@ -6528,8 +6467,7 @@ async function buildMePayload(u) {
       until: Number(u.vipUntil || 0),
       tier: u.vipTier || "none",
       canCreateTournament: canCreateTournament(u),
-      purchaseEnabled: isStripeVipConfigured(),
-      offer: isStripeVipConfigured() ? getStripeVipOfferPublic() : null,
+      purchaseEnabled: false,
     },
     canCreateTournament: canCreateTournament(u),
     isAdmin: isAdminUser(u),
@@ -6706,9 +6644,7 @@ app.post(
   "/api/stripe/webhook",
   express.raw({ type: "application/json" }),
   async (req, res) => {
-    const stripeClient = getStripeClient();
-    const stripeWebhookSecret = getStripeWebhookSecret();
-    if (!stripeClient || !stripeWebhookSecret) {
+    if (!stripeClient || !STRIPE_WEBHOOK_SECRET) {
       return res.status(503).json({ message: "Stripe nav konfigurēts." });
     }
     const sig = req.headers["stripe-signature"];
@@ -6718,7 +6654,7 @@ app.post(
       event = stripeClient.webhooks.constructEvent(
         req.body,
         sig,
-        stripeWebhookSecret
+        STRIPE_WEBHOOK_SECRET
       );
     } catch (err) {
       logger.warn({ err: String(err?.message || err) }, "stripe webhook verify");
@@ -6737,29 +6673,16 @@ app.post(
           logger.warn({ uname }, "stripe webhook: user not found");
           return res.json({ received: true });
         }
-        const vipMeta = String(session?.metadata?.vipPriceId || "").trim();
-        if (vipMeta) {
-          const result = grantVipForCheckoutSession(user, session);
-          if (result.ok && !result.already) {
-            await saveUsersImmediate(USERS);
-            ioServerRef?.emit("vip:updated", {
-              username: user.username,
-              active: isVipActive(user),
-              until: Number(user.vipUntil || 0),
-            });
-          }
-        } else {
-          const result = grantCoinsForCheckoutSession(user, session);
-          if (result.ok && !result.already && result.coinsAdded) {
-            await saveUsersImmediate(USERS);
-          }
-          if (result.ok && !result.already && result.coinsAdded) {
-            const sock = getSocketByUsername(user.username);
-            sock?.emit("coins:purchased", {
-              coins: user.coins,
-              added: result.coinsAdded,
-            });
-          }
+        const result = grantCoinsForCheckoutSession(user, session);
+        if (result.ok && !result.already && result.coinsAdded) {
+          await saveUsersImmediate(USERS);
+        }
+        if (result.ok && !result.already && result.coinsAdded) {
+          const sock = getSocketByUsername(user.username);
+          sock?.emit("coins:purchased", {
+            coins: user.coins,
+            added: result.coinsAdded,
+          });
         }
       }
     } catch (e) {
@@ -6772,66 +6695,6 @@ app.post(
 
 app.use(express.json({ limit: BODY_JSON_LIMIT }));
 app.use(express.urlencoded({ extended: true, limit: BODY_URLENC_LIMIT }));
-
-app.post("/api/mock/stripe/complete", (req, res) => {
-  if (!isStripeMockCheckoutEnabled()) {
-    return res.status(404).json({ message: "Mock checkout nav pieejams." });
-  }
-  const kind = String(req.body?.kind || "").trim().toLowerCase();
-  const username = String(req.body?.username || "").trim();
-  const sessionId =
-    String(req.body?.sessionId || "").trim() ||
-    `cs_mock_${crypto.randomBytes(8).toString("hex")}`;
-  const successUrl = String(req.body?.success || "").trim();
-  const cancelUrl = String(req.body?.cancel || "").trim();
-  if (!username) {
-    return res.status(400).json({ message: "Trūkst username." });
-  }
-  if (kind !== "vip") {
-    return res.status(400).json({ message: "Mock checkout atbalsta tikai VIP." });
-  }
-  const offer = getStripeVipOfferConfig();
-  if (!offer) {
-    return res.status(503).json({ message: "VIP piedāvājums nav konfigurēts." });
-  }
-  const key = findUserKeyCaseInsensitive(username);
-  const user = key ? USERS[key] : null;
-  if (!user) {
-    return res.status(404).json({ message: "Lietotājs nav atrasts." });
-  }
-  ensureVipFields(user);
-  const session = {
-    id: sessionId,
-    payment_status: "paid",
-    metadata: {
-      kind: "vip",
-      username: user.username,
-      vipOfferId: offer.id,
-      vipPriceId: offer.priceId,
-      vipTier: offer.tier,
-      vipDays: String(offer.days),
-    },
-  };
-  const result = grantVipForCheckoutSession(user, session);
-  if (!result.ok) {
-    return res.status(400).json({ message: "Mock VIP aktivācija neizdevās." });
-  }
-  if (!result.already) {
-    saveUsers(USERS);
-    ioServerRef?.emit("vip:updated", {
-      username: user.username,
-      active: isVipActive(user),
-      until: Number(user.vipUntil || 0),
-    });
-  }
-  return res.json({
-    ok: true,
-    redirectUrl:
-      buildCheckoutUrlWithSessionId(successUrl, sessionId) ||
-      cancelUrl ||
-      "/game.html?vip=ok",
-  });
-});
 
 app.use((err, req, res, next) => {
   if (err && (err.type === "entity.too.large" || err.status === 413)) {
@@ -7155,30 +7018,6 @@ function onlineBoardStatusForUsername(username) {
 function getMiniUserPayload(username) {
   const u = USERS[username];
   const board = onlineBoardStatusForUsername(username);
-  const isOnline = Array.from(onlineBySocket.values()).some(
-    (name) =>
-      String(name || "").trim().toLowerCase() ===
-      String(username || "").trim().toLowerCase()
-  );
-  const zoleLobbyId = userToZole3pLobby.get(String(username || "").trim());
-  const zoleLobby =
-    zoleLobbyId && zole3pLobbyById.has(zoleLobbyId)
-      ? zole3pLobbyById.get(zoleLobbyId)
-      : null;
-  const isJoinableLobby =
-    !!(
-      zoleLobby &&
-      Date.now() <= Number(zoleLobby.expiresAt || 0) &&
-      Array.isArray(zoleLobby.players) &&
-      zoleLobby.players.length < 3 &&
-      !zoleLobby.invitedSeat
-    );
-  const openSeatKey = String(username || "").trim().toLowerCase();
-  const openSeat = boardOpenSeatByHost.get(openSeatKey) || null;
-  const isJoinableOpenSeat =
-    !!openSeat &&
-    Date.now() <= Number(openSeat.expiresAt || 0) &&
-    !userToBoardGame.has(String(username || "").trim());
   if (!u) {
     return {
       username,
@@ -7188,20 +7027,10 @@ function getMiniUserPayload(username) {
       rankColor: "#9CA3AF",
       supporter: false,
       region: "",
-      isOnline,
       inBoardGame: board.inBoardGame,
       zoleVsBotLastHand: board.zoleVsBotLastHand,
       zole3pLobby: !!board.zole3pLobby,
       pendingBoardInvite: board.pendingBoardInvite || null,
-      zoleLobbyId: zoleLobby ? zoleLobby.id : "",
-      zoleLobbyPlayers: Array.isArray(zoleLobby?.players)
-        ? zoleLobby.players.slice()
-        : [],
-      zoleLobbyJoinable: isJoinableLobby,
-      boardOpenSeatType: String(openSeat?.type || "")
-        .trim()
-        .toLowerCase(),
-      boardOpenSeatJoinable: isJoinableOpenSeat,
     };
   }
   const info = ensureRankFields(u);
@@ -7213,20 +7042,10 @@ function getMiniUserPayload(username) {
     rankColor: u.rankColor || info.color || "#9CA3AF",
     supporter: !!u.supporter,
     region: u.region || "",
-    isOnline,
     inBoardGame: board.inBoardGame,
     zoleVsBotLastHand: board.zoleVsBotLastHand,
     zole3pLobby: !!board.zole3pLobby,
     pendingBoardInvite: board.pendingBoardInvite || null,
-    zoleLobbyId: zoleLobby ? zoleLobby.id : "",
-    zoleLobbyPlayers: Array.isArray(zoleLobby?.players)
-      ? zoleLobby.players.slice()
-      : [],
-    zoleLobbyJoinable: isJoinableLobby,
-    boardOpenSeatType: String(openSeat?.type || "")
-      .trim()
-      .toLowerCase(),
-    boardOpenSeatJoinable: isJoinableOpenSeat,
   };
 }
 
@@ -7245,13 +7064,11 @@ function broadcastOnlineList(force = false) {
       (u) =>
         `${u.username}|${u.avatarUrl || ""}|${u.rankLevel || 0}|${
           u.rankTitle || ""
-        }|${u.supporter ? 1 : 0}|${u.region || ""}|${u.isOnline ? 1 : 0}|${
+        }|${u.supporter ? 1 : 0}|${u.region || ""}|${
           u.inBoardGame ? 1 : 0
         }|${u.zoleVsBotLastHand ? 1 : 0}|${u.zole3pLobby ? 1 : 0}|${
           u.pendingBoardInvite?.from || ""
-        }|${u.pendingBoardInvite?.rematch ? 1 : 0}|${u.zoleLobbyId || ""}|${
-          u.zoleLobbyJoinable ? 1 : 0
-        }|${u.boardOpenSeatType || ""}|${u.boardOpenSeatJoinable ? 1 : 0}`
+        }|${u.pendingBoardInvite?.rematch ? 1 : 0}`
     )
     .join(";");
 
@@ -7857,12 +7674,10 @@ function listInvites(map) {
 
 function getFriendsPayload(user) {
   ensureFriends(user);
-  const friends = (user.friends || [])
-    .slice()
-    .sort((a, b) => String(a).localeCompare(String(b)));
   return {
-    friends,
-    friendMini: friends.map((username) => getMiniUserPayload(String(username || "").trim())),
+    friends: (user.friends || [])
+      .slice()
+      .sort((a, b) => String(a).localeCompare(String(b))),
     incoming: listInvites(user.friendInvitesIn),
     outgoing: listInvites(user.friendInvitesOut),
   };
@@ -8810,7 +8625,6 @@ app.post(
   authMiddleware,
   stripeCheckoutRateLimiter,
   async (req, res) => {
-    const stripeClient = getStripeClient();
     if (!stripeClient || !isStripeCoinsConfigured()) {
       return res.status(503).json({
         message: "Monētu pirkšana nav pieejama (Stripe nav konfigurēts).",
@@ -8841,14 +8655,12 @@ app.post(
         cancel_url: cancelUrl,
         client_reference_id: user.username,
         metadata: {
-          kind: "coins",
           username: user.username,
           packId: pack.id,
           coins: String(pack.coins),
         },
         payment_intent_data: {
           metadata: {
-            kind: "coins",
             username: user.username,
             packId: pack.id,
             coins: String(pack.coins),
@@ -9303,88 +9115,22 @@ app.post("/duel/offline-invites/:from/consume", authMiddleware, (req, res) => {
 app.get("/vip/status", authMiddleware, (req, res) => {
   const user = req.user;
   ensureVipFields(user);
-  const purchaseEnabled = isStripeVipConfigured();
   res.json({
     active: isVipActive(user),
     until: Number(user.vipUntil || 0),
     tier: user.vipTier || "none",
     canCreateTournament: canCreateTournament(user),
-    purchaseEnabled,
-    offer: purchaseEnabled ? getStripeVipOfferPublic() : null,
+    purchaseEnabled: false,
     message:
-      purchaseEnabled
-        ? "VIP pirkšana pieejama ar Stripe Checkout."
-        : "VIP pirkšana pašlaik nav pieejama.",
+      "VIP par žetoniem nav pieejams. Žetoni paredzēti laimes rata slotiem.",
   });
 });
 
-app.post("/vip/buy", authMiddleware, stripeCheckoutRateLimiter, async (req, res) => {
-  const offer = getStripeVipOfferConfig();
-  if (!offer) {
-    return res.status(503).json({
-      message: "VIP pirkšanas piedāvājums nav konfigurēts.",
-    });
-  }
-  const user = req.user;
-  const baseUrl = String(
-    process.env.BASE_URL || "https://bugats-wordle-server.onrender.com"
-  ).replace(/\/$/, "");
-  const successUrl = String(
-    process.env.STRIPE_VIP_SUCCESS_URL || `${baseUrl}/game.html?vip=ok`
-  );
-  const cancelUrl = String(
-    process.env.STRIPE_VIP_CANCEL_URL || `${baseUrl}/game.html?vip=cancel`
-  );
-  const metadata = {
-    kind: "vip",
-    username: user.username,
-    vipOfferId: offer.id,
-    vipPriceId: offer.priceId,
-    vipTier: offer.tier,
-    vipDays: String(offer.days),
-  };
-  if (isStripeMockCheckoutEnabled()) {
-    const sessionId = `cs_mock_${crypto.randomBytes(8).toString("hex")}`;
-    return res.json({
-      url: buildMockStripeCheckoutUrl({
-        kind: "vip",
-        successUrl,
-        cancelUrl,
-        sessionId,
-        username: user.username,
-        label: offer.label,
-      }),
-      sessionId,
-      offer: getStripeVipOfferPublic(),
-    });
-  }
-  const stripeClient = getStripeClient();
-  if (!stripeClient || !isStripeVipConfigured()) {
-    return res.status(503).json({
-      message: "VIP pirkšana nav pieejama (Stripe nav konfigurēts).",
-    });
-  }
-  try {
-    const session = await stripeClient.checkout.sessions.create({
-      mode: "payment",
-      line_items: [{ price: offer.priceId, quantity: 1 }],
-      success_url: successUrl.includes("{CHECKOUT_SESSION_ID}")
-        ? successUrl
-        : `${successUrl}${successUrl.includes("?") ? "&" : "?"}session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: cancelUrl,
-      client_reference_id: user.username,
-      metadata,
-      payment_intent_data: { metadata },
-    });
-    return res.json({
-      url: session.url,
-      sessionId: session.id,
-      offer: getStripeVipOfferPublic(),
-    });
-  } catch (e) {
-    logger.error({ err: String(e?.message || e) }, "stripe vip checkout create");
-    return res.status(500).json({ message: "Neizdevās izveidot VIP maksājumu." });
-  }
+app.post("/vip/buy", authMiddleware, async (req, res) => {
+  return res.status(403).json({
+    message:
+      "VIP pirkšana ar žetoniem ir izslēgta. Žetoni paredzēti tikai laimes ratam.",
+  });
 });
 
 app.post("/admin/vip/grant", authMiddleware, async (req, res) => {
@@ -14888,18 +14634,6 @@ if (process.env.NODE_ENV !== "test") {
 const __testHooks = {
   setRegionStateForTestOnly,
   getCurrentRoundWordForTestOnly,
-  setStripeClientForTestOnly(client) {
-    if (process.env.NODE_ENV !== "test") return;
-    stripeClientOverrideForTest = client || null;
-    if (!client) {
-      stripeClientCache = null;
-      stripeClientCacheKey = "";
-    }
-  },
-  getUserByNameForTestOnly(username) {
-    if (process.env.NODE_ENV !== "test") return null;
-    return getUserByNameForTestOnly(username);
-  },
   resetWeeklyQueueForTestOnly() {
     if (process.env.NODE_ENV !== "test") return;
     tournamentStore.weeklyQueue = buildInitialWeeklyQueue(Date.now());

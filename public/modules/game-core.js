@@ -180,8 +180,6 @@
 
       stripeCoinsEnabled: false,
       stripeCoinPacks: [],
-      vipPurchaseEnabled: false,
-      vipOffer: null,
     };
   }
 
