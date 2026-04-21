@@ -425,8 +425,47 @@
       tbody.appendChild(tr);
     }
 
+    function dataRowHist(rowLabel, rowTitle, values, fmt) {
+      const tr = document.createElement("tr");
+      const rh = document.createElement("th");
+      rh.setAttribute("scope", "row");
+      rh.className =
+        "vz-zole-table-hud__rowhead vz-zole-table-hud__rowhead--hist";
+      rh.textContent = rowLabel;
+      rh.setAttribute("title", rowTitle);
+      tr.appendChild(rh);
+      for (let i = 0; i < 3; i++) {
+        const raw = values[i];
+        const t = fmt ? fmt(raw, i) : formatPts(raw);
+        const n = Number(raw);
+        const neg = Number.isFinite(n) && n < 0;
+        const td = document.createElement("td");
+        td.className = "vz-zole-table-hud__cell vz-zole-table-hud__cell--hist";
+        if (i === myIdx) td.classList.add("vz-zole-table-hud__cell--me");
+        if (activePi === i) td.classList.add("vz-zole-table-hud__cell--active");
+        td.textContent = t;
+        if (neg) td.classList.add("vz-zole-table-hud__cell--neg");
+        td.setAttribute("title", rowTitle);
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+
     if (showPart) {
       dataRow("P.", "Partijas punkti tabulā", tdArr, (v) => formatPts(v));
+    }
+    const completed = Array.isArray(zole.completedTableDeltas)
+      ? zole.completedTableDeltas
+      : [];
+    const hN = completed.length;
+    for (let slot = 0; slot < hN; slot++) {
+      const abs = hN - slot;
+      const rowLab = `\u2212${abs}.`;
+      const title =
+        abs === 1
+          ? "Iepriekšējās partijas punkti tabulā"
+          : `Pirms ${abs} partijām — punkti tabulā`;
+      dataRowHist(rowLab, title, completed[slot], (v) => formatPts(v));
     }
     dataRow("K.", "Kopā tabulā", cum, (v) => formatPts(v));
     if (showEyes) {

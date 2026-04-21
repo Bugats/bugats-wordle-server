@@ -6690,6 +6690,11 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   white-space: nowrap;
   width: 16px;
 }
+#board-zole-container .vz-zole-table-hud__rowhead--hist {
+  color: rgba(255, 255, 255, 0.32);
+  font-weight: 700;
+  font-size: 6.5px;
+}
 #board-zole-container .vz-zole-table-hud__cell {
   padding: 2px 1px;
   text-align: center;
@@ -6697,6 +6702,11 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   font-size: 8px;
   color: #fef9c3;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+#board-zole-container .vz-zole-table-hud__cell--hist {
+  font-size: 7px;
+  font-weight: 600;
+  color: rgba(254, 249, 195, 0.72);
 }
 #board-zole-container .vz-zole-table-hud__cell--me {
   color: #e0f2fe;
