@@ -2277,7 +2277,8 @@ summary:focus-visible {
   margin-bottom: 6px;
   perspective: 900px;
   position: relative;
-  z-index: 2;
+  /* Virs #vz-grid-fx (z-index 6), lai burti netiek aizklāti ar PIXI overlay */
+  z-index: 8;
 }
 
 .vz-tile,
@@ -2676,10 +2677,34 @@ summary:focus-visible {
    =========================== */
 
 .vz-game-message {
-  min-height: 22px;
-  margin-top: 6px;
-  font-weight: 600;
-  color: #d7dadc;
+  min-height: 1.5em;
+  margin-top: 8px;
+  margin-bottom: 2px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: clamp(14px, 3.6vw, 17px);
+  line-height: 1.35;
+  text-align: center;
+  color: #f1f5f9;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  background: rgba(6, 10, 18, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-sizing: border-box;
+}
+
+.vz-body-game.vz-theme-light .vz-game-message {
+  color: #0f172a;
+  text-shadow: none;
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+.vz-body-game.vz-theme-contrast .vz-game-message {
+  color: #ffffff;
+  text-shadow: 0 0 1px #000000, 0 0 2px #000000;
+  background: #000000;
+  border: 2px solid #ffffff;
 }
 
 /* ===========================

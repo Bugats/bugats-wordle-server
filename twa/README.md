@@ -23,7 +23,10 @@ It uses Bubblewrap to generate an Android project that always loads the live web
    - package_name: lv.thezone.wordle
    - sha256_cert_fingerprints: replace with your SHA256
 
-5) Update twa-manifest.json in this folder if needed (packageId, host, name, iconUrl). Host is set to bugats-wordle-server.onrender.com.
+5) Update `twa-manifest.json` in this folder if needed (`packageId`, `host`, `name`, `iconUrl`).
+   - `packageId` must match the Play Console app package exactly.
+   - For VĀRDU ZONA, use `lv.thezone.wordle` consistently in both Play Console and `assetlinks.json`.
+   - Host is set to bugats-wordle-server.onrender.com.
 
 6) Init the TWA project (only first time; creates twa/app/):
    bubblewrap init --manifest=https://bugats-wordle-server.onrender.com/manifest.json

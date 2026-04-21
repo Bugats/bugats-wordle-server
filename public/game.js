@@ -5862,7 +5862,8 @@ function fitGridToViewport() {
   const maxByW = Math.floor((availW - (cols - 1) * gap) / cols);
   const maxByH = Math.floor((availH - (rows - 1) * gap) / rows);
 
-  const size = Math.max(30, Math.min(68, Math.min(maxByW, maxByH)));
+  /* Līdz 72px: nedaudz lielāki burti, ja ekrānā ir vieta (īpaši 5 buršu raundi) */
+  const size = Math.max(30, Math.min(72, Math.min(maxByW, maxByH)));
 
   gridEl.style.setProperty("--tile-size", size + "px");
   gridEl.style.setProperty("--tile-gap", gap + "px");
@@ -8382,7 +8383,7 @@ async function handleTournamentReportSubmit() {
     return;
   }
   if (score1 === score2) {
-    setTournamentReportStatus("Neizšķirts šobrīd nav atbalstīts.", "error");
+    setTournamentReportStatus("Neizšķirts ��obrīd nav atbalstīts.", "error");
     return;
   }
 
