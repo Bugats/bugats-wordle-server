@@ -3013,6 +3013,75 @@ function getTournamentMetaById(tournamentId) {
   );
 }
 
+/** Īss turnīru vēstures saraksts klientam (pēdējie pabeigtie + aktīvie). */
+async function buildRecentTournamentsPayload(user, limit = 15) {
+  const lim = Math.max(1, Math.min(40, Math.floor(Number(limit) || 15)));
+  const meLc = String(user?.username || "")
+    .trim()
+    .toLowerCase();
+  const sorted = [...(tournamentStore.tournaments || [])]
+    .filter((t) => t && Number.isFinite(Number(t?.id)) && Number(t.id) > 0)
+    .sort(
+      (a, b) =>
+        Number(b.completedAt || b.createdAt || 0) -
+        Number(a.completedAt || a.createdAt || 0)
+    );
+  const out = [];
+  for (const meta of sorted) {
+    if (out.length >= lim) break;
+    const id = Number(meta.id);
+    let championName = "";
+    let finalStandings = [];
+    try {
+      if (meta.stageId != null) {
+        finalStandings = await tournamentManager.get.finalStandings(
+          meta.stageId
+        );
+      }
+    } catch {
+      finalStandings = [];
+    }
+    if (Array.isArray(finalStandings) && finalStandings.length) {
+      championName = String(finalStandings[0]?.name || "").trim();
+    }
+    let iParticipated = false;
+    try {
+      const rows =
+        (await tournamentDb.select("participant", {
+          tournament_id: id,
+        })) || [];
+      for (const row of rows) {
+        const nm = String(row?.name || "")
+          .trim()
+          .toLowerCase();
+        if (nm && meLc && nm === meLc) {
+          iParticipated = true;
+          break;
+        }
+      }
+    } catch {
+      iParticipated = false;
+    }
+    const st = String(meta?.status || "active").toLowerCase();
+    out.push({
+      id,
+      name: String(meta?.name || `Turnīrs #${id}`).trim() || `Turnīrs #${id}`,
+      status: st === "completed" || st === "archived" ? st : "active",
+      type: meta?.type || "single_elimination",
+      playMode: normalizeTournamentPlayMode(meta?.playMode),
+      createdAt: Math.max(0, Number(meta?.createdAt) || 0),
+      completedAt: Math.max(0, Number(meta?.completedAt) || 0),
+      participantCount: Math.max(
+        0,
+        Math.floor(Number(meta?.participantCount) || 0)
+      ),
+      championName,
+      iParticipated: !!meLc && iParticipated,
+    });
+  }
+  return out;
+}
+
 function normalizeTournamentName(raw) {
   const name = String(raw || "")
     .replace(/\s+/g, " ")
@@ -9835,8 +9904,15 @@ app.get("/tournaments", authMiddleware, async (req, res) => {
   const list = [...(tournamentStore.tournaments || [])].sort(
     (a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)
   );
+  let recentTournaments = [];
+  try {
+    recentTournaments = await buildRecentTournamentsPayload(req.user, 15);
+  } catch (err) {
+    console.warn("buildRecentTournamentsPayload failed:", err);
+  }
   res.json({
     tournaments: list,
+    recentTournaments,
     schedule: buildWeeklyQueuePayload(req.user),
     vipRooms: getVipRoomsForUser(req.user),
   });

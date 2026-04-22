@@ -140,6 +140,7 @@
 
       // Turniri
       tournaments: [],
+      recentTournaments: [],
       tournamentActiveId: null,
       tournamentReportCtx: null,
       tournamentDisputeCtx: null,

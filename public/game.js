@@ -2266,6 +2266,8 @@ const tournamentScheduleSlotsEl = $("#tournament-schedule-slots");
 const tournamentWeeklyJoinBtnEl = $("#tournament-weekly-join-btn");
 const tournamentWeeklyJoinStatusEl = $("#tournament-weekly-join-status");
 const tournamentRulesListEl = $("#tournament-rules-list");
+const tournamentRecentWrapEl = $("#tournament-recent-wrap");
+const tournamentRecentListEl = $("#tournament-recent-list");
 const vipQuickTournamentPanelEl = $("#vip-quick-tournament-panel");
 const vipQuickTournamentHelpEl = $("#vip-quick-tournament-help");
 const vipQuickTournamentNameEl = $("#vip-quick-tournament-name");
@@ -8099,6 +8101,56 @@ function showTournamentMatchStartModal(message) {
   overlay.classList.remove("hidden");
 }
 
+function renderTournamentRecentList() {
+  if (!tournamentRecentWrapEl || !tournamentRecentListEl) return;
+  const list = Array.isArray(state.recentTournaments)
+    ? state.recentTournaments
+    : [];
+  if (!list.length) {
+    tournamentRecentWrapEl.classList.add("hidden");
+    tournamentRecentListEl.innerHTML = "";
+    return;
+  }
+  tournamentRecentWrapEl.classList.remove("hidden");
+  tournamentRecentListEl.innerHTML = "";
+  for (const t of list) {
+    const id = Number(t?.id);
+    if (!Number.isFinite(id) || id < 1) continue;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "vz-tournament-recent-item";
+    const st = String(t?.status || "active").toLowerCase();
+    const done = st === "completed" || st === "archived";
+    const nm = String(t?.name || `Turnīrs #${id}`).trim() || `Turnīrs #${id}`;
+    const titleEl = createEl("span", "vz-tournament-recent-item__title", nm);
+    const parts = [];
+    parts.push(done ? "Pabeigts" : "Aktīvs");
+    const champ = String(t?.championName || "").trim();
+    if (champ) parts.push(`🏆 ${champ}`);
+    const metaEl = createEl(
+      "span",
+      "vz-tournament-recent-item__meta",
+      parts.join(" · ")
+    );
+    btn.appendChild(titleEl);
+    btn.appendChild(metaEl);
+    if (t?.iParticipated) {
+      const badge = createEl(
+        "span",
+        "vz-tournament-recent-item__badge",
+        "Tu biji"
+      );
+      btn.appendChild(badge);
+    }
+    btn.addEventListener("click", () => {
+      state.tournamentActiveId = id;
+      state.tournamentHintTournamentId = id;
+      void refreshTournamentCard(true);
+    });
+    tournamentRecentListEl.appendChild(btn);
+  }
+}
+
 function clearTournamentCardUi() {
   if (tournamentMetaEl) {
     tournamentMetaEl.textContent = "";
@@ -8256,10 +8308,24 @@ function renderTournamentCard(meta, details) {
     ? String(details.finalStandings?.[0]?.name || "").trim()
     : "";
   if (championName && tournamentEmptyEl) {
+    const doneAt = Math.max(0, Number(meta?.completedAt) || 0);
+    const when =
+      doneAt > 0
+        ? new Date(doneAt).toLocaleString("lv-LV", {
+            timeZone: "Europe/Riga",
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "";
     fillVzEmptyState(tournamentEmptyEl, {
       glyph: "🏆",
       title: "Turnīrs noslēgts",
-      text: `Uzvarētājs: ${championName}`,
+      text: when
+        ? `Uzvarētājs: ${championName} · noslēgts ${when}`
+        : `Uzvarētājs: ${championName}`,
       compact: true,
       extraClass: "mission-status",
     });
@@ -8421,8 +8487,12 @@ async function refreshTournamentCard(force = false) {
       listPayload?.schedule
     );
     state.vipRooms = normalizeVipRoomList(listPayload?.vipRooms);
+    state.recentTournaments = Array.isArray(listPayload?.recentTournaments)
+      ? listPayload.recentTournaments
+      : [];
     renderTournamentSchedule();
     renderVipRoomPanel();
+    renderTournamentRecentList();
     const list = normalizeTournamentList(listPayload);
     state.tournaments = list;
 

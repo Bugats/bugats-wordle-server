@@ -101,6 +101,10 @@ describe("Tournament brackets API", () => {
     expect(listRes.body.tournaments.some((t) => t.id === tournamentId)).toBe(
       true
     );
+    expect(Array.isArray(listRes.body?.recentTournaments)).toBe(true);
+    expect(
+      listRes.body.recentTournaments.some((r) => r && r.id === tournamentId)
+    ).toBe(true);
 
     const detailRes = await request(app)
       .get(`/tournaments/${tournamentId}`)

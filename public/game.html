@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-27-friends-presence" />
+  <link rel="stylesheet" href="style.css?v=2026-03-28-tournaments-recent" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -498,9 +498,9 @@
                     <div class="vz-tournament-flow">
                       <div class="vz-card-header-sub">Vienota plūsma</div>
                       <ul class="vz-tournament-flow-list">
-                        <li>1) Spēlē turnīrus.</li>
-                        <li>2) VIP istabas izmanto privātām spēlēm.</li>
-                        <li>3) Ja nav mača, izaicini draugu.</li>
+                        <li>1) Pieteicies nedēļas turnīram vai atver pēdējo turnīru sarakstā.</li>
+                        <li>2) Spēlē mačus un iesniedz rezultātu (vai auto), līdz bracketam ir gala.</li>
+                        <li>3) VIP istabas — privātiem bracketiem ar draugiem.</li>
                       </ul>
                     </div>
                     <div id="tournament-schedule-line" class="vz-support-note">
@@ -513,6 +513,21 @@
                     </button>
                     <div id="tournament-weekly-join-status" class="mission-status"></div>
                     <ul id="tournament-rules-list" class="vz-missions-list"></ul>
+
+                    <div
+                      id="tournament-recent-wrap"
+                      class="vz-tournament-recent-wrap hidden"
+                      role="region"
+                      aria-labelledby="tournament-recent-title">
+                      <div id="tournament-recent-title" class="vz-card-header-sub">
+                        Pēdējie turnīri
+                      </div>
+                      <p class="vz-tournament-recent-hint vz-support-note">
+                        Noslēgtie un aktīvie — spied, lai atvērtu detaļās. Uzvarētājs rādās pēc bracketa
+                        pabeigšanas.
+                      </p>
+                      <ul id="tournament-recent-list" class="vz-tournament-recent-list"></ul>
+                    </div>
 
                     <ul id="tournament-match-list" class="vz-tournament-list hidden"></ul>
                     <div id="tournament-empty" class="hidden"></div>
@@ -1118,7 +1133,7 @@
       src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
 
     <!-- Game moduļi (pakāpeniska monolīta sadalīšana) -->
-    <script defer src="modules/game-core.js?v=2026-03-28-social-clan-weekly"></script>
+    <script defer src="modules/game-core.js?v=2026-03-28-tournaments-recent"></script>
     <script defer src="modules/services.js?v=2026-03-16-modsplit-1"></script>
     <script defer src="modules/ui.js?v=2026-03-16-modsplit-1"></script>
     <script defer src="modules/chat.js?v=2026-03-16-modsplit-1"></script>
@@ -1129,7 +1144,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-27-friends-presence"></script>
+    <script defer src="game.js?v=2026-03-28-tournaments-recent"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
