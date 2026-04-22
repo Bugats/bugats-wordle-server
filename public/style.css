@@ -3375,6 +3375,47 @@ summary:focus-visible {
 }
 
 /* ===========================
+   Šodien VĀRDU ZONĀ (viena rinda — atgriešanās)
+   =========================== */
+
+.vz-daily-anchor-card {
+  border-left: 3px solid #9d2235;
+  background: linear-gradient(
+    135deg,
+    rgba(157, 34, 53, 0.12) 0%,
+    rgba(20, 24, 32, 0.35) 55%
+  );
+}
+.vz-daily-anchor-kicker {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 224, 130, 0.88);
+}
+.vz-daily-anchor-headline {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #f8fafc;
+}
+.vz-daily-anchor-progress {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.92);
+  font-variant-numeric: tabular-nums;
+}
+.vz-daily-anchor-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  opacity: 0.82;
+}
+
+/* ===========================
    Dienas misijas
    =========================== */
 

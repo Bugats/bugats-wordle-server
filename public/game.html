@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-27-vz-unified-brand-b" />
+  <link rel="stylesheet" href="style.css?v=2026-03-27-daily-anchor" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -394,6 +394,25 @@
                     🎮 Dalīties rezultātu Discord
                   </button>
                   <p id="share-result-note" class="vz-share-note u-hidden-initial">Dalies ar savu rezultātu.</p>
+                </div>
+
+                <!-- ŠODIENAS MĒRĶIS (atgriešanās iemesls) -->
+                <div
+                  class="vz-leaderboard-card vz-daily-anchor-card"
+                  id="vz-daily-anchor-card"
+                  role="region"
+                  aria-labelledby="vz-daily-anchor-title">
+                  <div class="vz-card-header" id="vz-daily-anchor-title">
+                    Šodien VĀRDU ZONĀ
+                  </div>
+                  <p class="vz-daily-anchor-kicker" id="vz-daily-anchor-kicker">
+                    Tavs šodienas mērķis
+                  </p>
+                  <p class="vz-daily-anchor-headline" id="vz-daily-anchor-headline">
+                    Ielādē…
+                  </p>
+                  <p class="vz-daily-anchor-progress" id="vz-daily-anchor-progress"></p>
+                  <p class="vz-daily-anchor-hint vz-support-note" id="vz-daily-anchor-hint"></p>
                 </div>
 
                 <!-- MISIJAS -->
@@ -1110,7 +1129,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-27-vz-unified-brand"></script>
+    <script defer src="game.js?v=2026-03-27-daily-anchor"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>

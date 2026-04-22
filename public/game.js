@@ -2223,6 +2223,10 @@ const hofSeason1El = document.getElementById("hof-season1");
 
 // Misijas
 const missionsListEl = $("#missions-list");
+const dailyAnchorKickerEl = $("#vz-daily-anchor-kicker");
+const dailyAnchorHeadlineEl = $("#vz-daily-anchor-headline");
+const dailyAnchorProgressEl = $("#vz-daily-anchor-progress");
+const dailyAnchorHintEl = $("#vz-daily-anchor-hint");
 const engagementLoopCardEl = $("#engagement-loop-card");
 const engagementLoopSummaryEl = $("#engagement-loop-summary");
 const engagementLoopPrimaryBtnEl = $("#engagement-loop-primary-btn");
@@ -3169,6 +3173,10 @@ const TUTORIAL_STEPS = [
   {
     title: "Coins un uzticība",
     body: "Viens virtuālais atlikums visās spēlēs. Īss skaidrojums: izvēlnē «⋯ Vairāk» → «Coins / VIP / turnīri». Pirms naudas pirkuma — saite «Privātums un maksājumi» pie Stripe pakotnēm.",
+  },
+  {
+    title: "Šodienas mērķis",
+    body: "Sadaļā «Sacensības un rangi» kartīte «Šodien VĀRDU ZONĀ» parāda vienu skaidru soli — dienas lādi, misiju vai bonusu. Zem tās ir pilns misiju saraksts.",
   },
   {
     title: "Kā minēt",
@@ -4944,6 +4952,105 @@ function handleProfileDuelClick() {
 }
 
 // ==================== DIENAS MISIJAS ====================
+function formatMissionRewardsShort(rw) {
+  if (!rw || typeof rw !== "object") return "";
+  const parts = [];
+  if (rw.xp) parts.push(`+${rw.xp} XP`);
+  if (rw.coins) parts.push(`+${rw.coins} coins`);
+  if (rw.tokens) parts.push(`+${rw.tokens} žetoni`);
+  return parts.join(", ");
+}
+
+/** Viena skaidra «kāpēc atgriezties šodien» rinda — Daily Chest + dienas misijas. */
+function buildDailyAnchorSummary() {
+  const missions = Array.isArray(state.missions) ? state.missions : [];
+  const bonus = state.missionBonus;
+
+  if (_chestStatus?.available) {
+    const st = Math.max(0, Math.floor(Number(_chestStatus.streak) || 0));
+    return {
+      kicker: st > 0 ? `Dienas streak: ${st}` : "Ātra atlīdzība",
+      headline: "Atvērt dienas lādi",
+      progress: "Vienu reizi dienā — coins, XP un reizēm žetons.",
+      hint: "Pēc tam turpini vārdu raundu vai misijas zemāk.",
+    };
+  }
+
+  const claimM = missions.find((m) => m && m.isCompleted && !m.isClaimed);
+  if (claimM) {
+    const rw = formatMissionRewardsShort(claimM.rewards);
+    return {
+      kicker: "Misija gatava",
+      headline: "Saņem dienas misijas balvu",
+      progress: String(claimM.title || "Misija").slice(0, 140),
+      hint: rw ? `Balva: ${rw}. Spied «Saņemt» pie misijas zemāk.` : "Spied «Saņemt» pie misijas zemāk.",
+    };
+  }
+
+  if (bonus && bonus.isCompleted && !bonus.isClaimed) {
+    const rw = formatMissionRewardsShort(bonus.rewards);
+    return {
+      kicker: "Visas misijas izpildītas",
+      headline: "Saņem dienas bonusu",
+      progress: "Bonus par visām misijām šodien.",
+      hint: rw ? `Balva: ${rw}. Spied «Saņemt» pie bonusa zemāk.` : "Spied «Saņemt» pie bonusa zemāk.",
+    };
+  }
+
+  const inProg = missions.find(
+    (m) =>
+      m &&
+      !m.isCompleted &&
+      (Math.max(0, Math.floor(Number(m.progress) || 0)) <
+        Math.max(1, Math.floor(Number(m.target) || 1)))
+  );
+  if (inProg) {
+    const p = Math.max(0, Math.floor(Number(inProg.progress) || 0));
+    const t = Math.max(1, Math.floor(Number(inProg.target) || 1));
+    const rw = formatMissionRewardsShort(inProg.rewards);
+    return {
+      kicker: "Dienas misija",
+      headline: String(inProg.title || "Turpini dienas misiju").slice(
+        0,
+        140
+      ),
+      progress: `Progress: ${Math.min(p, t)}/${t}`,
+      hint: rw
+        ? `Pabeidz līdz ${t}, lai iegūtu: ${rw}.`
+        : "Detalizētāk — saraksts zemāk.",
+    };
+  }
+
+  if (missions.length > 0) {
+    return {
+      kicker: "Dienas progress",
+      headline: "Pārbaudi dienas misijas",
+      progress: "",
+      hint: "Ja viss izpildīts, saņem bonusu vai sāc jaunu raundu.",
+    };
+  }
+
+  return {
+    kicker: "Sveicināti",
+    headline: "Sāc raundu vai uzaicini uz dueli",
+    progress: "",
+    hint: "Dienas misijas parādās pēc ielādes — skaties sarakstu zemāk.",
+  };
+}
+
+function renderDailyAnchorCard() {
+  if (!dailyAnchorHeadlineEl) return;
+  const s = buildDailyAnchorSummary();
+  if (dailyAnchorKickerEl) dailyAnchorKickerEl.textContent = s.kicker || "";
+  dailyAnchorHeadlineEl.textContent = s.headline || "";
+  if (dailyAnchorProgressEl) {
+    const pr = String(s.progress || "").trim();
+    dailyAnchorProgressEl.textContent = pr;
+    dailyAnchorProgressEl.classList.toggle("hidden", !pr);
+  }
+  if (dailyAnchorHintEl) dailyAnchorHintEl.textContent = s.hint || "";
+}
+
 function renderMissions(missions, bonus) {
   if (!missionsListEl) return;
   state.missions = Array.isArray(missions) ? missions : [];
@@ -4956,6 +5063,7 @@ function renderMissions(missions, bonus) {
     status.textContent = "Šodien nav pieejamu misiju.";
     li.appendChild(status);
     missionsListEl.appendChild(li);
+    renderDailyAnchorCard();
     renderEngagementLoopCard();
     return;
   }
@@ -5055,6 +5163,7 @@ function renderMissions(missions, bonus) {
 
     missionsListEl.appendChild(li);
   }
+  renderDailyAnchorCard();
   renderEngagementLoopCard();
 }
 
@@ -5183,8 +5292,8 @@ function buildEngagementLoopActions() {
     actions.push({
       key: "open_daily_chest",
       type: "open_daily_chest",
-      label: "Atvērt Daily Chest",
-      note: "Atver lādi uzreiz, lai nezaudētu dienas loop tempu.",
+      label: "Atvērt dienas lādi",
+      note: "Atver lādi uzreiz — coins, XP un dienas streak.",
     });
   }
 
@@ -5385,6 +5494,7 @@ function renderEngagementLoopCard() {
       engagementLoopSecondaryActionsEl.appendChild(btn);
     });
   }
+  renderDailyAnchorCard();
   animateLoopCardTransition(primaryChanged);
 }
 
@@ -13130,7 +13240,7 @@ function ensureDailyChestUi() {
   btn.id = "vz-daily-chest-btn";
   btn.type = "button";
   btn.className = "mission-claim-btn";
-  btn.textContent = "🎁 Daily Chest";
+  btn.textContent = "🎁 Dienas lāde";
   btn.addEventListener("click", () => handleDailyChestClick());
 
   const sub = document.createElement("div");
@@ -13162,12 +13272,12 @@ function renderDailyChestUi(status) {
 
   if (available) {
     btn.disabled = false;
-    btn.textContent = "🎁 Atvērt Daily Chest";
+    btn.textContent = "🎁 Atvērt dienas lādi";
     sub.textContent = streak > 0 ? `Streak: ${streak}` : "Gatavs atvēršanai";
   } else {
     btn.disabled = false;
     const left = nextAt ? nextAt - Date.now() : 0;
-    btn.textContent = "🎁 Daily Chest (šodien jau atvērts)";
+    btn.textContent = "🎁 Dienas lāde (šodien jau atvērta)";
     sub.textContent = nextAt
       ? `Nākamais pēc: ${formatMsShort(left)}`
       : "Nāc rīt!";
@@ -13181,6 +13291,7 @@ async function refreshDailyChestStatus() {
     _chestStatus = s;
     ensureDailyChestUi();
     renderDailyChestUi(s);
+    renderDailyAnchorCard();
     renderEngagementLoopCard();
   } catch (err) {
     console.warn("Daily Chest status kļūda:", err);
@@ -13209,7 +13320,7 @@ async function openDailyChestNow() {
     const streak = Number(data?.streak) || 0;
 
     appendSystemMessage(
-      `🎁 Daily Chest atvērts: ${parts.join(", ") || "balva"} (streak ${streak})`
+      `🎁 Dienas lāde atvērta: ${parts.join(", ") || "balva"} (streak ${streak})`
     );
     animateDailyChestReward();
     playSound(sCoin);
