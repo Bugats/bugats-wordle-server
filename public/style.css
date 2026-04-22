@@ -1823,6 +1823,62 @@ button.vz-friend-quick-duel:hover {
   filter: brightness(1.08);
 }
 
+.vz-friend-clan-line {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(196, 181, 253, 0.95);
+  margin-top: 1px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vz-social-pulse-card {
+  border-left: 3px solid rgba(125, 211, 252, 0.55);
+  background: linear-gradient(
+    135deg,
+    rgba(14, 116, 144, 0.12) 0%,
+    rgba(15, 23, 42, 0.4) 60%
+  );
+}
+.vz-social-pulse-body {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #e2e8f0;
+}
+.vz-social-pulse-block {
+  margin-bottom: 10px;
+}
+.vz-social-pulse-block:last-child {
+  margin-bottom: 0;
+}
+.vz-social-pulse-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin: 6px 0 4px;
+}
+.vz-social-pulse-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0ea5e9, #22c55e);
+  min-width: 0;
+}
+.vz-social-pulse-nums {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #f8fafc;
+}
+.vz-social-pulse-note {
+  margin: 4px 0 0;
+  font-size: 10px;
+  opacity: 0.82;
+  line-height: 1.35;
+}
+
 /* ===== WEEKLY ===== */
 .vz-weekly-sub {
   font-size: 12px;

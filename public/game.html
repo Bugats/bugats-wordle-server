@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-28-tournaments-recent" />
+  <link rel="stylesheet" href="style.css?v=2026-03-28-social-pulse" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -442,6 +442,17 @@
                 <div class="vz-online-card">
                   <div class="vz-card-header">Online: <span id="online-count">0</span></div>
                   <ul id="online-list" class="vz-online-list"></ul>
+                </div>
+
+                <div
+                  class="vz-leaderboard-card vz-social-pulse-card"
+                  id="vz-social-pulse-card"
+                  role="region"
+                  aria-labelledby="vz-social-pulse-title">
+                  <div class="vz-card-header" id="vz-social-pulse-title">Sociālais pulss</div>
+                  <div id="vz-social-pulse-body" class="vz-social-pulse-body">
+                    <p class="vz-support-note">Ielādē…</p>
+                  </div>
                 </div>
 
                 <!-- DRAUGI -->
@@ -1133,7 +1144,7 @@
       src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
 
     <!-- Game moduļi (pakāpeniska monolīta sadalīšana) -->
-    <script defer src="modules/game-core.js?v=2026-03-28-tournaments-recent"></script>
+    <script defer src="modules/game-core.js?v=2026-03-28-social-pulse"></script>
     <script defer src="modules/services.js?v=2026-03-16-modsplit-1"></script>
     <script defer src="modules/ui.js?v=2026-03-16-modsplit-1"></script>
     <script defer src="modules/chat.js?v=2026-03-16-modsplit-1"></script>
@@ -1144,7 +1155,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-28-tournaments-recent"></script>
+    <script defer src="game.js?v=2026-03-28-social-pulse"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>

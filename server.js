@@ -7741,6 +7741,44 @@ function listInvites(map) {
   return arr;
 }
 
+function buildFriendSummariesForViewer(viewer) {
+  ensureFriends(viewer);
+  const names = (viewer.friends || [])
+    .map((n) => String(n || "").trim())
+    .filter(Boolean);
+  const out = [];
+  for (const name of names) {
+    const key = findUserKeyCaseInsensitive(name);
+    const fu = key ? USERS[key] : null;
+    const board = onlineBoardStatusForUsername(name);
+    const online = Array.from(onlineBySocket.values()).some(
+      (u) =>
+        String(u || "")
+          .trim()
+          .toLowerCase() === name.toLowerCase()
+    );
+    let clanTag = "";
+    if (fu?.clanId) {
+      const c = getClanById(fu.clanId);
+      if (c?.tag) clanTag = String(c.tag).trim().toUpperCase();
+    }
+    out.push({
+      name,
+      online,
+      inBoardGame: !!board.inBoardGame,
+      zole3pLobby: !!board.zole3pLobby,
+      zoleVsBotLastHand: !!board.zoleVsBotLastHand,
+      pendingBoardInvite: board.pendingBoardInvite || null,
+      clanTag,
+      sameClan:
+        !!viewer?.clanId &&
+        !!fu?.clanId &&
+        String(viewer.clanId) === String(fu.clanId),
+    });
+  }
+  return out;
+}
+
 function getFriendsPayload(user) {
   ensureFriends(user);
   return {
@@ -7749,6 +7787,7 @@ function getFriendsPayload(user) {
       .sort((a, b) => String(a).localeCompare(String(b))),
     incoming: listInvites(user.friendInvitesIn),
     outgoing: listInvites(user.friendInvitesOut),
+    friendSummaries: buildFriendSummariesForViewer(user),
   };
 }
 

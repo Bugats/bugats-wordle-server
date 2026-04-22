@@ -4154,7 +4154,9 @@ function updatePlayerCard(me) {
     }
   }
 
+  state.lastMeForSocial = me;
   renderClanCard(me);
+  renderSocialPulse();
 }
 
 function renderClanCard(me) {
@@ -5652,6 +5654,9 @@ function inviteFriendQuickDuel(friendName) {
 function applyFriendsPayload(payload) {
   if (!payload || typeof payload !== "object") return;
   state.friends = Array.isArray(payload.friends) ? payload.friends : [];
+  state.friendSummaries = Array.isArray(payload.friendSummaries)
+    ? payload.friendSummaries
+    : [];
   state.friendInvitesIn = Array.isArray(payload.incoming)
     ? payload.incoming
     : [];
@@ -5659,9 +5664,58 @@ function applyFriendsPayload(payload) {
     ? payload.outgoing
     : [];
   renderFriends();
+  renderSocialPulse();
   updateProfileFriendButton();
   renderVipRoomPanel();
   renderEngagementLoopCard();
+}
+
+function friendSummaryMap() {
+  const m = new Map();
+  for (const s of state.friendSummaries || []) {
+    const n = String(s?.name || "").trim().toLowerCase();
+    if (n) m.set(n, s);
+  }
+  return m;
+}
+
+function renderSocialPulse() {
+  const wrap = document.getElementById("vz-social-pulse-body");
+  if (!wrap) return;
+  const me = state.lastMeForSocial;
+  const clan = me?.clan;
+  const friends = Array.isArray(state.friends) ? state.friends : [];
+  const onlineFriends = friends.filter((n) =>
+    state.onlineUsers.has(String(n || "").trim().toLowerCase())
+  );
+  const parts = [];
+
+  if (clan?.weeklyGoal) {
+    const wg = clan.weeklyGoal;
+    const pct = Math.min(100, Math.max(0, Number(wg.pct) || 0));
+    const done = !!wg.done;
+    parts.push(
+      `<div class="vz-social-pulse-block"><strong>Klans · ${escapeHtml(
+        wg.label || "Nedēļas mērķis"
+      )}</strong><div class="vz-social-pulse-bar" aria-hidden="true"><span style="width:${pct}%"></span></div><div class="vz-social-pulse-nums">${escapeHtml(
+        String(Math.max(0, Math.floor(Number(wg.progress) || 0)))
+      )} / ${escapeHtml(
+        String(Math.max(1, Math.floor(Number(wg.target) || 1)))
+      )}${done ? " · ✓" : ""}</div><p class="vz-social-pulse-note">PvP galda uzvaras (ne pret botu). Nedēļa: ${escapeHtml(
+        String(wg.weekKey || "")
+      )}.</p></div>`
+    );
+  } else {
+    parts.push(
+      `<p class="vz-social-pulse-note">Nav klana — nedēļas kopējais mērķis nav pieejams. Vari izveidot vai pievienoties klanam zemāk.</p>`
+    );
+  }
+
+  parts.push(
+    `<div class="vz-social-pulse-block"><strong>Draugi tiešsaistē</strong>: ${onlineFriends.length} no ${friends.length}.</div>`
+  );
+
+  wrap.innerHTML = parts.join("");
 }
 
 function friendRelation(name) {
@@ -5741,20 +5795,26 @@ function renderFriends() {
     return;
   }
 
+  const sumByName = friendSummaryMap();
+
   state.friends.forEach((name) => {
     const row = createEl("li", "vz-friend-row");
     const left = createEl("div", "vz-friend-left");
     const top = createEl("div", "vz-friend-top");
-    const online = state.onlineUsers.has(
-      String(name || "")
-        .trim()
-        .toLowerCase()
-    );
-    const mini = state.onlineMiniByUser?.get(
-      String(name || "")
-        .trim()
-        .toLowerCase()
-    );
+    const key = String(name || "")
+      .trim()
+      .toLowerCase();
+    const summary = sumByName.get(key);
+    const online = summary?.online ?? state.onlineUsers.has(key);
+    const mini =
+      summary && typeof summary === "object"
+        ? {
+            inBoardGame: !!summary.inBoardGame,
+            zole3pLobby: !!summary.zole3pLobby,
+            zoleVsBotLastHand: !!summary.zoleVsBotLastHand,
+            pendingBoardInvite: summary.pendingBoardInvite || null,
+          }
+        : state.onlineMiniByUser?.get(key);
     const presUi = getFriendPresenceUi(mini, online);
 
     const badge = createEl("span", "vz-friend-pres-badge");
@@ -5773,6 +5833,21 @@ function renderFriends() {
       sub.textContent = presUi.sub;
       sub.title = presUi.title;
       left.appendChild(sub);
+    }
+    const tag = String(summary?.clanTag || "").trim().toUpperCase();
+    if (tag || summary?.sameClan) {
+      const clanLine = createEl("div", "vz-friend-clan-line");
+      if (summary?.sameClan) {
+        clanLine.textContent = `Tavs klans · [${tag || "—"}]`;
+      } else if (tag) {
+        clanLine.textContent = `Klans: [${tag}]`;
+      } else {
+        clanLine.textContent = "Tavs klans";
+      }
+      clanLine.title = summary?.sameClan
+        ? "Draugs ir tajā pašā klanā kā tu."
+        : "Drauga klana tags (ja pieejams).";
+      left.appendChild(clanLine);
     }
     row.appendChild(left);
 
@@ -8807,6 +8882,7 @@ function updateOnlineList(payload) {
   state.onlineUsers = onlineSet;
   state.onlineMiniByUser = miniMap;
   renderFriends();
+  renderSocialPulse();
 }
 
 // ==================== HALL OF FAME ====================
@@ -10949,6 +11025,7 @@ function initSocket() {
     try {
       const me = await apiGet("/me");
       updatePlayerCard(me);
+      renderSocialPulse();
     } catch (_) {}
   });
 

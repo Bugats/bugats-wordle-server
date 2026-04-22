@@ -161,6 +161,11 @@
       pendingDuelInvites: [],
       seenOfflineDuelInviteKeys: new Set(),
 
+      /** Draugu kopsavilkums no servera (online + galds + klana tags) */
+      friendSummaries: [],
+      /** Pēdējais /me objekts sociālajam pulsam */
+      lastMeForSocial: null,
+
       // Globālā skaņa
       soundOn: true,
 
