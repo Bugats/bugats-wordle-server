@@ -3168,7 +3168,7 @@ const TUTORIAL_STEPS = [
   },
   {
     title: "Draugi, duelis, galds",
-    body: "Viss ir VĀRDU ZONĀ: profilā pievieno draugus un vari uzaicināt uz dueli. Augšā ♟️ «Galda spēles» — šahs, dambrete, zole. Lejā «Sacensības un rangi» — TOP, misijas, turnīri.",
+    body: "Viss ir VĀRDU ZONĀ: profilā pievieno draugus. Draugu sarakstā redzams statuss (Spēlē / Gaida / Brīvs / Offline) un poga «⚔ Duelis» — viens klikšķis uz vārdu dueli. Augšā ♟️ «Galda spēles» — šahs, dambrete, zole. Lejā «Sacensības un rangi» — TOP, misijas, turnīri.",
   },
   {
     title: "Coins un uzticība",
@@ -5550,37 +5550,101 @@ async function claimMissionBonus() {
 }
 
 // ==================== DRAUGI ====================
-function formatSocialPresenceFromPayload(p) {
-  if (!p || typeof p !== "object") return null;
+/**
+ * Draugu / online īss statuss — bez «sociālā tīkla» sienas: Spēlē / Gaida / Brīvs / Offline.
+ * @returns {{ label: string, sub: string, title: string, tone: "busy"|"wait"|"room"|"free"|"off" }|null}
+ */
+function getFriendPresenceUi(p, online) {
+  if (!online) {
+    return {
+      label: "Offline",
+      sub: "",
+      title: "Nav tiešsaistē — dueli var nosūtīt, viņš redzēs, kad ienāks.",
+      tone: "off",
+    };
+  }
+  if (!p || typeof p !== "object") {
+    return {
+      label: "Brīvs",
+      sub: "",
+      title: "Tiešsaistē — vari uzaicināt uz dueli.",
+      tone: "free",
+    };
+  }
   const inGame = !!p.inBoardGame;
   const lobby = !!p.zole3pLobby;
   const invite = p.pendingBoardInvite;
   const lastHand = !!p.zoleVsBotLastHand;
-  const parts = [];
-  const titleBits = [];
+
   if (inGame) {
-    parts.push("galds");
-    titleBits.push("Spēlē galda spēli");
-  }
-  if (lobby) {
-    parts.push("Zole 3P");
-    titleBits.push("Atvērta Zoles 3 cilvēku istaba");
+    return {
+      label: "Spēlē",
+      sub: "galds",
+      title: "Aktīva galda spēle (šahs, dambrete vai zole).",
+      tone: "busy",
+    };
   }
   if (invite && invite.from) {
-    if (invite.rematch) {
-      parts.push("revānšs");
-      titleBits.push(`Gaida revānšu no ${invite.from}`);
-    } else {
-      parts.push("aicinājums");
-      titleBits.push(`Gaida galda uzaicinājumu no ${invite.from}`);
-    }
+    const rem = !!invite.rematch;
+    return {
+      label: "Gaida",
+      sub: rem ? "revānšs" : "aicinājums",
+      title: rem
+        ? `Gaida galda revānšu no ${invite.from}.`
+        : `Gaida galda uzaicinājumu no ${invite.from}.`,
+      tone: "wait",
+    };
+  }
+  if (lobby) {
+    return {
+      label: "Istaba",
+      sub: "Zole 3P",
+      title: "Atvērta Zoles 3 cilvēku istaba — var būt aizņemts ar uzaicinājumiem.",
+      tone: "room",
+    };
   }
   if (lastHand) {
-    parts.push("pēdējā partija");
-    titleBits.push("Zole pret botiem — pēdējā partija šajā mačā");
+    return {
+      label: "Spēlē",
+      sub: "Zole · pēdējā",
+      title: "Zole pret botiem — pēdējā partija šajā mačā.",
+      tone: "busy",
+    };
   }
-  if (!parts.length) return null;
-  return { text: parts.join(" · "), title: titleBits.join(" · ") };
+  return {
+    label: "Brīvs",
+    sub: "",
+    title: "Tiešsaistē — vari uzaicināt uz vārdu dueli.",
+    tone: "free",
+  };
+}
+
+/** Online sarakstam — kompakta viena rindiņa (saderība ar veco UI). */
+function formatSocialPresenceFromPayload(p) {
+  const online = true;
+  const ui = getFriendPresenceUi(p, online);
+  if (!ui) return null;
+  const line = ui.sub ? `${ui.label} · ${ui.sub}` : ui.label;
+  return { text: line, title: ui.title };
+}
+
+function inviteFriendQuickDuel(friendName) {
+  const target = String(friendName || "").trim();
+  if (!target) return;
+  if (!state.socket || !state.socket.connected) {
+    appendSystemMessage("Nav servera savienojuma — uzaicinājumu nevar nosūtīt.");
+    return;
+  }
+  if (target.toLowerCase() === String(state.username || "").trim().toLowerCase()) {
+    appendSystemMessage("Nevari izaicināt sevi.");
+    return;
+  }
+  state.socket.emit("duel.challenge", { target, ranked: true });
+  appendSystemMessage(`⚔ Nosūtīju dueli uz: ${target}.`);
+  document.getElementById("vz-section-game")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
 }
 
 function applyFriendsPayload(payload) {
@@ -5679,41 +5743,51 @@ function renderFriends() {
     const row = createEl("li", "vz-friend-row");
     const left = createEl("div", "vz-friend-left");
     const top = createEl("div", "vz-friend-top");
-    const dot = createEl("span", "vz-friend-status");
     const online = state.onlineUsers.has(
       String(name || "")
         .trim()
         .toLowerCase()
     );
-    if (online) dot.classList.add("vz-friend-online");
-    top.appendChild(dot);
+    const mini = state.onlineMiniByUser?.get(
+      String(name || "")
+        .trim()
+        .toLowerCase()
+    );
+    const presUi = getFriendPresenceUi(mini, online);
+
+    const badge = createEl("span", "vz-friend-pres-badge");
+    badge.textContent = presUi.label;
+    badge.title = presUi.title;
+    badge.classList.add(`vz-friend-pres-badge--${presUi.tone}`);
+    top.appendChild(badge);
 
     const nick = createEl("span", "vz-friend-name clickable-username");
     nick.textContent = name;
     nick.addEventListener("click", () => openProfile(name));
     top.appendChild(nick);
     left.appendChild(top);
-    const mini = state.onlineMiniByUser?.get(
-      String(name || "")
-        .trim()
-        .toLowerCase()
-    );
-    const pres = formatSocialPresenceFromPayload(mini);
-    if (pres) {
-      const pr = createEl("span", "vz-friend-presence");
-      pr.textContent = pres.text;
-      pr.title = pres.title;
-      left.appendChild(pr);
+    if (presUi.sub) {
+      const sub = createEl("span", "vz-friend-pres-sub");
+      sub.textContent = presUi.sub;
+      sub.title = presUi.title;
+      left.appendChild(sub);
     }
     row.appendChild(left);
 
     const actions = createEl("div", "vz-friend-actions");
+    const duelBtn = document.createElement("button");
+    duelBtn.type = "button";
+    duelBtn.className = "vz-friend-quick-duel";
+    duelBtn.textContent = "⚔ Duelis";
+    duelBtn.title = "Izaicināt uz vārdu dueli (tiešsaistē vai offline — saņems paziņojumu)";
+    duelBtn.addEventListener("click", () => inviteFriendQuickDuel(name));
     const dmBtn = document.createElement("button");
     dmBtn.textContent = "DM";
     dmBtn.addEventListener("click", () => openDmWith(name));
     const rmBtn = document.createElement("button");
     rmBtn.textContent = "Noņemt";
     rmBtn.addEventListener("click", () => friendRemove(name));
+    actions.appendChild(duelBtn);
     actions.appendChild(dmBtn);
     actions.appendChild(rmBtn);
     row.appendChild(actions);
