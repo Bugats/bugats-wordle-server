@@ -14621,8 +14621,18 @@ async function initGame() {
   }
 
   if (friendsFilterInputEl) {
+    try {
+      const saved = sessionStorage.getItem("vz_friend_list_filter");
+      if (saved) {
+        state.friendListFilter = saved;
+        friendsFilterInputEl.value = saved;
+      }
+    } catch (_) {}
     friendsFilterInputEl.addEventListener("input", () => {
       state.friendListFilter = String(friendsFilterInputEl.value || "");
+      try {
+        sessionStorage.setItem("vz_friend_list_filter", state.friendListFilter);
+      } catch (_) {}
       renderFriends();
     });
   }
