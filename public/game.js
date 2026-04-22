@@ -2291,6 +2291,8 @@ const vipRoomListEl = $("#vip-room-list");
 const friendsListEl = $("#friends-list");
 const friendsListScrollEl = $("#friends-list-scroll");
 const friendsListHintEl = $("#friends-list-hint");
+const friendsFilterInputEl = $("#friends-filter-input");
+const friendsCardEl = $("#friends-card");
 const friendsInvitesEl = $("#friends-invites");
 const friendAddInputEl = $("#friend-add-input");
 const friendAddBtnEl = $("#friend-add-btn");
@@ -5798,8 +5800,40 @@ function renderFriends() {
   }
 
   const sumByName = friendSummaryMap();
+  const nFriends = state.friends.length;
+  const filterLc = String(state.friendListFilter || "").trim().toLowerCase();
+  const useCompact = nFriends >= 8;
+  if (friendsCardEl) {
+    friendsCardEl.classList.toggle("vz-friends-card--compact", useCompact);
+  }
 
-  state.friends.forEach((name) => {
+  let namesToShow = state.friends.filter((raw) => {
+    const nm = String(raw || "").trim();
+    if (!filterLc) return true;
+    return nm.toLowerCase().includes(filterLc);
+  });
+  namesToShow = namesToShow.slice().sort((a, b) => {
+    const ka = String(a || "")
+      .trim()
+      .toLowerCase();
+    const kb = String(b || "")
+      .trim()
+      .toLowerCase();
+    const oa =
+      (sumByName.get(ka)?.online ?? state.onlineUsers.has(ka)) ? 1 : 0;
+    const ob =
+      (sumByName.get(kb)?.online ?? state.onlineUsers.has(kb)) ? 1 : 0;
+    if (ob !== oa) return ob - oa;
+    return String(a).localeCompare(String(b), "lv");
+  });
+
+  if (!namesToShow.length && filterLc) {
+    const li = createEl("li", "vz-friend-row vz-friend-row--filter-empty");
+    li.textContent = "Nav draugu, kas atbilst meklējumam.";
+    friendsListEl.appendChild(li);
+  }
+
+  for (const name of namesToShow) {
     const row = createEl("li", "vz-friend-row");
     const left = createEl("div", "vz-friend-left");
     const top = createEl("div", "vz-friend-top");
@@ -5830,41 +5864,53 @@ function renderFriends() {
     nick.addEventListener("click", () => openProfile(name));
     top.appendChild(nick);
     left.appendChild(top);
-    if (presUi.sub) {
-      const sub = createEl("span", "vz-friend-pres-sub");
-      sub.textContent = presUi.sub;
-      sub.title = presUi.title;
-      left.appendChild(sub);
-    }
+
     const tag = String(summary?.clanTag || "").trim().toUpperCase();
-    if (tag || summary?.sameClan) {
-      const clanLine = createEl("div", "vz-friend-clan-line");
-      if (summary?.sameClan) {
-        clanLine.textContent = `Tavs klans · [${tag || "—"}]`;
-      } else if (tag) {
-        clanLine.textContent = `Klans: [${tag}]`;
-      } else {
-        clanLine.textContent = "Tavs klans";
-      }
-      clanLine.title = summary?.sameClan
+    const metaBits = [];
+    if (presUi.sub) metaBits.push(presUi.sub);
+    if (summary?.sameClan && tag) metaBits.push(`[${tag}]`);
+    else if (summary?.sameClan) metaBits.push("klans");
+    else if (tag) metaBits.push(`[${tag}]`);
+    if (metaBits.length) {
+      const meta = createEl("span", "vz-friend-meta-inline", metaBits.join(" · "));
+      const clanHint = summary?.sameClan
         ? "Draugs ir tajā pašā klanā kā tu."
-        : "Drauga klana tags (ja pieejams).";
-      left.appendChild(clanLine);
+        : tag
+          ? "Drauga klana tags."
+          : "";
+      meta.title = [presUi.title, clanHint].filter(Boolean).join(" ");
+      left.appendChild(meta);
     }
+
     row.appendChild(left);
 
     const actions = createEl("div", "vz-friend-actions");
     const duelBtn = document.createElement("button");
     duelBtn.type = "button";
     duelBtn.className = "vz-friend-quick-duel";
-    duelBtn.textContent = "⚔ Duelis";
-    duelBtn.title = "Izaicināt uz vārdu dueli (tiešsaistē vai offline — saņems paziņojumu)";
+    if (useCompact) {
+      duelBtn.textContent = "⚔";
+      duelBtn.setAttribute("aria-label", `Duelis: ${name}`);
+    } else {
+      duelBtn.textContent = "⚔ Duelis";
+      duelBtn.setAttribute("aria-label", `Izaicināt uz dueli: ${name}`);
+    }
+    duelBtn.title =
+      "Izaicināt uz vārdu dueli (tiešsaistē vai offline — saņems paziņojumu)";
     duelBtn.addEventListener("click", () => inviteFriendQuickDuel(name));
     const dmBtn = document.createElement("button");
-    dmBtn.textContent = "DM";
+    dmBtn.className = "vz-friend-icon-btn";
+    dmBtn.type = "button";
+    dmBtn.textContent = useCompact ? "✉" : "DM";
+    dmBtn.title = "Privātās ziņas";
+    dmBtn.setAttribute("aria-label", `DM: ${name}`);
     dmBtn.addEventListener("click", () => openDmWith(name));
     const rmBtn = document.createElement("button");
-    rmBtn.textContent = "Noņemt";
+    rmBtn.className = "vz-friend-icon-btn vz-friend-icon-btn--danger";
+    rmBtn.type = "button";
+    rmBtn.textContent = useCompact ? "✕" : "Noņemt";
+    rmBtn.title = "Noņemt no draugiem";
+    rmBtn.setAttribute("aria-label", `Noņemt draugu: ${name}`);
     rmBtn.addEventListener("click", () => friendRemove(name));
     actions.appendChild(duelBtn);
     actions.appendChild(dmBtn);
@@ -5872,17 +5918,31 @@ function renderFriends() {
     row.appendChild(actions);
 
     friendsListEl.appendChild(row);
-  });
+  }
 
-  const nFriends = state.friends.length;
   if (friendsListHintEl) {
     friendsListHintEl.hidden = nFriends <= 8;
+    if (nFriends > 8) {
+      friendsListHintEl.textContent =
+        "Saraksts ir kompakts un ritināms — meklē pēc vārda, tiešsaistē augšā.";
+    }
   }
   if (friendsListScrollEl) {
-    friendsListScrollEl.setAttribute(
-      "aria-label",
-      nFriends ? `Draugu saraksts (${nFriends})` : "Draugu saraksts"
-    );
+    const shown = namesToShow.length;
+    const label =
+      filterLc && shown !== nFriends
+        ? `Draugu saraksts (${shown} no ${nFriends})`
+        : nFriends
+          ? `Draugu saraksts (${nFriends})`
+          : "Draugu saraksts";
+    friendsListScrollEl.setAttribute("aria-label", label);
+  }
+  if (
+    friendsFilterInputEl &&
+    document.activeElement !== friendsFilterInputEl
+  ) {
+    const want = String(state.friendListFilter || "");
+    if (friendsFilterInputEl.value !== want) friendsFilterInputEl.value = want;
   }
 }
 
@@ -14557,6 +14617,13 @@ async function initGame() {
         e.preventDefault();
         friendAddBtnEl.click();
       }
+    });
+  }
+
+  if (friendsFilterInputEl) {
+    friendsFilterInputEl.addEventListener("input", () => {
+      state.friendListFilter = String(friendsFilterInputEl.value || "");
+      renderFriends();
     });
   }
 

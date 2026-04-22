@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-28-friends-scroll" />
+  <link rel="stylesheet" href="style.css?v=2026-03-28-friends-compact-grid" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -463,6 +463,18 @@
                     <button id="friend-add-btn" type="button">Pievienot</button>
                   </div>
                   <div id="friends-invites" class="vz-friends-invites"></div>
+                  <div class="vz-friends-toolbar">
+                    <label class="vz-sr-only" for="friends-filter-input">Meklēt draugus</label>
+                    <input
+                      id="friends-filter-input"
+                      class="vz-friends-filter-input"
+                      type="search"
+                      inputmode="search"
+                      enterkeyhint="search"
+                      placeholder="Meklēt draugus…"
+                      autocomplete="off"
+                      spellcheck="false" />
+                  </div>
                   <div class="vz-friends-list-scroll" id="friends-list-scroll">
                     <ul id="friends-list" class="vz-friends-list"></ul>
                   </div>
@@ -1149,7 +1161,7 @@
       src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
 
     <!-- Game moduļi (pakāpeniska monolīta sadalīšana) -->
-    <script defer src="modules/game-core.js?v=2026-03-28-social-pulse"></script>
+    <script defer src="modules/game-core.js?v=2026-03-28-friends-compact-grid"></script>
     <script defer src="modules/services.js?v=2026-03-16-modsplit-1"></script>
     <script defer src="modules/ui.js?v=2026-03-16-modsplit-1"></script>
     <script defer src="modules/chat.js?v=2026-03-16-modsplit-1"></script>
@@ -1160,7 +1172,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-28-friends-scroll"></script>
+    <script defer src="game.js?v=2026-03-28-friends-compact-grid"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>

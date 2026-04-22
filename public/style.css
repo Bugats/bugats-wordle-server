@@ -1636,6 +1636,20 @@ summary:focus-visible {
   cursor: pointer;
 }
 
+.vz-friends-toolbar {
+  margin: 0 0 6px;
+}
+.vz-friends-filter-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.35);
+  color: #f8fafc;
+  font-size: 12px;
+}
+
 .vz-friends-invites {
   display: flex;
   flex-direction: column;
@@ -1673,7 +1687,7 @@ summary:focus-visible {
 
 /* Draugu saraksts: fiksēta augstuma zona ar ritināšanu (daudz draugu) */
 #friends-card .vz-friends-list-scroll {
-  max-height: min(42vh, 360px);
+  max-height: min(38vh, 320px);
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1683,7 +1697,7 @@ summary:focus-visible {
 }
 @media (min-width: 900px) {
   #friends-card .vz-friends-list-scroll {
-    max-height: min(50vh, 440px);
+    max-height: min(44vh, 400px);
   }
 }
 .vz-friends-list-hint {
@@ -1711,6 +1725,49 @@ summary:focus-visible {
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(0, 0, 0, 0.25);
   font-size: 12px;
+}
+.vz-friend-row--filter-empty {
+  justify-content: center;
+  font-size: 11px;
+  opacity: 0.85;
+  border-style: dashed;
+}
+
+/* Daudz draugu: vienā rindā — nav «kara līnijas» starp vārdu un pogām */
+#friends-card.vz-friends-card--compact .vz-friend-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 2px;
+  padding: 4px 6px;
+  font-size: 11px;
+}
+#friends-card.vz-friends-card--compact .vz-friend-left {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 0;
+}
+#friends-card.vz-friends-card--compact .vz-friend-top {
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 6px;
+}
+#friends-card.vz-friends-card--compact .vz-friend-meta-inline {
+  flex: 1 1 100%;
+  order: 3;
+}
+#friends-card.vz-friends-card--compact .vz-friend-actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  max-width: none;
+  flex-wrap: nowrap;
+  gap: 4px;
 }
 
 .vz-friend-left {
@@ -1745,6 +1802,11 @@ summary:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+#friends-card.vz-friends-card--compact .vz-friend-pres-badge {
+  max-width: 34%;
+  font-size: 8px;
+  padding: 1px 5px;
+}
 .vz-friend-pres-badge--free {
   border-color: rgba(34, 197, 94, 0.45);
   background: rgba(34, 197, 94, 0.12);
@@ -1771,16 +1833,21 @@ summary:focus-visible {
   color: #9ca3af;
 }
 
-.vz-friend-pres-sub {
+.vz-friend-meta-inline {
+  display: block;
+  width: 100%;
   font-size: 10px;
   font-weight: 600;
-  color: rgba(253, 230, 138, 0.88);
-  opacity: 0.9;
-  padding-left: 1px;
-  max-width: 100%;
+  color: rgba(253, 230, 138, 0.82);
+  opacity: 0.92;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+#friends-card.vz-friends-card--compact .vz-friend-meta-inline {
+  font-size: 9px;
+  width: 100%;
+  flex-basis: 100%;
 }
 
 .vz-friend-presence {
@@ -1819,6 +1886,9 @@ summary:focus-visible {
   gap: 6px;
   max-width: 52%;
 }
+#friends-card.vz-friends-card--compact .vz-friend-actions {
+  max-width: none;
+}
 
 .vz-friend-actions button {
   border-radius: 8px;
@@ -1829,6 +1899,10 @@ summary:focus-visible {
   font-weight: 800;
   padding: 4px 8px;
   cursor: pointer;
+}
+#friends-card.vz-friends-card--compact .vz-friend-actions button {
+  padding: 3px 6px;
+  font-size: 10px;
 }
 
 button.vz-friend-quick-duel {
@@ -1842,6 +1916,20 @@ button.vz-friend-quick-duel {
 }
 button.vz-friend-quick-duel:hover {
   filter: brightness(1.08);
+}
+#friends-card.vz-friends-card--compact button.vz-friend-quick-duel {
+  min-width: 30px;
+  padding: 3px 5px;
+}
+
+.vz-friend-icon-btn {
+  min-width: 28px;
+  padding: 3px 5px !important;
+  font-size: 11px !important;
+}
+.vz-friend-icon-btn--danger {
+  border-color: rgba(248, 113, 113, 0.35) !important;
+  color: #fecaca !important;
 }
 
 .vz-friend-clan-line {

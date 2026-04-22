@@ -163,6 +163,8 @@
 
       /** Draugu kopsavilkums no servera (online + galds + klana tags) */
       friendSummaries: [],
+      /** Meklēšanas teksts draugu sarakstā (klienta filtrs) */
+      friendListFilter: "",
       /** Pēdējais /me objekts sociālajam pulsam */
       lastMeForSocial: null,
 
