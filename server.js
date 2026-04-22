@@ -13800,7 +13800,7 @@ io.on("connection", (socket) => {
         }
         return socket.emit("board.error", {
           message:
-            "Saimniekam vispirms jāizveido zoles istaba (3 spēlētāji). Atver «Galda spēles» → Zole → «Izveidot istabu».",
+            "Saimniekam vispirms jāizveido zoles istaba (3 spēlētāji). VĀRDU ZONĀ: «Galda spēles» → Zole → «Izveidot istabu».",
         });
       }
       game = createZoleOnline2pGame(challengerName, opponentName);

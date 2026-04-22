@@ -823,7 +823,7 @@ const ZOLE_BOT_USERNAMES = new Set(["ZoleBot1", "ZoleBot2"]);
 
 /** Pēdējais galda rezultāts — revānša pogai */
 let lastBoardResultSnapshot = null;
-/** Lai «[Galda spēles] Tava kārta» nerādītos atkārtoti katram board.move (piem., šaha pulkstenis). */
+/** Lai «[VĀRDU ZONA — galds] Tava kārta» nerādītos atkārtoti katram board.move (piem., šaha pulkstenis). */
 let _lastGaldaTurnNotifyKey = null;
 
 /** Pēc nosūtīta gājiena: ja ilgi nav `board.move`, vienu reizi statusa kanālā (tīkla glitch bez disconnect). */
@@ -2040,7 +2040,7 @@ function showBoardGameResult(payload) {
     ) {
       title = "Mačs beidzies";
       detail =
-        "Pēdējā partija pret botiem ir izspēlēta. Vari turpināt vārdu spēli vai atvērt «Galda spēles» jaunai spēlei.";
+        "Pēdējā partija pret botiem ir izspēlēta. Vari turpināt VĀRDU ZONU (vārdi) vai atvērt «Galda spēles» jaunai spēlei.";
       overlay.classList.add("vz-board-result--draw");
     } else {
       title = "Neizšķirts";
@@ -3164,7 +3164,7 @@ const TUTORIAL_STEPS = [
   },
   {
     title: "Draugi, duelis, galds",
-    body: "Šajā pašā lapā: profilā pievieno draugus un vari uzaicināt uz dueli. Augšā ♟️ «Galda spēles» — šahs, dambrete, zole. Lejā «Sacensības un rangi» — TOP, misijas, turnīri.",
+    body: "Viss ir VĀRDU ZONĀ: profilā pievieno draugus un vari uzaicināt uz dueli. Augšā ♟️ «Galda spēles» — šahs, dambrete, zole. Lejā «Sacensības un rangi» — TOP, misijas, turnīri.",
   },
   {
     title: "Coins un uzticība",
@@ -8855,16 +8855,16 @@ function appendSystemMessage(text) {
   appendChatMessage({ username: "SYSTEM", text: t, ts: now });
 }
 
-/** Publiskā čata sistēmas ziņas par galda spēlēm — ar [Galda spēles], lai atšķirtu no vārdu spēles. */
+/** Publiskā čata sistēmas ziņas par galdu — ar [VĀRDU ZONA — galds], lai atšķirtu no vārdu raunda čata. */
 function appendGaldaSystemMessage(text) {
   const s = String(text ?? "").trim();
   if (!s) return;
-  const line = `[Galda spēles] ${s}`;
+  const line = `[VĀRDU ZONA — galds] ${s}`;
   appendSystemMessage(line);
   if (gameMessageEl) gameMessageEl.textContent = line;
 }
 
-/** Vienots statusa kanāls: čats + #game-message (vārdu zona + sinhr. ar galdu). */
+/** Vienots statusa kanāls: čats + #game-message (VĀRDU ZONA + sinhr. ar galdu). */
 const VZ_STATUS_PREFIX = "[VĀRDU ZONA]";
 function appendVzStatusMessage(detail) {
   const s = String(detail ?? "").trim();
@@ -11134,8 +11134,8 @@ function initSocket() {
     const rem = !!payload?.rematch;
     appendGaldaSystemMessage(
       rem
-        ? `${from} piedāvā revānšu (${typeLv}). Atver «Galda spēles», lai pieņemtu vai noraidītu.`
-        : `${from} uzaicina uz ${typeLv}. Atver «Galda spēles», lai pieņemtu vai noraidītu.`
+        ? `${from} piedāvā revānšu (${typeLv}). Atver «Galda spēles» (VĀRDU ZONA), lai pieņemtu vai noraidītu.`
+        : `${from} uzaicina uz ${typeLv}. Atver «Galda spēles» (VĀRDU ZONA), lai pieņemtu vai noraidītu.`
     );
   });
   socket.on("board.inviteSent", (payload) => {
@@ -11263,7 +11263,7 @@ function initSocket() {
   });
   socket.on("board.error", (payload) => {
     disarmBoardMoveResponseWait();
-    appendGaldaSystemMessage(payload?.message || "Galda spēles kļūda.");
+    appendGaldaSystemMessage(payload?.message || "Kļūda galdā (VĀRDU ZONA).");
   });
   socket.on("board.chessDrawState", (payload) => {
     if (payload?.gameId !== boardState.gameId) return;
@@ -12187,7 +12187,7 @@ function renderBoardGame() {
         hintEl.textContent =
           boardState.zoleMode === "vs_bot"
             ? boardState.zoleVsBotNextHandPending
-              ? "Spied «Nākamā partija» vai «Pēdējā partija» (tiešsaistē redzama atzīme; pēc pēdējās partijas mačs beidzas un atgriežies pie vārdu spēles). Atkāpties — pamest uzreiz."
+              ? "Spied «Nākamā partija» vai «Pēdējā partija» (tiešsaistē redzama atzīme; pēc pēdējās partijas mačs beidzas un atgriežies pie VĀRDU ZONAS — vārdu raunda). Atkāpties — pamest uzreiz."
               : "Šī bija pēdējā partija šajā mačā. Vari sākt jaunu spēli no lobija vai aizvērt modāli."
             : "Skaties tabulas punktus zemāk. Uzvarētājs pēc spēles — labākais +/− šajā partijā.";
       } else if (boardState.zole?.phase === "play") {
@@ -13496,7 +13496,8 @@ async function openDiscordShare(text) {
 
 async function handleShare() {
   const url = window.location.href;
-  const text = "VĀRDU ZONA – nāc uzspēlē latviešu Word battle!";
+  const text =
+    "VĀRDU ZONA — latviešu vārdi, šahs, dambrete un zole vienā lietotnē. Nāc spēlēt!";
 
   if (navigator.share) {
     try {
@@ -13516,13 +13517,15 @@ async function handleShare() {
 
 function handleShareWhatsapp() {
   const url = window.location.href;
-  const text = "VĀRDU ZONA – nāc uzspēlē latviešu Word battle!";
+  const text =
+    "VĀRDU ZONA — latviešu vārdi, šahs, dambrete un zole vienā lietotnē. Nāc spēlēt!";
   openWhatsappShare(`${text} ${url}`);
 }
 
 function handleShareDiscord() {
   const url = window.location.href;
-  const text = "VĀRDU ZONA – nāc uzspēlē latviešu Word battle!";
+  const text =
+    "VĀRDU ZONA — latviešu vārdi, šahs, dambrete un zole vienā lietotnē. Nāc spēlēt!";
   openDiscordShare(`${text} ${url}`);
 }
 

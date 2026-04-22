@@ -7,7 +7,7 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
     <meta http-equiv="Pragma" content="no-cache" />
-    <title>VĀRDU ZONA – spēle</title>
+    <title>VĀRDU ZONA</title>
 
     <meta name="theme-color" content="#9d2235" />
     <meta name="color-scheme" content="dark light" />
@@ -18,7 +18,7 @@
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <meta
       name="description"
-      content="VĀRDU ZONA — latviešu vārdu minēšanas spēle ar rankiem, XP, čatu, misijām un dueļiem."
+      content="VĀRDU ZONA — latviešu vārdu spēle, šahs, dambrete un zole vienā vietā: rangi, XP, čats, misijas un dueļi."
     />
 
     <!-- Perf: preconnect -->
@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-27-board-ux-chess-invite" />
+  <link rel="stylesheet" href="style.css?v=2026-03-27-vz-unified-brand-b" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -194,7 +194,7 @@
       <div class="vz-logo-main">
         <div id="vz-logo-fx" aria-hidden="true"></div>
         <img src="img/file_00000000ce6c720a99f237b5c35b4241.png" alt="VĀRDU ZONA" class="vz-logo-img" />
-        <span class="vz-logo-sub">LATVIEŠU VĀRDU SPĒLE</span>
+        <span class="vz-logo-sub">Vārdi · šahs · dambrete · zole — viena lietotne</span>
       </div>
 
       <!-- SEZONA -->
@@ -320,7 +320,7 @@
                   <div class="vz-card-row"><span>Lab. streak:</span><span id="player-best-streak"></span></div>
                   <div class="vz-card-row"><span>Coins:</span><span id="player-coins"></span></div>
                   <p class="vz-coins-hint">
-                    Viens atlikums visur: vārdu zonā vari <strong>iegūt un zaudēt</strong> coins
+                    Viens atlikums visur VĀRDU ZONĀ: vārdu raundā vari <strong>iegūt un zaudēt</strong> coins
                     spēlējot; <strong>Zolē, dambretē un šahā</strong> pēc partijas ar
                     <strong>cilvēkiem</strong> coins var mainīties (uzvara / zaudējums). Pret
                     <strong>botiem</strong> coins nemainās. Vari arī <strong>papildināt ar naudu</strong>
@@ -908,7 +908,7 @@
         <div class="profile-row"><span>Punkti:</span><span id="pp-score"></span></div>
         <div class="profile-row"><span>Coins:</span><span id="pp-coins"></span></div>
         <p class="vz-coins-hint vz-coins-hint--popup">
-          Tas pats atlikums: vārdu zona + galda spēles (Zole, dambrete, šahs) pret cilvēkiem; pret botiem
+          Tas pats atlikums visā VĀRDU ZONĀ — vārdi un galds (Zole, dambrete, šahs) pret cilvēkiem; pret botiem
           nemainās; papildināšana ar Stripe, ja ieslēgts.
           <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Īsi par coins</a>
         </p>
@@ -1106,11 +1106,11 @@
     <script defer src="modules/duel.js?v=2026-03-16-modsplit-1"></script>
     <script defer src="modules/board-games.js?v=2026-04-07-lint-cleanup"></script>
     <script defer src="modules/zole-legal.js?v=2026-03-24-zole-discard"></script>
-    <script defer src="modules/zole-board.js?v=2026-03-27-zole-table-history"></script>
+    <script defer src="modules/zole-board.js?v=2026-03-27-vz-unified-brand"></script>
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-27-board-ux-chess-invite"></script>
+    <script defer src="game.js?v=2026-03-27-vz-unified-brand"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1319,14 +1319,14 @@
             id="board-back-words-btn"
             type="button"
             class="vz-board-back-words"
-            title="Atgriezties pie vārdu spēles ekrāna. Aktīvā galda spēle turpinās; uzaicinājumi un gājiens arī čatā ar [Galda spēles] un zem «Ziņojumi».">
-            ← Vārdu zona
+            title="Atgriezties pie galvenā ekrāna. Aktīvā galda spēle turpinās; uzaicinājumi un gājiens arī čatā ar [VĀRDU ZONA — galds] un zem «Ziņojumi».">
+            ← VĀRDU ZONA
           </button>
           <p id="board-modal-context" class="vz-board-modal-context" role="status" aria-live="polite" aria-atomic="true"></p>
         </div>
         <div id="board-games-lobby" class="vz-board-lobby">
           <h3 class="vz-board-title">Galda spēles</h3>
-          <p class="vz-board-desc">Dambrete, šahs un zole. Uzvaras dod novada un klana punktus!</p>
+          <p class="vz-board-desc">Tā pati VĀRDU ZONA — dambrete, šahs un zole. Uzvaras dod novada un klana punktus!</p>
           <div id="board-dambrete-mode-wrap" class="vz-board-dambrete-mode" aria-label="Dambretes noteikumi">
             <span class="vz-board-dambrete-mode-label">Dambretes režīms</span>
             <div class="vz-board-dambrete-mode-radios">
@@ -1615,9 +1615,9 @@
               id="board-compact-back-words-btn"
               type="button"
               class="vz-board-compact-back-words hidden"
-              title="Atgriezties pie vārdu spēles; zole turpinās fonā."
-              aria-label="Atpakaļ pie vārdu spēles">
-              ← Vārdi
+              title="Atgriezties pie VĀRDU ZONAS galvenā ekrāna; zole turpinās fonā."
+              aria-label="Atpakaļ pie VĀRDU ZONAS galvenā ekrāna">
+              ← Galvenais
             </button>
             <div class="vz-board-game-meta">
               <span id="board-game-type" class="vz-board-game-type"></span>

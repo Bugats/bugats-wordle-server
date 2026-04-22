@@ -4776,9 +4776,13 @@ summary:focus-visible {
     max-width: min(320px, 85vw);
   }
   .vz-logo-sub{
-    font-size: 0.75rem;
-    letter-spacing: 0.14em;
-    display: none;
+    font-size: 0.62rem;
+    letter-spacing: 0.06em;
+    text-transform: none;
+    max-width: 92vw;
+    margin-left: auto;
+    margin-right: auto;
+    line-height: 1.25;
   }
 }
 /* ===== MOBILE/FULLSCREEN: nekas netraucē režģim + klaviatūrai ===== */

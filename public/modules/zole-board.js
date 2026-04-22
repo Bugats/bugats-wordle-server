@@ -313,7 +313,7 @@
       return `Gaida: ${names[t] || "?"} met kārti.`;
     }
     if (ph === "end" && zole.zoleLastMatchHand) {
-      return "Pēdējā partija šajā mačā — pēc tās atgriežamies pie vārdu spēles.";
+      return "Pēdējā partija šajā mačā — pēc tās atgriežamies pie VĀRDU ZONAS (vārdi).";
     }
     return "";
   }
@@ -1244,7 +1244,7 @@
         );
         lastBtn.type = "button";
         lastBtn.title =
-          "Pēdējā partija: citi redzēs atzīmi tiešsaistē; pēc partijas mačs beigsies un atgriezīsies pie vārdu spēles.";
+          "Pēdējā partija: citi redzēs atzīmi tiešsaistē; pēc partijas mačs beigsies un atgriezīsies pie VĀRDU ZONAS (vārdi).";
         lastBtn.addEventListener("click", () => opts.onZoleVsBotLastHand());
         const nextBtn = el(
           "button",

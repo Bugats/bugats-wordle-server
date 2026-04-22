@@ -1,7 +1,7 @@
 {
   "name": "VĀRDU ZONA",
   "short_name": "VĀRDU ZONA",
-  "description": "Latviešu vārdu minēšanas spēle ar rankiem, misijām, dueļiem un izaicinājumiem draugiem.",
+  "description": "VĀRDU ZONA — latviešu vārdu spēle, šahs, dambrete un zole vienā lietotnē: rangi, misijas, dueļi un draugi.",
   "lang": "lv",
   "start_url": "./",
   "scope": "./",
