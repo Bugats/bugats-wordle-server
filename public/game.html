@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-03-28-social-pulse" />
+  <link rel="stylesheet" href="style.css?v=2026-03-28-friends-scroll" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -463,7 +463,12 @@
                     <button id="friend-add-btn" type="button">Pievienot</button>
                   </div>
                   <div id="friends-invites" class="vz-friends-invites"></div>
-                  <ul id="friends-list" class="vz-friends-list"></ul>
+                  <div class="vz-friends-list-scroll" id="friends-list-scroll">
+                    <ul id="friends-list" class="vz-friends-list"></ul>
+                  </div>
+                  <p class="vz-friends-list-hint vz-support-note" id="friends-list-hint" hidden>
+                    Saraksts ir ritināms — daudzi draugi neaizņem visu ekrānu.
+                  </p>
                 </div>
 
                 <!-- KLANI -->
@@ -1155,7 +1160,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-03-28-social-pulse"></script>
+    <script defer src="game.js?v=2026-03-28-friends-scroll"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>

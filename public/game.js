@@ -2289,6 +2289,8 @@ const vipRoomListEl = $("#vip-room-list");
 
 // Draugi
 const friendsListEl = $("#friends-list");
+const friendsListScrollEl = $("#friends-list-scroll");
+const friendsListHintEl = $("#friends-list-hint");
 const friendsInvitesEl = $("#friends-invites");
 const friendAddInputEl = $("#friend-add-input");
 const friendAddBtnEl = $("#friend-add-btn");
@@ -5871,6 +5873,17 @@ function renderFriends() {
 
     friendsListEl.appendChild(row);
   });
+
+  const nFriends = state.friends.length;
+  if (friendsListHintEl) {
+    friendsListHintEl.hidden = nFriends <= 8;
+  }
+  if (friendsListScrollEl) {
+    friendsListScrollEl.setAttribute(
+      "aria-label",
+      nFriends ? `Draugu saraksts (${nFriends})` : "Draugu saraksts"
+    );
+  }
 }
 
 async function refreshFriends() {
