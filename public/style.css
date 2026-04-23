@@ -3385,12 +3385,18 @@ button.vz-friend-quick-duel:hover {
 .vz-profile-popup {
   position: fixed;
   inset: 0;
+  /* Nepieļaut, ka modālis (īpaši avatars) iekļūst zem mobilā pārlūka adreses joslas / notch */
+  padding-top: max(12px, env(safe-area-inset-top, 0px));
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
   background: rgba(0, 0, 0, 0.65);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
   animation: vzModalOverlayIn 0.25s ease-out;
+  box-sizing: border-box;
 }
 
 .vz-profile-popup-inner {
@@ -3398,12 +3404,31 @@ button.vz-friend-quick-duel:hover {
   background: #111;
   border-radius: 10px;
   padding: 16px 20px;
+  padding-top: max(20px, calc(14px + env(safe-area-inset-top, 0px)));
   min-width: 260px;
   max-width: 320px;
+  max-height: calc(
+    100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 32px
+  );
+  max-height: min(
+    92dvh,
+    calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 32px)
+  );
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
   border: 1px solid #ff0055;
   font-size: 14px;
   animation: vzModalSlideIn 0.3s ease-out;
+}
+
+#player-profile-popup .vz-profile-avatar-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
+  margin-bottom: 4px;
 }
 
 .vz-profile-popup-inner h3 {
@@ -3530,8 +3555,14 @@ button.vz-friend-quick-duel:hover {
 
 .vz-profile-popup-close {
   position: absolute;
-  right: 8px;
-  top: 6px;
+  right: max(8px, env(safe-area-inset-right, 0px));
+  top: max(8px, env(safe-area-inset-top, 0px));
+  z-index: 2;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .vz-profile-msg-btn {
