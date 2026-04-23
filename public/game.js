@@ -1387,22 +1387,25 @@ function syncBoardOpenSeatsPanelVisibility() {
     const invite = document.getElementById("board-games-invite");
     return invite && !invite.classList.contains("hidden");
   })();
-  const show = lobbyVisible && !inInvite && !boardState.gameId;
+  const tab = getBoardLobbyGameTab();
+  const baseShow = lobbyVisible && !inInvite && !boardState.gameId;
+  const showChess = baseShow && tab === "chess";
+  const showDamb = baseShow && tab === "dambrete";
   if (chessWrap) {
-    chessWrap.classList.toggle("hidden", !show);
-    if (show) {
+    chessWrap.classList.toggle("hidden", !showChess);
+    if (showChess) {
       renderBoardOpenSeatsTable("chess");
       scheduleBoardOpenSeatsPoll();
     }
   }
   if (dambWrap) {
-    dambWrap.classList.toggle("hidden", !show);
-    if (show) {
+    dambWrap.classList.toggle("hidden", !showDamb);
+    if (showDamb) {
       renderBoardOpenSeatsTable("dambrete");
       scheduleBoardOpenSeatsPoll();
     }
   }
-  if (!show) {
+  if (!showChess && !showDamb) {
     clearBoardOpenSeatsPoll();
     return;
   }
@@ -1515,8 +1518,13 @@ function syncZole3pOpenLobbyPanelVisibility() {
   const inZoleRoomFlow =
     getSelectedBoardZoleMode() === "online_3p" ||
     !!zole3pLobbySnapshot?.zoleLobby;
+  const onZoleTab = getBoardLobbyGameTab() === "zole";
   const show =
-    lobbyVisible && !inInvite && inZoleRoomFlow && !boardState.gameId;
+    lobbyVisible &&
+    !inInvite &&
+    inZoleRoomFlow &&
+    !boardState.gameId &&
+    onZoleTab;
   wrap.classList.toggle("hidden", !show);
   if (show) {
     renderZole3pOpenLobbyTable();
@@ -1677,6 +1685,95 @@ function getSelectedBoardZoleMode() {
 
 const CHESS_PVP_PRESET_STORAGE = "vz_chess_pvp_preset_v1";
 const CHESS_BOT_PRESET_STORAGE = "vz_chess_bot_preset_v1";
+const BOARD_LOBBY_GAME_TAB_STORAGE = "vz_board_lobby_game_tab_v1";
+
+function getBoardLobbyGameTab() {
+  try {
+    const v = String(
+      sessionStorage.getItem(BOARD_LOBBY_GAME_TAB_STORAGE) || ""
+    )
+      .toLowerCase()
+      .trim();
+    if (v === "chess" || v === "dambrete" || v === "zole") return v;
+  } catch (_) {}
+  return "zole";
+}
+
+function setBoardLobbyGameTab(tab) {
+  const t =
+    String(tab || "").toLowerCase() === "chess"
+      ? "chess"
+      : String(tab || "").toLowerCase() === "dambrete"
+        ? "dambrete"
+        : "zole";
+  try {
+    sessionStorage.setItem(BOARD_LOBBY_GAME_TAB_STORAGE, t);
+  } catch (_) {}
+  return t;
+}
+
+/** Lobija augšējās pogas: tikai viena spēle redzama (Zole / šahs / dambrete). */
+function syncBoardGamePickTab() {
+  const tab = getBoardLobbyGameTab();
+  const tabs = {
+    zole: document.getElementById("board-pick-zole"),
+    chess: document.getElementById("board-pick-chess"),
+    dambrete: document.getElementById("board-pick-dambrete"),
+  };
+  const panels = {
+    zole: document.getElementById("board-panel-zole"),
+    chess: document.getElementById("board-panel-chess"),
+    dambrete: document.getElementById("board-panel-dambrete"),
+  };
+  const inviteBlock = document.getElementById("board-invite-friend-block");
+  const hint = document.getElementById("board-invite-hint");
+  const zm = getSelectedBoardZoleMode();
+  const showFriend =
+    tab === "chess" ||
+    tab === "dambrete" ||
+    (tab === "zole" && (zm === "online_2p" || zm === "online_3p"));
+  if (inviteBlock) inviteBlock.classList.toggle("hidden", !showFriend);
+  if (hint) {
+    if (tab === "chess") {
+      hint.innerHTML =
+        "Ievadi vārdu kā čatā. Šaha laiks augšā — tas pats uzaicinājumam, revānšam un publicētajai vietai.";
+    } else if (tab === "dambrete") {
+      hint.textContent =
+        "Ievadi vārdu kā čatā. Dambretes režīms (krievu / angļu) ir augšā.";
+    } else if (tab === "zole" && zm === "online_3p") {
+      hint.innerHTML =
+        "3 cilvēkiem vispirms «Izveidot zoles istabu», tad uzaicini ar šo lauku. 2 cilvēkiem + bots — uzaicini vienu draugu.";
+    } else if (tab === "zole" && zm === "online_2p") {
+      hint.textContent = "Uzaicini vienu draugu; trešais būs bots.";
+    } else {
+      hint.textContent = "";
+    }
+  }
+  for (const k of ["zole", "chess", "dambrete"]) {
+    const b = tabs[k];
+    const p = panels[k];
+    const on = k === tab;
+    if (b) {
+      b.classList.toggle("vz-board-game-pick__tab--active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+      b.tabIndex = on ? 0 : -1;
+    }
+    if (p) {
+      p.classList.toggle("vz-board-game-panel--active", on);
+      if (on) p.removeAttribute("hidden");
+      else p.setAttribute("hidden", "");
+    }
+  }
+  const head = document.getElementById("board-lobby-heading");
+  if (head) {
+    head.textContent =
+      tab === "chess" ? "Šahs" : tab === "dambrete" ? "Dambrete" : "Zole";
+  }
+  syncBoardChessTimeRowVisibility();
+  syncBoardOpenSeatsPanelVisibility();
+  syncZole3pOpenLobbyPanelVisibility();
+  syncBoardModalContext();
+}
 
 function persistChessPresetSelect(sel, storageKey) {
   if (!sel || !storageKey) return;
@@ -1735,10 +1832,9 @@ function formatChessClockHumanLine(payload) {
 function syncBoardChessTimeRowVisibility() {
   const rowPvp = document.getElementById("board-chess-time-row");
   const rowBot = document.getElementById("board-chess-time-row-vsbot");
-  const zm = getSelectedBoardZoleMode();
-  const in3p = zm === "online_3p" || !!zole3pLobbySnapshot?.zoleLobby;
-  if (rowPvp) rowPvp.classList.toggle("hidden", in3p);
-  if (rowBot) rowBot.classList.remove("hidden");
+  const onChessTab = getBoardLobbyGameTab() === "chess";
+  if (rowPvp) rowPvp.classList.toggle("hidden", !onChessTab);
+  if (rowBot) rowBot.classList.toggle("hidden", !onChessTab);
 }
 
 function boardZoleModeLabel(mode) {
@@ -11955,7 +12051,14 @@ function syncBoardModalContext() {
     el.textContent = `Zoles istaba · ${n}/3 · saimnieks: ${h}`;
     return;
   }
-  el.textContent = "Izvēlies spēli vai uzaicini draugu.";
+  const tab = getBoardLobbyGameTab();
+  const gameHint =
+    tab === "chess"
+      ? "Šahs — izvēlies laiku vai uzaicini."
+      : tab === "dambrete"
+        ? "Dambrete — izvēlies režīmu vai uzaicini."
+        : "Zole — izvēlies režīmu zemāk.";
+  el.textContent = gameHint;
 }
 
 function syncBoardDambreteModePanelVisibility() {
@@ -12012,6 +12115,7 @@ function showBoardModal() {
     syncBoardModalFullscreen();
   }
   syncBoardDambreteModePanelVisibility();
+  if (!boardState.gameId) syncBoardGamePickTab();
   syncBoardModalContext();
   syncZole3pOpenLobbyPanelVisibility();
   syncBoardOpenSeatsPanelVisibility();
@@ -12233,6 +12337,9 @@ function showBoardInviteModal(from, type, payload) {
       }
     }
   }
+  if (type === "chess") setBoardLobbyGameTab("chess");
+  else if (type === "zole") setBoardLobbyGameTab("zole");
+  else setBoardLobbyGameTab("dambrete");
   syncBoardModalFullscreen();
   syncBoardDambreteModePanelVisibility();
   syncBoardModalContext();
@@ -13277,6 +13384,8 @@ function bindBoardGames() {
       const target = currentProfileName?.trim();
       if (target && state.socket) {
         showBoardModal();
+        setBoardLobbyGameTab("dambrete");
+        syncBoardGamePickTab();
         if (inviteUsername) inviteUsername.value = target;
         state.socket.emit("board.invite", {
           target,
@@ -13290,6 +13399,8 @@ function bindBoardGames() {
       const target = currentProfileName?.trim();
       if (target && state.socket) {
         showBoardModal();
+        setBoardLobbyGameTab("chess");
+        syncBoardGamePickTab();
         if (inviteUsername) inviteUsername.value = target;
         state.socket.emit("board.invite", {
           target,
@@ -13303,9 +13414,11 @@ function bindBoardGames() {
       const target = currentProfileName?.trim();
       if (target && state.socket) {
         showBoardModal();
+        setBoardLobbyGameTab("zole");
+        syncBoardGamePickTab();
         if (inviteUsername) inviteUsername.value = target;
         appendGaldaSystemMessage(
-          "Zolei ar 3 cilvēkiem: spied «Izveidot zoles istabu», tad «Zole» ar šo vārdu formā."
+          "Zolei ar 3 cilvēkiem: spied «Izveidot zoles istabu», tad «Uzaicināt uz zoli» ar šo vārdu formā."
         );
       }
     });
@@ -13340,7 +13453,22 @@ function bindBoardGames() {
       if (state.socket) state.socket.emit("board.zoleLeaveLobby");
     });
   document.querySelectorAll('input[name="board-zole-mode"]').forEach((el) => {
-    el.addEventListener("change", () => syncBoardDambreteModePanelVisibility());
+    el.addEventListener("change", () => {
+      syncBoardDambreteModePanelVisibility();
+      syncBoardGamePickTab();
+    });
+  });
+  document.getElementById("board-pick-zole")?.addEventListener("click", () => {
+    setBoardLobbyGameTab("zole");
+    syncBoardGamePickTab();
+  });
+  document.getElementById("board-pick-chess")?.addEventListener("click", () => {
+    setBoardLobbyGameTab("chess");
+    syncBoardGamePickTab();
+  });
+  document.getElementById("board-pick-dambrete")?.addEventListener("click", () => {
+    setBoardLobbyGameTab("dambrete");
+    syncBoardGamePickTab();
   });
   syncBoardChessTimeRowVisibility();
   document

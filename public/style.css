@@ -6053,6 +6053,94 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   color: #f4f4f5;
 }
 .vz-board-desc { font-size: 13px; opacity: 0.85; margin-bottom: 16px; }
+
+/* Lobijs: trīs lielas spēles pogas, tad tikai viena paneļa saturs */
+.vz-board-game-pick {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+@media (min-width: 520px) {
+  .vz-board-game-pick {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+.vz-board-game-pick__tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 12px 14px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.88);
+  background: rgba(0, 0, 0, 0.28);
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.vz-board-game-pick__tab:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.06);
+}
+.vz-board-game-pick__tab--active {
+  color: #fffbeb;
+  border-color: rgba(250, 204, 21, 0.55);
+  background: linear-gradient(
+    165deg,
+    rgba(120, 53, 15, 0.35) 0%,
+    rgba(30, 27, 75, 0.55) 100%
+  );
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+.vz-board-game-panel {
+  display: none;
+  margin-bottom: 4px;
+}
+.vz-board-game-panel--active {
+  display: block;
+}
+.vz-board-bot-diff-global {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+}
+.vz-board-bot-diff-global .vz-board-bot-label {
+  margin: 0 0 6px;
+}
+.vz-board-invite-friend {
+  margin: 8px 0 14px;
+  padding: 10px 12px 12px;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  background: rgba(15, 23, 42, 0.25);
+}
+.vz-board-invite-btns--single {
+  flex-direction: column;
+}
+.vz-board-invite-btns--single .vz-board-invite-btn {
+  width: 100%;
+  max-width: 100%;
+  flex: 1 1 auto;
+}
+.vz-board-bot-btns--single {
+  flex-direction: column;
+}
+.vz-board-bot-btns--single .vz-board-invite-btn {
+  width: 100%;
+  max-width: 100%;
+}
+
 .vz-board-dambrete-mode {
   margin-bottom: 14px;
   padding: 12px 14px;
