@@ -8864,7 +8864,12 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     height: 36px;
     font-size: 26px;
   }
-  .vz-board-invite-btn { min-width: 80px; padding: 10px 12px; }
+  .vz-board-invite-btn {
+    min-width: 0;
+    padding: 12px 14px;
+    min-height: 48px;
+    font-size: 15px;
+  }
   .vz-board-resign { padding: 8px 14px; }
 }
 @media (max-width: 360px) {
