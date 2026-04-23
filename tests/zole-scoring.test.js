@@ -4,6 +4,7 @@ import {
   zoleCardEyes,
   zoleComputeTableDeltas,
   zoleGaldsLoserIdx,
+  zoleTeamEyesFromLastResult,
 } from "../lib/zole.js";
 
 describe("zoleCardEyes", () => {
@@ -156,5 +157,44 @@ describe("zoleComputeTableDeltas", () => {
     expect(delta[0]).toBe(-14);
     expect(delta[1]).toBe(7);
     expect(delta[2]).toBe(7);
+  });
+});
+
+describe("zoleTeamEyesFromLastResult", () => {
+  it("big/zole/maza_zole: lielais vs mazie kopā", () => {
+    const s = {
+      kind: "big",
+      contractorIdx: 1,
+      eyes: [20, 55, 15],
+      win: true,
+    };
+    const t = zoleTeamEyesFromLastResult(s);
+    expect(t).toEqual({
+      kind: "big",
+      contractorIdx: 1,
+      bigEyes: 55,
+      smallEyes: 35,
+      margin: 20,
+    });
+  });
+
+  it("galdins: zaudētājs vs uzvarētāji kopā", () => {
+    const s = {
+      kind: "galdins",
+      loserIdx: 2,
+      eyes: [22, 24, 18],
+    };
+    const t = zoleTeamEyesFromLastResult(s);
+    expect(t).toEqual({
+      kind: "galdins",
+      loserIdx: 2,
+      loserEyes: 18,
+      winnersEyes: 46,
+      margin: 28,
+    });
+  });
+
+  it("galdins tie: nav komandas skatījuma", () => {
+    expect(zoleTeamEyesFromLastResult({ kind: "galdins", tie: true, eyes: [1, 1, 1] })).toBeNull();
   });
 });

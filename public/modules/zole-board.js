@@ -1094,9 +1094,13 @@
     return "";
   }
 
-  /** Partijas beigās: kurš savācis visvairāk acu (pēc stiķiem). */
+  /** Partijas beigās: kurš savācis visvairāk acu (izmantojam `lastResult.eyes` — ar noraktu / vidu). */
   function endEyesWinnerLine(zole) {
-    const eyes = zole.eyePoints;
+    const lr = zole.lastResult;
+    const eyes =
+      lr && Array.isArray(lr.eyes) && lr.eyes.length === 3
+        ? lr.eyes
+        : zole.eyePoints;
     if (!eyes || eyes.length !== 3) return "";
     let best = 0;
     for (let i = 1; i < 3; i++) {
@@ -1105,6 +1109,114 @@
     const e = eyes[best] ?? 0;
     const nm = zole.players?.[best] || "?";
     return `${nm} visvairāk acu šajā izspēlē: ${e}`;
+  }
+
+  /** Lielais vs mazie — kāršu acu kopsummas un starpība (tabulas likme atsevišķi). */
+  function buildEndTeamEyesCard(zole) {
+    const lr = zole.lastResult;
+    if (!lr || typeof lr !== "object") return null;
+    if (!Array.isArray(lr.eyes) || lr.eyes.length !== 3) return null;
+    const eyes = lr.eyes.map((n) =>
+      Number.isFinite(Number(n)) ? Number(n) : 0
+    );
+    const k = lr.kind;
+    const wrap = el("div", "vz-zole-end__team-eyes");
+    wrap.setAttribute("role", "status");
+    wrap.setAttribute("aria-live", "polite");
+
+    if (k === "big" || k === "zole" || k === "maza_zole") {
+      const cidx = lr.contractorIdx;
+      if (typeof cidx !== "number" || cidx < 0) return null;
+      const bigNm = zolePlayerName(zole, cidx);
+      const mazNm = zoleMazoNames(zole, cidx);
+      const bigE = eyes[cidx];
+      const opp = [0, 1, 2].filter((i) => i !== cidx);
+      const smallE = eyes[opp[0]] + eyes[opp[1]];
+      const margin = bigE - smallE;
+      const absM = Math.abs(margin);
+      const title = el("div", "vz-zole-end__team-eyes-title", "Kāršu acis šajā partijā");
+      const row = el("div", "vz-zole-end__team-eyes-row");
+      row.appendChild(
+        el("span", "vz-zole-end__team-eyes-pill vz-zole-end__team-eyes-pill--big", `Lielais (${bigNm}): ${bigE}`)
+      );
+      row.appendChild(
+        el("span", "vz-zole-end__team-eyes-pill vz-zole-end__team-eyes-pill--small", `Mazie kopā (${mazNm}): ${smallE}`)
+      );
+      let subTxt = "";
+      if (margin > 0) {
+        subTxt = `Lielajam pārsvars par ${absM} acīm pretinieku komandā.`;
+      } else if (margin < 0) {
+        subTxt = `Mazajiem pārsvars par ${absM} acīm pret līgumdevēju.`;
+      } else {
+        subTxt = "Abās pusēs vienāds kāršu punktu krājums.";
+      }
+      const contractNm =
+        k === "big" ? "Lielais" : k === "zole" ? "Zole" : "Mazā zole";
+      let tabHint = "";
+      if (typeof lr.win === "boolean") {
+        if (lr.win) {
+          tabHint = ` ${contractNm}: uzvara tabulā (lielais ieguva punktus no mazajiem).`;
+        } else {
+          tabHint = ` ${contractNm}: zaudējums tabulā (lielais zaudēja punktus mazajiem).`;
+        }
+      }
+      const sub = el("div", "vz-zole-end__team-eyes-sub", subTxt + tabHint);
+      wrap.appendChild(title);
+      wrap.appendChild(row);
+      wrap.appendChild(sub);
+      return wrap;
+    }
+
+    if (k === "galdins" && lr.tie) return null;
+    if (k === "galdins" || k === "galds") {
+      const li = lr.loserIdx;
+      if (typeof li !== "number" || li < 0) return null;
+      const loserNm = zolePlayerName(zole, li);
+      const winners = [0, 1, 2].filter((i) => i !== li);
+      const wNm = winners
+        .map((i) => zolePlayerName(zole, i))
+        .join(" un ");
+      const loserE = eyes[li];
+      const winE = eyes[winners[0]] + eyes[winners[1]];
+      const margin = winE - loserE;
+      const absM = Math.abs(margin);
+      const label = k === "galdins" ? "Galdiņš" : "Galds";
+      const title = el(
+        "div",
+        "vz-zole-end__team-eyes-title",
+        `Kāršu acis · ${label}`
+      );
+      const row = el("div", "vz-zole-end__team-eyes-row");
+      row.appendChild(
+        el(
+          "span",
+          "vz-zole-end__team-eyes-pill vz-zole-end__team-eyes-pill--small",
+          `Uzvarētāji (${wNm}): ${winE}`
+        )
+      );
+      row.appendChild(
+        el(
+          "span",
+          "vz-zole-end__team-eyes-pill vz-zole-end__team-eyes-pill--big",
+          `Zaudētājs (${loserNm}): ${loserE}`
+        )
+      );
+      let subTxt = "";
+      if (margin > 0) {
+        subTxt = `Uzvarētāju pusē par ${absM} acīm vairāk nekā zaudētājam.`;
+      } else if (margin < 0) {
+        subTxt = `Zaudētājam par ${absM} acīm vairāk nekā uzvarētājiem kopā.`;
+      } else {
+        subTxt = "Abās «pusēs» vienāds punktu krājums.";
+      }
+      const sub = el("div", "vz-zole-end__team-eyes-sub", subTxt);
+      wrap.appendChild(title);
+      wrap.appendChild(row);
+      wrap.appendChild(sub);
+      return wrap;
+    }
+
+    return null;
   }
 
   /** Acis no noraktajām (lielais) un no divām vidus kārtīm (zole / mazā zole). */
@@ -1191,6 +1303,8 @@
       endMain.appendChild(buildMatchScoreStrip(zole, myIdx));
       const myPtsLine = buildEndMyTablePtsLine(zole, myIdx);
       if (myPtsLine) endMain.appendChild(myPtsLine);
+      const teamEyes = buildEndTeamEyesCard(zole);
+      if (teamEyes) endMain.appendChild(teamEyes);
       endMain.appendChild(buildEndCenter(zole, zm));
       let deltaLine = "";
       if (zole.tableDelta) {
