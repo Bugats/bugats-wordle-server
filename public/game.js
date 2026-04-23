@@ -2323,6 +2323,9 @@ const dailyAnchorKickerEl = $("#vz-daily-anchor-kicker");
 const dailyAnchorHeadlineEl = $("#vz-daily-anchor-headline");
 const dailyAnchorProgressEl = $("#vz-daily-anchor-progress");
 const dailyAnchorHintEl = $("#vz-daily-anchor-hint");
+const giveawayAnchorWrapEl = document.getElementById("vz-giveaway-anchor");
+const giveawayAnchorTextEl = document.getElementById("vz-giveaway-anchor-text");
+const giveawayAnchorBtnEl = document.getElementById("vz-giveaway-anchor-btn");
 const engagementLoopCardEl = $("#engagement-loop-card");
 const engagementLoopSummaryEl = $("#engagement-loop-summary");
 const engagementLoopPrimaryBtnEl = $("#engagement-loop-primary-btn");
@@ -2506,6 +2509,12 @@ const ppEmailInputEl = $("#pp-email-input");
 const ppEmailSaveBtn = $("#pp-email-save");
 const ppEmailStatusEl = $("#pp-email-status");
 const ppEmailRemoveBtn = document.getElementById("pp-email-remove");
+const ppBetaBlockEl = document.getElementById("pp-beta-block");
+const ppBetaBadgeEl = document.getElementById("pp-beta-badge");
+const ppBetaDescEl = document.getElementById("pp-beta-desc");
+const ppBetaAgreeEl = document.getElementById("pp-beta-agree");
+const ppBetaSubmitBtn = document.getElementById("pp-beta-submit");
+const ppBetaStatusEl = document.getElementById("pp-beta-status");
 
 // Novads (modal)
 const regionModalEl = document.getElementById("region-modal");
@@ -4115,6 +4124,11 @@ function updatePlayerCard(me) {
   if (typeof me.email === "string") {
     state.email = me.email;
   }
+  state.betaTester = !!me.betaTester;
+  state.betaOptInRequestedAt = Math.max(
+    0,
+    Math.floor(Number(me.betaOptInRequestedAt) || 0)
+  );
   if (playerTitleEl) {
     const title = String(me.title || "").trim();
     playerTitleEl.textContent = title || "—";
@@ -4801,6 +4815,42 @@ function setProfileEmailStatus(message, kind) {
   if (kind === "error") ppEmailStatusEl.classList.add("vz-error");
 }
 
+function setBetaProfileStatus(message, kind) {
+  if (!ppBetaStatusEl) return;
+  ppBetaStatusEl.textContent = message || "";
+  ppBetaStatusEl.classList.remove("vz-ok", "vz-error");
+  if (kind === "ok") ppBetaStatusEl.classList.add("vz-ok");
+  if (kind === "error") ppBetaStatusEl.classList.add("vz-error");
+}
+
+async function handleProfileBetaOptIn() {
+  if (!state.token) return;
+  if (!ppBetaAgreeEl?.checked) {
+    setBetaProfileStatus("Atzīmē rūtiņu ar piekrišanu.", "error");
+    return;
+  }
+  if (ppBetaSubmitBtn) ppBetaSubmitBtn.disabled = true;
+  setBetaProfileStatus("", "");
+  try {
+    const data = await apiPost("/beta/opt-in", { agree: true });
+    state.betaOptInRequestedAt = Math.max(
+      0,
+      Math.floor(Number(data?.betaOptInRequestedAt) || 0)
+    );
+    state.betaTester = !!data?.betaTester;
+    setBetaProfileStatus("Pieteikums saglabāts. Paldies!", "ok");
+    renderDailyAnchorCard();
+    if (state.username) {
+      const fresh = await apiGet("/profile/" + encodeURIComponent(state.username));
+      showPlayerProfile(fresh);
+    }
+  } catch (err) {
+    setBetaProfileStatus(err.message || "Neizdevās pieteikties.", "error");
+  } finally {
+    if (ppBetaSubmitBtn) ppBetaSubmitBtn.disabled = false;
+  }
+}
+
 async function handleProfileEmailSave() {
   if (!state.token || !ppEmailInputEl) return;
   const raw = String(ppEmailInputEl.value || "").trim();
@@ -4810,6 +4860,7 @@ async function handleProfileEmailSave() {
     const saved = data?.email ?? "";
     state.email = saved;
     ppEmailInputEl.value = saved;
+    renderDailyAnchorCard();
     setProfileEmailStatus(
       saved ? "Saglabāts." : "E-pasts noņemts.",
       saved ? "ok" : ""
@@ -4831,6 +4882,7 @@ async function handleProfileEmailRemove() {
     await apiPost("/email", { email: "" });
     state.email = "";
     ppEmailInputEl.value = "";
+    renderDailyAnchorCard();
     setProfileEmailStatus("E-pasts noņemts. Vairs nesaņemsi jaunumus.", "ok");
   } catch (err) {
     setProfileEmailStatus(err.message || "Neizdevās noņemt.", "error");
@@ -4913,6 +4965,47 @@ function showPlayerProfile(data) {
     ppEmailInputEl.value = data.email || state.email || "";
   }
   setProfileEmailStatus("", "");
+
+  if (ppBetaBlockEl) {
+    ppBetaBlockEl.classList.toggle("hidden", !isSelf);
+  }
+  if (isSelf) {
+    const beta = !!data.betaTester;
+    const reqAt = Math.max(
+      0,
+      Math.floor(Number(data.betaOptInRequestedAt) || 0)
+    );
+    state.betaTester = beta;
+    state.betaOptInRequestedAt = reqAt;
+    if (ppBetaBadgeEl) {
+      ppBetaBadgeEl.textContent = beta
+        ? "Tu esi aplikācijas beta testers"
+        : reqAt > 0
+          ? "Pieteikums izlozei / beta — saņemts"
+          : "";
+      ppBetaBadgeEl.classList.toggle("hidden", !beta && !reqAt);
+    }
+    if (ppBetaDescEl) {
+      ppBetaDescEl.textContent = beta
+        ? "Paldies par palīdzību testēt VĀRDU ZONU. Ja vēlies izstāties, raksti administratoram."
+        : reqAt > 0
+          ? "Mēs varam sazināties uz tavu profila e-pastu, kad būs izloze vai beta piekļuve."
+          : "Giveaway: saglabā e-pastu augšā, atzīmē piekrišanu un piesakies — mēs redzēsim tavu kontu sarakstā (e-pasts netiek rādīts citiem spēlētājiem).";
+    }
+    if (ppBetaAgreeEl) {
+      ppBetaAgreeEl.checked = false;
+      ppBetaAgreeEl.disabled = beta || reqAt > 0;
+    }
+    if (ppBetaSubmitBtn) {
+      ppBetaSubmitBtn.disabled = beta || reqAt > 0;
+      ppBetaSubmitBtn.textContent = beta
+        ? "Jau beta testers"
+        : reqAt > 0
+          ? "Pieteikums jau iesūtīts"
+          : "Pieteikties kā beta testers / izlozei";
+    }
+    setBetaProfileStatus("", "");
+  }
 
   let duelBtn = document.getElementById("vz-profile-duel-btn");
   const inner =
@@ -5029,6 +5122,7 @@ function hidePlayerProfile() {
   if (!profilePopupEl) return;
   profilePopupEl.classList.add("hidden");
   setProfileEmailStatus("", "");
+  setBetaProfileStatus("", "");
 }
 
 async function openProfile(username) {
@@ -5078,6 +5172,24 @@ function buildDailyAnchorSummary() {
       progress: "Vienu reizi dienā — coins, XP un reizēm žetons.",
       hint: "Pēc tam turpini vārdu raundu vai misijas zemāk.",
     };
+  }
+
+  if (!state.betaTester) {
+    const hasEmail = String(state.email || "").trim().length > 0;
+    const opted = Math.max(0, Math.floor(Number(state.betaOptInRequestedAt) || 0)) > 0;
+    if (!opted) {
+      return {
+        kicker: "Izloze un beta",
+        headline: hasEmail
+          ? "Piesakies beta testiem un balvu izlozēm"
+          : "Saglabā e-pastu profilā — izlozei un beta",
+        progress: hasEmail
+          ? "Viena atzīme profilā — mēs varam sazināties par balvām un agru piekļuvi."
+          : "E-pasts profilā paliek privāts; pēc tam vari apstiprināt pieteikšanos.",
+        hint: "Spied zemāk «Atvērt profilu» vai atver Profilu → e-pasts → pieteikties.",
+        showGiveawayCta: true,
+      };
+    }
   }
 
   const claimM = missions.find((m) => m && m.isCompleted && !m.isClaimed);
@@ -5153,6 +5265,28 @@ function renderDailyAnchorCard() {
     dailyAnchorProgressEl.classList.toggle("hidden", !pr);
   }
   if (dailyAnchorHintEl) dailyAnchorHintEl.textContent = s.hint || "";
+  const showGa = !!s.showGiveawayCta && !!state.token;
+  if (giveawayAnchorWrapEl) {
+    giveawayAnchorWrapEl.classList.toggle("hidden", !showGa);
+  }
+  if (giveawayAnchorTextEl) {
+    giveawayAnchorTextEl.textContent = showGa
+      ? String(state.email || "").trim()
+        ? "Tev jau ir saglabāts e-pasts — atver profilu, atzīmē piekrišanu un spied «Pieteikties»."
+        : "Profilā ievadi e-pastu un saglabā; tad vari pieteikties izlozei un beta testiem."
+      : "";
+  }
+}
+
+function syncGiveawayAnchorButton() {
+  if (!giveawayAnchorBtnEl) return;
+  giveawayAnchorBtnEl.onclick = () => {
+    document.getElementById("vz-section-profile")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    if (state.username) void openProfile(state.username);
+  };
 }
 
 function renderMissions(missions, bonus) {
@@ -15034,6 +15168,8 @@ async function initGame() {
       if (e.key === "Enter") handleProfileEmailSave();
     });
   }
+  syncGiveawayAnchorButton();
+  if (ppBetaSubmitBtn) ppBetaSubmitBtn.addEventListener("click", handleProfileBetaOptIn);
 
   if (duelOkBtn) {
     duelOkBtn.type = "button";

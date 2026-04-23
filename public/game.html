@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-04-23-board-lobby-tabs" />
+  <link rel="stylesheet" href="style.css?v=2026-04-23-giveaway-beta" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -413,6 +413,13 @@
                   </p>
                   <p class="vz-daily-anchor-progress" id="vz-daily-anchor-progress"></p>
                   <p class="vz-daily-anchor-hint vz-support-note" id="vz-daily-anchor-hint"></p>
+                  <div id="vz-giveaway-anchor" class="vz-giveaway-anchor hidden">
+                    <p class="vz-giveaway-anchor__title">🎁 Balvu izloze / beta</p>
+                    <p class="vz-giveaway-anchor__text" id="vz-giveaway-anchor-text"></p>
+                    <button type="button" class="mission-claim-btn vz-giveaway-anchor__btn" id="vz-giveaway-anchor-btn">
+                      Atvērt profilu
+                    </button>
+                  </div>
                 </div>
 
                 <!-- MISIJAS -->
@@ -1028,6 +1035,17 @@
           <div id="pp-email-status" class="vz-profile-email-status"></div>
         </div>
 
+        <div id="pp-beta-block" class="vz-profile-beta-block hidden">
+          <div class="vz-profile-beta-badge" id="pp-beta-badge" aria-live="polite"></div>
+          <p class="vz-profile-beta-desc" id="pp-beta-desc"></p>
+          <label class="vz-profile-beta-check">
+            <input id="pp-beta-agree" type="checkbox" />
+            <span>Esmu lasījis/-usi: e-pasts tiek lietots tikai saziņai par izlozi vai beta piekļuvi; ne pārdošanai trešajām pusēm.</span>
+          </label>
+          <button id="pp-beta-submit" type="button" class="mission-claim-btn">Pieteikties kā beta testers / izlozei</button>
+          <div id="pp-beta-status" class="vz-profile-email-status"></div>
+        </div>
+
         <div class="profile-row profile-row--center-actions">
           <button id="pp-msg-btn" class="vz-profile-msg-btn" type="button">Rakstīt personiski</button>
           <div class="vz-profile-board-actions">
@@ -1172,7 +1190,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-04-23-board-lobby-tabs"></script>
+    <script defer src="game.js?v=2026-04-23-giveaway-beta"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>

@@ -76,6 +76,8 @@
       refreshTokenExpiresAt: 0,
       username: null,
       email: "",
+      betaTester: false,
+      betaOptInRequestedAt: 0,
       region: "",
       regionPoints: 0,
       regionBoost: 0,

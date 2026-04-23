@@ -53,6 +53,7 @@ import {
   zoleStartNextHand,
   ZOLE_BOT_1,
   isZoleBotUsername,
+  cardKey,
 } from "./lib/zole.js";
 import Stripe from "stripe";
 import {
@@ -3995,6 +3996,11 @@ function loadUsers(listOverride) {
         u.email = "";
       }
 
+      // Beta / giveaway: brīvprātīga pieteikšanās (e-pasts profilā)
+      if (typeof u.betaOptInRequestedAt !== "number" || !Number.isFinite(u.betaOptInRequestedAt))
+        u.betaOptInRequestedAt = 0;
+      if (typeof u.betaTester !== "boolean") u.betaTester = false;
+
       // Supporter flag
       if (typeof u.supporter !== "boolean") u.supporter = false;
       ensureVipFields(u);
@@ -6558,6 +6564,8 @@ async function buildMePayload(u) {
       from: inv.from,
       at: inv.at,
     })),
+    betaTester: !!u.betaTester,
+    betaOptInRequestedAt: Math.max(0, Math.floor(Number(u.betaOptInRequestedAt) || 0)),
   };
 }
 
@@ -9317,6 +9325,66 @@ app.post("/email", authMiddleware, (req, res) => {
   return res.json({ ok: true, email: user.email });
 });
 
+/** Brīvprātīga pieteikšanās beta / giveaway sarakstam — prasa saglabātu e-pastu. */
+app.post("/beta/opt-in", authMiddleware, (req, res) => {
+  const user = req.user;
+  const agree = req.body?.agree === true || req.body?.agree === "true" || req.body?.agree === "1";
+  if (!agree) {
+    return res.status(400).json({ message: "Jāapstiprina noteikumi (atzīmē rūtiņu)." });
+  }
+  const em = normalizeEmail(String(user.email || "").trim());
+  if (!em) {
+    return res.status(400).json({
+      message:
+        "Vispirms profilā saglabā derīgu e-pastu (tas paliek privāts), tad piesakies.",
+    });
+  }
+  user.betaOptInRequestedAt = Date.now();
+  saveUsers(USERS);
+  return res.json({
+    ok: true,
+    betaOptInRequestedAt: user.betaOptInRequestedAt,
+    betaTester: !!user.betaTester,
+  });
+});
+
+/** Admins: ieslēdz vai izslēdz «beta testeris» karodziņu. */
+app.post("/admin/user/beta-tester", authMiddleware, (req, res) => {
+  const admin = req.user;
+  if (!isAdminUser(admin)) {
+    return res.status(403).json({ message: "Tikai admins." });
+  }
+  const targetName = String(req.body?.username || "").trim();
+  if (!targetName) {
+    return res.status(400).json({ message: "Norādi username." });
+  }
+  const key = findUserKeyCaseInsensitive(targetName);
+  const target = key ? USERS[key] : null;
+  if (!target) {
+    return res.status(404).json({ message: "Lietotājs nav atrasts." });
+  }
+  const want =
+    req.body?.betaTester === true ||
+    req.body?.betaTester === "true" ||
+    req.body?.betaTester === 1 ||
+    req.body?.betaTester === "1";
+  target.betaTester = !!want;
+  if (!target.betaTester) {
+    target.betaOptInRequestedAt = 0;
+  }
+  saveUsers(USERS);
+  return res.json({
+    ok: true,
+    username: target.username,
+    betaTester: !!target.betaTester,
+    betaOptInRequestedAt: Math.max(
+      0,
+      Math.floor(Number(target.betaOptInRequestedAt) || 0)
+    ),
+    email: target.email || "",
+  });
+});
+
 // ======== AVATĀRA ENDPOINTS ========
 app.post("/avatar", authMiddleware, async (req, res) => {
   try {
@@ -9504,11 +9572,22 @@ async function buildPublicProfilePayload(targetUser, requester) {
     payload.email = targetUser.email || "";
     payload.referralLink = `${String(process.env.BASE_URL || "https://bugats-wordle-server.onrender.com").replace(/\/$/, "")}/index.html?ref=${encodeURIComponent(targetUser.username || "")}`;
     payload.referredCount = Math.max(0, Number(targetUser.referredCount) || 0);
+    payload.betaTester = !!targetUser.betaTester;
+    payload.betaOptInRequestedAt = Math.max(
+      0,
+      Math.floor(Number(targetUser.betaOptInRequestedAt) || 0)
+    );
   }
 
   if (isAdmin) {
     payload.isBanned = !!targetUser.isBanned;
     payload.mutedUntil = targetUser.mutedUntil || 0;
+    payload.email = targetUser.email || "";
+    payload.betaTester = !!targetUser.betaTester;
+    payload.betaOptInRequestedAt = Math.max(
+      0,
+      Math.floor(Number(targetUser.betaOptInRequestedAt) || 0)
+    );
   }
   return payload;
 }
@@ -14782,6 +14861,90 @@ const __testHooks = {
     if (!io) return;
     tickExpiredBoardInvites(io);
     expireZole3pThirdSeatInvites(io);
+  },
+  /**
+   * E2E: šahs — iestata FEN (derīgu `chess.js` stringu).
+   * Fool's mate pirms pēdējā gājiena: `f3 e5 g4` → melnais var `Qh4#`.
+   */
+  setChessFenForTestOnly(gameId, fen) {
+    if (process.env.NODE_ENV !== "test") return false;
+    const gid = String(gameId || "").trim();
+    const g = gid ? boardGames.get(gid) : null;
+    if (!g || g.type !== "chess" || g.status !== "active") return false;
+    const f = String(fen || "").trim();
+    if (!f) return false;
+    try {
+      const ch = new Chess(f);
+      g.fen = ch.fen();
+      g.turn = ch.turn() === "w" ? 0 : 1;
+      g.lastMoveAt = Date.now();
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  /**
+   * E2E: Zole 3P — viens stiķis Mazajā zolē, līgumdevējs zaudē (pretinieks paņem stiķi).
+   * `contractorUsername` jāatbilst `game.players[i]`.
+   */
+  forceZole3pMazaZoleOneTrickLoseTestOnly(gameId, contractorUsername) {
+    if (process.env.NODE_ENV !== "test") return false;
+    const gid = String(gameId || "").trim();
+    const g = gid ? boardGames.get(gid) : null;
+    if (!g || g.type !== "zole" || !g.zole || g.players?.length !== 3) return false;
+    const want = String(contractorUsername || "").trim().toLowerCase();
+    let cidx = -1;
+    for (let i = 0; i < 3; i++) {
+      if (String(g.players[i] || "").trim().toLowerCase() === want) {
+        cidx = i;
+        break;
+      }
+    }
+    if (cidx < 0) return false;
+    const z = g.zole;
+    z.phase = "play";
+    z.contract = "maza_zole";
+    z.contractorIdx = cidx;
+    z.tricksPlayed = 0;
+    z.tricksWon = [0, 0, 0];
+    z.eyePoints = [0, 0, 0];
+    z.trick = [];
+    z.currentTrickEyes = 0;
+    z.lastCompletedTrick = null;
+    z.kitty = [];
+    z.kittyEyesToOpponents = 0;
+    z.buried = [];
+    z.trumpSuit = 1;
+    z.turn = cidx;
+    z.trickLeader = cidx;
+    for (let i = 0; i < 3; i++) z.hands[i] = [];
+    z.hands[cidx] = [{ s: 0, r: 9 }];
+    const o1 = (cidx + 1) % 3;
+    const o2 = (cidx + 2) % 3;
+    z.hands[o1] = [{ s: 0, r: 13 }];
+    z.hands[o2] = [{ s: 0, r: 10 }];
+    g.turn = cidx;
+    g.lastMoveAt = Date.now();
+    return true;
+  },
+  /** E2E: pirmā legālā kārta no `legalCardKeys` rokai `forPlayerUsername`. */
+  zoleFirstLegalCardForTestOnly(gameId, forPlayerUsername) {
+    if (process.env.NODE_ENV !== "test") return null;
+    const gid = String(gameId || "").trim();
+    const g = gid ? boardGames.get(gid) : null;
+    if (!g?.zole) return null;
+    const idx = boardGameSeatIndex(g, forPlayerUsername);
+    if (idx < 0) return null;
+    const snap = zolePublicSnapshot(g.zole, idx);
+    const keys = snap?.legalCardKeys;
+    if (!Array.isArray(keys) || !keys.length) return null;
+    const k = String(keys[0] || "").trim();
+    if (!k) return null;
+    const hand = g.zole.hands[idx] || [];
+    for (const c of hand) {
+      if (cardKey(c) === k) return { s: c.s, r: c.r };
+    }
+    return null;
   },
 };
 

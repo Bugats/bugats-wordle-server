@@ -3650,6 +3650,67 @@ button.vz-friend-quick-duel:hover {
   opacity: 0.82;
 }
 
+.vz-giveaway-anchor {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.vz-giveaway-anchor__title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fef3c7;
+}
+.vz-giveaway-anchor__text {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(248, 250, 252, 0.88);
+}
+.vz-giveaway-anchor__btn {
+  width: 100%;
+  max-width: 16rem;
+}
+
+.vz-profile-beta-block {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(250, 204, 21, 0.28);
+  background: rgba(15, 23, 42, 0.45);
+}
+.vz-profile-beta-badge {
+  font-size: 12px;
+  font-weight: 800;
+  color: #fde68a;
+  margin-bottom: 6px;
+}
+.vz-profile-beta-desc {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(248, 250, 252, 0.88);
+}
+.vz-profile-beta-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(226, 232, 240, 0.92);
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.vz-profile-beta-check input {
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--vz-lv-blood, #9d2235);
+}
+#pp-beta-submit {
+  width: 100%;
+  margin-top: 4px;
+}
+
 /* ===========================
    Dienas misijas
    =========================== */
