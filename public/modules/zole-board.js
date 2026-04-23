@@ -1111,6 +1111,86 @@
     return `${nm} visvairāk acu šajā izspēlē: ${e}`;
   }
 
+  /**
+   * Tabulas iznākums līgumdevējam (lielais / zole / mazā zole) — bezstiķis, jaņos vai līmenis ar p. skaitu.
+   */
+  function zoleContractorTableNarrative(lr, contractKind, contractorIdx, eyesArr) {
+    if (!lr || typeof lr !== "object") return "";
+    const k = contractKind;
+    const cidx = contractorIdx;
+    if (typeof cidx !== "number" || cidx < 0 || cidx > 2) return "";
+    const bigE =
+      typeof lr.contrEyes === "number" && k === "big"
+        ? lr.contrEyes
+        : Array.isArray(eyesArr)
+          ? Number(eyesArr[cidx]) || 0
+          : 0;
+    const tricksRow =
+      Array.isArray(lr.tricks) && lr.tricks.length === 3 ? lr.tricks : null;
+    const contrTricks = tricksRow ? Number(tricksRow[cidx]) || 0 : null;
+
+    if (k === "maza_zole") {
+      if (lr.win === true) {
+        return "Tabula: mazā zole uzvarēta — +12 lielajam, −6 katram mazajam.";
+      }
+      if (lr.win === false) {
+        const early =
+          lr.earlyOpponentTrick === true
+            ? " Partija pārtraukta pēc pretinieka stiķa."
+            : "";
+        return `Tabula: mazā zole zaudēta — −14 lielajam, +7 katram mazajam.${early}`;
+      }
+      return "";
+    }
+
+    if (k !== "big" && k !== "zole") return "";
+
+    const tier = Number(lr.tier);
+    const fromEach = Number.isFinite(tier) ? tier : 0;
+
+    if (lr.win === true) {
+      if (k === "zole") {
+        if (fromEach === 7) {
+          return "Tabula: zole uzvarēta — pa 7 p. no katra mazā (visi stiķi).";
+        }
+        if (fromEach === 6) {
+          return "Tabula: zole uzvarēta — pa 6 p. no katra mazā (lielajam 91+ acis).";
+        }
+        return "Tabula: zole uzvarēta — pa 5 p. no katra mazā.";
+      }
+      if (fromEach === 3) {
+        return "Tabula: lielais uzvarēja — pa 3 p. no katra mazā (mazajiem bezstiķa).";
+      }
+      if (fromEach === 2) {
+        return "Tabula: lielais uzvarēja — pa 2 p. no katra mazā (mazajiem zem 30 acīm kopā).";
+      }
+      return "Tabula: lielais uzvarēja — pa 1 p. no katra mazā.";
+    }
+
+    if (lr.win === false) {
+      if (k === "zole") {
+        if (lr.contractorNoTricks === true || contrTricks === 0) {
+          return `Tabula: zole zaudēta bez stiķa (lielajam 0 stiķu) — katram mazajam ${fromEach} p. (${fromEach * 2} p. no lielā).`;
+        }
+        if (bigE < 31) {
+          return `Tabula: zole zaudēta jaņos (lielajam ${bigE} acis, mazāk par 31) — katram mazajam ${fromEach} p.`;
+        }
+        return `Tabula: zole zaudēta — katram mazajam ${fromEach} p. (lielajam ${bigE} acis, mazāk par 61 uzvarai).`;
+      }
+      if (k === "big") {
+        if (lr.contractorNoTricks === true || contrTricks === 0) {
+          return `Tabula: lielais zaudēja bez stiķa (0 stiķu) — katram mazajam ${fromEach} p.`;
+        }
+        if (bigE < 31) {
+          return `Tabula: lielais zaudēja jaņos (${bigE} acis) — katram mazajam ${fromEach} p.`;
+        }
+        return `Tabula: lielais zaudēja — katram mazajam ${fromEach} p. (lielajam ${bigE} acis pie tabulas).`;
+      }
+    }
+
+    return "";
+  }
+
   /** Lielais vs mazie — kāršu acu kopsummas un starpība (tabulas likme atsevišķi). */
   function buildEndTeamEyesCard(zole) {
     const lr = zole.lastResult;
@@ -1144,23 +1224,18 @@
       );
       let subTxt = "";
       if (margin > 0) {
-        subTxt = `Lielajam pārsvars par ${absM} acīm pretinieku komandā.`;
+        subTxt = `Kāršu punkti: lielajam pārsvars par ${absM} acīm pretinieku komandā.`;
       } else if (margin < 0) {
-        subTxt = `Mazajiem pārsvars par ${absM} acīm pret līgumdevēju.`;
+        subTxt = `Kāršu punkti: mazajiem pārsvars par ${absM} acīm pret līgumdevēju.`;
       } else {
-        subTxt = "Abās pusēs vienāds kāršu punktu krājums.";
+        subTxt = "Kāršu punkti: abās pusēs vienāds krājums.";
       }
-      const contractNm =
-        k === "big" ? "Lielais" : k === "zole" ? "Zole" : "Mazā zole";
-      let tabHint = "";
-      if (typeof lr.win === "boolean") {
-        if (lr.win) {
-          tabHint = ` ${contractNm}: uzvara tabulā (lielais ieguva punktus no mazajiem).`;
-        } else {
-          tabHint = ` ${contractNm}: zaudējums tabulā (lielais zaudēja punktus mazajiem).`;
-        }
-      }
-      const sub = el("div", "vz-zole-end__team-eyes-sub", subTxt + tabHint);
+      const tabLine = zoleContractorTableNarrative(lr, k, cidx, eyes);
+      const sub = el(
+        "div",
+        "vz-zole-end__team-eyes-sub",
+        tabLine ? `${subTxt} ${tabLine}` : subTxt
+      );
       wrap.appendChild(title);
       wrap.appendChild(row);
       wrap.appendChild(sub);
@@ -1203,13 +1278,22 @@
       );
       let subTxt = "";
       if (margin > 0) {
-        subTxt = `Uzvarētāju pusē par ${absM} acīm vairāk nekā zaudētājam.`;
+        subTxt = `Kāršu punkti: uzvarētāju pusē par ${absM} acīm vairāk nekā zaudētājam.`;
       } else if (margin < 0) {
-        subTxt = `Zaudētājam par ${absM} acīm vairāk nekā uzvarētājiem kopā.`;
+        subTxt = `Kāršu punkti: zaudētājam par ${absM} acīm vairāk nekā uzvarētājiem kopā.`;
       } else {
-        subTxt = "Abās «pusēs» vienāds punktu krājums.";
+        subTxt = "Kāršu punkti: abās pusēs vienāds krājums.";
       }
-      const sub = el("div", "vz-zole-end__team-eyes-sub", subTxt);
+      const pay = Number(lr.payEach);
+      const payOk = Number.isFinite(pay) && pay > 0;
+      const loserNo = lr.loserNoTricks === true;
+      const tabG =
+        payOk && typeof li === "number"
+          ? loserNo
+            ? ` Tabula: zaudētājs bez stiķa — katram uzvarētājam ${pay} p.`
+            : ` Tabula: katram uzvarētājam ${pay} p. no zaudētāja.`
+          : "";
+      const sub = el("div", "vz-zole-end__team-eyes-sub", subTxt + tabG);
       wrap.appendChild(title);
       wrap.appendChild(row);
       wrap.appendChild(sub);
