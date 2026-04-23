@@ -3927,6 +3927,15 @@ button.vz-friend-quick-duel:hover {
   font-size: 13px;
 }
 
+/* VIP / ātrais turnīrs: lielāka «Spēles mods» izvēlne (dambrete, šahs, zole) */
+#vip-quick-tournament-play-mode,
+#vip-room-play-mode {
+  min-height: 44px;
+  padding: 10px 12px;
+  font-size: 15px;
+  border-radius: 8px;
+}
+
 .vz-vip-room-panel {
   margin-top: 9px;
   padding-top: 8px;
@@ -6200,6 +6209,70 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   -webkit-tap-highlight-color: transparent;
 }
 .vz-board-invite-btn:hover { background: rgba(255, 255, 255, 0.15); }
+
+/* Galda lobijs: lielākas izvēles (Zole / dambrete / šahs — PvP, vs bot, režīmi) */
+#board-games-modal .vz-board-invite-btns {
+  gap: 10px;
+}
+#board-games-modal .vz-board-invite-btn {
+  min-height: 48px;
+  padding: 12px 18px;
+  font-size: 15px;
+  line-height: 1.25;
+  border-radius: 10px;
+}
+@media (max-width: 520px) {
+  #board-games-modal .vz-board-invite-btns {
+    flex-direction: column;
+  }
+  #board-games-modal .vz-board-invite-btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+  }
+}
+#board-games-modal .vz-board-dambrete-mode {
+  padding: 14px 16px;
+}
+#board-games-modal .vz-board-dambrete-mode-radios {
+  gap: 10px;
+}
+#board-games-modal .vz-board-dambrete-mode-opt {
+  font-size: 15px;
+  line-height: 1.35;
+  padding: 6px 4px;
+  min-height: 44px;
+}
+#board-games-modal .vz-board-dambrete-mode-opt input {
+  width: 1.15em;
+  height: 1.15em;
+  flex-shrink: 0;
+}
+#board-games-modal .vz-board-bot-diff {
+  font-size: 14px;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+#board-games-modal .vz-board-bot-diff label {
+  gap: 6px;
+  min-height: 44px;
+  padding: 4px 0;
+}
+#board-games-modal .vz-board-bot-btns {
+  gap: 10px;
+}
+#board-games-modal .vz-board-chess-time-select,
+#board-games-modal .vz-board-zole-stake-select {
+  padding: 11px 12px;
+  font-size: 15px;
+  min-height: 48px;
+  border-radius: 10px;
+}
+#board-games-modal .vz-board-label {
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
 .vz-board-pending {
   font-size: 13px;
   opacity: 0.92;
@@ -8522,13 +8595,16 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 
 .vz-profile-board-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 .vz-profile-invite-board {
-  padding: 6px 12px;
-  font-size: 12px;
-  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  min-height: 44px;
+  border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.06);
   color: #fff;
   cursor: pointer;
+  touch-action: manipulation;
 }
 .vz-chess-placeholder { font-size: 12px; opacity: 0.8; }
 .vz-chess-board-wrap {
