@@ -3702,6 +3702,35 @@ button.vz-friend-quick-duel:hover {
   width: 100%;
   max-width: 16rem;
 }
+.vz-giveaway-anchor__play {
+  display: block;
+  margin-top: 10px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fde68a;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.vz-giveaway-anchor__play:hover {
+  color: #fff;
+}
+.vz-profile-play-test {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.88);
+  text-align: center;
+}
+.vz-profile-play-test a {
+  color: #fde68a;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.vz-profile-play-test a:hover {
+  color: #fff;
+}
 
 .vz-profile-beta-block {
   margin-top: 12px;
