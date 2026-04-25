@@ -2515,6 +2515,7 @@ const ppBetaDescEl = document.getElementById("pp-beta-desc");
 const ppBetaAgreeEl = document.getElementById("pp-beta-agree");
 const ppBetaSubmitBtn = document.getElementById("pp-beta-submit");
 const ppBetaStatusEl = document.getElementById("pp-beta-status");
+const ppGiveawayEmailGateEl = document.getElementById("pp-giveaway-email-gate");
 
 // Novads (modal)
 const regionModalEl = document.getElementById("region-modal");
@@ -4823,8 +4824,38 @@ function setBetaProfileStatus(message, kind) {
   if (kind === "error") ppBetaStatusEl.classList.add("vz-error");
 }
 
+function hasSavedProfileEmailForGiveaway() {
+  return String(state.email || "").trim().length > 0;
+}
+
+/** Izlozes bloks: rāda brīdinājumu, ja nav saglabāta e-pasta. */
+function syncGiveawayEmailGateUi() {
+  const has = hasSavedProfileEmailForGiveaway();
+  const opted =
+    Math.max(0, Math.floor(Number(state.betaOptInRequestedAt) || 0)) > 0;
+  const done = opted || !!state.betaTester;
+  if (ppGiveawayEmailGateEl) {
+    ppGiveawayEmailGateEl.classList.toggle("hidden", has || done);
+  }
+  if (ppBetaSubmitBtn && !state.betaTester && !opted) {
+    ppBetaSubmitBtn.disabled = !has;
+    ppBetaSubmitBtn.title = has
+      ? ""
+      : "Vispirms saglabā e-pastu augšā (obligāti izlozei).";
+  }
+}
+
 async function handleProfileBetaOptIn() {
   if (!state.token) return;
+  if (!hasSavedProfileEmailForGiveaway()) {
+    setBetaProfileStatus(
+      "Izlozei vajag saglabātu e-pastu. Augšā ievadi e-pastu un spied «Saglabāt».",
+      "error"
+    );
+    ppGiveawayEmailGateEl?.classList.remove("hidden");
+    ppEmailInputEl?.focus?.();
+    return;
+  }
   if (!ppBetaAgreeEl?.checked) {
     setBetaProfileStatus("Atzīmē rūtiņu ar piekrišanu.", "error");
     return;
@@ -4860,6 +4891,7 @@ async function handleProfileEmailSave() {
     const saved = data?.email ?? "";
     state.email = saved;
     ppEmailInputEl.value = saved;
+    syncGiveawayEmailGateUi();
     renderDailyAnchorCard();
     setProfileEmailStatus(
       saved ? "Saglabāts." : "E-pasts noņemts.",
@@ -4882,6 +4914,7 @@ async function handleProfileEmailRemove() {
     await apiPost("/email", { email: "" });
     state.email = "";
     ppEmailInputEl.value = "";
+    syncGiveawayEmailGateUi();
     renderDailyAnchorCard();
     setProfileEmailStatus("E-pasts noņemts. Vairs nesaņemsi jaunumus.", "ok");
   } catch (err) {
@@ -4962,6 +4995,7 @@ function showPlayerProfile(data) {
     ppEmailBlockEl.classList.toggle("hidden", !isSelf);
   }
   if (isSelf && ppEmailInputEl) {
+    if (typeof data.email === "string") state.email = data.email;
     ppEmailInputEl.value = data.email || state.email || "";
   }
   setProfileEmailStatus("", "");
@@ -4989,22 +5023,28 @@ function showPlayerProfile(data) {
       ppBetaDescEl.textContent = beta
         ? "Paldies par palīdzību testēt VĀRDU ZONU. Ja vēlies izstāties, raksti administratoram."
         : reqAt > 0
-          ? "Mēs varam sazināties uz tavu profila e-pastu, kad būs izloze vai beta piekļuve."
-          : "Giveaway: saglabā e-pastu augšā, atzīmē piekrišanu un piesakies — mēs redzēsim tavu kontu sarakstā (e-pasts netiek rādīts citiem spēlētājiem).";
+          ? "Esi izlozes sarakstā. Saziņai izmantosim tavu saglabāto e-pastu (citi spēlētāji to neredz)."
+          : "Izlozei obligāti vajag derīgu e-pastu augšā + šī poga ar piekrišanu. Administrators redz tavu lietotājvārdu un e-pastu sarakstam.";
     }
     if (ppBetaAgreeEl) {
       ppBetaAgreeEl.checked = false;
       ppBetaAgreeEl.disabled = beta || reqAt > 0;
     }
     if (ppBetaSubmitBtn) {
-      ppBetaSubmitBtn.disabled = beta || reqAt > 0;
       ppBetaSubmitBtn.textContent = beta
         ? "Jau beta testers"
         : reqAt > 0
-          ? "Pieteikums jau iesūtīts"
-          : "Pieteikties kā beta testers / izlozei";
+          ? "Pieteikums izlozei — saņemts"
+          : "Pieteikties balvu izlozei";
+      if (beta || reqAt > 0) {
+        ppBetaSubmitBtn.disabled = true;
+        ppBetaSubmitBtn.title = "";
+      } else {
+        syncGiveawayEmailGateUi();
+      }
     }
     setBetaProfileStatus("", "");
+    syncGiveawayEmailGateUi();
   }
 
   let duelBtn = document.getElementById("vz-profile-duel-btn");
@@ -5179,14 +5219,14 @@ function buildDailyAnchorSummary() {
     const opted = Math.max(0, Math.floor(Number(state.betaOptInRequestedAt) || 0)) > 0;
     if (!opted) {
       return {
-        kicker: "Izloze un beta",
+        kicker: "Balvu izloze",
         headline: hasEmail
-          ? "Piesakies beta testiem un balvu izlozēm"
-          : "Saglabā e-pastu profilā — izlozei un beta",
+          ? "Piesakies izlozei — e-pasts jau saglabāts"
+          : "Izlozei vajag tavu e-pastu profilā",
         progress: hasEmail
-          ? "Viena atzīme profilā — mēs varam sazināties par balvām un agru piekļuvi."
-          : "E-pasts profilā paliek privāts; pēc tam vari apstiprināt pieteikšanos.",
-        hint: "Spied zemāk «Atvērt profilu» vai atver Profilu → e-pasts → pieteikties.",
+          ? "Profilā atzīmē piekrišanu un spied «Pieteikties balvu izlozei»."
+          : "Vispirms ievadi e-pastu profilā un spied «Saglabāt», tad pieteikšanos.",
+        hint: "Spied «Atvērt profilu» zemāk.",
         showGiveawayCta: true,
       };
     }
@@ -5272,8 +5312,8 @@ function renderDailyAnchorCard() {
   if (giveawayAnchorTextEl) {
     giveawayAnchorTextEl.textContent = showGa
       ? String(state.email || "").trim()
-        ? "Tev jau ir saglabāts e-pasts — atver profilu, atzīmē piekrišanu un spied «Pieteikties»."
-        : "Profilā ievadi e-pastu un saglabā; tad vari pieteikties izlozei un beta testiem."
+        ? "E-pasts saglabāts — profilā atzīmē piekrišanu un spied «Pieteikties balvu izlozei»."
+        : "Izlozei obligāti: profilā ievadi e-pastu, «Saglabāt», tad pieteikšanās ar rūtiņu."
       : "";
   }
 }
