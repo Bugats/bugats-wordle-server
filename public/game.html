@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-04-24-play-test-hero" />
+  <link rel="stylesheet" href="style.css?v=2026-04-25-nhl-giveaway-mission" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1059,6 +1059,24 @@
           <div id="pp-email-status" class="vz-profile-email-status"></div>
         </div>
 
+        <div id="pp-nhl-giveaway-wrap" class="vz-profile-nhl-giveaway hidden">
+          <div class="vz-profile-nhl-giveaway__title">🏒 NHL izlozei — mīļākais klubs</div>
+          <p class="vz-profile-nhl-giveaway__hint">
+            Ieraksti komandas nosaukumu (tas simbolizē tavu mīļāko logo). Obligāti arī e-pasts un izlozes pieteikšanās zemāk.
+          </p>
+          <div class="vz-profile-nhl-giveaway__row">
+            <input
+              id="pp-nhl-team-input"
+              type="text"
+              maxlength="64"
+              autocomplete="off"
+              placeholder="piem., Rangers, Maple Leafs…"
+            />
+            <button id="pp-nhl-team-save" type="button" class="mission-claim-btn">Saglabāt</button>
+          </div>
+          <div id="pp-nhl-team-status" class="vz-profile-email-status"></div>
+        </div>
+
         <div id="pp-beta-block" class="vz-profile-beta-block hidden">
           <div class="vz-profile-beta-heading">🎁 Balvu izloze</div>
           <div class="vz-profile-beta-badge" id="pp-beta-badge" aria-live="polite"></div>
@@ -1230,7 +1248,7 @@
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-04-24-giveaway-email-required"></script>
+    <script defer src="game.js?v=2026-04-25-nhl-giveaway-mission"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>

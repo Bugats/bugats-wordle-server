@@ -384,6 +384,17 @@ function normalizeEmail(raw) {
   if (!EMAIL_RE.test(email)) return "";
   return email;
 }
+
+const GIVEAWAY_NHL_TEAM_MAX = 64;
+/** NHL / komandas nosaukums izlozei — bez HTML / vadības zīmēm. */
+function normalizeGiveawayNhlTeam(raw) {
+  let s = String(raw || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[\x00-\x1f<>\"\\{}|]/g, "")
+    .slice(0, GIVEAWAY_NHL_TEAM_MAX);
+  return s;
+}
 function compactAvatarUrl(raw, maxChars = AVATAR_INLINE_MAX_CHARS) {
   if (typeof raw !== "string") return null;
   const url = raw.trim();
@@ -4000,6 +4011,8 @@ function loadUsers(listOverride) {
       if (typeof u.betaOptInRequestedAt !== "number" || !Number.isFinite(u.betaOptInRequestedAt))
         u.betaOptInRequestedAt = 0;
       if (typeof u.betaTester !== "boolean") u.betaTester = false;
+      if (typeof u.giveawayNhlTeam !== "string") u.giveawayNhlTeam = "";
+      u.giveawayNhlTeam = normalizeGiveawayNhlTeam(u.giveawayNhlTeam);
 
       // Supporter flag
       if (typeof u.supporter !== "boolean") u.supporter = false;
@@ -5759,6 +5772,62 @@ function ensureDailyMissions(user) {
       // nekas vairāk; saveUsers notiek pie /me vai /missions endpointiem
     }
   }
+
+  ensureNhlGiveawayMission(user);
+}
+
+/** Īpaša misija «NHL klubs + izloze» — neiet dienas bonusa skaitā (tikai parastās 6). */
+function ensureNhlGiveawayMission(user) {
+  const key = todayKey();
+  const list = user.missions;
+  if (!Array.isArray(list)) return;
+  const has = list.some((m) => m && m.type === "nhl_giveaway_submit");
+  if (has) {
+    syncNhlGiveawayMissionProgress(user);
+    return;
+  }
+  const id = `nhl_giveaway_${key}`;
+  const prog = nhlGiveawayMissionProgress(user);
+  list.push({
+    id,
+    code: "nhl_giveaway",
+    title:
+      "Izlozei: ieraksti mīļākā NHL kluba nosaukumu (logo), saglabā e-pastu un piesakies izlozei profilā.",
+    type: "nhl_giveaway_submit",
+    target: 1,
+    progress: prog,
+    isCompleted: prog >= 1,
+    isClaimed: false,
+    rewards: { xp: 40, coins: 35, tokens: 0 },
+    meta: {},
+  });
+}
+
+function nhlGiveawayMissionProgress(u) {
+  const hasLogo = Boolean(normalizeGiveawayNhlTeam(u?.giveawayNhlTeam || ""));
+  const hasEmail = Boolean(normalizeEmail(u?.email || ""));
+  const opted = Math.max(0, Number(u?.betaOptInRequestedAt) || 0) > 0;
+  return hasLogo && hasEmail && opted ? 1 : 0;
+}
+
+function syncNhlGiveawayMissionProgress(user) {
+  const list = user.missions;
+  if (!Array.isArray(list)) return false;
+  let changed = false;
+  for (const m of list) {
+    if (!m || m.type !== "nhl_giveaway_submit") continue;
+    const prog = nhlGiveawayMissionProgress(user);
+    if ((m.progress || 0) !== prog) {
+      m.progress = prog;
+      changed = true;
+    }
+    const done = prog >= (m.target || 1);
+    if (done !== !!m.isCompleted) {
+      m.isCompleted = done;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 function getPublicMissions(user) {
@@ -5766,6 +5835,7 @@ function getPublicMissions(user) {
   return user.missions.map((m) => ({
     id: m.id,
     title: m.title,
+    type: m.type || "",
     target: m.target,
     progress: m.progress || 0,
     isCompleted: !!m.isCompleted,
@@ -5777,8 +5847,11 @@ function getPublicMissions(user) {
 function getMissionBonusStatus(user) {
   ensureDailyMissions(user);
   const list = Array.isArray(user.missions) ? user.missions : [];
-  const total = list.length;
-  const completed = list.filter((m) => m && m.isCompleted).length;
+  const bonusList = list.filter(
+    (m) => m && m.type !== "nhl_giveaway_submit"
+  );
+  const total = bonusList.length;
+  const completed = bonusList.filter((m) => m && m.isCompleted).length;
   const today = todayKey();
   const isClaimed = user.missionsBonusDate === today;
   const rewards = {
@@ -6566,6 +6639,7 @@ async function buildMePayload(u) {
     })),
     betaTester: !!u.betaTester,
     betaOptInRequestedAt: Math.max(0, Math.floor(Number(u.betaOptInRequestedAt) || 0)),
+    giveawayNhlTeam: String(u.giveawayNhlTeam || "").trim(),
   };
 }
 
@@ -9321,12 +9395,37 @@ app.post("/email", authMiddleware, (req, res) => {
     return res.status(400).json({ message: "Šis e-pasts jau izmantots." });
   }
   user.email = cleanedEmail;
+  syncNhlGiveawayMissionProgress(user);
   saveUsers(USERS);
   return res.json({ ok: true, email: user.email });
 });
 
+/** NHL / mīļākā komanda balvu izlozei (teksts — piem. «Rangers»). */
+app.post("/giveaway/nhl-team", authMiddleware, async (req, res) => {
+  const user = req.user;
+  markActivity(user);
+  const cleaned = normalizeGiveawayNhlTeam(req.body?.team ?? req.body?.nhlTeam ?? "");
+  if (!cleaned) {
+    return res.status(400).json({
+      message:
+        "Ieraksti komandas nosaukumu (piem. Maple Leafs). Nav atļauti speciālie simboli.",
+    });
+  }
+  user.giveawayNhlTeam = cleaned;
+  ensureDailyMissions(user);
+  syncNhlGiveawayMissionProgress(user);
+  saveUsers(USERS);
+  return res.json({
+    ok: true,
+    giveawayNhlTeam: user.giveawayNhlTeam,
+    me: await buildMePayload(user),
+    missions: getPublicMissions(user),
+    bonus: getMissionBonusStatus(user),
+  });
+});
+
 /** Brīvprātīga pieteikšanās beta / giveaway sarakstam — prasa saglabātu e-pastu. */
-app.post("/beta/opt-in", authMiddleware, (req, res) => {
+app.post("/beta/opt-in", authMiddleware, async (req, res) => {
   const user = req.user;
   const agree = req.body?.agree === true || req.body?.agree === "true" || req.body?.agree === "1";
   if (!agree) {
@@ -9340,11 +9439,16 @@ app.post("/beta/opt-in", authMiddleware, (req, res) => {
     });
   }
   user.betaOptInRequestedAt = Date.now();
+  ensureDailyMissions(user);
+  syncNhlGiveawayMissionProgress(user);
   saveUsers(USERS);
   return res.json({
     ok: true,
     betaOptInRequestedAt: user.betaOptInRequestedAt,
     betaTester: !!user.betaTester,
+    me: await buildMePayload(user),
+    missions: getPublicMissions(user),
+    bonus: getMissionBonusStatus(user),
   });
 });
 
@@ -9577,6 +9681,7 @@ async function buildPublicProfilePayload(targetUser, requester) {
       0,
       Math.floor(Number(targetUser.betaOptInRequestedAt) || 0)
     );
+    payload.giveawayNhlTeam = String(targetUser.giveawayNhlTeam || "").trim();
   }
 
   if (isAdmin) {
@@ -9588,6 +9693,7 @@ async function buildPublicProfilePayload(targetUser, requester) {
       0,
       Math.floor(Number(targetUser.betaOptInRequestedAt) || 0)
     );
+    payload.giveawayNhlTeam = String(targetUser.giveawayNhlTeam || "").trim();
   }
   return payload;
 }

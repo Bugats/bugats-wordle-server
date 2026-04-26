@@ -3807,6 +3807,55 @@ button.vz-friend-quick-duel:hover {
   color: rgba(226, 232, 240, 0.75);
 }
 
+.vz-profile-nhl-giveaway {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(12, 30, 50, 0.5);
+}
+.vz-profile-nhl-giveaway__title {
+  font-size: 12px;
+  font-weight: 800;
+  color: #bae6fd;
+  text-align: center;
+  margin: 0 0 6px;
+}
+.vz-profile-nhl-giveaway__hint {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(226, 232, 240, 0.88);
+  text-align: center;
+}
+.vz-profile-nhl-giveaway__row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.vz-profile-nhl-giveaway__row input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(15, 23, 42, 0.85);
+  color: #fff;
+  font-size: 13px;
+}
+
+.mission-item--nhl {
+  border-left: 3px solid #38bdf8;
+  padding-left: 8px;
+  margin-left: -4px;
+}
+.mission-nhl-hint {
+  margin: 4px 0 0;
+  font-size: 10px;
+  line-height: 1.35;
+  color: rgba(186, 230, 253, 0.9);
+}
+
 .vz-profile-beta-block {
   margin-top: 12px;
   padding: 10px 12px;

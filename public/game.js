@@ -2516,6 +2516,10 @@ const ppBetaAgreeEl = document.getElementById("pp-beta-agree");
 const ppBetaSubmitBtn = document.getElementById("pp-beta-submit");
 const ppBetaStatusEl = document.getElementById("pp-beta-status");
 const ppGiveawayEmailGateEl = document.getElementById("pp-giveaway-email-gate");
+const ppNhlGiveawayWrapEl = document.getElementById("pp-nhl-giveaway-wrap");
+const ppNhlTeamInputEl = document.getElementById("pp-nhl-team-input");
+const ppNhlTeamSaveBtn = document.getElementById("pp-nhl-team-save");
+const ppNhlTeamStatusEl = document.getElementById("pp-nhl-team-status");
 
 // Novads (modal)
 const regionModalEl = document.getElementById("region-modal");
@@ -4130,6 +4134,9 @@ function updatePlayerCard(me) {
     0,
     Math.floor(Number(me.betaOptInRequestedAt) || 0)
   );
+  if (typeof me.giveawayNhlTeam === "string") {
+    state.giveawayNhlTeam = me.giveawayNhlTeam;
+  }
   if (playerTitleEl) {
     const title = String(me.title || "").trim();
     playerTitleEl.textContent = title || "—";
@@ -4816,6 +4823,36 @@ function setProfileEmailStatus(message, kind) {
   if (kind === "error") ppEmailStatusEl.classList.add("vz-error");
 }
 
+function setNhlTeamProfileStatus(message, kind) {
+  if (!ppNhlTeamStatusEl) return;
+  ppNhlTeamStatusEl.textContent = message || "";
+  ppNhlTeamStatusEl.classList.remove("vz-ok", "vz-error");
+  if (kind === "ok") ppNhlTeamStatusEl.classList.add("vz-ok");
+  if (kind === "error") ppNhlTeamStatusEl.classList.add("vz-error");
+}
+
+async function handleProfileNhlTeamSave() {
+  if (!state.token || !ppNhlTeamInputEl) return;
+  const raw = String(ppNhlTeamInputEl.value || "").trim();
+  if (ppNhlTeamSaveBtn) ppNhlTeamSaveBtn.disabled = true;
+  setNhlTeamProfileStatus("", "");
+  try {
+    const data = await apiPost("/giveaway/nhl-team", { team: raw });
+    state.giveawayNhlTeam = String(data?.giveawayNhlTeam || raw || "").trim();
+    if (data?.me) updatePlayerCard(data.me);
+    if (Array.isArray(data?.missions) && data?.bonus != null) {
+      renderMissions(data.missions, data.bonus);
+    }
+    if (ppNhlTeamInputEl) ppNhlTeamInputEl.value = state.giveawayNhlTeam || "";
+    setNhlTeamProfileStatus("Saglabāts.", "ok");
+    appendSystemMessage("🏒 NHL klubs izlozei saglabāts.");
+  } catch (err) {
+    setNhlTeamProfileStatus(err.message || "Neizdevās saglabāt.", "error");
+  } finally {
+    if (ppNhlTeamSaveBtn) ppNhlTeamSaveBtn.disabled = false;
+  }
+}
+
 function setBetaProfileStatus(message, kind) {
   if (!ppBetaStatusEl) return;
   ppBetaStatusEl.textContent = message || "";
@@ -4869,6 +4906,10 @@ async function handleProfileBetaOptIn() {
       Math.floor(Number(data?.betaOptInRequestedAt) || 0)
     );
     state.betaTester = !!data?.betaTester;
+    if (data?.me) updatePlayerCard(data.me);
+    if (Array.isArray(data?.missions) && data?.bonus != null) {
+      renderMissions(data.missions, data.bonus);
+    }
     setBetaProfileStatus("Pieteikums saglabāts. Paldies!", "ok");
     renderDailyAnchorCard();
     if (state.username) {
@@ -5003,6 +5044,14 @@ function showPlayerProfile(data) {
   if (ppBetaBlockEl) {
     ppBetaBlockEl.classList.toggle("hidden", !isSelf);
   }
+  if (ppNhlGiveawayWrapEl) {
+    ppNhlGiveawayWrapEl.classList.toggle("hidden", !isSelf);
+  }
+  if (isSelf && ppNhlTeamInputEl) {
+    ppNhlTeamInputEl.value =
+      String(data.giveawayNhlTeam ?? state.giveawayNhlTeam ?? "").trim();
+  }
+  if (isSelf) setNhlTeamProfileStatus("", "");
   if (isSelf) {
     const beta = !!data.betaTester;
     const reqAt = Math.max(
@@ -5163,6 +5212,7 @@ function hidePlayerProfile() {
   profilePopupEl.classList.add("hidden");
   setProfileEmailStatus("", "");
   setBetaProfileStatus("", "");
+  setNhlTeamProfileStatus("", "");
 }
 
 async function openProfile(username) {
@@ -5348,6 +5398,7 @@ function renderMissions(missions, bonus) {
 
   missions.forEach((m) => {
     const li = createEl("li", "mission-item");
+    if (m.type === "nhl_giveaway_submit") li.classList.add("mission-item--nhl");
 
     const title = createEl("div", "mission-title");
     title.textContent = m.title;
@@ -5367,6 +5418,13 @@ function renderMissions(missions, bonus) {
       const rewardsEl = createEl("div", "mission-rewards");
       rewardsEl.textContent = "Balva: " + rewardParts.join(", ");
       li.appendChild(rewardsEl);
+    }
+
+    if (m.type === "nhl_giveaway_submit") {
+      const hint = createEl("div", "mission-nhl-hint");
+      hint.textContent =
+        "Soļi: 1) Profilā saglabā NHL klubu · 2) E-pasts · 3) Izlozes pieteikšanās.";
+      li.appendChild(hint);
     }
 
     const bottom = createEl("div", "mission-bottom");
@@ -15210,6 +15268,12 @@ async function initGame() {
   }
   syncGiveawayAnchorButton();
   if (ppBetaSubmitBtn) ppBetaSubmitBtn.addEventListener("click", handleProfileBetaOptIn);
+  if (ppNhlTeamSaveBtn) ppNhlTeamSaveBtn.addEventListener("click", handleProfileNhlTeamSave);
+  if (ppNhlTeamInputEl) {
+    ppNhlTeamInputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") handleProfileNhlTeamSave();
+    });
+  }
 
   if (duelOkBtn) {
     duelOkBtn.type = "button";
