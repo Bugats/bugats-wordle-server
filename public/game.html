@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-04-24-play-test-link" />
+  <link rel="stylesheet" href="style.css?v=2026-04-24-play-test-hero" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -301,6 +301,13 @@
                   </div>
 
                   <div class="vz-card-row"><span>Nickname:</span><span id="player-name"></span></div>
+                  <a
+                    class="vz-play-test-inline"
+                    href="https://play.google.com/apps/testing/lv.thezone.wordle?safe=active"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >📲 Android testa versija — spied šeit</a
+                  >
                   <div class="vz-card-row"><span>Novads:</span><span id="player-region">—</span></div>
                   <div class="vz-card-row vz-title-row">
                     <span>Tituls:</span><span id="player-title" class="vz-title-value">—</span>
@@ -405,6 +412,13 @@
                   <div class="vz-card-header" id="vz-daily-anchor-title">
                     Šodien VĀRDU ZONĀ
                   </div>
+                  <a
+                    class="vz-play-test-hero"
+                    href="https://play.google.com/apps/testing/lv.thezone.wordle?safe=active"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >📲 Android: pieslēdzies testa versijai (1 klikšķis)</a
+                  >
                   <p class="vz-daily-anchor-kicker" id="vz-daily-anchor-kicker">
                     Tavs šodienas mērķis
                   </p>
@@ -416,16 +430,16 @@
                   <div id="vz-giveaway-anchor" class="vz-giveaway-anchor hidden">
                     <p class="vz-giveaway-anchor__title">🎁 Balvu izloze</p>
                     <p class="vz-giveaway-anchor__text" id="vz-giveaway-anchor-text"></p>
-                    <button type="button" class="mission-claim-btn vz-giveaway-anchor__btn" id="vz-giveaway-anchor-btn">
-                      Atvērt profilu
-                    </button>
                     <a
-                      class="vz-giveaway-anchor__play"
+                      class="vz-giveaway-anchor__play-btn"
                       href="https://play.google.com/apps/testing/lv.thezone.wordle?safe=active"
                       target="_blank"
                       rel="noopener noreferrer"
-                      >📱 Google Play — testa versija (opt-in)</a
+                      >📲 Play testa versija</a
                     >
+                    <button type="button" class="mission-claim-btn vz-giveaway-anchor__btn" id="vz-giveaway-anchor-btn">
+                      Izlozei — atvērt profilu
+                    </button>
                   </div>
                 </div>
 
@@ -1062,15 +1076,14 @@
           </label>
           <button id="pp-beta-submit" type="button" class="mission-claim-btn">Pieteikties balvu izlozei</button>
           <div id="pp-beta-status" class="vz-profile-email-status"></div>
-          <p class="vz-profile-play-test">
-            <a
-              href="https://play.google.com/apps/testing/lv.thezone.wordle?safe=active"
-              target="_blank"
-              rel="noopener noreferrer"
-              >Google Play — testa opt-in</a
-            >
-            · Android; pēc pievienošanās atjaunini lietotni Play veikalā.
-          </p>
+          <a
+            class="vz-profile-play-test-btn"
+            href="https://play.google.com/apps/testing/lv.thezone.wordle?safe=active"
+            target="_blank"
+            rel="noopener noreferrer"
+            >📲 Saņem Android testa versiju</a
+          >
+          <p class="vz-profile-play-test-hint">Pēc pievienošanās Play veikalā atjaunini VĀRDU ZONU.</p>
         </div>
 
         <div class="profile-row profile-row--center-actions">
