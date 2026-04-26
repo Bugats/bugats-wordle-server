@@ -2,7 +2,7 @@ try {
   importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
 } catch {}
 
-const CACHE_VERSION = "vz-pwa-v11";
+const CACHE_VERSION = "vz-pwa-v12";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -16,6 +16,7 @@ const CORE_ASSETS = [
   "./manifest.json",
   "./icon.svg",
   "./icon-maskable.svg",
+  "./img/vardu-zona-logo.png",
   "./pwa.js",
 ];
 
