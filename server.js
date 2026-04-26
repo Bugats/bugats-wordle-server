@@ -67,6 +67,7 @@ import {
   normalizeGiveawayNhlAbbr,
   normalizeGiveawayNhlTeam,
 } from "./lib/nhl-giveaway.js";
+import { saveJsonAtomic } from "./lib/atomic-json.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2253,16 +2254,6 @@ function loadJsonSafe(file, fallback) {
     console.error("Kļūda lasot JSON:", file, err);
     return fallback;
   }
-}
-
-// atomic save
-function saveJsonAtomic(file, data) {
-  const suffix = `${process.pid}.${Date.now()}.${Math.random()
-    .toString(16)
-    .slice(2)}`;
-  const tmp = `${file}.${suffix}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
-  fs.renameSync(tmp, file);
 }
 
 // ======== TURNĪRI (brackets-manager) ========

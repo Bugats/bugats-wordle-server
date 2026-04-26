@@ -26,3 +26,7 @@ node_modules/
 /tournaments.json
 /tournaments.brackets.json
 /clans.json
+
+# Atomārās saglabāšanas pagaidu faili (skat. server.js saveJsonAtomic)
+/tmp/*
+!/tmp/.gitkeep
