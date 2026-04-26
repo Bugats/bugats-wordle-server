@@ -5839,7 +5839,7 @@ function ensureNhlGiveawayMission(user) {
     id,
     code: "nhl_giveaway",
     title:
-      "Izlozei: izvēlies NHL komandas cepuri ar logo, saglabā e-pastu un piesakies izlozei profilā.",
+      "Izlozei: Play testa saite → lejupielādē VĀRDU ZONA no Google Play → NHL cepure → e-pasts → pieteikšanās profilā.",
     type: "nhl_giveaway_submit",
     target: 1,
     progress: prog,

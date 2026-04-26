@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-04-25-nhl-hats" />
+  <link rel="stylesheet" href="style.css?v=2026-04-27-giveaway-play-path" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -306,8 +306,13 @@
                     href="https://play.google.com/apps/testing/lv.thezone.wordle?safe=active"
                     target="_blank"
                     rel="noopener noreferrer"
-                    >📲 Android testa versija — spied šeit</a
+                    >📲 1) Google Play — slēgtais tests (pievienoties)</a
                   >
+                  <p class="vz-play-test-inline-note">
+                    Obligāti ceļš uz izlozi: <strong>šī testa saite</strong> → tad Play veikalā
+                    <strong>Lejupielādēt VĀRDU ZONA</strong> → šeit profilā <strong>e-pasts</strong> un
+                    pieteikšanās izlozei.
+                  </p>
                   <div class="vz-card-row"><span>Novads:</span><span id="player-region">—</span></div>
                   <div class="vz-card-row vz-title-row">
                     <span>Tituls:</span><span id="player-title" class="vz-title-value">—</span>
@@ -417,8 +422,13 @@
                     href="https://play.google.com/apps/testing/lv.thezone.wordle?safe=active"
                     target="_blank"
                     rel="noopener noreferrer"
-                    >📲 Android: pieslēdzies testa versijai (1 klikšķis)</a
+                    >📲 1) Google Play — slēgtais tests VĀRDU ZONAI</a
                   >
+                  <p class="vz-play-test-hero-note">
+                    Obligāti: vispirms <strong>šī saite</strong> (pievienošanās testam), tad Play veikalā
+                    <strong>instalē VĀRDU ZONA</strong>. Šeit pārlūkā — <strong>e-pasts</strong> profilā un
+                    izlozes pieteikšanās.
+                  </p>
                   <p class="vz-daily-anchor-kicker" id="vz-daily-anchor-kicker">
                     Tavs šodienas mērķis
                   </p>
@@ -435,7 +445,7 @@
                       href="https://play.google.com/apps/testing/lv.thezone.wordle?safe=active"
                       target="_blank"
                       rel="noopener noreferrer"
-                      >📲 Play testa versija</a
+                      >📲 Play — slēgtais tests (obligāti 1. solis)</a
                     >
                     <button type="button" class="mission-claim-btn vz-giveaway-anchor__btn" id="vz-giveaway-anchor-btn">
                       Izlozei — atvērt profilu
@@ -1043,8 +1053,10 @@
         <div id="pp-email-block" class="vz-profile-email-block hidden">
           <div class="vz-profile-email-label">E-pasts (tikai tev redzams)</div>
           <p class="vz-profile-email-privacy">
-            <strong>Balvu izlozei</strong> šis e-pasts ir obligāts — bez saglabāta e-pasta pieteikties izlozei nevar.
-            Citādi: reti jaunumi, bez spama; vari noņemt jebkurā brīdī.
+            <strong>Balvu izlozei</strong> obligāti arī <strong>Google Play slēgtais tests</strong> un
+            <strong>aplikācijas VĀRDU ZONA lejupielāde</strong> no Play veikala; šeit saglabā
+            <strong>e-pastu</strong> — bez tā pieteikties izlozei nevar. Citādi: reti jaunumi, bez spama; vari
+            noņemt jebkurā brīdī.
           </p>
           <div class="vz-profile-email-row">
             <input
@@ -1062,7 +1074,9 @@
         <div id="pp-nhl-giveaway-wrap" class="vz-profile-nhl-giveaway hidden">
           <div class="vz-profile-nhl-giveaway__title">🏒 NHL izlozei — izvēlies cepuri ar logo</div>
           <p class="vz-profile-nhl-giveaway__hint">
-            Spied uz savas komandas cepures (oficiālais NHL logo). Ja vajag citu komandu, raksti zemāk. Tad e-pasts un izlozes pieteikšanās.
+            Pēc Play testa saites un VĀRDU ZONAS instalācijas: spied uz savas komandas cepures (oficiālais NHL
+            logo). Ja vajag citu komandu, raksti zemāk. Tad augšā <strong>e-pasts</strong> un izlozes
+            pieteikšanās.
           </p>
           <div id="pp-nhl-hat-grid" class="vz-nhl-hat-grid-host" aria-label="NHL komandas"></div>
           <p class="vz-profile-nhl-giveaway__manual">Vai komandas nosaukums brīvā tekstā:</p>
@@ -1083,7 +1097,12 @@
           <div class="vz-profile-beta-heading">🎁 Balvu izloze</div>
           <div class="vz-profile-beta-badge" id="pp-beta-badge" aria-live="polite"></div>
           <ol class="vz-profile-giveaway-steps" id="pp-giveaway-steps">
-            <li>Ievadi un spied <strong>Saglabāt</strong> pie e-pasta augšā.</li>
+            <li>
+              <strong>Google Play:</strong> spied uz <strong>slēgtā testa saites</strong> zemāk vai kartītē
+              «Šodien VĀRDU ZONĀ», pievienojies testam, tad Play veikalā
+              <strong>Lejupielādē / atjaunini VĀRDU ZONA</strong>.
+            </li>
+            <li>Šeit, pārlūkā: ievadi <strong>e-pastu</strong> augšā un spied <strong>Saglabāt</strong>.</li>
             <li>Atzīmē piekrišanu un spied <strong>Pieteikties</strong> — tad esi izlozes sarakstā (saziņai izmantosim šo e-pastu).</li>
           </ol>
           <p id="pp-giveaway-email-gate" class="vz-profile-giveaway-email-gate hidden" role="status">
@@ -1103,7 +1122,11 @@
             rel="noopener noreferrer"
             >📲 Saņem Android testa versiju</a
           >
-          <p class="vz-profile-play-test-hint">Pēc pievienošanās Play veikalā atjaunini VĀRDU ZONU.</p>
+          <p class="vz-profile-play-test-hint">
+            Bez šī soļa izloze nepilnīga: vispirms <strong>testa saite</strong>, tad Play veikalā
+            <strong>instalē vai atjaunini VĀRDU ZONA</strong> (tā pati Google konta e-pasta adrese, ko saglabā šeit,
+            ja iespējams).
+          </p>
         </div>
 
         <div class="profile-row profile-row--center-actions">
@@ -1251,7 +1274,7 @@
     <script defer src="modules/nhl-giveaway-teams.js?v=2026-04-25-nhl-hats"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-04-25-nhl-hats"></script>
+    <script defer src="game.js?v=2026-04-27-giveaway-play-path"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>

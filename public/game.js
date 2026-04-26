@@ -5130,7 +5130,7 @@ function showPlayerProfile(data) {
         ? "Paldies par palīdzību testēt VĀRDU ZONU. Ja vēlies izstāties, raksti administratoram."
         : reqAt > 0
           ? "Esi izlozes sarakstā. Saziņai izmantosim tavu saglabāto e-pastu (citi spēlētāji to neredz)."
-          : "Izlozei obligāti vajag derīgu e-pastu augšā + šī poga ar piekrišanu. Administrators redz tavu lietotājvārdu un e-pastu sarakstam.";
+          : "Izlozei obligāti: Google Play slēgtais tests (zemāk), tad VĀRDU ZONAS aplikācijas lejupielāde no Play veikala; šeit derīgs e-pasts + šī poga ar piekrišanu. Administrators redz tavu lietotājvārdu un e-pastu sarakstam.";
     }
     if (ppBetaAgreeEl) {
       ppBetaAgreeEl.checked = false;
@@ -5331,9 +5331,9 @@ function buildDailyAnchorSummary() {
           ? "Piesakies izlozei — e-pasts jau saglabāts"
           : "Izlozei vajag tavu e-pastu profilā",
         progress: hasEmail
-          ? "Profilā atzīmē piekrišanu un spied «Pieteikties balvu izlozei»."
-          : "Vispirms ievadi e-pastu profilā un spied «Saglabāt», tad pieteikšanos.",
-        hint: "Spied «Atvērt profilu» zemāk.",
+          ? "1) Augšā «Google Play — slēgtais tests» → instalē VĀRDU ZONA. 2) Profilā piekrišana un «Pieteikties»."
+          : "1) Spied «Google Play — slēgtais tests» augšā, instalē VĀRDU ZONA. 2) Profilā e-pasts «Saglabāt». 3) Pieteikšanās.",
+        hint: "Spied «Izlozei — atvērt profilu» zemāk.",
         showGiveawayCta: true,
       };
     }
@@ -5419,8 +5419,8 @@ function renderDailyAnchorCard() {
   if (giveawayAnchorTextEl) {
     giveawayAnchorTextEl.textContent = showGa
       ? String(state.email || "").trim()
-        ? "E-pasts saglabāts — profilā atzīmē piekrišanu un spied «Pieteikties balvu izlozei»."
-        : "Izlozei obligāti: profilā ievadi e-pastu, «Saglabāt», tad pieteikšanās ar rūtiņu."
+        ? "E-pasts saglabāts — vispirms Play testa saite un VĀRDU ZONAS instalācija, tad profilā piekrišana un «Pieteikties»."
+        : "Izlozei obligāti: 1) augšā Play slēgtais tests → instalē VĀRDU ZONA; 2) profilā e-pasts «Saglabāt»; 3) pieteikšanās ar rūtiņu."
       : "";
   }
 }
@@ -5480,7 +5480,7 @@ function renderMissions(missions, bonus) {
     if (m.type === "nhl_giveaway_submit") {
       const hint = createEl("div", "mission-nhl-hint");
       hint.textContent =
-        "Soļi: 1) Profilā saglabā NHL klubu · 2) E-pasts · 3) Izlozes pieteikšanās.";
+        "Soļi: 1) Play testa saite → instalē VĀRDU ZONA · 2) NHL cepure profilā · 3) E-pasts · 4) Izlozes pieteikšanās.";
       li.appendChild(hint);
     }
 

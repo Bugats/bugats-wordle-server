@@ -3683,6 +3683,19 @@ button.vz-friend-quick-duel:hover {
   transform: translateY(0);
 }
 
+.vz-play-test-hero-note,
+.vz-play-test-inline-note {
+  margin: 0 0 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.88);
+}
+.vz-play-test-inline-note {
+  margin: 0 0 10px;
+  color: rgba(30, 41, 59, 0.9);
+}
+
 .vz-player-card .vz-play-test-inline {
   display: block;
   margin: 6px 0 8px;
