@@ -44,7 +44,10 @@ function escapeHtml(s) {
 
 /** Tikai lokālās statiskās lapas tukšo bloku saitēm (XSS riska mazināšana). */
 function vzSafeTrustPageHref(href) {
-  const base = String(href || "").trim().split("#")[0].toLowerCase();
+  const base = String(href || "")
+    .trim()
+    .split("#")[0]
+    .toLowerCase();
   const allowed = new Set([
     "coins-vip-turniri.html",
     "privacy.html",
@@ -77,8 +80,12 @@ function fillVzEmptyState(el, options = {}) {
     .filter(Boolean)
     .join(" ");
   const g = escapeHtml(glyph);
-  const t = title ? `<p class="vz-empty-state__title">${escapeHtml(title)}</p>` : "";
-  const x = text ? `<p class="vz-empty-state__text">${escapeHtml(text)}</p>` : "";
+  const t = title
+    ? `<p class="vz-empty-state__title">${escapeHtml(title)}</p>`
+    : "";
+  const x = text
+    ? `<p class="vz-empty-state__text">${escapeHtml(text)}</p>`
+    : "";
   const link =
     linkHref && linkLabel
       ? `<p class="vz-empty-state__link-wrap"><a class="vz-empty-state__link" href="${escapeHtml(linkHref)}" target="_blank" rel="noopener">${escapeHtml(linkLabel)}</a></p>`
@@ -681,7 +688,12 @@ function boardGamePlayerIndex(players, username) {
   if (!username || !Array.isArray(players)) return -1;
   const want = String(username).trim().toLowerCase();
   for (let i = 0; i < players.length; i++) {
-    if (String(players[i] || "").trim().toLowerCase() === want) return i;
+    if (
+      String(players[i] || "")
+        .trim()
+        .toLowerCase() === want
+    )
+      return i;
   }
   return -1;
 }
@@ -927,10 +939,7 @@ function startBoardInviteOutgoingWait(expiresAt, targetUsername, opts = {}) {
   pending.dataset.pendingRematch = opts.rematch ? "1" : "";
   pending.dataset.pendingGameType = String(opts.gameType || "").trim();
   pending.dataset.pendingChessLine = String(opts.chessClockLine || "").trim();
-  const sec = Math.max(
-    0,
-    Math.round(Number(opts.inviteTimeoutMs) / 1000) || 0
-  );
+  const sec = Math.max(0, Math.round(Number(opts.inviteTimeoutMs) / 1000) || 0);
   pending.dataset.pendingInviteSec = sec > 0 ? String(sec) : "";
   pending.classList.remove("hidden");
   syncBoardInvitePendingUi();
@@ -1034,10 +1043,7 @@ function ingestChessClockPayload(payload) {
       Math.max(0, Math.floor(Number(c.remainingMs[1]) || 0)),
     ],
     incrementMs: Math.max(0, Math.floor(Number(c.incrementMs) || 0)),
-    initialMsPerSide: Math.max(
-      0,
-      Math.floor(Number(c.initialMsPerSide) || 0)
-    ),
+    initialMsPerSide: Math.max(0, Math.floor(Number(c.initialMsPerSide) || 0)),
     lastServerNow: Number(c.serverNow) || now,
     clientReceivedAt: now,
   };
@@ -1084,23 +1090,16 @@ function syncChessDrawControls() {
   const ds = boardState.chessDrawState;
   const myIdx = boardGamePlayerIndex(boardState.players, state.username);
   const myTurn = myIdx === boardState.turn;
-  const offerFrom = ds?.drawOfferFrom
-    ? String(ds.drawOfferFrom).trim()
-    : "";
+  const offerFrom = ds?.drawOfferFrom ? String(ds.drawOfferFrom).trim() : "";
   const me = String(state.username || "").trim();
   const offeredToMe =
-    offerFrom &&
-    me &&
-    offerFrom.toLowerCase() !== me.toLowerCase();
+    offerFrom && me && offerFrom.toLowerCase() !== me.toLowerCase();
 
   offerBtn.classList.toggle("hidden", !myTurn);
   /** Pieņemt / noraidīt drīkst jebkurā brīdī, kamēr piedāvājums ir aktīvs (FIDE). */
   acceptBtn.classList.toggle("hidden", !offeredToMe);
-  if (declineBtn)
-    declineBtn.classList.toggle("hidden", !offeredToMe);
-  const canClaim =
-    myTurn &&
-    !!(ds?.claimFifty || ds?.claimThreefold);
+  if (declineBtn) declineBtn.classList.toggle("hidden", !offeredToMe);
+  const canClaim = myTurn && !!(ds?.claimFifty || ds?.claimThreefold);
   claimBtn.classList.toggle("hidden", !canClaim);
 
   if (hint) {
@@ -1119,13 +1118,19 @@ function syncChessDrawControls() {
       parts.push(offerLine);
     }
     if (typeof ds?.halfMoveClock === "number") {
-      parts.push(`Pusgājienu skaitītājs (50 gāj. likums): ${ds.halfMoveClock}/100.`);
+      parts.push(
+        `Pusgājienu skaitītājs (50 gāj. likums): ${ds.halfMoveClock}/100.`
+      );
     }
     if (ds?.claimThreefold && myTurn) {
-      parts.push("Ir trīskāršs atkārtojums — savā gājienā vari pieteikt neizšķirtu.");
+      parts.push(
+        "Ir trīskāršs atkārtojums — savā gājienā vari pieteikt neizšķirtu."
+      );
     }
     if (ds?.claimFifty && myTurn) {
-      parts.push("Ir izpildīts 50 gājienu likums — savā gājienā vari pieteikt neizšķirtu.");
+      parts.push(
+        "Ir izpildīts 50 gājienu likums — savā gājienā vari pieteikt neizšķirtu."
+      );
     }
     hint.textContent = parts.join(" ");
     hint.classList.toggle("hidden", parts.length === 0);
@@ -1167,8 +1172,14 @@ function syncChessClockDomCore() {
   if (cells && cells.length >= 2) {
     cells[0].classList.toggle("vz-board-chess-clock--active", turn === 0);
     cells[1].classList.toggle("vz-board-chess-clock--active", turn === 1);
-    cells[0].classList.toggle("vz-board-chess-clock--low", w > 0 && w <= 30_000);
-    cells[1].classList.toggle("vz-board-chess-clock--low", b > 0 && b <= 30_000);
+    cells[0].classList.toggle(
+      "vz-board-chess-clock--low",
+      w > 0 && w <= 30_000
+    );
+    cells[1].classList.toggle(
+      "vz-board-chess-clock--low",
+      b > 0 && b <= 30_000
+    );
   }
 }
 
@@ -1184,8 +1195,14 @@ function syncChessClockDom() {
     stopChessClockTick();
     if (wrap) wrap.classList.add("hidden");
     if (cells) {
-      cells[0]?.classList.remove("vz-board-chess-clock--active", "vz-board-chess-clock--low");
-      cells[1]?.classList.remove("vz-board-chess-clock--active", "vz-board-chess-clock--low");
+      cells[0]?.classList.remove(
+        "vz-board-chess-clock--active",
+        "vz-board-chess-clock--low"
+      );
+      cells[1]?.classList.remove(
+        "vz-board-chess-clock--active",
+        "vz-board-chess-clock--low"
+      );
     }
     return;
   }
@@ -1276,9 +1293,7 @@ function dambreteVariantLabelClient(v) {
 
 function renderBoardOpenSeatsTable(kind) {
   const wrapId =
-    kind === "chess"
-      ? "board-chess-open-seats"
-      : "board-dambrete-open-seats";
+    kind === "chess" ? "board-chess-open-seats" : "board-dambrete-open-seats";
   const tbodyId =
     kind === "chess"
       ? "board-chess-open-seats-body"
@@ -1299,7 +1314,9 @@ function renderBoardOpenSeatsTable(kind) {
       : Array.isArray(boardOpenSeatsCache?.dambrete)
         ? boardOpenSeatsCache.dambrete
         : [];
-  const me = String(state.username || "").trim().toLowerCase();
+  const me = String(state.username || "")
+    .trim()
+    .toLowerCase();
   const inGame = !!boardState.gameId;
   if (emptyEl) {
     if (rows.length === 0) {
@@ -1351,7 +1368,9 @@ function renderBoardOpenSeatsTable(kind) {
 }
 
 function syncMyBoardOpenSeatButtons() {
-  const me = String(state.username || "").trim().toLowerCase();
+  const me = String(state.username || "")
+    .trim()
+    .toLowerCase();
   const chessList = Array.isArray(boardOpenSeatsCache?.chess)
     ? boardOpenSeatsCache.chess
     : [];
@@ -1359,10 +1378,16 @@ function syncMyBoardOpenSeatButtons() {
     ? boardOpenSeatsCache.dambrete
     : [];
   const inChess = chessList.some(
-    (r) => String(r?.host || "").trim().toLowerCase() === me
+    (r) =>
+      String(r?.host || "")
+        .trim()
+        .toLowerCase() === me
   );
   const inDamb = dList.some(
-    (r) => String(r?.host || "").trim().toLowerCase() === me
+    (r) =>
+      String(r?.host || "")
+        .trim()
+        .toLowerCase() === me
   );
   document
     .getElementById("board-chess-open-seat-publish")
@@ -1436,7 +1461,9 @@ function renderZole3pOpenLobbyTable() {
   const tbody = document.getElementById("board-zole-3p-open-lobbies-body");
   const emptyEl = document.getElementById("board-zole-3p-open-lobbies-empty");
   if (!wrap || !tbody) return;
-  const me = String(state.username || "").trim().toLowerCase();
+  const me = String(state.username || "")
+    .trim()
+    .toLowerCase();
   const inGame = !!boardState.gameId;
   const inLobby = !!zole3pLobbySnapshot?.zoleLobby;
   const myLobbyId = inLobby
@@ -1544,13 +1571,15 @@ function syncZole3pStakeSelectFromLobby() {
   }
   const cpp = Math.max(
     0,
-    Math.min(5, Math.floor(Number(zole3pLobbySnapshot?.zole3pCoinsPerPoint) || 0))
+    Math.min(
+      5,
+      Math.floor(Number(zole3pLobbySnapshot?.zole3pCoinsPerPoint) || 0)
+    )
   );
   sel.value = String(cpp);
   const host = String(zole3pLobbySnapshot?.host || "").trim();
   const me = String(state.username || "").trim();
-  const isHost =
-    host && me && host.toLowerCase() === me.toLowerCase();
+  const isHost = host && me && host.toLowerCase() === me.toLowerCase();
   const n = (zole3pLobbySnapshot?.players || []).length;
   sel.disabled = !isHost || n >= 3;
 }
@@ -1588,8 +1617,7 @@ function updateZole3pLobbyUI(payload) {
     clearZole3pThirdInviteCountdown();
     if (box) box.classList.add("hidden");
     if (pending) pending.classList.add("hidden");
-    if (payload?.cancelled)
-      appendGaldaSystemMessage("Zoles istaba atcelta.");
+    if (payload?.cancelled) appendGaldaSystemMessage("Zoles istaba atcelta.");
     syncZole3pStakeSelectFromLobby();
     syncBoardDambreteModePanelVisibility();
     syncZole3pOpenLobbyPanelVisibility();
@@ -1601,8 +1629,7 @@ function updateZole3pLobbyUI(payload) {
   const host = payload.host || "";
   const players = payload.players || [];
   const me = String(state.username || "").trim();
-  const isHost =
-    host && me && host.trim().toLowerCase() === me.toLowerCase();
+  const isHost = host && me && host.trim().toLowerCase() === me.toLowerCase();
   const inLobby = players.some(
     (p) => me && String(p).trim().toLowerCase() === me.toLowerCase()
   );
@@ -1689,9 +1716,7 @@ const BOARD_LOBBY_GAME_TAB_STORAGE = "vz_board_lobby_game_tab_v1";
 
 function getBoardLobbyGameTab() {
   try {
-    const v = String(
-      sessionStorage.getItem(BOARD_LOBBY_GAME_TAB_STORAGE) || ""
-    )
+    const v = String(sessionStorage.getItem(BOARD_LOBBY_GAME_TAB_STORAGE) || "")
       .toLowerCase()
       .trim();
     if (v === "chess" || v === "dambrete" || v === "zole") return v;
@@ -1792,11 +1817,15 @@ function applyChessPresetFromStorage() {
   const pvp = document.getElementById("board-chess-time-preset");
   const bot = document.getElementById("board-chess-time-preset-vsbot");
   try {
-    const pv = String(localStorage.getItem(CHESS_PVP_PRESET_STORAGE) || "").trim();
+    const pv = String(
+      localStorage.getItem(CHESS_PVP_PRESET_STORAGE) || ""
+    ).trim();
     if (pvp && chessSelectHasPreset(pvp, pv)) pvp.value = pv;
   } catch {}
   try {
-    const bv = String(localStorage.getItem(CHESS_BOT_PRESET_STORAGE) || "").trim();
+    const bv = String(
+      localStorage.getItem(CHESS_BOT_PRESET_STORAGE) || ""
+    ).trim();
     if (bot && chessSelectHasPreset(bot, bv)) bot.value = bv;
   } catch {}
 }
@@ -1851,12 +1880,17 @@ function hideBoardResultOverlay() {
     ?.classList.add("hidden");
   document.getElementById("board-result-overlay")?.classList.add("hidden");
   document.getElementById("board-result-rematch")?.classList.add("hidden");
-  document.getElementById("board-result-rematch-status")?.classList.add("hidden");
+  document
+    .getElementById("board-result-rematch-status")
+    ?.classList.add("hidden");
   const modal = document.getElementById("board-games-modal");
   const inner = document.getElementById("board-modal-inner");
   if (modal && !modal.classList.contains("hidden") && inner) {
     inner.focus({ preventScroll: true });
-  } else if (_boardResultFocusReturn && typeof _boardResultFocusReturn.focus === "function") {
+  } else if (
+    _boardResultFocusReturn &&
+    typeof _boardResultFocusReturn.focus === "function"
+  ) {
     try {
       _boardResultFocusReturn.focus({ preventScroll: true });
     } catch (_) {}
@@ -1868,10 +1902,12 @@ function boardGameOpponentName(players, vsBot) {
   const arr = players || [];
   const me = state.username;
   const idx = boardGamePlayerIndex(arr, me);
-  if (arr.length === 3 && boardState.type === "zole" && boardState.zoleMode === "online_3p") {
-    const others = arr.filter(
-      (_, i) => i !== idx
-    );
+  if (
+    arr.length === 3 &&
+    boardState.type === "zole" &&
+    boardState.zoleMode === "online_3p"
+  ) {
+    const others = arr.filter((_, i) => i !== idx);
     return others.length ? others.join(", ") : "pretinieki";
   }
   const opp = idx === 0 ? arr[1] : arr[0];
@@ -1882,7 +1918,9 @@ function boardGameOpponentName(players, vsBot) {
 
 function boardResultHumanOpponentUsername(players) {
   const arr = players || [];
-  const meLc = String(state.username || "").trim().toLowerCase();
+  const meLc = String(state.username || "")
+    .trim()
+    .toLowerCase();
   const humans = arr.filter((p) => {
     const s = String(p || "").trim();
     if (!s) return false;
@@ -1891,7 +1929,10 @@ function boardResultHumanOpponentUsername(players) {
     return true;
   });
   const others = humans.filter(
-    (p) => String(p || "").trim().toLowerCase() !== meLc
+    (p) =>
+      String(p || "")
+        .trim()
+        .toLowerCase() !== meLc
   );
   if (others.length !== 1) return "";
   return String(others[0] || "").trim();
@@ -1977,11 +2018,17 @@ function zoleMyTablePtsLine(snap, username) {
   if (!snap || !Array.isArray(snap.tableDelta) || snap.tableDelta.length < 3)
     return "";
   const players = Array.isArray(snap.players) ? snap.players : [];
-  const me = String(username || "").trim().toLowerCase();
+  const me = String(username || "")
+    .trim()
+    .toLowerCase();
   if (!me) return "";
   let myI = -1;
   for (let i = 0; i < players.length; i++) {
-    if (String(players[i] || "").trim().toLowerCase() === me) {
+    if (
+      String(players[i] || "")
+        .trim()
+        .toLowerCase() === me
+    ) {
       myI = i;
       break;
     }
@@ -2001,7 +2048,9 @@ function zoleBuriedKittyEyesLine(snap) {
   if (!lr || typeof lr !== "object") return "";
   const parts = [];
   if (typeof lr.buriedEyesTotal === "number" && lr.buriedEyesTotal > 0) {
-    parts.push(`Noraktās 2 kārtis lielajam: +${lr.buriedEyesTotal} acis tabulā.`);
+    parts.push(
+      `Noraktās 2 kārtis lielajam: +${lr.buriedEyesTotal} acis tabulā.`
+    );
   }
   if (
     typeof lr.kittyEyesToOpponents === "number" &&
@@ -2019,9 +2068,7 @@ function zoleResultExtraLine(snap) {
   const lr = snap?.lastResult;
   const players = Array.isArray(snap?.players) ? snap.players : [];
   const nm = (i) =>
-    typeof i === "number" && i >= 0 && players[i]
-      ? String(players[i])
-      : "?";
+    typeof i === "number" && i >= 0 && players[i] ? String(players[i]) : "?";
   const mazoPair = (cidx) => {
     if (typeof cidx !== "number") return "?";
     return [0, 1, 2]
@@ -2075,9 +2122,7 @@ function showBoardGameResult(payload) {
   const me = state.username;
   const oppName = boardGameOpponentName(players, vsBot);
   const oppPhrase =
-    vsBot && oppName.startsWith("botu")
-      ? oppName
-      : `pret ${oppName}`;
+    vsBot && oppName.startsWith("botu") ? oppName : `pret ${oppName}`;
   const dVar =
     gameType === "dambrete"
       ? normalizeDambreteVariantClient(
@@ -2118,7 +2163,9 @@ function showBoardGameResult(payload) {
         : `DAMBRETE · ${boardDambreteModeLabel(dVar).toUpperCase()} · REZULTĀTS`;
 
   const iWon =
-    winner && me && String(winner).trim().toLowerCase() === String(me).trim().toLowerCase();
+    winner &&
+    me &&
+    String(winner).trim().toLowerCase() === String(me).trim().toLowerCase();
   const iLost = winner && me && !iWon;
 
   if (!winner) {
@@ -2169,7 +2216,9 @@ function showBoardGameResult(payload) {
         : `Tu uzvarēji — pretiniekam beidzās laiks${oppName ? ` (${oppName})` : ""}.`;
     } else if (reason === "resign") {
       detail =
-        resignedBy && String(resignedBy).trim().toLowerCase() !== String(me).trim().toLowerCase()
+        resignedBy &&
+        String(resignedBy).trim().toLowerCase() !==
+          String(me).trim().toLowerCase()
           ? vsBot
             ? "Bots padodas — uzvara tev."
             : `Tu uzvarēji — ${oppName} padodas.`
@@ -2180,8 +2229,9 @@ function showBoardGameResult(payload) {
       const snap = payload?.zole || boardState.zole;
       const tab = zoleMyTablePtsLine(snap, me);
       const cppStake = Math.floor(
-        Number(payload?.zole3pCoinsPerPoint ?? boardState.zole3pCoinsPerPoint) ||
-          0
+        Number(
+          payload?.zole3pCoinsPerPoint ?? boardState.zole3pCoinsPerPoint
+        ) || 0
       );
       const coinStake = zole3pCoinsFromTableLine(snap, me, cppStake);
       detail =
@@ -2205,7 +2255,8 @@ function showBoardGameResult(payload) {
     } else if (reason === "resign") {
       detail =
         resignedBy &&
-        String(resignedBy).trim().toLowerCase() === String(me).trim().toLowerCase()
+        String(resignedBy).trim().toLowerCase() ===
+          String(me).trim().toLowerCase()
           ? "Tu padodies — spēle zaudēta."
           : vsBot
             ? `Tu zaudēji — uzvarēja ${oppName}.`
@@ -2218,8 +2269,9 @@ function showBoardGameResult(payload) {
       const snap = payload?.zole || boardState.zole;
       const tab = zoleMyTablePtsLine(snap, me);
       const cppStake = Math.floor(
-        Number(payload?.zole3pCoinsPerPoint ?? boardState.zole3pCoinsPerPoint) ||
-          0
+        Number(
+          payload?.zole3pCoinsPerPoint ?? boardState.zole3pCoinsPerPoint
+        ) || 0
       );
       const coinStake = zole3pCoinsFromTableLine(snap, me, cppStake);
       detail =
@@ -2374,7 +2426,9 @@ const vipQuickTournamentTypeEl = $("#vip-quick-tournament-type");
 const vipQuickTournamentPlayModeEl = $("#vip-quick-tournament-play-mode");
 const vipQuickTournamentSeedingEl = $("#vip-quick-tournament-seeding");
 const vipQuickTournamentCreateBtnEl = $("#vip-quick-tournament-create-btn");
-const vipQuickTournamentCreateStatusEl = $("#vip-quick-tournament-create-status");
+const vipQuickTournamentCreateStatusEl = $(
+  "#vip-quick-tournament-create-status"
+);
 const vipRoomPanelEl = $("#vip-room-panel");
 const vipRoomHelpEl = $("#vip-room-help");
 const vipRoomNameEl = $("#vip-room-name");
@@ -2826,7 +2880,6 @@ function syncStripeCoinsBuyUi() {
   }
 }
 
-
 async function apiGet(path) {
   return apiRequest(path, {});
 }
@@ -2991,8 +3044,7 @@ function classifyApiFailure(err) {
     return {
       key: "auth",
       title: "Piekļuve beigusies",
-      text:
-        "Tava sesija vairs nav derīga vai nav tiesību šai darbībai. Ielogojies vēlreiz.",
+      text: "Tava sesija vairs nav derīga vai nav tiesību šai darbībai. Ielogojies vēlreiz.",
       hint: "",
       showLogin: true,
     };
@@ -3000,8 +3052,7 @@ function classifyApiFailure(err) {
     return {
       key: "server",
       title: "Servera kļūda",
-      text:
-        "Serveris atbild ar kļūdu. Tas parasti ir īslaicīgi — pamēģini vēlreiz pēc brīža.",
+      text: "Serveris atbild ar kļūdu. Tas parasti ir īslaicīgi — pamēģini vēlreiz pēc brīža.",
       hint: status ? `Kods: ${status}` : "",
       showLogin: false,
     };
@@ -3009,8 +3060,7 @@ function classifyApiFailure(err) {
     return {
       key: "rate",
       title: "Pārāk daudz pieprasījumu",
-      text:
-        "Uz brīdi esi nosūtījis pārāk daudz pieprasījumu. Pagaidi un mēģini vēlreiz.",
+      text: "Uz brīdi esi nosūtījis pārāk daudz pieprasījumu. Pagaidi un mēģini vēlreiz.",
       hint: "",
       showLogin: false,
     };
@@ -3018,8 +3068,7 @@ function classifyApiFailure(err) {
     return {
       key: "timeout",
       title: "Noildze",
-      text:
-        "Serveris neatbildēja laikā. Pārbaudi savienojumu un mēģini vēlreiz.",
+      text: "Serveris neatbildēja laikā. Pārbaudi savienojumu un mēģini vēlreiz.",
       hint: "",
       showLogin: false,
     };
@@ -3033,8 +3082,7 @@ function classifyApiFailure(err) {
     return {
       key: "network",
       title: "Savienojuma problēma",
-      text:
-        "Neizdevās sasniegt serveri. Pārbaudi internetu vai mēģini vēlāk.",
+      text: "Neizdevās sasniegt serveri. Pārbaudi internetu vai mēģini vēlāk.",
       hint: "",
       showLogin: false,
     };
@@ -3043,8 +3091,7 @@ function classifyApiFailure(err) {
       key: "client",
       title: "Pieprasījums neizdevās",
       text:
-        String(err?.message || "").trim() ||
-        "Neizdevās izpildīt pieprasījumu.",
+        String(err?.message || "").trim() || "Neizdevās izpildīt pieprasījumu.",
       hint: status ? `Kods: ${status}` : "",
       showLogin: false,
     };
@@ -3052,8 +3099,7 @@ function classifyApiFailure(err) {
     key: "unknown",
     title: "Kaut kas nogāja greizi",
     text:
-      String(err?.message || "").trim() ||
-      "Nezināma kļūda. Pamēģini vēlreiz.",
+      String(err?.message || "").trim() || "Nezināma kļūda. Pamēģini vēlreiz.",
     hint: "",
     showLogin: false,
   };
@@ -3075,7 +3121,9 @@ function showConnectionIssueOverlay(info, opts = {}) {
   }
   if (offlineLoginBtn) offlineLoginBtn.classList.toggle("hidden", !showLogin);
   if (offlineRetryBtn) {
-    offlineRetryBtn.textContent = showLogin ? "Atjaunot lapu" : "Mēģināt vēlreiz";
+    offlineRetryBtn.textContent = showLogin
+      ? "Atjaunot lapu"
+      : "Mēģināt vēlreiz";
   }
   setOfflineOverlay(true);
 
@@ -4847,7 +4895,9 @@ function syncNhlHatPickerUi(selectedAbbr) {
 
 async function handleNhlHatPick(abbr) {
   if (!state.token) return;
-  const a = String(abbr || "").trim().toUpperCase();
+  const a = String(abbr || "")
+    .trim()
+    .toUpperCase();
   if (!a) return;
   if (ppNhlTeamSaveBtn) ppNhlTeamSaveBtn.disabled = true;
   setNhlTeamProfileStatus("", "");
@@ -4984,7 +5034,9 @@ async function handleProfileBetaOptIn() {
     setBetaProfileStatus("Pieteikums saglabāts. Paldies!", "ok");
     renderDailyAnchorCard();
     if (state.username) {
-      const fresh = await apiGet("/profile/" + encodeURIComponent(state.username));
+      const fresh = await apiGet(
+        "/profile/" + encodeURIComponent(state.username)
+      );
       showPlayerProfile(fresh);
     }
   } catch (err) {
@@ -5119,7 +5171,9 @@ function showPlayerProfile(data) {
     ppNhlGiveawayWrapEl.classList.toggle("hidden", !isSelf);
   }
   if (isSelf && ppNhlTeamInputEl) {
-    const ab = String(data.giveawayNhlAbbr ?? state.giveawayNhlAbbr ?? "").trim();
+    const ab = String(
+      data.giveawayNhlAbbr ?? state.giveawayNhlAbbr ?? ""
+    ).trim();
     if (ab) {
       ppNhlTeamInputEl.value = "";
     } else {
@@ -5348,7 +5402,8 @@ function buildDailyAnchorSummary() {
 
   if (!state.betaTester) {
     const hasEmail = String(state.email || "").trim().length > 0;
-    const opted = Math.max(0, Math.floor(Number(state.betaOptInRequestedAt) || 0)) > 0;
+    const opted =
+      Math.max(0, Math.floor(Number(state.betaOptInRequestedAt) || 0)) > 0;
     if (!opted) {
       const hat = hasNhlHatPickForGiveaway();
       return {
@@ -5376,7 +5431,9 @@ function buildDailyAnchorSummary() {
       kicker: "Misija gatava",
       headline: "Saņem dienas misijas balvu",
       progress: String(claimM.title || "Misija").slice(0, 140),
-      hint: rw ? `Balva: ${rw}. Spied «Saņemt» pie misijas zemāk.` : "Spied «Saņemt» pie misijas zemāk.",
+      hint: rw
+        ? `Balva: ${rw}. Spied «Saņemt» pie misijas zemāk.`
+        : "Spied «Saņemt» pie misijas zemāk.",
     };
   }
 
@@ -5386,7 +5443,9 @@ function buildDailyAnchorSummary() {
       kicker: "Visas misijas izpildītas",
       headline: "Saņem dienas bonusu",
       progress: "Bonus par visām misijām šodien.",
-      hint: rw ? `Balva: ${rw}. Spied «Saņemt» pie bonusa zemāk.` : "Spied «Saņemt» pie bonusa zemāk.",
+      hint: rw
+        ? `Balva: ${rw}. Spied «Saņemt» pie bonusa zemāk.`
+        : "Spied «Saņemt» pie bonusa zemāk.",
     };
   }
 
@@ -5394,8 +5453,8 @@ function buildDailyAnchorSummary() {
     (m) =>
       m &&
       !m.isCompleted &&
-      (Math.max(0, Math.floor(Number(m.progress) || 0)) <
-        Math.max(1, Math.floor(Number(m.target) || 1)))
+      Math.max(0, Math.floor(Number(m.progress) || 0)) <
+        Math.max(1, Math.floor(Number(m.target) || 1))
   );
   if (inProg) {
     const p = Math.max(0, Math.floor(Number(inProg.progress) || 0));
@@ -5403,10 +5462,7 @@ function buildDailyAnchorSummary() {
     const rw = formatMissionRewardsShort(inProg.rewards);
     return {
       kicker: "Dienas misija",
-      headline: String(inProg.title || "Turpini dienas misiju").slice(
-        0,
-        140
-      ),
+      headline: String(inProg.title || "Turpini dienas misiju").slice(0, 140),
       progress: `Progress: ${Math.min(p, t)}/${t}`,
       hint: rw
         ? `Pabeidz līdz ${t}, lai iegūtu: ${rw}.`
@@ -6026,7 +6082,8 @@ function getFriendPresenceUi(p, online) {
     return {
       label: "Istaba",
       sub: "Zole 3P",
-      title: "Atvērta Zoles 3 cilvēku istaba — var būt aizņemts ar uzaicinājumiem.",
+      title:
+        "Atvērta Zoles 3 cilvēku istaba — var būt aizņemts ar uzaicinājumiem.",
       tone: "room",
     };
   }
@@ -6059,10 +6116,17 @@ function inviteFriendQuickDuel(friendName) {
   const target = String(friendName || "").trim();
   if (!target) return;
   if (!state.socket || !state.socket.connected) {
-    appendSystemMessage("Nav servera savienojuma — uzaicinājumu nevar nosūtīt.");
+    appendSystemMessage(
+      "Nav servera savienojuma — uzaicinājumu nevar nosūtīt."
+    );
     return;
   }
-  if (target.toLowerCase() === String(state.username || "").trim().toLowerCase()) {
+  if (
+    target.toLowerCase() ===
+    String(state.username || "")
+      .trim()
+      .toLowerCase()
+  ) {
     appendSystemMessage("Nevari izaicināt sevi.");
     return;
   }
@@ -6096,7 +6160,9 @@ function applyFriendsPayload(payload) {
 function friendSummaryMap() {
   const m = new Map();
   for (const s of state.friendSummaries || []) {
-    const n = String(s?.name || "").trim().toLowerCase();
+    const n = String(s?.name || "")
+      .trim()
+      .toLowerCase();
     if (n) m.set(n, s);
   }
   return m;
@@ -6109,7 +6175,11 @@ function renderSocialPulse() {
   const clan = me?.clan;
   const friends = Array.isArray(state.friends) ? state.friends : [];
   const onlineFriends = friends.filter((n) =>
-    state.onlineUsers.has(String(n || "").trim().toLowerCase())
+    state.onlineUsers.has(
+      String(n || "")
+        .trim()
+        .toLowerCase()
+    )
   );
   const parts = [];
 
@@ -6220,7 +6290,9 @@ function renderFriends() {
 
   const sumByName = friendSummaryMap();
   const nFriends = state.friends.length;
-  const filterLc = String(state.friendListFilter || "").trim().toLowerCase();
+  const filterLc = String(state.friendListFilter || "")
+    .trim()
+    .toLowerCase();
   const useCompact = nFriends >= 8;
   if (friendsCardEl) {
     friendsCardEl.classList.toggle("vz-friends-card--compact", useCompact);
@@ -6238,10 +6310,8 @@ function renderFriends() {
     const kb = String(b || "")
       .trim()
       .toLowerCase();
-    const oa =
-      (sumByName.get(ka)?.online ?? state.onlineUsers.has(ka)) ? 1 : 0;
-    const ob =
-      (sumByName.get(kb)?.online ?? state.onlineUsers.has(kb)) ? 1 : 0;
+    const oa = (sumByName.get(ka)?.online ?? state.onlineUsers.has(ka)) ? 1 : 0;
+    const ob = (sumByName.get(kb)?.online ?? state.onlineUsers.has(kb)) ? 1 : 0;
     if (ob !== oa) return ob - oa;
     return String(a).localeCompare(String(b), "lv");
   });
@@ -6284,14 +6354,20 @@ function renderFriends() {
     top.appendChild(nick);
     left.appendChild(top);
 
-    const tag = String(summary?.clanTag || "").trim().toUpperCase();
+    const tag = String(summary?.clanTag || "")
+      .trim()
+      .toUpperCase();
     const metaBits = [];
     if (presUi.sub) metaBits.push(presUi.sub);
     if (summary?.sameClan && tag) metaBits.push(`[${tag}]`);
     else if (summary?.sameClan) metaBits.push("klans");
     else if (tag) metaBits.push(`[${tag}]`);
     if (metaBits.length) {
-      const meta = createEl("span", "vz-friend-meta-inline", metaBits.join(" · "));
+      const meta = createEl(
+        "span",
+        "vz-friend-meta-inline",
+        metaBits.join(" · ")
+      );
       const clanHint = summary?.sameClan
         ? "Draugs ir tajā pašā klanā kā tu."
         : tag
@@ -6356,10 +6432,7 @@ function renderFriends() {
           : "Draugu saraksts";
     friendsListScrollEl.setAttribute("aria-label", label);
   }
-  if (
-    friendsFilterInputEl &&
-    document.activeElement !== friendsFilterInputEl
-  ) {
+  if (friendsFilterInputEl && document.activeElement !== friendsFilterInputEl) {
     const want = String(state.friendListFilter || "");
     if (friendsFilterInputEl.value !== want) friendsFilterInputEl.value = want;
   }
@@ -8268,7 +8341,11 @@ function parseVipQuickTournamentSeeding(raw) {
   const text = String(raw || "");
   const parts = text
     .split(/[\n,;]+/)
-    .map((s) => String(s || "").replace(/\s+/g, " ").trim())
+    .map((s) =>
+      String(s || "")
+        .replace(/\s+/g, " ")
+        .trim()
+    )
     .filter(Boolean);
   const seen = new Set();
   const out = [];
@@ -8302,7 +8379,8 @@ function setVipQuickTournamentCreateStatus(message, kind = "") {
   vipQuickTournamentCreateStatusEl.textContent = String(message || "");
   vipQuickTournamentCreateStatusEl.classList.remove("vz-ok", "vz-error");
   if (kind === "ok") vipQuickTournamentCreateStatusEl.classList.add("vz-ok");
-  if (kind === "error") vipQuickTournamentCreateStatusEl.classList.add("vz-error");
+  if (kind === "error")
+    vipQuickTournamentCreateStatusEl.classList.add("vz-error");
 }
 
 function renderVipQuickTournamentPanel() {
@@ -8355,7 +8433,8 @@ async function handleVipQuickTournamentCreate() {
     return;
   }
   try {
-    if (vipQuickTournamentCreateBtnEl) vipQuickTournamentCreateBtnEl.disabled = true;
+    if (vipQuickTournamentCreateBtnEl)
+      vipQuickTournamentCreateBtnEl.disabled = true;
     const autoReportOnly =
       playMode === "dambrete" || playMode === "chess" || playMode === "zole"
         ? false
@@ -8369,9 +8448,7 @@ async function handleVipQuickTournamentCreate() {
     });
     const tid = resp?.tournament?.id;
     setVipQuickTournamentCreateStatus(
-      tid != null
-        ? `Turnīrs #${tid} izveidots.`
-        : "Turnīrs izveidots.",
+      tid != null ? `Turnīrs #${tid} izveidots.` : "Turnīrs izveidots.",
       "ok"
     );
     if (vipQuickTournamentNameEl) vipQuickTournamentNameEl.value = "";
@@ -11377,8 +11454,7 @@ function initSocket() {
         {
           key: "socket_auth",
           title: "Piekļuve čatam un galdam",
-          text:
-            "Savienojums noraidīts — iespējams, beidzies sesijas tokens. Ielogojies vēlreiz vai atjauno lapu.",
+          text: "Savienojums noraidīts — iespējams, beidzies sesijas tokens. Ielogojies vēlreiz vai atjauno lapu.",
           hint: "",
           showLogin: true,
         },
@@ -11392,8 +11468,7 @@ function initSocket() {
         {
           key: "socket_net",
           title: "Nav tiešsaistes savienojuma",
-          text:
-            "Neizdevās pieslēgties reāllaika serverim. Pārbaudi internetu; pēc atjaunošanās viss sinhronizēsies.",
+          text: "Neizdevās pieslēgties reāllaika serverim. Pārbaudi internetu; pēc atjaunošanās viss sinhronizēsies.",
           hint: "",
           showLogin: false,
         },
@@ -11408,8 +11483,7 @@ function initSocket() {
   socket.on("disconnect", (reason) => {
     disarmBoardMoveResponseWait();
     if (reason === "io client disconnect") return;
-    const inGalds =
-      !!(boardState?.gameId || zole3pLobbySnapshot?.zoleLobby);
+    const inGalds = !!(boardState?.gameId || zole3pLobbySnapshot?.zoleLobby);
     appendVzStatusMessage(
       inGalds
         ? "Atvienots no servera — neaizver modāļus; pēc atkārtotas pieslēgšanās galds un istaba ielādēsies no servera."
@@ -11965,8 +12039,7 @@ function initSocket() {
     const target = String(payload?.target || "").trim();
     const exp = Number(payload?.expiresAt) || Date.now() + 60 * 1000;
     const gt = String(payload?.type || "").toLowerCase();
-    const chessLine =
-      gt === "chess" ? formatChessClockHumanLine(payload) : "";
+    const chessLine = gt === "chess" ? formatChessClockHumanLine(payload) : "";
     if (target)
       startBoardInviteOutgoingWait(exp, target, {
         toHost: !!payload?.toHost,
@@ -12000,9 +12073,7 @@ function initSocket() {
     const by = String(payload?.by || "").trim();
     hideBoardInviteModal();
     appendGaldaSystemMessage(
-      by
-        ? `${by} atsauca galda uzaicinājumu.`
-        : "Uzaicinājums atcelts."
+      by ? `${by} atsauca galda uzaicinājumu.` : "Uzaicinājums atcelts."
     );
   });
   socket.on("board.inviteDeclineOk", () => {
@@ -12020,7 +12091,9 @@ function initSocket() {
     const rem = !!payload?.rematch;
     if (rematchOnly && !rem) return;
     if (!rematchOnly && rem) return;
-    const me = String(state.username || "").trim().toLowerCase();
+    const me = String(state.username || "")
+      .trim()
+      .toLowerCase();
     const invSec = Math.max(
       1,
       Math.round(Number(payload?.inviteTimeoutMs) / 1000) || 60
@@ -12064,7 +12137,9 @@ function initSocket() {
     appendVzStatusMessage(line);
   });
   socket.on("board.zoleThirdInviteSent", () => {
-    appendGaldaSystemMessage("Zoles uzaicinājums trešajam spēlētājam nosūtīts.");
+    appendGaldaSystemMessage(
+      "Zoles uzaicinājums trešajam spēlētājam nosūtīts."
+    );
   });
   socket.on("board.zoleLobby", (payload) => {
     updateZole3pLobbyUI(payload);
@@ -12103,8 +12178,7 @@ function initSocket() {
     /* Neaizvērt modāli — startBoardGame atver spēles zonu; citādi Zole paliek aiz hidden. */
     startBoardGame(payload);
     const t = payload?.type || "dambrete";
-    const label =
-      t === "chess" ? "Šahs" : t === "zole" ? "Zole" : "Dambrete";
+    const label = t === "chess" ? "Šahs" : t === "zole" ? "Zole" : "Dambrete";
     appendGaldaSystemMessage(`${label} — spēle sākusies.`);
     const myIdx = boardGamePlayerIndex(payload?.players || [], state.username);
     const isMyTurn =
@@ -12185,10 +12259,7 @@ function initSocket() {
       else if (m === "online_3p") boardState.zoleMode = "online_3p";
       else boardState.zoleMode = "online_2p";
     }
-    if (
-      boardState.type === "dambrete" &&
-      payload?.dambreteVariant != null
-    ) {
+    if (boardState.type === "dambrete" && payload?.dambreteVariant != null) {
       boardState.dambreteVariant = normalizeDambreteVariantClient(
         payload.dambreteVariant
       );
@@ -12277,7 +12348,9 @@ function initSocket() {
     const won =
       winner &&
       String(winner).trim().toLowerCase() ===
-        String(state.username || "").trim().toLowerCase();
+        String(state.username || "")
+          .trim()
+          .toLowerCase();
     const zole2pPvP =
       payload?.type === "zole" &&
       !payload?.vsBot &&
@@ -12294,8 +12367,9 @@ function initSocket() {
     }
     if (payload?.type === "zole" && zoleSnapForEnd) {
       const cppChat = Math.floor(
-        Number(payload?.zole3pCoinsPerPoint ?? boardState.zole3pCoinsPerPoint) ||
-          0
+        Number(
+          payload?.zole3pCoinsPerPoint ?? boardState.zole3pCoinsPerPoint
+        ) || 0
       );
       const zExtra = (
         zoleMyTablePtsLine(zoleSnapForEnd, meChat) +
@@ -12352,8 +12426,7 @@ function syncBoardModalContext() {
   }
   if (inGame && boardState.gameId) {
     const t = boardState.type || "dambrete";
-    const label =
-      t === "chess" ? "Šahs" : t === "zole" ? "Zole" : "Dambrete";
+    const label = t === "chess" ? "Šahs" : t === "zole" ? "Zole" : "Dambrete";
     const ph = boardState.type === "zole" && boardState.zole?.phase;
     const phaseLv =
       ph === "bid"
@@ -12526,8 +12599,7 @@ function syncBoardModalFullscreen() {
     syncBoardBrowserFullscreenUi();
     return;
   }
-  const zoleFs =
-    boardState.gameId && boardState.type === "zole";
+  const zoleFs = boardState.gameId && boardState.type === "zole";
   modal.classList.toggle("vz-board-modal--fullscreen", !!zoleFs);
   syncBoardBrowserFullscreenUi();
 }
@@ -12544,7 +12616,10 @@ function hideBoardModal() {
   syncBoardBrowserFullscreenUi();
   syncBoardDambreteModePanelVisibility();
   syncBoardModalContext();
-  if (_boardModalFocusReturn && typeof _boardModalFocusReturn.focus === "function") {
+  if (
+    _boardModalFocusReturn &&
+    typeof _boardModalFocusReturn.focus === "function"
+  ) {
     try {
       _boardModalFocusReturn.focus({ preventScroll: true });
     } catch (_) {}
@@ -12724,8 +12799,7 @@ function startBoardGame(payload) {
           })()
         : null,
     vsBot: !!payload?.vsBot,
-    zoleVsBotNextHandPending:
-      payload?.type === "zole" && !!payload?.vsBot,
+    zoleVsBotNextHandPending: payload?.type === "zole" && !!payload?.vsBot,
     dambreteVariant:
       payload?.type === "dambrete"
         ? normalizeDambreteVariantClient(payload?.dambreteVariant)
@@ -12781,7 +12855,9 @@ function hideBoardGameArea() {
     );
   }
   document.getElementById("board-modal-topbar")?.classList.remove("hidden");
-  document.getElementById("board-compact-back-words-btn")?.classList.add("hidden");
+  document
+    .getElementById("board-compact-back-words-btn")
+    ?.classList.add("hidden");
   if (modal) modal.classList.add("hidden");
   if (modal) modal.classList.remove("vz-board-modal--fullscreen");
   syncBoardBrowserFullscreenUi();
@@ -12835,12 +12911,7 @@ function countDambreteValidDestinations(fromR, fromC, legalMoves) {
   if (!legalMoves) return 0;
   const set = new Set();
   for (const m of legalMoves.moves || []) {
-    if (
-      m.from[0] === fromR &&
-      m.from[1] === fromC &&
-      m.to &&
-      m.to.length >= 2
-    )
+    if (m.from[0] === fromR && m.from[1] === fromC && m.to && m.to.length >= 2)
       set.add(`${m.to[0]},${m.to[1]}`);
   }
   for (const j of legalMoves.jumps || []) {
@@ -12898,7 +12969,9 @@ function renderBoardGame() {
     );
   }
   const modalTopbar = document.getElementById("board-modal-topbar");
-  const compactBackBtn = document.getElementById("board-compact-back-words-btn");
+  const compactBackBtn = document.getElementById(
+    "board-compact-back-words-btn"
+  );
   const zoleCompactTop =
     boardState.gameId &&
     boardState.type === "zole" &&
@@ -12914,9 +12987,7 @@ function renderBoardGame() {
     const zPlay =
       boardState.type === "zole" && boardState.zole?.phase === "play";
     const zoleGameOn =
-      boardState.gameId &&
-      boardState.type === "zole" &&
-      !!boardState.zole;
+      boardState.gameId && boardState.type === "zole" && !!boardState.zole;
     gameAreaEl.classList.toggle("vz-board-zole-play", zPlay);
     gameAreaEl.classList.toggle("vz-board-zole-fs", zoleGameOn);
     gameAreaEl.classList.toggle("vz-board-zole-compact-top", !!zoleCompactTop);
@@ -12954,7 +13025,9 @@ function renderBoardGame() {
       : boardState.players[boardState.turn] || "?";
   if (turnEl) {
     if (boardState.type === "zole" && boardState.zole?.phase === "bid") {
-      turnEl.textContent = isMyTurn ? "Tava likšanas kārta" : `${turnName} likšanā`;
+      turnEl.textContent = isMyTurn
+        ? "Tava likšanas kārta"
+        : `${turnName} likšanā`;
     } else if (
       boardState.type === "zole" &&
       boardState.zole?.phase === "discard"
@@ -12978,8 +13051,7 @@ function renderBoardGame() {
     );
   }
   if (gameAreaEl && boardState.type === "zole" && zoleCompactTop) {
-    const hideMetaRow =
-      boardState.zole?.phase === "play" && isMyTurn;
+    const hideMetaRow = boardState.zole?.phase === "play" && isMyTurn;
     gameAreaEl.classList.toggle("vz-board-zole-header-meta--hide", hideMetaRow);
   } else if (gameAreaEl) {
     gameAreaEl.classList.remove("vz-board-zole-header-meta--hide");
@@ -13053,24 +13125,32 @@ function renderBoardGame() {
       const sel = boardState.selectedCell;
       if (jumpsOn && !sel) {
         hintEl.innerHTML =
-          "<strong>Jālēkt.</strong> Spied uz sava kauliņa ar <strong class=\"vz-hint-mark vz-hint-mark--gold\">zelta aplīti</strong> — tad parādīsies <strong class=\"vz-hint-mark vz-hint-mark--move\">atļauto</strong> mērķa lauki. Citus savus kauliņus šajā brīdī nevar izvēlēties.";
+          '<strong>Jālēkt.</strong> Spied uz sava kauliņa ar <strong class="vz-hint-mark vz-hint-mark--gold">zelta aplīti</strong> — tad parādīsies <strong class="vz-hint-mark vz-hint-mark--move">atļauto</strong> mērķa lauki. Citus savus kauliņus šajā brīdī nevar izvēlēties.';
       } else if (jumpsOn && sel) {
         const sq = dambreteHintSquare(sel[0], sel[1]);
-        const n = countDambreteValidDestinations(sel[0], sel[1], boardState.legalMoves);
+        const n = countDambreteValidDestinations(
+          sel[0],
+          sel[1],
+          boardState.legalMoves
+        );
         hintEl.innerHTML =
           n > 0
             ? `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Tagad spied <strong class="vz-hint-mark vz-hint-mark--move">atļauto</strong> lauciņu (${n} ${n === 1 ? "iespēja" : "iespējas"}) — lēciena beigas. Citur — citu sākuma kauliņu.`
             : `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied citu kauliņu ar <strong class="vz-hint-mark vz-hint-mark--gold">zelta aplīti</strong> vai atļauto mērķi.`;
       } else if (sel) {
         const sq = dambreteHintSquare(sel[0], sel[1]);
-        const n = countDambreteValidDestinations(sel[0], sel[1], boardState.legalMoves);
+        const n = countDambreteValidDestinations(
+          sel[0],
+          sel[1],
+          boardState.legalMoves
+        );
         hintEl.innerHTML =
           n > 0
             ? `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied <strong class="vz-hint-mark vz-hint-mark--move">atļauto</strong> lauciņu (${n} ${n === 1 ? "gājiens" : "gājieni"}). Citur — maini figūru.`
             : `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Nav derīgu lauku — izvēlies citu savu kauliņu.`;
       } else {
         hintEl.innerHTML =
-          "Spied savu kauliņu, tad <strong class=\"vz-hint-mark vz-hint-mark--move\">atļauto</strong> lauciņu. Mainīt izvēli — spied citu savu kauliņu.";
+          'Spied savu kauliņu, tad <strong class="vz-hint-mark vz-hint-mark--move">atļauto</strong> lauciņu. Mainīt izvēli — spied citu savu kauliņu.';
       }
     } else if (boardState.type === "chess") {
       const clockNote = (() => {
@@ -13078,9 +13158,7 @@ function renderBoardGame() {
         if (!ck) return "";
         const iniMin = Math.max(
           1,
-          Math.round(
-            (ck.initialMsPerSide || 10 * 60 * 1000) / 60000
-          )
+          Math.round((ck.initialMsPerSide || 10 * 60 * 1000) / 60000)
         );
         const incS = Math.max(0, Math.round((ck.incrementMs || 0) / 1000));
         const base =
@@ -13094,14 +13172,17 @@ function renderBoardGame() {
       const sel = boardState.selectedCell;
       if (sel) {
         const sq = boardCellAlgebraic(sel[0], sel[1]);
-        const n = countChessValidDestinations(sel[0], sel[1], boardState.legalMoves);
+        const n = countChessValidDestinations(
+          sel[0],
+          sel[1],
+          boardState.legalMoves
+        );
         hintEl.innerHTML =
           n > 0
             ? `Izvēlēta figūra <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied <strong class="vz-hint-mark vz-hint-mark--move">atļauto</strong> lauciņu (${n} ${n === 1 ? "gājiens" : "gājieni"}). Citur — atcelt vai citu figūru.${clockNote}`
             : `Izvēlēta <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Nav derīgu lauku — izvēlies citu savu figūru.${clockNote}`;
       } else {
-        hintEl.innerHTML =
-          `Spied savu figūru, tad <strong class="vz-hint-mark vz-hint-mark--move">atļauto</strong> lauciņu (uz dēļa iezīmēts zaļi). Mainīt — spied citu savu figūru.${clockNote}`;
+        hintEl.innerHTML = `Spied savu figūru, tad <strong class="vz-hint-mark vz-hint-mark--move">atļauto</strong> lauciņu (uz dēļa iezīmēts zaļi). Mainīt — spied citu savu figūru.${clockNote}`;
       }
     } else {
       hintEl.textContent =
@@ -13155,7 +13236,8 @@ function renderBoardGame() {
             armBoardMoveResponseWait();
           },
           onDiscard: (pair) => {
-            if (!state.socket || !boardState.gameId || pair.length !== 2) return;
+            if (!state.socket || !boardState.gameId || pair.length !== 2)
+              return;
             state.socket.emit("board.move", {
               gameId: boardState.gameId,
               discard: pair,
@@ -13459,8 +13541,12 @@ function bindBoardGames() {
       .getElementById("vz-section-game")
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
-  document.getElementById("board-back-words-btn")?.addEventListener("click", backToWords);
-  document.getElementById("board-compact-back-words-btn")?.addEventListener("click", backToWords);
+  document
+    .getElementById("board-back-words-btn")
+    ?.addEventListener("click", backToWords);
+  document
+    .getElementById("board-compact-back-words-btn")
+    ?.addEventListener("click", backToWords);
   const boardResultClose = document.getElementById("board-result-close");
   const boardResultOverlay = document.getElementById("board-result-overlay");
   if (boardResultClose)
@@ -13520,8 +13606,12 @@ function bindBoardGames() {
       }
       if (zm === "online_3p") {
         const snap = zole3pLobbySnapshot;
-        const me = String(state.username || "").trim().toLowerCase();
-        const hostLc = String(snap?.host || "").trim().toLowerCase();
+        const me = String(state.username || "")
+          .trim()
+          .toLowerCase();
+        const hostLc = String(snap?.host || "")
+          .trim()
+          .toLowerCase();
         const inRoom = (snap?.players || []).some(
           (p) => String(p).trim().toLowerCase() === me
         );
@@ -13636,7 +13726,9 @@ function bindBoardGames() {
       if (!target || !state.socket) return;
       state.socket.emit("board.inviteCancel", { target });
     });
-  const zole3pInviteThird = document.getElementById("board-zole-3p-invite-third");
+  const zole3pInviteThird = document.getElementById(
+    "board-zole-3p-invite-third"
+  );
   const zole3pCancel = document.getElementById("board-zole-3p-cancel-lobby");
   const zole3pThirdInput = document.getElementById("board-zole-3p-third");
   if (zole3pInviteThird)
@@ -13661,22 +13753,36 @@ function bindBoardGames() {
       if (!boardState.gameId || !state.socket) return;
       state.socket.emit("board.resign", { gameId: boardState.gameId });
     });
-  document.getElementById("board-chess-draw-offer")?.addEventListener("click", () => {
-    if (!boardState.gameId || !state.socket || boardState.type !== "chess") return;
-    state.socket.emit("board.chessDrawOffer", { gameId: boardState.gameId });
-  });
-  document.getElementById("board-chess-draw-accept")?.addEventListener("click", () => {
-    if (!boardState.gameId || !state.socket || boardState.type !== "chess") return;
-    state.socket.emit("board.chessDrawAccept", { gameId: boardState.gameId });
-  });
-  document.getElementById("board-chess-draw-decline")?.addEventListener("click", () => {
-    if (!boardState.gameId || !state.socket || boardState.type !== "chess") return;
-    state.socket.emit("board.chessDrawDecline", { gameId: boardState.gameId });
-  });
-  document.getElementById("board-chess-claim-draw")?.addEventListener("click", () => {
-    if (!boardState.gameId || !state.socket || boardState.type !== "chess") return;
-    state.socket.emit("board.chessClaimDraw", { gameId: boardState.gameId });
-  });
+  document
+    .getElementById("board-chess-draw-offer")
+    ?.addEventListener("click", () => {
+      if (!boardState.gameId || !state.socket || boardState.type !== "chess")
+        return;
+      state.socket.emit("board.chessDrawOffer", { gameId: boardState.gameId });
+    });
+  document
+    .getElementById("board-chess-draw-accept")
+    ?.addEventListener("click", () => {
+      if (!boardState.gameId || !state.socket || boardState.type !== "chess")
+        return;
+      state.socket.emit("board.chessDrawAccept", { gameId: boardState.gameId });
+    });
+  document
+    .getElementById("board-chess-draw-decline")
+    ?.addEventListener("click", () => {
+      if (!boardState.gameId || !state.socket || boardState.type !== "chess")
+        return;
+      state.socket.emit("board.chessDrawDecline", {
+        gameId: boardState.gameId,
+      });
+    });
+  document
+    .getElementById("board-chess-claim-draw")
+    ?.addEventListener("click", () => {
+      if (!boardState.gameId || !state.socket || boardState.type !== "chess")
+        return;
+      state.socket.emit("board.chessClaimDraw", { gameId: boardState.gameId });
+    });
   const boardFsBtn = document.getElementById("board-browser-fs-btn");
   if (boardFsBtn) {
     boardFsBtn.addEventListener("click", async () => {
@@ -13756,20 +13862,29 @@ function bindBoardGames() {
       state.socket.emit("board.zoleCreateLobby", { zole3pCoinsPerPoint: cpp });
     });
   });
-  document.getElementById("board-zole-3p-stake")?.addEventListener("change", () => {
-    if (!state.socket) return;
-    const snap = zole3pLobbySnapshot;
-    if (!snap?.zoleLobby) return;
-    const me = String(state.username || "").trim();
-    const host = String(snap.host || "").trim();
-    if (!me || !host || me.toLowerCase() !== host.toLowerCase()) return;
-    if ((snap.players || []).length >= 3) return;
-    const cpp = Math.max(
-      0,
-      Math.min(5, Math.floor(Number(document.getElementById("board-zole-3p-stake")?.value) || 0))
-    );
-    state.socket.emit("board.zoleSetLobbyStake", { zole3pCoinsPerPoint: cpp });
-  });
+  document
+    .getElementById("board-zole-3p-stake")
+    ?.addEventListener("change", () => {
+      if (!state.socket) return;
+      const snap = zole3pLobbySnapshot;
+      if (!snap?.zoleLobby) return;
+      const me = String(state.username || "").trim();
+      const host = String(snap.host || "").trim();
+      if (!me || !host || me.toLowerCase() !== host.toLowerCase()) return;
+      if ((snap.players || []).length >= 3) return;
+      const cpp = Math.max(
+        0,
+        Math.min(
+          5,
+          Math.floor(
+            Number(document.getElementById("board-zole-3p-stake")?.value) || 0
+          )
+        )
+      );
+      state.socket.emit("board.zoleSetLobbyStake", {
+        zole3pCoinsPerPoint: cpp,
+      });
+    });
   document
     .getElementById("board-zole-3p-leave-lobby")
     ?.addEventListener("click", () => {
@@ -13789,10 +13904,12 @@ function bindBoardGames() {
     setBoardLobbyGameTab("chess");
     syncBoardGamePickTab();
   });
-  document.getElementById("board-pick-dambrete")?.addEventListener("click", () => {
-    setBoardLobbyGameTab("dambrete");
-    syncBoardGamePickTab();
-  });
+  document
+    .getElementById("board-pick-dambrete")
+    ?.addEventListener("click", () => {
+      setBoardLobbyGameTab("dambrete");
+      syncBoardGamePickTab();
+    });
   syncBoardChessTimeRowVisibility();
   document
     .getElementById("board-zole-3p-open-lobbies")
@@ -14595,7 +14712,8 @@ function initRadioUi() {
 
   if (!radioAudio || !radioBtn || !volumeInput || !statusEl) return;
 
-  const RADIO_STREAM_URL = "https://stream.nightride.fm/nightride.mp3";
+  // Lokālais fons (public/music/wild-wide-walker.wav) — Wild Wide Walker (Behind Two Lines), Ip-Records
+  const RADIO_STREAM_URL = "/music/wild-wide-walker.wav";
   let isPlaying = false;
 
   try {
@@ -14613,17 +14731,17 @@ function initRadioUi() {
         await radioAudio.play();
         isPlaying = true;
         radioBtn.textContent = "⏸ Pauze";
-        statusEl.textContent = "Radio spēlē...";
+        statusEl.textContent = "Mūzika spēlē...";
       } catch (err) {
         console.error("Radio play error:", err);
         statusEl.textContent =
-          "Neizdevās palaist radio (pārbaudi URL vai pārlūka atļaujas).";
+          "Neizdevās palaist mūziku (pārbaudi failu vai pārlūka atļaujas).";
       }
     } else {
       radioAudio.pause();
       isPlaying = false;
       radioBtn.textContent = "▶ Spēlēt";
-      statusEl.textContent = "Radio izslēgts";
+      statusEl.textContent = "Mūzika izslēgta";
     }
   });
 
@@ -14792,8 +14910,7 @@ async function initGame() {
   function resetOfflineOverlayToBrowserDefault() {
     if (offlineTitleEl) offlineTitleEl.textContent = "Nav interneta";
     if (offlineTextEl)
-      offlineTextEl.textContent =
-        "Pārbaudi savienojumu un mēģini vēlreiz.";
+      offlineTextEl.textContent = "Pārbaudi savienojumu un mēģini vēlreiz.";
     if (offlineHintEl) {
       offlineHintEl.textContent = "";
       offlineHintEl.classList.add("hidden");
@@ -15358,8 +15475,10 @@ async function initGame() {
     });
   }
   syncGiveawayAnchorButton();
-  if (ppBetaSubmitBtn) ppBetaSubmitBtn.addEventListener("click", handleProfileBetaOptIn);
-  if (ppNhlTeamSaveBtn) ppNhlTeamSaveBtn.addEventListener("click", handleProfileNhlTeamSave);
+  if (ppBetaSubmitBtn)
+    ppBetaSubmitBtn.addEventListener("click", handleProfileBetaOptIn);
+  if (ppNhlTeamSaveBtn)
+    ppNhlTeamSaveBtn.addEventListener("click", handleProfileNhlTeamSave);
   if (ppNhlTeamInputEl) {
     ppNhlTeamInputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter") handleProfileNhlTeamSave();

@@ -6746,8 +6746,8 @@ app.use(
           "https://unpkg.com",
           "https://cdn.onesignal.com",
         ],
-        // Allow the in-game radio stream host while keeping strict defaults.
-        "media-src": ["'self'", "https://stream.nightride.fm"],
+        // Fona mūzika: faili no public/music (tikai same-origin).
+        "media-src": ["'self'"],
         // Avatāri no Supabase Storage
         "img-src": [
           "'self'",
