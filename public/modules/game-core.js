@@ -79,6 +79,7 @@
       betaTester: false,
       betaOptInRequestedAt: 0,
       giveawayNhlTeam: "",
+      giveawayNhlAbbr: "",
       region: "",
       regionPoints: 0,
       regionBoost: 0,

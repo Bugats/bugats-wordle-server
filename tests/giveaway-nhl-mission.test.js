@@ -56,4 +56,22 @@ describe("POST /giveaway/nhl-team", () => {
     expect(nhl.progress).toBe(0);
     expect(nhl.isCompleted).toBe(false);
   });
+
+  it("saves abbreviation from hat picker and sets canonical team name", async () => {
+    const suffix = Date.now().toString().slice(-8);
+    const u = `nhl_abbr_${suffix}`;
+    const token = await ensureUserToken({
+      username: u,
+      password: "Test12345",
+      email: `${u}@example.com`,
+    });
+    const res = await request(app)
+      .post("/giveaway/nhl-team")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ abbr: "nyr" });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.giveawayNhlAbbr).toBe("NYR");
+    expect(res.body.giveawayNhlTeam).toBe("New York Rangers");
+  });
 });

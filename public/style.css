@@ -3828,6 +3828,74 @@ button.vz-friend-quick-duel:hover {
   color: rgba(226, 232, 240, 0.88);
   text-align: center;
 }
+.vz-nhl-hat-grid-host {
+  margin: 0 0 10px;
+}
+.vz-nhl-hat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px 2px 6px;
+  -webkit-overflow-scrolling: touch;
+}
+.vz-nhl-hat-btn {
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  touch-action: manipulation;
+}
+.vz-nhl-hat-cap {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border: 2px solid rgba(148, 163, 184, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease,
+    transform 0.1s ease;
+}
+.vz-nhl-hat-btn:hover .vz-nhl-hat-cap {
+  border-color: rgba(251, 191, 36, 0.65);
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.2);
+}
+.vz-nhl-hat-btn--selected .vz-nhl-hat-cap {
+  border-color: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.35);
+  transform: scale(1.05);
+}
+.vz-nhl-hat-logo {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+.vz-nhl-hat-cap--fallback {
+  font-size: 10px;
+  font-weight: 800;
+  color: #e2e8f0;
+  letter-spacing: -0.02em;
+}
+.vz-profile-nhl-giveaway__manual {
+  margin: 8px 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(226, 232, 240, 0.75);
+  text-align: center;
+}
+
 .vz-profile-nhl-giveaway__row {
   display: flex;
   gap: 8px;

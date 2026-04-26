@@ -104,6 +104,23 @@ function waitZoleBidTurn(sockets, gameId, bidTurn, timeoutMs = 25000) {
   });
 }
 
+function waitBoardEndFromAny(sockets, gameId, pred, timeoutMs = 25000) {
+  return new Promise((resolve, reject) => {
+    const to = setTimeout(() => {
+      for (const s of sockets) s.removeListener("board.end", onEnd);
+      reject(new Error("board.end (any) wait timeout"));
+    }, timeoutMs);
+    function onEnd(p) {
+      if (p?.gameId !== gameId) return;
+      if (pred && !pred(p)) return;
+      clearTimeout(to);
+      for (const s of sockets) s.removeListener("board.end", onEnd);
+      resolve(p);
+    }
+    for (const s of sockets) s.on("board.end", onEnd);
+  });
+}
+
 function waitBoardEnd(socket, gameId, timeoutMs = 20000) {
   return new Promise((resolve, reject) => {
     const to = setTimeout(() => {
@@ -152,7 +169,7 @@ describe("Board socket E2E", () => {
         httpServer.close(() => resolve());
       });
     },
-    45000
+    60000
   );
 
   it("PvP accepts draw agreement when accepter is not on move (FIDE-style)", async () => {
@@ -572,6 +589,61 @@ describe("Board socket E2E", () => {
   );
 
   it(
+    "chess PvP: fool's mate finish — checkmate on board.end",
+    async () => {
+      const u1 = await signupUser(`cmw${Date.now()}`);
+      const u2 = await signupUser(`cmb${Date.now()}`);
+
+      const s1 = await connectClient(port, u1.token);
+      const s2 = await connectClient(port, u2.token);
+
+      const inviteId = await new Promise((resolve, reject) => {
+        const to = setTimeout(() => reject(new Error("invite timeout")), 10000);
+        s2.once("board.invite", (p) => {
+          clearTimeout(to);
+          resolve(String(p?.inviteId || "").trim());
+        });
+        s1.emit("board.invite", { target: u2.username, type: "chess" });
+      });
+
+      const start = await new Promise((resolve, reject) => {
+        const to = setTimeout(() => reject(new Error("board.start")), 10000);
+        s1.once("board.start", (p) => {
+          clearTimeout(to);
+          resolve(p);
+        });
+        s2.emit("board.accept", {
+          inviteId,
+          from: u1.username,
+          type: "chess",
+        });
+      });
+
+      const gameId = start.gameId;
+      const fen =
+        "rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2";
+      expect(__testHooks.setChessFenForTestOnly(gameId, fen)).toBe(true);
+
+      const endP = waitBoardEndFromAny(
+        [s1, s2],
+        gameId,
+        (p) => p?.reason === "checkmate",
+        20000
+      );
+      s2.emit("board.move", { gameId, san: "Qh4#" });
+      const end = await endP;
+      expect(end?.reason).toBe("checkmate");
+      expect(String(end?.winner || "").toLowerCase()).toBe(
+        u2.username.toLowerCase()
+      );
+
+      s1.close();
+      s2.close();
+    },
+    45000
+  );
+
+  it(
     "zole 3P: lobby, third seat, stake on board.end after resign",
     async () => {
       const h = await signupUser(`z3h${Date.now()}`);
@@ -658,5 +730,118 @@ describe("Board socket E2E", () => {
       sh.close();
     },
     60000
+  );
+
+  it(
+    "zole 3P: natural maza_zole hand end with stake on board.end (coins from table)",
+    async () => {
+      const h = await signupUser(`z3m${Date.now()}`);
+      const j1 = await signupUser(`z3m1${Date.now()}`);
+      const j2 = await signupUser(`z3m2${Date.now()}`);
+
+      const sh = await connectClient(port, h.token);
+      const s1 = await connectClient(port, j1.token);
+      const s2 = await connectClient(port, j2.token);
+
+      const lobbyP = new Promise((resolve, reject) => {
+        const to = setTimeout(() => reject(new Error("board.zoleLobby")), 10000);
+        sh.once("board.zoleLobby", (p) => {
+          clearTimeout(to);
+          resolve(p);
+        });
+      });
+      sh.emit("board.zoleCreateLobby", { zole3pCoinsPerPoint: 2 });
+      const lob0 = await lobbyP;
+      const lobbyId = lob0?.lobbyId;
+      expect(typeof lobbyId).toBe("string");
+
+      s1.emit("board.zoleJoinOpenLobby", { lobbyId });
+
+      const inviteId = await new Promise((resolve, reject) => {
+        const to = setTimeout(() => reject(new Error("third invite")), 10000);
+        s2.once("board.invite", (p) => {
+          clearTimeout(to);
+          resolve(String(p?.inviteId || "").trim());
+        });
+        sh.emit("board.zoleInviteThird", { target: j2.username });
+      });
+
+      const startP = new Promise((resolve, reject) => {
+        const to = setTimeout(() => reject(new Error("board.start")), 15000);
+        sh.once("board.start", (p) => {
+          clearTimeout(to);
+          resolve(p);
+        });
+      });
+      s2.emit("board.zoleAcceptThird", {
+        inviteId,
+        from: h.username,
+        lobbyId,
+      });
+      const st = await startP;
+      const gameId = st.gameId;
+      expect(st.zole3pCoinsPerPoint).toBe(2);
+
+      const allSocks = [sh, s1, s2];
+
+      let bidTurn = st.zole?.bidTurn ?? 0;
+      for (let step = 0; step < 6; step++) {
+        if (step > 0) {
+          await waitZoleBidTurn(allSocks, gameId, bidTurn);
+        }
+        const sock =
+          st.players[bidTurn] === h.username
+            ? sh
+            : st.players[bidTurn] === j1.username
+              ? s1
+              : s2;
+        sock.emit("board.move", { gameId, bid: "pass" });
+        if (step < 5) bidTurn = (bidTurn + 1) % 3;
+      }
+
+      await waitBoardMoveFromAny(
+        allSocks,
+        gameId,
+        (p) => p?.zole?.phase === "play" && p?.zole?.contract === "galdins",
+        25000
+      );
+
+      expect(
+        __testHooks.forceZole3pMazaZoleOneTrickLoseTestOnly(gameId, h.username)
+      ).toBe(true);
+
+      const mv1 = __testHooks.zoleFirstLegalCardForTestOnly(gameId, h.username);
+      const mv2 = __testHooks.zoleFirstLegalCardForTestOnly(gameId, j1.username);
+      const mv3 = __testHooks.zoleFirstLegalCardForTestOnly(gameId, j2.username);
+      expect(mv1).toBeTruthy();
+      expect(mv2).toBeTruthy();
+      expect(mv3).toBeTruthy();
+
+      sh.emit("board.move", { gameId, card: mv1 });
+      s1.emit("board.move", { gameId, card: mv2 });
+      const endP = waitBoardEndFromAny(
+        allSocks,
+        gameId,
+        (p) => p?.reason === "win" && p?.type === "zole",
+        25000
+      );
+      s2.emit("board.move", { gameId, card: mv3 });
+      const end = await endP;
+      expect(end?.reason).toBe("win");
+      expect(end?.zole3pCoinsPerPoint).toBe(2);
+      expect(end?.zole?.phase).toBe("end");
+      const td = end?.zole?.tableDelta;
+      expect(Array.isArray(td)).toBe(true);
+      expect(td[0]).toBe(-14);
+      expect(td[1]).toBe(7);
+      expect(td[2]).toBe(7);
+      expect(typeof end?.coinsGain).toBe("number");
+      expect(typeof end?.coinsLoss).toBe("number");
+
+      s1.close();
+      s2.close();
+      sh.close();
+    },
+    90000
   );
 });

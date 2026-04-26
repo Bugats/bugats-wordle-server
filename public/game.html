@@ -43,7 +43,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-04-25-nhl-giveaway-mission" />
+  <link rel="stylesheet" href="style.css?v=2026-04-25-nhl-hats" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1060,17 +1060,19 @@
         </div>
 
         <div id="pp-nhl-giveaway-wrap" class="vz-profile-nhl-giveaway hidden">
-          <div class="vz-profile-nhl-giveaway__title">🏒 NHL izlozei — mīļākais klubs</div>
+          <div class="vz-profile-nhl-giveaway__title">🏒 NHL izlozei — izvēlies cepuri ar logo</div>
           <p class="vz-profile-nhl-giveaway__hint">
-            Ieraksti komandas nosaukumu (tas simbolizē tavu mīļāko logo). Obligāti arī e-pasts un izlozes pieteikšanās zemāk.
+            Spied uz savas komandas cepures (oficiālais NHL logo). Ja vajag citu komandu, raksti zemāk. Tad e-pasts un izlozes pieteikšanās.
           </p>
+          <div id="pp-nhl-hat-grid" class="vz-nhl-hat-grid-host" aria-label="NHL komandas"></div>
+          <p class="vz-profile-nhl-giveaway__manual">Vai komandas nosaukums brīvā tekstā:</p>
           <div class="vz-profile-nhl-giveaway__row">
             <input
               id="pp-nhl-team-input"
               type="text"
               maxlength="64"
               autocomplete="off"
-              placeholder="piem., Rangers, Maple Leafs…"
+              placeholder="piem., Rangers…"
             />
             <button id="pp-nhl-team-save" type="button" class="mission-claim-btn">Saglabāt</button>
           </div>
@@ -1246,9 +1248,10 @@
     <script defer src="modules/zole-legal.js?v=2026-03-24-zole-discard"></script>
     <script defer src="modules/zole-board.js?v=2026-03-27-zole-table-narrative"></script>
     <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
+    <script defer src="modules/nhl-giveaway-teams.js?v=2026-04-25-nhl-hats"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-04-25-nhl-giveaway-mission"></script>
+    <script defer src="game.js?v=2026-04-25-nhl-hats"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>

@@ -2517,6 +2517,7 @@ const ppBetaSubmitBtn = document.getElementById("pp-beta-submit");
 const ppBetaStatusEl = document.getElementById("pp-beta-status");
 const ppGiveawayEmailGateEl = document.getElementById("pp-giveaway-email-gate");
 const ppNhlGiveawayWrapEl = document.getElementById("pp-nhl-giveaway-wrap");
+const ppNhlHatGridEl = document.getElementById("pp-nhl-hat-grid");
 const ppNhlTeamInputEl = document.getElementById("pp-nhl-team-input");
 const ppNhlTeamSaveBtn = document.getElementById("pp-nhl-team-save");
 const ppNhlTeamStatusEl = document.getElementById("pp-nhl-team-status");
@@ -4137,6 +4138,9 @@ function updatePlayerCard(me) {
   if (typeof me.giveawayNhlTeam === "string") {
     state.giveawayNhlTeam = me.giveawayNhlTeam;
   }
+  if (typeof me.giveawayNhlAbbr === "string") {
+    state.giveawayNhlAbbr = me.giveawayNhlAbbr;
+  }
   if (playerTitleEl) {
     const title = String(me.title || "").trim();
     playerTitleEl.textContent = title || "—";
@@ -4831,6 +4835,40 @@ function setNhlTeamProfileStatus(message, kind) {
   if (kind === "error") ppNhlTeamStatusEl.classList.add("vz-error");
 }
 
+function syncNhlHatPickerUi(selectedAbbr) {
+  const g = window.VZNhlGiveaway;
+  if (!ppNhlHatGridEl || !g || typeof g.renderHatPicker !== "function") return;
+  g.renderHatPicker(ppNhlHatGridEl, {
+    selectedAbbr,
+    onPick: handleNhlHatPick,
+  });
+}
+
+async function handleNhlHatPick(abbr) {
+  if (!state.token) return;
+  const a = String(abbr || "").trim().toUpperCase();
+  if (!a) return;
+  if (ppNhlTeamSaveBtn) ppNhlTeamSaveBtn.disabled = true;
+  setNhlTeamProfileStatus("", "");
+  try {
+    const data = await apiPost("/giveaway/nhl-team", { abbr: a });
+    state.giveawayNhlAbbr = String(data?.giveawayNhlAbbr || a || "").trim();
+    state.giveawayNhlTeam = String(data?.giveawayNhlTeam || "").trim();
+    if (data?.me) updatePlayerCard(data.me);
+    if (Array.isArray(data?.missions) && data?.bonus != null) {
+      renderMissions(data.missions, data.bonus);
+    }
+    if (ppNhlTeamInputEl) ppNhlTeamInputEl.value = "";
+    syncNhlHatPickerUi(state.giveawayNhlAbbr);
+    setNhlTeamProfileStatus("Komandas cepure saglabāta.", "ok");
+    appendSystemMessage("🏒 NHL komandas cepure izlozei saglabāta.");
+  } catch (err) {
+    setNhlTeamProfileStatus(err.message || "Neizdevās saglabāt.", "error");
+  } finally {
+    if (ppNhlTeamSaveBtn) ppNhlTeamSaveBtn.disabled = false;
+  }
+}
+
 async function handleProfileNhlTeamSave() {
   if (!state.token || !ppNhlTeamInputEl) return;
   const raw = String(ppNhlTeamInputEl.value || "").trim();
@@ -4839,11 +4877,19 @@ async function handleProfileNhlTeamSave() {
   try {
     const data = await apiPost("/giveaway/nhl-team", { team: raw });
     state.giveawayNhlTeam = String(data?.giveawayNhlTeam || raw || "").trim();
+    state.giveawayNhlAbbr = String(data?.giveawayNhlAbbr || "").trim();
     if (data?.me) updatePlayerCard(data.me);
     if (Array.isArray(data?.missions) && data?.bonus != null) {
       renderMissions(data.missions, data.bonus);
     }
-    if (ppNhlTeamInputEl) ppNhlTeamInputEl.value = state.giveawayNhlTeam || "";
+    if (ppNhlTeamInputEl) {
+      if (state.giveawayNhlAbbr) {
+        ppNhlTeamInputEl.value = "";
+      } else {
+        ppNhlTeamInputEl.value = state.giveawayNhlTeam || "";
+      }
+    }
+    syncNhlHatPickerUi(state.giveawayNhlAbbr);
     setNhlTeamProfileStatus("Saglabāts.", "ok");
     appendSystemMessage("🏒 NHL klubs izlozei saglabāts.");
   } catch (err) {
@@ -5048,10 +5094,21 @@ function showPlayerProfile(data) {
     ppNhlGiveawayWrapEl.classList.toggle("hidden", !isSelf);
   }
   if (isSelf && ppNhlTeamInputEl) {
-    ppNhlTeamInputEl.value =
-      String(data.giveawayNhlTeam ?? state.giveawayNhlTeam ?? "").trim();
+    const ab = String(data.giveawayNhlAbbr ?? state.giveawayNhlAbbr ?? "").trim();
+    if (ab) {
+      ppNhlTeamInputEl.value = "";
+    } else {
+      ppNhlTeamInputEl.value = String(
+        data.giveawayNhlTeam ?? state.giveawayNhlTeam ?? ""
+      ).trim();
+    }
   }
-  if (isSelf) setNhlTeamProfileStatus("", "");
+  if (isSelf) {
+    setNhlTeamProfileStatus("", "");
+    syncNhlHatPickerUi(
+      String(data.giveawayNhlAbbr ?? state.giveawayNhlAbbr ?? "").trim()
+    );
+  }
   if (isSelf) {
     const beta = !!data.betaTester;
     const reqAt = Math.max(
