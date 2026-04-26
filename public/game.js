@@ -4283,6 +4283,7 @@ function updatePlayerCard(me) {
   state.lastMeForSocial = me;
   renderClanCard(me);
   renderSocialPulse();
+  renderDailyAnchorCard();
 }
 
 function renderClanCard(me) {
@@ -4860,6 +4861,7 @@ async function handleNhlHatPick(abbr) {
     }
     if (ppNhlTeamInputEl) ppNhlTeamInputEl.value = "";
     syncNhlHatPickerUi(state.giveawayNhlAbbr);
+    syncGiveawayEmailGateUi();
     setNhlTeamProfileStatus("Komandas cepure saglabāta.", "ok");
     appendSystemMessage("🏒 NHL komandas cepure izlozei saglabāta.");
   } catch (err) {
@@ -4890,6 +4892,7 @@ async function handleProfileNhlTeamSave() {
       }
     }
     syncNhlHatPickerUi(state.giveawayNhlAbbr);
+    syncGiveawayEmailGateUi();
     setNhlTeamProfileStatus("Saglabāts.", "ok");
     appendSystemMessage("🏒 NHL klubs izlozei saglabāts.");
   } catch (err) {
@@ -4911,9 +4914,16 @@ function hasSavedProfileEmailForGiveaway() {
   return String(state.email || "").trim().length > 0;
 }
 
-/** Izlozes bloks: rāda brīdinājumu, ja nav saglabāta e-pasta. */
+function hasNhlHatPickForGiveaway() {
+  const ab = String(state.giveawayNhlAbbr || "").trim();
+  if (ab) return true;
+  return Boolean(String(state.giveawayNhlTeam || "").trim());
+}
+
+/** Izlozes bloks: e-pasts + NHL cepure pirms pieteikšanās. */
 function syncGiveawayEmailGateUi() {
   const has = hasSavedProfileEmailForGiveaway();
+  const hat = hasNhlHatPickForGiveaway();
   const opted =
     Math.max(0, Math.floor(Number(state.betaOptInRequestedAt) || 0)) > 0;
   const done = opted || !!state.betaTester;
@@ -4921,10 +4931,17 @@ function syncGiveawayEmailGateUi() {
     ppGiveawayEmailGateEl.classList.toggle("hidden", has || done);
   }
   if (ppBetaSubmitBtn && !state.betaTester && !opted) {
-    ppBetaSubmitBtn.disabled = !has;
-    ppBetaSubmitBtn.title = has
-      ? ""
-      : "Vispirms saglabā e-pastu augšā (obligāti izlozei).";
+    const can = has && hat;
+    ppBetaSubmitBtn.disabled = !can;
+    if (!has) {
+      ppBetaSubmitBtn.title =
+        "Vispirms saglabā e-pastu augšā (obligāti izlozei).";
+    } else if (!hat) {
+      ppBetaSubmitBtn.title =
+        "Vispirms zemāk izvēlies NHL komandas cepuri (vai ieraksti komandas nosaukumu) un spied «Saglabāt».";
+    } else {
+      ppBetaSubmitBtn.title = "";
+    }
   }
 }
 
@@ -4932,11 +4949,19 @@ async function handleProfileBetaOptIn() {
   if (!state.token) return;
   if (!hasSavedProfileEmailForGiveaway()) {
     setBetaProfileStatus(
-      "Izlozei vajag saglabātu e-pastu. Augšā ievadi e-pastu un spied «Saglabāt».",
+      "NHL cepures izlozei vajag saglabātu e-pastu. Augšā ievadi e-pastu un spied «Saglabāt».",
       "error"
     );
     ppGiveawayEmailGateEl?.classList.remove("hidden");
     ppEmailInputEl?.focus?.();
+    return;
+  }
+  if (!hasNhlHatPickForGiveaway()) {
+    setBetaProfileStatus(
+      "Lai pieteiktos cepures izlozei, vispirms zemāk izvēlies komandas cepuri ar logo (vai ieraksti nosaukumu) un spied «Saglabāt».",
+      "error"
+    );
+    ppNhlHatGridEl?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
     return;
   }
   if (!ppBetaAgreeEl?.checked) {
@@ -5121,7 +5146,7 @@ function showPlayerProfile(data) {
       ppBetaBadgeEl.textContent = beta
         ? "Tu esi aplikācijas beta testers"
         : reqAt > 0
-          ? "Pieteikums izlozei / beta — saņemts"
+          ? "Pieteikums NHL cepures izlozei — saņemts"
           : "";
       ppBetaBadgeEl.classList.toggle("hidden", !beta && !reqAt);
     }
@@ -5129,8 +5154,8 @@ function showPlayerProfile(data) {
       ppBetaDescEl.textContent = beta
         ? "Paldies par palīdzību testēt VĀRDU ZONU. Ja vēlies izstāties, raksti administratoram."
         : reqAt > 0
-          ? "Esi izlozes sarakstā. Saziņai izmantosim tavu saglabāto e-pastu (citi spēlētāji to neredz)."
-          : "Izlozei obligāti: Google Play slēgtais tests (zemāk), tad VĀRDU ZONAS aplikācijas lejupielāde no Play veikala; šeit derīgs e-pasts + šī poga ar piekrišanu. Administrators redz tavu lietotājvārdu un e-pastu sarakstam.";
+          ? "Esi NHL cepures izlozes sarakstā. Saziņai izmantosim tavu saglabāto e-pastu (citi spēlētāji to neredz)."
+          : "Cepures izlozei domāti tie, kas lieto VĀRDU ZONU no Play: vispirms tests un aplikācija, tad šeit e-pasts, NHL cepure un šī poga ar piekrišanu. Administrators redz tavu lietotājvārdu un e-pastu sarakstam.";
     }
     if (ppBetaAgreeEl) {
       ppBetaAgreeEl.checked = false;
@@ -5140,8 +5165,8 @@ function showPlayerProfile(data) {
       ppBetaSubmitBtn.textContent = beta
         ? "Jau beta testers"
         : reqAt > 0
-          ? "Pieteikums izlozei — saņemts"
-          : "Pieteikties balvu izlozei";
+          ? "Pieteikums saņemts"
+          : "Pieteikties NHL cepures izlozei";
       if (beta || reqAt > 0) {
         ppBetaSubmitBtn.disabled = true;
         ppBetaSubmitBtn.title = "";
@@ -5325,14 +5350,19 @@ function buildDailyAnchorSummary() {
     const hasEmail = String(state.email || "").trim().length > 0;
     const opted = Math.max(0, Math.floor(Number(state.betaOptInRequestedAt) || 0)) > 0;
     if (!opted) {
+      const hat = hasNhlHatPickForGiveaway();
       return {
-        kicker: "Balvu izloze",
+        kicker: "NHL cepures izloze",
         headline: hasEmail
-          ? "Piesakies izlozei — e-pasts jau saglabāts"
-          : "Izlozei vajag tavu e-pastu profilā",
+          ? hat
+            ? "Piesakies cepures izlozei — viss gandrīz gatavs"
+            : "Piesakies cepures izlozei — saglabā NHL cepuri"
+          : "Cepures izlozei vajag e-pastu profilā",
         progress: hasEmail
-          ? "1) Augšā «Google Play — slēgtais tests» → instalē VĀRDU ZONA. 2) Profilā piekrišana un «Pieteikties»."
-          : "1) Spied «Google Play — slēgtais tests» augšā, instalē VĀRDU ZONA. 2) Profilā e-pasts «Saglabāt». 3) Pieteikšanās.",
+          ? hat
+            ? "Play testa saite → VĀRDU ZONA no veikala. Profilā piekrišana un «Pieteikties»."
+            : "Profilā izvēlies komandas cepuri (vai tekstu) un «Saglabāt», tad piekrišana un «Pieteikties»."
+          : "1) Play tests + VĀRDU ZONA. 2) Profilā e-pasts. 3) NHL cepure. 4) «Pieteikties».",
         hint: "Spied «Izlozei — atvērt profilu» zemāk.",
         showGiveawayCta: true,
       };
@@ -5417,10 +5447,14 @@ function renderDailyAnchorCard() {
     giveawayAnchorWrapEl.classList.toggle("hidden", !showGa);
   }
   if (giveawayAnchorTextEl) {
+    const em = String(state.email || "").trim();
+    const hat = hasNhlHatPickForGiveaway();
     giveawayAnchorTextEl.textContent = showGa
-      ? String(state.email || "").trim()
-        ? "E-pasts saglabāts — vispirms Play testa saite un VĀRDU ZONAS instalācija, tad profilā piekrišana un «Pieteikties»."
-        : "Izlozei obligāti: 1) augšā Play slēgtais tests → instalē VĀRDU ZONA; 2) profilā e-pasts «Saglabāt»; 3) pieteikšanās ar rūtiņu."
+      ? em
+        ? hat
+          ? "E-pasts + NHL cepure saglabāti — Play tests un VĀRDU ZONA, tad profilā «Pieteikties» cepures izlozei."
+          : "E-pasts saglabāts — profilā izvēlies NHL cepuri un «Saglabāt», tad «Pieteikties»."
+        : "Cepures izlozei: Play tests → VĀRDU ZONA → profilā e-pasts, NHL cepure un «Pieteikties»."
       : "";
   }
 }
@@ -5480,7 +5514,7 @@ function renderMissions(missions, bonus) {
     if (m.type === "nhl_giveaway_submit") {
       const hint = createEl("div", "mission-nhl-hint");
       hint.textContent =
-        "Soļi: 1) Play testa saite → instalē VĀRDU ZONA · 2) NHL cepure profilā · 3) E-pasts · 4) Izlozes pieteikšanās.";
+        "Tikai tiem, kas lieto VĀRDU ZONU no Play: 1) tests + aplikācija · 2) e-pasts + NHL cepure profilā · 3) «Pieteikties» cepures izlozei.";
       li.appendChild(hint);
     }
 

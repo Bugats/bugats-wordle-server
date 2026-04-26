@@ -5823,7 +5823,10 @@ function ensureDailyMissions(user) {
   ensureNhlGiveawayMission(user);
 }
 
-/** Īpaša misija «NHL klubs + izloze» — neiet dienas bonusa skaitā (tikai parastās 6). */
+const NHL_HAT_GIVEAWAY_MISSION_TITLE =
+  "NHL cepures izloze: VĀRDU ZONA no Play → e-pasts → komandas cepure → pieteikšanās izlozei.";
+
+/** Īpaša misija «NHL cepure + izloze» — neiet dienas bonusa skaitā (tikai parastās 6). */
 function ensureNhlGiveawayMission(user) {
   const key = todayKey();
   const list = user.missions;
@@ -5838,8 +5841,7 @@ function ensureNhlGiveawayMission(user) {
   list.push({
     id,
     code: "nhl_giveaway",
-    title:
-      "Izlozei: Play testa saite → lejupielādē VĀRDU ZONA no Google Play → NHL cepure → e-pasts → pieteikšanās profilā.",
+    title: NHL_HAT_GIVEAWAY_MISSION_TITLE,
     type: "nhl_giveaway_submit",
     target: 1,
     progress: prog,
@@ -5851,12 +5853,10 @@ function ensureNhlGiveawayMission(user) {
 }
 
 function nhlGiveawayMissionProgress(u) {
-  const hasPick =
-    Boolean(normalizeGiveawayNhlAbbr(u?.giveawayNhlAbbr || "")) ||
-    Boolean(normalizeGiveawayNhlTeam(u?.giveawayNhlTeam || ""));
   const hasEmail = Boolean(normalizeEmail(u?.email || ""));
   const opted = Math.max(0, Number(u?.betaOptInRequestedAt) || 0) > 0;
-  return hasPick && hasEmail && opted ? 1 : 0;
+  /** Izlozei pieteikušies: aplikācija no Play (solīts) + e-pasts + oficiāla pieteikšanās. */
+  return hasEmail && opted ? 1 : 0;
 }
 
 function syncNhlGiveawayMissionProgress(user) {
@@ -5865,6 +5865,10 @@ function syncNhlGiveawayMissionProgress(user) {
   let changed = false;
   for (const m of list) {
     if (!m || m.type !== "nhl_giveaway_submit") continue;
+    if (m.title !== NHL_HAT_GIVEAWAY_MISSION_TITLE) {
+      m.title = NHL_HAT_GIVEAWAY_MISSION_TITLE;
+      changed = true;
+    }
     const prog = nhlGiveawayMissionProgress(user);
     if ((m.progress || 0) !== prog) {
       m.progress = prog;
@@ -9500,7 +9504,7 @@ app.get("/giveaway/nhl-teams", (_req, res) => {
   res.json({ teams });
 });
 
-/** Brīvprātīga pieteikšanās beta / giveaway sarakstam — prasa saglabātu e-pastu. */
+/** Brīvprātīga pieteikšanās NHL cepures izlozei — prasa e-pastu un saglabātu komandas cepuri. */
 app.post("/beta/opt-in", authMiddleware, async (req, res) => {
   const user = req.user;
   const agree = req.body?.agree === true || req.body?.agree === "true" || req.body?.agree === "1";
@@ -9512,6 +9516,15 @@ app.post("/beta/opt-in", authMiddleware, async (req, res) => {
     return res.status(400).json({
       message:
         "Vispirms profilā saglabā derīgu e-pastu (tas paliek privāts), tad piesakies.",
+    });
+  }
+  const hasHatPick =
+    Boolean(normalizeGiveawayNhlAbbr(user.giveawayNhlAbbr || "")) ||
+    Boolean(normalizeGiveawayNhlTeam(user.giveawayNhlTeam || ""));
+  if (!hasHatPick) {
+    return res.status(400).json({
+      message:
+        "Lai pieteiktos NHL cepures izlozei, vispirms profilā izvēlies komandas cepuri ar logo (vai ieraksti komandas nosaukumu) un spied «Saglabāt».",
     });
   }
   user.betaOptInRequestedAt = Date.now();

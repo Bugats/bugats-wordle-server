@@ -57,6 +57,31 @@ describe("POST /giveaway/nhl-team", () => {
     expect(nhl.isCompleted).toBe(false);
   });
 
+  it("marks NHL hat mission complete after Play path + email + opt-in", async () => {
+    const suffix = Date.now().toString().slice(-8);
+    const u = `nhl_done_${suffix}`;
+    const token = await ensureUserToken({
+      username: u,
+      password: "Test12345",
+      email: `${u}@example.com`,
+    });
+    await request(app)
+      .post("/giveaway/nhl-team")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ abbr: "BOS" });
+    const opt = await request(app)
+      .post("/beta/opt-in")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ agree: true });
+    expect(opt.status).toBe(200);
+    const ms = await request(app).get("/missions").set("Authorization", `Bearer ${token}`);
+    expect(ms.status).toBe(200);
+    const nhl = ms.body.missions.find((m) => m.type === "nhl_giveaway_submit");
+    expect(nhl).toBeTruthy();
+    expect(nhl.progress).toBe(1);
+    expect(nhl.isCompleted).toBe(true);
+  });
+
   it("saves abbreviation from hat picker and sets canonical team name", async () => {
     const suffix = Date.now().toString().slice(-8);
     const u = `nhl_abbr_${suffix}`;

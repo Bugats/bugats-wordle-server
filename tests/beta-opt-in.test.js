@@ -54,7 +54,22 @@ describe("POST /beta/opt-in", () => {
     expect(res.status).toBe(400);
   });
 
-  it("records opt-in when email present", async () => {
+  it("rejects opt-in without saved NHL hat / team", async () => {
+    const suffix = Date.now().toString().slice(-8);
+    const u = `beta_nohat_${suffix}`;
+    const token = await ensureUserToken({
+      username: u,
+      password: "Test12345",
+      email: `${u}@example.com`,
+    });
+    const res = await request(app)
+      .post("/beta/opt-in")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ agree: true });
+    expect(res.status).toBe(400);
+  });
+
+  it("records opt-in when email present and NHL pick saved", async () => {
     const suffix = Date.now().toString().slice(-8);
     const u = `beta_ok_${suffix}`;
     const token = await ensureUserToken({
@@ -62,6 +77,11 @@ describe("POST /beta/opt-in", () => {
       password: "Test12345",
       email: `${u}@example.com`,
     });
+    const hat = await request(app)
+      .post("/giveaway/nhl-team")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ abbr: "TOR" });
+    expect(hat.status).toBe(200);
     const res = await request(app)
       .post("/beta/opt-in")
       .set("Authorization", `Bearer ${token}`)
