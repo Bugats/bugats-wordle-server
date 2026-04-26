@@ -51,6 +51,7 @@ import {
   zolePickBotDiscard,
   zolePublicSnapshot,
   zoleStartNextHand,
+  zoleLegalPlays,
   ZOLE_BOT_1,
   isZoleBotUsername,
   cardKey,
@@ -386,6 +387,50 @@ function normalizeEmail(raw) {
 }
 
 const GIVEAWAY_NHL_TEAM_MAX = 64;
+
+/** NHL komandas izlozei (saīsinājums → pilns nosaukums misijai / eksportam). */
+const NHL_GIVEAWAY_ABBR_TO_NAME = {
+  ANA: "Anaheim Ducks",
+  BOS: "Boston Bruins",
+  BUF: "Buffalo Sabres",
+  CAR: "Carolina Hurricanes",
+  CBJ: "Columbus Blue Jackets",
+  CGY: "Calgary Flames",
+  CHI: "Chicago Blackhawks",
+  COL: "Colorado Avalanche",
+  DAL: "Dallas Stars",
+  DET: "Detroit Red Wings",
+  EDM: "Edmonton Oilers",
+  FLA: "Florida Panthers",
+  LAK: "Los Angeles Kings",
+  MIN: "Minnesota Wild",
+  MTL: "Montréal Canadiens",
+  NSH: "Nashville Predators",
+  NJD: "New Jersey Devils",
+  NYI: "New York Islanders",
+  NYR: "New York Rangers",
+  OTT: "Ottawa Senators",
+  PHI: "Philadelphia Flyers",
+  PIT: "Pittsburgh Penguins",
+  SEA: "Seattle Kraken",
+  SJS: "San Jose Sharks",
+  STL: "St. Louis Blues",
+  TBL: "Tampa Bay Lightning",
+  TOR: "Toronto Maple Leafs",
+  UTA: "Utah Hockey Club",
+  VAN: "Vancouver Canucks",
+  VGK: "Vegas Golden Knights",
+  WPG: "Winnipeg Jets",
+  WSH: "Washington Capitals",
+};
+
+function normalizeGiveawayNhlAbbr(raw) {
+  const a = String(raw || "").trim().toUpperCase();
+  if (!a || a.length > 4) return "";
+  if (!/^[A-Z]+$/.test(a)) return "";
+  return NHL_GIVEAWAY_ABBR_TO_NAME[a] ? a : "";
+}
+
 /** NHL / komandas nosaukums izlozei — bez HTML / vadības zīmēm. */
 function normalizeGiveawayNhlTeam(raw) {
   let s = String(raw || "")
@@ -4013,6 +4058,8 @@ function loadUsers(listOverride) {
       if (typeof u.betaTester !== "boolean") u.betaTester = false;
       if (typeof u.giveawayNhlTeam !== "string") u.giveawayNhlTeam = "";
       u.giveawayNhlTeam = normalizeGiveawayNhlTeam(u.giveawayNhlTeam);
+      if (typeof u.giveawayNhlAbbr !== "string") u.giveawayNhlAbbr = "";
+      u.giveawayNhlAbbr = normalizeGiveawayNhlAbbr(u.giveawayNhlAbbr);
 
       // Supporter flag
       if (typeof u.supporter !== "boolean") u.supporter = false;
@@ -5792,7 +5839,7 @@ function ensureNhlGiveawayMission(user) {
     id,
     code: "nhl_giveaway",
     title:
-      "Izlozei: ieraksti mīļākā NHL kluba nosaukumu (logo), saglabā e-pastu un piesakies izlozei profilā.",
+      "Izlozei: izvēlies NHL komandas cepuri ar logo, saglabā e-pastu un piesakies izlozei profilā.",
     type: "nhl_giveaway_submit",
     target: 1,
     progress: prog,
@@ -5804,10 +5851,12 @@ function ensureNhlGiveawayMission(user) {
 }
 
 function nhlGiveawayMissionProgress(u) {
-  const hasLogo = Boolean(normalizeGiveawayNhlTeam(u?.giveawayNhlTeam || ""));
+  const hasPick =
+    Boolean(normalizeGiveawayNhlAbbr(u?.giveawayNhlAbbr || "")) ||
+    Boolean(normalizeGiveawayNhlTeam(u?.giveawayNhlTeam || ""));
   const hasEmail = Boolean(normalizeEmail(u?.email || ""));
   const opted = Math.max(0, Number(u?.betaOptInRequestedAt) || 0) > 0;
-  return hasLogo && hasEmail && opted ? 1 : 0;
+  return hasPick && hasEmail && opted ? 1 : 0;
 }
 
 function syncNhlGiveawayMissionProgress(user) {
@@ -6640,6 +6689,7 @@ async function buildMePayload(u) {
     betaTester: !!u.betaTester,
     betaOptInRequestedAt: Math.max(0, Math.floor(Number(u.betaOptInRequestedAt) || 0)),
     giveawayNhlTeam: String(u.giveawayNhlTeam || "").trim(),
+    giveawayNhlAbbr: String(u.giveawayNhlAbbr || "").trim().toUpperCase(),
   };
 }
 
@@ -6736,7 +6786,12 @@ app.use(
         // Allow the in-game radio stream host while keeping strict defaults.
         "media-src": ["'self'", "https://stream.nightride.fm"],
         // Avatāri no Supabase Storage
-        "img-src": ["'self'", "data:", "https://*.supabase.co"],
+        "img-src": [
+          "'self'",
+          "data:",
+          "https://*.supabase.co",
+          "https://assets.nhle.com",
+        ],
       },
     },
   })
@@ -9400,28 +9455,49 @@ app.post("/email", authMiddleware, (req, res) => {
   return res.json({ ok: true, email: user.email });
 });
 
-/** NHL / mīļākā komanda balvu izlozei (teksts — piem. «Rangers»). */
+/** NHL komanda izlozei — `abbr` (piem. TOR) vai brīvs `team` teksts. */
 app.post("/giveaway/nhl-team", authMiddleware, async (req, res) => {
   const user = req.user;
   markActivity(user);
-  const cleaned = normalizeGiveawayNhlTeam(req.body?.team ?? req.body?.nhlTeam ?? "");
-  if (!cleaned) {
+  const bodyAbbr = normalizeGiveawayNhlAbbr(
+    req.body?.abbr ?? req.body?.teamAbbr ?? req.body?.nhlAbbr
+  );
+  const cleanedText = normalizeGiveawayNhlTeam(
+    req.body?.team ?? req.body?.nhlTeam ?? ""
+  );
+  if (bodyAbbr) {
+    user.giveawayNhlAbbr = bodyAbbr;
+    user.giveawayNhlTeam = NHL_GIVEAWAY_ABBR_TO_NAME[bodyAbbr] || bodyAbbr;
+  } else if (cleanedText) {
+    user.giveawayNhlTeam = cleanedText;
+    user.giveawayNhlAbbr = "";
+  } else {
     return res.status(400).json({
       message:
-        "Ieraksti komandas nosaukumu (piem. Maple Leafs). Nav atļauti speciālie simboli.",
+        "Izvēlies komandas cepuri ar logo vai ieraksti komandas nosaukumu.",
     });
   }
-  user.giveawayNhlTeam = cleaned;
   ensureDailyMissions(user);
   syncNhlGiveawayMissionProgress(user);
   saveUsers(USERS);
   return res.json({
     ok: true,
+    giveawayNhlAbbr: user.giveawayNhlAbbr || "",
     giveawayNhlTeam: user.giveawayNhlTeam,
     me: await buildMePayload(user),
     missions: getPublicMissions(user),
     bonus: getMissionBonusStatus(user),
   });
+});
+
+app.get("/giveaway/nhl-teams", (_req, res) => {
+  const teams = Object.keys(NHL_GIVEAWAY_ABBR_TO_NAME)
+    .sort()
+    .map((abbr) => ({
+      abbr,
+      name: NHL_GIVEAWAY_ABBR_TO_NAME[abbr],
+    }));
+  res.json({ teams });
 });
 
 /** Brīvprātīga pieteikšanās beta / giveaway sarakstam — prasa saglabātu e-pastu. */
@@ -9682,6 +9758,9 @@ async function buildPublicProfilePayload(targetUser, requester) {
       Math.floor(Number(targetUser.betaOptInRequestedAt) || 0)
     );
     payload.giveawayNhlTeam = String(targetUser.giveawayNhlTeam || "").trim();
+    payload.giveawayNhlAbbr = String(targetUser.giveawayNhlAbbr || "")
+      .trim()
+      .toUpperCase();
   }
 
   if (isAdmin) {
@@ -9694,6 +9773,9 @@ async function buildPublicProfilePayload(targetUser, requester) {
       Math.floor(Number(targetUser.betaOptInRequestedAt) || 0)
     );
     payload.giveawayNhlTeam = String(targetUser.giveawayNhlTeam || "").trim();
+    payload.giveawayNhlAbbr = String(targetUser.giveawayNhlAbbr || "")
+      .trim()
+      .toUpperCase();
   }
   return payload;
 }
@@ -15033,24 +15115,21 @@ const __testHooks = {
     g.lastMoveAt = Date.now();
     return true;
   },
-  /** E2E: pirmā legālā kārta no `legalCardKeys` rokai `forPlayerUsername`. */
+  /** E2E: pirmā legālā kārta rokai `forPlayerUsername` (neatkarīgi no `turn`). */
   zoleFirstLegalCardForTestOnly(gameId, forPlayerUsername) {
     if (process.env.NODE_ENV !== "test") return null;
     const gid = String(gameId || "").trim();
     const g = gid ? boardGames.get(gid) : null;
     if (!g?.zole) return null;
+    const z = g.zole;
+    if (z.phase !== "play") return null;
     const idx = boardGameSeatIndex(g, forPlayerUsername);
     if (idx < 0) return null;
-    const snap = zolePublicSnapshot(g.zole, idx);
-    const keys = snap?.legalCardKeys;
-    if (!Array.isArray(keys) || !keys.length) return null;
-    const k = String(keys[0] || "").trim();
-    if (!k) return null;
-    const hand = g.zole.hands[idx] || [];
-    for (const c of hand) {
-      if (cardKey(c) === k) return { s: c.s, r: c.r };
-    }
-    return null;
+    const hand = z.hands[idx] || [];
+    const legal = zoleLegalPlays(hand, z.trick || []);
+    const c = legal[0];
+    if (!c) return null;
+    return { s: c.s, r: c.r };
   },
 };
 
