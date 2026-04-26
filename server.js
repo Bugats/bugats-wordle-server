@@ -54,7 +54,6 @@ import {
   zoleLegalPlays,
   ZOLE_BOT_1,
   isZoleBotUsername,
-  cardKey,
 } from "./lib/zole.js";
 import Stripe from "stripe";
 import {
@@ -63,6 +62,11 @@ import {
   findPackById,
   grantCoinsForCheckoutSession,
 } from "./lib/stripe-coins.js";
+import {
+  NHL_GIVEAWAY_ABBR_TO_NAME,
+  normalizeGiveawayNhlAbbr,
+  normalizeGiveawayNhlTeam,
+} from "./lib/nhl-giveaway.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -386,60 +390,6 @@ function normalizeEmail(raw) {
   return email;
 }
 
-const GIVEAWAY_NHL_TEAM_MAX = 64;
-
-/** NHL komandas izlozei (saīsinājums → pilns nosaukums misijai / eksportam). */
-const NHL_GIVEAWAY_ABBR_TO_NAME = {
-  ANA: "Anaheim Ducks",
-  BOS: "Boston Bruins",
-  BUF: "Buffalo Sabres",
-  CAR: "Carolina Hurricanes",
-  CBJ: "Columbus Blue Jackets",
-  CGY: "Calgary Flames",
-  CHI: "Chicago Blackhawks",
-  COL: "Colorado Avalanche",
-  DAL: "Dallas Stars",
-  DET: "Detroit Red Wings",
-  EDM: "Edmonton Oilers",
-  FLA: "Florida Panthers",
-  LAK: "Los Angeles Kings",
-  MIN: "Minnesota Wild",
-  MTL: "Montréal Canadiens",
-  NSH: "Nashville Predators",
-  NJD: "New Jersey Devils",
-  NYI: "New York Islanders",
-  NYR: "New York Rangers",
-  OTT: "Ottawa Senators",
-  PHI: "Philadelphia Flyers",
-  PIT: "Pittsburgh Penguins",
-  SEA: "Seattle Kraken",
-  SJS: "San Jose Sharks",
-  STL: "St. Louis Blues",
-  TBL: "Tampa Bay Lightning",
-  TOR: "Toronto Maple Leafs",
-  UTA: "Utah Hockey Club",
-  VAN: "Vancouver Canucks",
-  VGK: "Vegas Golden Knights",
-  WPG: "Winnipeg Jets",
-  WSH: "Washington Capitals",
-};
-
-function normalizeGiveawayNhlAbbr(raw) {
-  const a = String(raw || "").trim().toUpperCase();
-  if (!a || a.length > 4) return "";
-  if (!/^[A-Z]+$/.test(a)) return "";
-  return NHL_GIVEAWAY_ABBR_TO_NAME[a] ? a : "";
-}
-
-/** NHL / komandas nosaukums izlozei — bez HTML / vadības zīmēm. */
-function normalizeGiveawayNhlTeam(raw) {
-  let s = String(raw || "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/[\x00-\x1f<>\"\\{}|]/g, "")
-    .slice(0, GIVEAWAY_NHL_TEAM_MAX);
-  return s;
-}
 function compactAvatarUrl(raw, maxChars = AVATAR_INLINE_MAX_CHARS) {
   if (typeof raw !== "string") return null;
   const url = raw.trim();
@@ -955,7 +905,9 @@ function broadcastBoardOpenSeatsList() {
 }
 
 function removeBoardOpenSeatForUser(username, doBroadcast = true) {
-  const key = String(username || "").trim().toLowerCase();
+  const key = String(username || "")
+    .trim()
+    .toLowerCase();
   if (!key) return;
   if (!boardOpenSeatByHost.delete(key)) return;
   if (doBroadcast) broadcastBoardOpenSeatsList();
@@ -987,7 +939,9 @@ function buildBoardOpenSeatsListPayload() {
     } else if (t === "dambrete") {
       dambrete.push({
         host,
-        dambreteVariant: normalizeDambreteVariant(v.dambreteVariant || "russian"),
+        dambreteVariant: normalizeDambreteVariant(
+          v.dambreteVariant || "russian"
+        ),
       });
     } else {
       boardOpenSeatByHost.delete(k);
@@ -1014,8 +968,15 @@ function pruneExpiredBoardOpenSeats() {
   if (changed) broadcastBoardOpenSeatsList();
 }
 
-function setPendingBoardInviteForTarget(targetUsername, fromUsername, expiresAt, rematch = false) {
-  const key = String(targetUsername || "").trim().toLowerCase();
+function setPendingBoardInviteForTarget(
+  targetUsername,
+  fromUsername,
+  expiresAt,
+  rematch = false
+) {
+  const key = String(targetUsername || "")
+    .trim()
+    .toLowerCase();
   const from = String(fromUsername || "").trim();
   if (!key || !from) return;
   pendingBoardInviteByUsername.set(key, {
@@ -1026,7 +987,9 @@ function setPendingBoardInviteForTarget(targetUsername, fromUsername, expiresAt,
 }
 
 function clearPendingBoardInvite(username) {
-  const key = String(username || "").trim().toLowerCase();
+  const key = String(username || "")
+    .trim()
+    .toLowerCase();
   if (key) pendingBoardInviteByUsername.delete(key);
 }
 
@@ -1059,11 +1022,15 @@ function tickExpiredBoardInvites(io) {
       inviteTimeoutMs: boardGameInviteTimeoutMs,
     };
     if (v.rematch) {
-      if (from) getSocketByUsername(from)?.emit("board.rematchTimedOut", payload);
-      if (target) getSocketByUsername(target)?.emit("board.rematchTimedOut", payload);
+      if (from)
+        getSocketByUsername(from)?.emit("board.rematchTimedOut", payload);
+      if (target)
+        getSocketByUsername(target)?.emit("board.rematchTimedOut", payload);
     } else {
-      if (from) getSocketByUsername(from)?.emit("board.inviteTimedOut", payload);
-      if (target) getSocketByUsername(target)?.emit("board.inviteTimedOut", payload);
+      if (from)
+        getSocketByUsername(from)?.emit("board.inviteTimedOut", payload);
+      if (target)
+        getSocketByUsername(target)?.emit("board.inviteTimedOut", payload);
     }
   }
 }
@@ -1083,13 +1050,18 @@ function expireZole3pThirdSeatInvites(io) {
     for (const [id, meta] of zole3pSeatInviteById.entries()) {
       if (
         meta.lobbyId === lobby.id &&
-        String(meta.inviteeUsername || "").toLowerCase() === target.toLowerCase()
+        String(meta.inviteeUsername || "").toLowerCase() ===
+          target.toLowerCase()
       ) {
         delIds.push(id);
       }
     }
     for (const id of delIds) zole3pSeatInviteById.delete(id);
-    notifyZole3pLobbyPeers(lobby.id, "board.zoleLobby", zole3pLobbyPayload(lobby));
+    notifyZole3pLobbyPeers(
+      lobby.id,
+      "board.zoleLobby",
+      zole3pLobbyPayload(lobby)
+    );
     if (target) {
       getSocketByUsername(host)?.emit("board.zoleThirdInviteTimedOut", {
         target,
@@ -1145,11 +1117,8 @@ function zole3pLobbyListEntry(lobby) {
     playerCount: players.length,
     openSeats,
     zole3pCoinsPerPoint: cpp,
-    hasPendingInvite: !!(
-      lobby.invitedSeat && String(lobby.invitedSeat).trim()
-    ),
-    stakeLabel:
-      cpp > 0 ? `${cpp} coins / tabulas punkts` : "+10/−4 (fiksēti)",
+    hasPendingInvite: !!(lobby.invitedSeat && String(lobby.invitedSeat).trim()),
+    stakeLabel: cpp > 0 ? `${cpp} coins / tabulas punkts` : "+10/−4 (fiksēti)",
   };
 }
 
@@ -1183,8 +1152,7 @@ function zole3pLobbyPayload(lobby) {
     players: lobby.players.slice(),
     needThird: lobby.players.length < 3,
     invitedThird: lobby.invitedSeat || null,
-    thirdInviteExpiresAt:
-      lobby.invitedSeat && invExp > now ? invExp : null,
+    thirdInviteExpiresAt: lobby.invitedSeat && invExp > now ? invExp : null,
     zole3pCoinsPerPoint: clampZole3pCoinsPerPoint(lobby.zole3pCoinsPerPoint),
   };
 }
@@ -1207,9 +1175,7 @@ function removeUserFromZole3pLobby(lobbyId, username) {
   const delInv = [];
   for (const [id, meta] of zole3pSeatInviteById.entries()) {
     if (meta.lobbyId !== lobbyId) continue;
-    if (
-      String(meta.inviteeUsername || "").toLowerCase() === u.toLowerCase()
-    ) {
+    if (String(meta.inviteeUsername || "").toLowerCase() === u.toLowerCase()) {
       delInv.push(id);
     }
   }
@@ -1234,7 +1200,9 @@ function maybeStartZole3pFromLobby(io, lobby) {
   const lid = lobby.id;
   clearZole3pLobby(lid, false);
   const game = createZoleOnline3pGame(p1, p2, p3);
-  game.zole3pCoinsPerPoint = clampZole3pCoinsPerPoint(lobby.zole3pCoinsPerPoint);
+  game.zole3pCoinsPerPoint = clampZole3pCoinsPerPoint(
+    lobby.zole3pCoinsPerPoint
+  );
   const room = `board:${game.id}`;
   for (const p of game.players) {
     getSocketByUsername(p)?.join(room);
@@ -1283,9 +1251,7 @@ function chessClockInit(game, opts = null) {
   const humanMs = clampChessInitialMs(
     o.initialMsPerSide ?? CHESS_CLOCK_DEFAULT_MS
   );
-  const inc = clampChessIncrementMs(
-    o.incrementMs ?? CHESS_CLOCK_INCREMENT_MS
-  );
+  const inc = clampChessIncrementMs(o.incrementMs ?? CHESS_CLOCK_INCREMENT_MS);
   const botMs = 365 * 24 * 60 * 60 * 1000; // vs bot: “bezgalīgs” laiks botam
   game.chessClock = {
     remainingMs: game.vsBot ? [humanMs, botMs] : [humanMs, humanMs],
@@ -1301,8 +1267,14 @@ function chessClockPayload(game) {
   const now = Date.now();
   const elapsed = Math.max(0, now - (Number(clk.turnStartAt) || now));
   const cur = game.turn;
-  const r0 = Math.max(0, (Number(clk.remainingMs[0]) || 0) - (cur === 0 ? elapsed : 0));
-  const r1 = Math.max(0, (Number(clk.remainingMs[1]) || 0) - (cur === 1 ? elapsed : 0));
+  const r0 = Math.max(
+    0,
+    (Number(clk.remainingMs[0]) || 0) - (cur === 0 ? elapsed : 0)
+  );
+  const r1 = Math.max(
+    0,
+    (Number(clk.remainingMs[1]) || 0) - (cur === 1 ? elapsed : 0)
+  );
   return {
     remainingMs: [r0, r1],
     incrementMs: Math.max(0, Math.floor(Number(clk.incrementMs) || 0)),
@@ -1749,10 +1721,7 @@ function zole3pClearInvitedSeatIfUser(username) {
   const u = String(username || "").toLowerCase();
   if (!u) return;
   for (const lobby of zole3pLobbyById.values()) {
-    if (
-      lobby.invitedSeat &&
-      String(lobby.invitedSeat).toLowerCase() === u
-    ) {
+    if (lobby.invitedSeat && String(lobby.invitedSeat).toLowerCase() === u) {
       lobby.invitedSeat = null;
       lobby.thirdInviteExpiresAt = null;
       const toDel = [];
@@ -1878,8 +1847,7 @@ function playZoleBotBids(io, game) {
       scheduleNextZoleBotTurn(io, game);
       return;
     }
-    game.turn =
-      game.zole.phase === "play" ? game.zole.turn : game.zole.bidTurn;
+    game.turn = game.zole.phase === "play" ? game.zole.turn : game.zole.bidTurn;
     emitZoleToHumans(io, game, "board.move", {
       gameId: game.id,
       type: "zole",
@@ -2121,9 +2089,7 @@ function finishBoardGame(game, winnerUsername, reason) {
         }
       } else {
         for (const h of humans) {
-          if (
-            String(h).toLowerCase() === String(winnerUsername).toLowerCase()
-          )
+          if (String(h).toLowerCase() === String(winnerUsername).toLowerCase())
             continue;
           const hKey = findUserKeyCaseInsensitive(h);
           if (hKey && USERS[hKey]) zoleLosers.push(USERS[hKey]);
@@ -2132,11 +2098,7 @@ function finishBoardGame(game, winnerUsername, reason) {
     }
   } else if (game.players?.length >= 2) {
     const [p1, p2] = game.players;
-    const loserKey = winnerUsername
-      ? p1 === winnerUsername
-        ? p2
-        : p1
-      : null;
+    const loserKey = winnerUsername ? (p1 === winnerUsername ? p2 : p1) : null;
     loser = loserKey ? USERS[findUserKeyCaseInsensitive(loserKey)] : null;
   }
 
@@ -3563,7 +3525,9 @@ function buildClanPayload(clan, forUser = null) {
   const goalTarget = Math.max(1, Math.floor(clan.weeklyGoalTarget || 0) || 1);
   const goalProg = Math.max(0, Math.floor(clan.weeklyGoalProgress || 0));
   const goalPct =
-    goalTarget > 0 ? Math.min(100, Math.round((goalProg / goalTarget) * 1000) / 10) : 0;
+    goalTarget > 0
+      ? Math.min(100, Math.round((goalProg / goalTarget) * 1000) / 10)
+      : 0;
   return {
     id: clan.id,
     name: clan.name,
@@ -4053,7 +4017,10 @@ function loadUsers(listOverride) {
       }
 
       // Beta / giveaway: brīvprātīga pieteikšanās (e-pasts profilā)
-      if (typeof u.betaOptInRequestedAt !== "number" || !Number.isFinite(u.betaOptInRequestedAt))
+      if (
+        typeof u.betaOptInRequestedAt !== "number" ||
+        !Number.isFinite(u.betaOptInRequestedAt)
+      )
         u.betaOptInRequestedAt = 0;
       if (typeof u.betaTester !== "boolean") u.betaTester = false;
       if (typeof u.giveawayNhlTeam !== "string") u.giveawayNhlTeam = "";
@@ -5900,9 +5867,7 @@ function getPublicMissions(user) {
 function getMissionBonusStatus(user) {
   ensureDailyMissions(user);
   const list = Array.isArray(user.missions) ? user.missions : [];
-  const bonusList = list.filter(
-    (m) => m && m.type !== "nhl_giveaway_submit"
-  );
+  const bonusList = list.filter((m) => m && m.type !== "nhl_giveaway_submit");
   const total = bonusList.length;
   const completed = bonusList.filter((m) => m && m.isCompleted).length;
   const today = todayKey();
@@ -6677,9 +6642,7 @@ async function buildMePayload(u) {
     referralLink: `${String(process.env.BASE_URL || "https://bugats-wordle-server.onrender.com").replace(/\/$/, "")}/index.html?ref=${encodeURIComponent(u.username || "")}`,
     referredCount: Math.max(0, Number(u.referredCount) || 0),
     stripeCoinsEnabled: isStripeCoinsConfigured(),
-    stripeCoinPacks: isStripeCoinsConfigured()
-      ? getCoinPacksPublicList()
-      : [],
+    stripeCoinPacks: isStripeCoinsConfigured() ? getCoinPacksPublicList() : [],
     pendingDuelInvites: buildPendingDuelInvitesPayload(u),
     clanId: u.clanId || null,
     clan: u.clanId ? buildClanPayload(getClanById(u.clanId), u) : null,
@@ -6691,9 +6654,14 @@ async function buildMePayload(u) {
       at: inv.at,
     })),
     betaTester: !!u.betaTester,
-    betaOptInRequestedAt: Math.max(0, Math.floor(Number(u.betaOptInRequestedAt) || 0)),
+    betaOptInRequestedAt: Math.max(
+      0,
+      Math.floor(Number(u.betaOptInRequestedAt) || 0)
+    ),
     giveawayNhlTeam: String(u.giveawayNhlTeam || "").trim(),
-    giveawayNhlAbbr: String(u.giveawayNhlAbbr || "").trim().toUpperCase(),
+    giveawayNhlAbbr: String(u.giveawayNhlAbbr || "")
+      .trim()
+      .toUpperCase(),
   };
 }
 
@@ -6867,7 +6835,10 @@ app.post(
         STRIPE_WEBHOOK_SECRET
       );
     } catch (err) {
-      logger.warn({ err: String(err?.message || err) }, "stripe webhook verify");
+      logger.warn(
+        { err: String(err?.message || err) },
+        "stripe webhook verify"
+      );
       return res.status(400).send("webhook error");
     }
     try {
@@ -9026,18 +8997,14 @@ app.post("/clan/create", authMiddleware, async (req, res) => {
     .trim()
     .toUpperCase();
   if (name.length < CLAN_NAME_MIN || name.length > CLAN_NAME_MAX) {
-    return res
-      .status(400)
-      .json({
-        message: `Klana nosaukumam jābūt ${CLAN_NAME_MIN}-${CLAN_NAME_MAX} burtiem.`,
-      });
+    return res.status(400).json({
+      message: `Klana nosaukumam jābūt ${CLAN_NAME_MIN}-${CLAN_NAME_MAX} burtiem.`,
+    });
   }
   if (tag.length < CLAN_TAG_MIN || tag.length > CLAN_TAG_MAX) {
-    return res
-      .status(400)
-      .json({
-        message: `Klana tagam jābūt ${CLAN_TAG_MIN}-${CLAN_TAG_MAX} burtiem.`,
-      });
+    return res.status(400).json({
+      message: `Klana tagam jābūt ${CLAN_TAG_MIN}-${CLAN_TAG_MAX} burtiem.`,
+    });
   }
   if (getClanByTag(tag)) {
     return res.status(400).json({ message: `Tags [${tag}] jau aizņemts.` });
@@ -9081,11 +9048,9 @@ app.post("/clan/leave", authMiddleware, async (req, res) => {
     String(clan.owner || "").toLowerCase() ===
     String(user.username).toLowerCase()
   ) {
-    return res
-      .status(400)
-      .json({
-        message: "Vadītājs nevar iziet. Pārnes vadību vai izdzēs klanu.",
-      });
+    return res.status(400).json({
+      message: "Vadītājs nevar iziet. Pārnes vadību vai izdzēs klanu.",
+    });
   }
   clan.members = (clan.members || []).filter(
     (m) =>
@@ -9321,8 +9286,7 @@ app.get("/clan/leaderboard", (_req, res) => {
 app.post("/clan/weekly-goal", authMiddleware, (req, res) => {
   const user = req.user;
   const clan = user.clanId ? getClanById(user.clanId) : null;
-  if (!clan)
-    return res.status(400).json({ message: "Tu neesi klanā." });
+  if (!clan) return res.status(400).json({ message: "Tu neesi klanā." });
   if (!canClanManage(clan, user.username)) {
     return res
       .status(403)
@@ -9507,9 +9471,14 @@ app.get("/giveaway/nhl-teams", (_req, res) => {
 /** Brīvprātīga pieteikšanās NHL cepures izlozei — prasa e-pastu un saglabātu komandas cepuri. */
 app.post("/beta/opt-in", authMiddleware, async (req, res) => {
   const user = req.user;
-  const agree = req.body?.agree === true || req.body?.agree === "true" || req.body?.agree === "1";
+  const agree =
+    req.body?.agree === true ||
+    req.body?.agree === "true" ||
+    req.body?.agree === "1";
   if (!agree) {
-    return res.status(400).json({ message: "Jāapstiprina noteikumi (atzīmē rūtiņu)." });
+    return res
+      .status(400)
+      .json({ message: "Jāapstiprina noteikumi (atzīmē rūtiņu)." });
   }
   const em = normalizeEmail(String(user.email || "").trim());
   if (!em) {
@@ -9592,7 +9561,10 @@ app.get("/admin/giveaway/hat-lottery-opt-ins", authMiddleware, (req, res) => {
   for (const key of Object.keys(USERS)) {
     const u = USERS[key];
     if (!u || typeof u !== "object") continue;
-    const optedAt = Math.max(0, Math.floor(Number(u.betaOptInRequestedAt) || 0));
+    const optedAt = Math.max(
+      0,
+      Math.floor(Number(u.betaOptInRequestedAt) || 0)
+    );
     if (optedAt <= 0) continue;
     const email = normalizeEmail(String(u.email || "").trim());
     entries.push({
@@ -9600,7 +9572,9 @@ app.get("/admin/giveaway/hat-lottery-opt-ins", authMiddleware, (req, res) => {
       email: email || "",
       betaOptInRequestedAt: optedAt,
       betaTester: !!u.betaTester,
-      giveawayNhlAbbr: String(u.giveawayNhlAbbr || "").trim().toUpperCase(),
+      giveawayNhlAbbr: String(u.giveawayNhlAbbr || "")
+        .trim()
+        .toUpperCase(),
       giveawayNhlTeam: String(u.giveawayNhlTeam || "").trim(),
     });
   }
@@ -12481,9 +12455,7 @@ io.on("connection", (socket) => {
             ? clampZole3pCoinsPerPoint(boardGame.zole3pCoinsPerPoint)
             : undefined,
         chessClock:
-          boardGame.type === "chess"
-            ? chessClockPayload(boardGame)
-            : undefined,
+          boardGame.type === "chess" ? chessClockPayload(boardGame) : undefined,
         chessDrawState:
           boardGame.type === "chess"
             ? chessDrawStatePayload(boardGame)
@@ -13616,7 +13588,9 @@ io.on("connection", (socket) => {
     if (gameType !== "dambrete" && gameType !== "chess")
       return socket.emit("board.error", { message: "Nederīgs spēles tips." });
     if (String(joiner.username).toLowerCase() === hostName.toLowerCase())
-      return socket.emit("board.error", { message: "Nevari pievienoties sev." });
+      return socket.emit("board.error", {
+        message: "Nevari pievienoties sev.",
+      });
     if (userToBoardGame.has(joiner.username))
       return socket.emit("board.error", { message: "Tu jau esi spēlē." });
     if (userToBoardGame.has(hostName))
@@ -13666,8 +13640,7 @@ io.on("connection", (socket) => {
         inviteId,
         from: joiner.username,
         type: gameType,
-        dambreteVariant:
-          gameType === "dambrete" ? dambreteVariant : undefined,
+        dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
         fromOpenSeatList: true,
         expiresAt: invExp,
       };
@@ -13682,8 +13655,7 @@ io.on("connection", (socket) => {
       inviteId,
       target: hostName,
       type: gameType,
-      dambreteVariant:
-        gameType === "dambrete" ? dambreteVariant : undefined,
+      dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
       expiresAt: invExp,
       toHost: true,
       inviteTimeoutMs: boardGameInviteTimeoutMs,
@@ -13698,7 +13670,9 @@ io.on("connection", (socket) => {
     if (!user) return;
     const fromName = String(payload?.from || "").trim();
     if (!fromName)
-      return socket.emit("board.error", { message: "Nav norādīts uzaicinātājs." });
+      return socket.emit("board.error", {
+        message: "Nav norādīts uzaicinātājs.",
+      });
     const pairKey = boardInvitePairKey(fromName, user.username);
     const pending = boardInviteVariantByPair.get(pairKey);
     const now = Date.now();
@@ -13733,7 +13707,9 @@ io.on("connection", (socket) => {
       payload?.target || payload?.username || ""
     ).trim();
     if (!targetName)
-      return socket.emit("board.error", { message: "Nav norādīts pretinieks." });
+      return socket.emit("board.error", {
+        message: "Nav norādīts pretinieks.",
+      });
     const pairKey = boardInvitePairKey(fromUser.username, targetName);
     const pending = boardInviteVariantByPair.get(pairKey);
     const now = Date.now();
@@ -13760,14 +13736,12 @@ io.on("connection", (socket) => {
       payload?.opponentUsername || payload?.target || payload?.username || ""
     ).trim();
     if (!targetName)
-      return socket.emit("board.error", { message: "Nav norādīts pretinieks." });
+      return socket.emit("board.error", {
+        message: "Nav norādīts pretinieks.",
+      });
     if (String(fromUser.username).toLowerCase() === targetName.toLowerCase())
       return socket.emit("board.error", { message: "Nevari uzaicināt sevi." });
-    if (
-      gameType !== "dambrete" &&
-      gameType !== "chess" &&
-      gameType !== "zole"
-    )
+    if (gameType !== "dambrete" && gameType !== "chess" && gameType !== "zole")
       return socket.emit("board.error", { message: "Nederīgs spēles tips." });
     const zoleModeRaw =
       gameType === "zole" ? parseZoleModeFromPayload(payload) : undefined;
@@ -13932,8 +13906,7 @@ io.on("connection", (socket) => {
       });
     if (
       lobby.players.some(
-        (p) =>
-          String(p).toLowerCase() === String(user.username).toLowerCase()
+        (p) => String(p).toLowerCase() === String(user.username).toLowerCase()
       )
     ) {
       socket.emit("board.zoleLobby", zole3pLobbyPayload(lobby));
@@ -13942,7 +13915,11 @@ io.on("connection", (socket) => {
     lobby.players.push(user.username);
     userToZole3pLobby.set(user.username, lobby.id);
     lobby.expiresAt = Date.now() + ZOLE_3P_LOBBY_TTL_MS;
-    notifyZole3pLobbyPeers(lobby.id, "board.zoleLobby", zole3pLobbyPayload(lobby));
+    notifyZole3pLobbyPeers(
+      lobby.id,
+      "board.zoleLobby",
+      zole3pLobbyPayload(lobby)
+    );
     maybeStartZole3pFromLobby(io, lobby);
   });
 
@@ -13960,7 +13937,11 @@ io.on("connection", (socket) => {
     lobby.zole3pCoinsPerPoint = clampZole3pCoinsPerPoint(
       payload?.zole3pCoinsPerPoint ?? payload?.zoleCoinsPerPoint
     );
-    notifyZole3pLobbyPeers(lobbyId, "board.zoleLobby", zole3pLobbyPayload(lobby));
+    notifyZole3pLobbyPeers(
+      lobbyId,
+      "board.zoleLobby",
+      zole3pLobbyPayload(lobby)
+    );
   });
 
   socket.on("board.zoleInviteThird", (payload) => {
@@ -14036,7 +14017,9 @@ io.on("connection", (socket) => {
         zoleThirdSeat: true,
         zoleLobbyId: lobbyId,
         zoleLobbyPlayers: lobby.players.slice(),
-        zole3pCoinsPerPoint: clampZole3pCoinsPerPoint(lobby.zole3pCoinsPerPoint),
+        zole3pCoinsPerPoint: clampZole3pCoinsPerPoint(
+          lobby.zole3pCoinsPerPoint
+        ),
         expiresAt:
           lobby.thirdInviteExpiresAt || Date.now() + zole3pThirdInviteTtlMs,
       });
@@ -14045,7 +14028,11 @@ io.on("connection", (socket) => {
       target: targetUser.username,
       thirdInviteExpiresAt: lobby.thirdInviteExpiresAt,
     });
-    notifyZole3pLobbyPeers(lobbyId, "board.zoleLobby", zole3pLobbyPayload(lobby));
+    notifyZole3pLobbyPeers(
+      lobbyId,
+      "board.zoleLobby",
+      zole3pLobbyPayload(lobby)
+    );
   });
 
   socket.on("board.zoleAcceptThird", (payload) => {
@@ -14091,7 +14078,11 @@ io.on("connection", (socket) => {
     lobby.players.push(user.username);
     userToZole3pLobby.set(user.username, lobby.id);
     lobby.expiresAt = Date.now() + ZOLE_3P_LOBBY_TTL_MS;
-    notifyZole3pLobbyPeers(lobby.id, "board.zoleLobby", zole3pLobbyPayload(lobby));
+    notifyZole3pLobbyPeers(
+      lobby.id,
+      "board.zoleLobby",
+      zole3pLobbyPayload(lobby)
+    );
     maybeStartZole3pFromLobby(io, lobby);
   });
 
@@ -14119,7 +14110,11 @@ io.on("connection", (socket) => {
     removeUserFromZole3pLobby(lobbyId, fromUser.username);
     const lob2 = zole3pLobbyById.get(lobbyId);
     if (lob2) {
-      notifyZole3pLobbyPeers(lobbyId, "board.zoleLobby", zole3pLobbyPayload(lob2));
+      notifyZole3pLobbyPeers(
+        lobbyId,
+        "board.zoleLobby",
+        zole3pLobbyPayload(lob2)
+      );
     }
   });
 
@@ -14143,7 +14138,11 @@ io.on("connection", (socket) => {
     }
     const host = lobby?.host;
     if (lobby && host) {
-      notifyZole3pLobbyPeers(meta.lobbyId, "board.zoleLobby", zole3pLobbyPayload(lobby));
+      notifyZole3pLobbyPeers(
+        meta.lobbyId,
+        "board.zoleLobby",
+        zole3pLobbyPayload(lobby)
+      );
     }
   });
 
@@ -14236,8 +14235,7 @@ io.on("connection", (socket) => {
       game = createZoleOnline2pGame(challengerName, opponentName);
     } else if (gameType === "chess") {
       const clkOpts =
-        pendingVar?.chessClockOpts ||
-        parseChessClockOptsFromPayload(payload);
+        pendingVar?.chessClockOpts || parseChessClockOptsFromPayload(payload);
       game = createChessGame(challengerName, opponentName, clkOpts);
     } else {
       game = createDambreteGame(challengerName, opponentName, dambreteVariant);
@@ -14280,8 +14278,7 @@ io.on("connection", (socket) => {
         board: game.board,
         fen: game.fen,
         dambreteVariant: game.dambreteVariant,
-        chessClock:
-          game.type === "chess" ? chessClockPayload(game) : undefined,
+        chessClock: game.type === "chess" ? chessClockPayload(game) : undefined,
         chessDrawState:
           game.type === "chess" ? chessDrawStatePayload(game) : undefined,
       };
@@ -14332,8 +14329,7 @@ io.on("connection", (socket) => {
       dambreteVariant: game.dambreteVariant,
       zole: game.type === "zole" ? zolePublicSnapshot(game.zole, 0) : undefined,
       zoleMode: game.type === "zole" ? game.zoleMode : undefined,
-      chessClock:
-        game.type === "chess" ? chessClockPayload(game) : undefined,
+      chessClock: game.type === "chess" ? chessClockPayload(game) : undefined,
       chessDrawState:
         game.type === "chess" ? chessDrawStatePayload(game) : undefined,
     };
@@ -14361,7 +14357,9 @@ io.on("connection", (socket) => {
       if (pIdx < 0 || isZoleBotUsername(game.players[pIdx]))
         return socket.emit("board.error", { message: "Nederīgs spēlētājs." });
       if (game.zole.bidTurn !== pIdx)
-        return socket.emit("board.error", { message: "Nav tavas likšanas kārtas." });
+        return socket.emit("board.error", {
+          message: "Nav tavas likšanas kārtas.",
+        });
       const bid = String(payload?.bid || payload?.zoleBid || "").toLowerCase();
       if (
         bid !== "pass" &&
@@ -14805,7 +14803,10 @@ io.on("connection", (socket) => {
     if (game.vsBot) return;
     if (!game.players.includes(user.username)) return;
     const from = game.chessDrawOfferFrom;
-    if (!from || String(from).toLowerCase() === String(user.username).toLowerCase())
+    if (
+      !from ||
+      String(from).toLowerCase() === String(user.username).toLowerCase()
+    )
       return socket.emit("board.error", {
         message: "Nav aktīva neizšķirta piedāvājuma no pretinieka.",
       });
@@ -14853,15 +14854,23 @@ io.on("connection", (socket) => {
     try {
       ch = new Chess(game.fen);
     } catch (_) {
-      return socket.emit("board.error", { message: "Neizdevās pārbaudīt pozīciju." });
+      return socket.emit("board.error", {
+        message: "Neizdevās pārbaudīt pozīciju.",
+      });
     }
     const fifty = ch.isDrawByFiftyMoves();
     const three = ch.isThreefoldRepetition();
     if (!fifty && !three)
       return socket.emit("board.error", {
-        message: "Šobrīd nav pamata pieteikt neizšķirtu (50 gājienu likums vai trīskāršs atkārtojums).",
+        message:
+          "Šobrīd nav pamata pieteikt neizšķirtu (50 gājienu likums vai trīskāršs atkārtojums).",
       });
-    const reason = fifty && three ? "draw_claim_both" : fifty ? "draw_claim_fifty" : "draw_claim_threefold";
+    const reason =
+      fifty && three
+        ? "draw_claim_both"
+        : fifty
+          ? "draw_claim_fifty"
+          : "draw_claim_threefold";
     finishBoardGame(game, null, reason);
     const endBase = {
       gameId,
@@ -14992,7 +15001,11 @@ io.on("connection", (socket) => {
             removeUserFromZole3pLobby(lid, uname2);
             const lob2 = zole3pLobbyById.get(lid);
             if (lob2) {
-              notifyZole3pLobbyPeers(lid, "board.zoleLobby", zole3pLobbyPayload(lob2));
+              notifyZole3pLobbyPeers(
+                lid,
+                "board.zoleLobby",
+                zole3pLobbyPayload(lob2)
+              );
             }
           }
         }
@@ -15127,11 +15140,18 @@ const __testHooks = {
     if (process.env.NODE_ENV !== "test") return false;
     const gid = String(gameId || "").trim();
     const g = gid ? boardGames.get(gid) : null;
-    if (!g || g.type !== "zole" || !g.zole || g.players?.length !== 3) return false;
-    const want = String(contractorUsername || "").trim().toLowerCase();
+    if (!g || g.type !== "zole" || !g.zole || g.players?.length !== 3)
+      return false;
+    const want = String(contractorUsername || "")
+      .trim()
+      .toLowerCase();
     let cidx = -1;
     for (let i = 0; i < 3; i++) {
-      if (String(g.players[i] || "").trim().toLowerCase() === want) {
+      if (
+        String(g.players[i] || "")
+          .trim()
+          .toLowerCase() === want
+      ) {
         cidx = i;
         break;
       }
