@@ -9578,6 +9578,41 @@ app.post("/admin/user/beta-tester", authMiddleware, (req, res) => {
   });
 });
 
+/**
+ * Admins: NHL cepures izlozes pieteikumi (e-pasts + komanda + laiks).
+ * GET ar Authorization: Bearer <admin JWT>. Atbildē tikai lietotāji ar
+ * betaOptInRequestedAt > 0 (oficiāli pieteikušies pēc piekrišanas).
+ */
+app.get("/admin/giveaway/hat-lottery-opt-ins", authMiddleware, (req, res) => {
+  const admin = req.user;
+  if (!isAdminUser(admin)) {
+    return res.status(403).json({ message: "Tikai admins." });
+  }
+  const entries = [];
+  for (const key of Object.keys(USERS)) {
+    const u = USERS[key];
+    if (!u || typeof u !== "object") continue;
+    const optedAt = Math.max(0, Math.floor(Number(u.betaOptInRequestedAt) || 0));
+    if (optedAt <= 0) continue;
+    const email = normalizeEmail(String(u.email || "").trim());
+    entries.push({
+      username: String(u.username || "").trim(),
+      email: email || "",
+      betaOptInRequestedAt: optedAt,
+      betaTester: !!u.betaTester,
+      giveawayNhlAbbr: String(u.giveawayNhlAbbr || "").trim().toUpperCase(),
+      giveawayNhlTeam: String(u.giveawayNhlTeam || "").trim(),
+    });
+  }
+  entries.sort((a, b) => b.betaOptInRequestedAt - a.betaOptInRequestedAt);
+  res.json({
+    ok: true,
+    generatedAt: Date.now(),
+    count: entries.length,
+    entries,
+  });
+});
+
 // ======== AVATĀRA ENDPOINTS ========
 app.post("/avatar", authMiddleware, async (req, res) => {
   try {
