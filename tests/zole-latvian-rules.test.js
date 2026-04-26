@@ -88,6 +88,15 @@ describe("Latvian trump / follow suit (♣ kreicis, ♦ kāravs, ♥ ercens, ♠
     expect(legalP.length).toBe(2);
     expect(legalP.every((c) => !zoleIsTrump(c))).toBe(true);
   });
+
+  it("trick: after trump lead, plain card in same physical suit is discard (loses to trump)", () => {
+    const trick = [
+      { playerIdx: 0, card: { s: 0, r: 12 } },
+      { playerIdx: 1, card: { s: 0, r: 9 } },
+      { playerIdx: 2, card: { s: 2, r: 9 } },
+    ];
+    expect(zoleTrickWinner(trick)).toBe(0);
+  });
 });
 
 describe("sortZoleHand", () => {
