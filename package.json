@@ -5,7 +5,10 @@
   "main": "server.js",
   "type": "module",
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
+  },
+  "overrides": {
+    "uuid": "^14.0.0"
   },
   "scripts": {
     "start": "node server.js",
