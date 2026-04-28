@@ -8679,7 +8679,7 @@ async function sendPasswordResetEmail(toEmail, resetLink) {
       subject: "VĀRDU ZONA – paroles atjaunošana",
       html: `
         <p>Sveiki!</p>
-        <p>Tu pieprasīji paroles atjaunošanu VĀRDU ZONA kontam.</p>
+        <p>Tu pieprasīji paroles atjaunošanu VĀRDU ZONAS kontam.</p>
         <p>Nospied linku zemāk, lai izvēlētos jaunu paroli (links der 1 stundu):</p>
         <p><a href="${resetLink}">${resetLink}</a></p>
         <p>Ja tu nepieprasīji atjaunošanu, ignorē šo e-pastu.</p>
