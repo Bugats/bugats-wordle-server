@@ -397,7 +397,7 @@ function renderMissions(missions) {
     );
 
     if (!m.isCompleted) {
-      statusSpan.textContent = "Progressā";
+      statusSpan.textContent = "Progresā";
     } else if (m.isCompleted && !m.isClaimed) {
       statusSpan.textContent = "Gatavs saņemšanai";
     } else {
