@@ -3755,7 +3755,7 @@ function buildWeeklyQueuePayload(user) {
       )}:${String(WEEKLY_TOURNAMENT_MINUTE).padStart(2, "0")} (Rīga).`,
       "Neizšķirts mačā nav atļauts.",
       `Anti-fake: vismaz ${WEEKLY_TOURNAMENT_MIN_TOTAL_GUESSES} minējumi + unikāla ierīce starp dalībniekiem.`,
-      `Spēles mods: ${tournamentPlayModeLabel(playMode)}.`,
+      `Spēles režīms: ${tournamentPlayModeLabel(playMode)}.`,
       tournamentPlayModeRule(playMode),
       "Rezultāts tiek iesniegts automātiski (nav manuālas ciparu ievades).",
     ],
@@ -5782,7 +5782,7 @@ function ensureDailyMissions(user) {
 }
 
 const NHL_HAT_GIVEAWAY_MISSION_TITLE =
-  "NHL cepures izloze: VĀRDU ZONA no Play → e-pasts → komandas cepure → pieteikšanās izlozei.";
+  "NHL cepures izloze: VĀRDU ZONU no Play → e-pasts → komandas cepure → pieteikšanās izlozei.";
 
 /** Īpaša misija «NHL cepure + izloze» — neiet dienas bonusa skaitā (tikai parastās 6). */
 function ensureNhlGiveawayMission(user) {

@@ -5198,7 +5198,7 @@ function showPlayerProfile(data) {
     state.betaOptInRequestedAt = reqAt;
     if (ppBetaBadgeEl) {
       ppBetaBadgeEl.textContent = beta
-        ? "Tu esi aplikācijas beta testers"
+        ? "Tu esi aplikācijas beta testētājs"
         : reqAt > 0
           ? "Pieteikums NHL cepures izlozei — saņemts"
           : "";
@@ -5206,7 +5206,7 @@ function showPlayerProfile(data) {
     }
     if (ppBetaDescEl) {
       ppBetaDescEl.textContent = beta
-        ? "Paldies par palīdzību testēt VĀRDU ZONU. Ja vēlies izstāties, raksti administratoram."
+        ? "Paldies, ka palīdzēji testēt VĀRDU ZONU. Ja vēlies izstāties, raksti administratoram."
         : reqAt > 0
           ? "Esi NHL cepures izlozes sarakstā. Saziņai izmantosim tavu saglabāto e-pastu (citi spēlētāji to neredz)."
           : "Cepures izlozei domāti tie, kas lieto VĀRDU ZONU no Play: vispirms tests un aplikācija, tad šeit e-pasts, NHL cepure un šī poga ar piekrišanu. Administrators redz tavu lietotājvārdu un e-pastu sarakstam.";
@@ -5217,7 +5217,7 @@ function showPlayerProfile(data) {
     }
     if (ppBetaSubmitBtn) {
       ppBetaSubmitBtn.textContent = beta
-        ? "Jau beta testers"
+        ? "Jau beta testētājs"
         : reqAt > 0
           ? "Pieteikums saņemts"
           : "Pieteikties NHL cepures izlozei";
@@ -5415,9 +5415,9 @@ function buildDailyAnchorSummary() {
           : "Cepures izlozei vajag e-pastu profilā",
         progress: hasEmail
           ? hat
-            ? "Play testa saite → VĀRDU ZONA no veikala. Profilā piekrišana un «Pieteikties»."
+            ? "Play testa saite → VĀRDU ZONU no veikala. Profilā piekrišana un «Pieteikties»."
             : "Profilā izvēlies komandas cepuri (vai tekstu) un «Saglabāt», tad piekrišana un «Pieteikties»."
-          : "1) Play tests + VĀRDU ZONA. 2) Profilā e-pasts. 3) NHL cepure. 4) «Pieteikties».",
+          : "1) Play tests + VĀRDU ZONU. 2) Profilā e-pasts. 3) NHL cepure. 4) «Pieteikties».",
         hint: "Spied «Izlozei — atvērt profilu» zemāk.",
         showGiveawayCta: true,
       };
@@ -5508,9 +5508,9 @@ function renderDailyAnchorCard() {
     giveawayAnchorTextEl.textContent = showGa
       ? em
         ? hat
-          ? "E-pasts + NHL cepure saglabāti — Play tests un VĀRDU ZONA, tad profilā «Pieteikties» cepures izlozei."
+          ? "E-pasts + NHL cepure saglabāti — Play tests un VĀRDU ZONU, tad profilā «Pieteikties» cepures izlozei."
           : "E-pasts saglabāts — profilā izvēlies NHL cepuri un «Saglabāt», tad «Pieteikties»."
-        : "Cepures izlozei: Play tests → VĀRDU ZONA → profilā e-pasts, NHL cepure un «Pieteikties»."
+        : "Cepures izlozei: Play tests → VĀRDU ZONU → profilā e-pasts, NHL cepure un «Pieteikties»."
       : "";
   }
 }
@@ -5579,7 +5579,7 @@ function renderMissions(missions, bonus) {
 
     const statusSpan = createEl("span", "mission-status");
 
-    if (!m.isCompleted) statusSpan.textContent = "Progressā";
+    if (!m.isCompleted) statusSpan.textContent = "Progresā";
     else if (m.isCompleted && !m.isClaimed)
       statusSpan.textContent = "Gatavs saņemšanai";
     else {
@@ -5628,7 +5628,7 @@ function renderMissions(missions, bonus) {
     li.appendChild(bottom);
 
     const statusSpan = createEl("span", "mission-status");
-    if (!bonus.isCompleted) statusSpan.textContent = "Progressā";
+    if (!bonus.isCompleted) statusSpan.textContent = "Progresā";
     else if (bonus.isCompleted && !bonus.isClaimed)
       statusSpan.textContent = "Gatavs saņemšanai";
     else {
@@ -8524,7 +8524,7 @@ function renderTournamentSchedule() {
       const label = String(s.modeLabel || s.mode || "Turnīrs");
       const playLabel = String(s.playModeLabel || s.playMode || "").trim();
       tournamentScheduleModeEl.textContent = playLabel
-        ? `Turnīra režīms: ${label} · Spēles mods: ${playLabel}`
+        ? `Turnīra režīms: ${label} · Spēles režīms: ${playLabel}`
         : `Turnīra režīms: ${label} (rotē katru nedēļu)`;
     }
   }
@@ -12031,8 +12031,8 @@ function initSocket() {
     const rem = !!payload?.rematch;
     appendGaldaSystemMessage(
       rem
-        ? `${from} piedāvā revānšu (${typeLv}). Atver «Galda spēles» (VĀRDU ZONA), lai pieņemtu vai noraidītu.`
-        : `${from} uzaicina uz ${typeLv}. Atver «Galda spēles» (VĀRDU ZONA), lai pieņemtu vai noraidītu.`
+        ? `${from} piedāvā revānšu (${typeLv}). Atver «Galda spēles» (VĀRDU ZONĀ), lai pieņemtu vai noraidītu.`
+        : `${from} uzaicina uz ${typeLv}. Atver «Galda spēles» (VĀRDU ZONĀ), lai pieņemtu vai noraidītu.`
     );
   });
   socket.on("board.inviteSent", (payload) => {
