@@ -803,12 +803,83 @@
     return c;
   }
 
+  /**
+   * Izteiksmīgs kopsavilkums «kas uzvarēja / zaudēja» pret spēlētāju šajā partijā.
+   */
+  function buildHandEndOutcomeBanner(zole, myIdx) {
+    const lr = zole.lastResult;
+    const wrap = el("div", "vz-zole-end__outcome");
+    const storyFallback = () => lastResultText(zole) || "";
+
+    if (!lr || typeof lr !== "object" || !lr.kind) {
+      wrap.classList.add("vz-zole-end__outcome--neutral");
+      const t = el(
+        "div",
+        "vz-zole-end__outcome-title vz-zole-end__outcome-title--neutral",
+        "Partija beigusies"
+      );
+      t.setAttribute("role", "status");
+      t.setAttribute("aria-live", "polite");
+      wrap.appendChild(t);
+      return wrap;
+    }
+
+    const k = lr.kind;
+    let tone = "neutral";
+    let title = "Partija beigusies";
+    let subtitle = "";
+
+    if (k === "galdins") {
+      if (lr.tie === true) {
+        tone = "neutral";
+        title = "Galdiņš — neizšķirts";
+        subtitle = "Trīs vienādi — bez tabulas izmaksām.";
+      } else {
+        const li = lr.loserIdx;
+        const iLost = typeof li === "number" && li === myIdx;
+        tone = iLost ? "lose" : "win";
+        title = iLost ? "Tu zaudēji šajā partijā" : "Tu uzvarēji šajā partijā!";
+        subtitle = storyFallback();
+      }
+    } else if (k === "galds") {
+      const li = lr.loserIdx;
+      const iLost = typeof li === "number" && li === myIdx;
+      tone = iLost ? "lose" : "win";
+      title = iLost ? "Tu zaudēji šajā partijā" : "Tu uzvarēji šajā partijā!";
+      subtitle = storyFallback();
+    } else if (k === "big" || k === "zole" || k === "maza_zole") {
+      const cidx = lr.contractorIdx;
+      const win = lr.win === true;
+      const imContractor =
+        typeof cidx === "number" && cidx >= 0 && cidx === myIdx;
+      const iWon = imContractor ? win : !win;
+      tone = iWon ? "win" : "lose";
+      title = iWon ? "Tu uzvarēji šajā partijā!" : "Tu zaudēji šajā partijā.";
+      subtitle = storyFallback();
+    } else {
+      subtitle = storyFallback();
+    }
+
+    wrap.classList.add(`vz-zole-end__outcome--${tone}`);
+    const titleEl = el(
+      "div",
+      `vz-zole-end__outcome-title vz-zole-end__outcome-title--${tone}`,
+      title
+    );
+    titleEl.setAttribute("role", "status");
+    titleEl.setAttribute("aria-live", "polite");
+    wrap.appendChild(titleEl);
+    if (subtitle) {
+      wrap.appendChild(el("div", "vz-zole-end__outcome-sub", subtitle));
+    }
+    return wrap;
+  }
+
   function buildEndCenter(zole, zm) {
-    const c = el("div", "vz-zole-classic__msg");
+    const c = el("div", "vz-zole-classic__msg vz-zole-classic__msg--endfoot");
     const mh = zole.matchHandsPlayed ?? 0;
-    c.textContent =
-      zm === "vs_bot" ? `Beigas · #${mh}` : "Beigas";
-    return c;
+    c.textContent = zm === "vs_bot" && mh > 0 ? `Mačā: partija Nr. ${mh}` : "";
+    return c.textContent ? c : null;
   }
 
   /** Beigu ekrānā — skaidri «cik tabulas punktu man šajā partijā / kopā mačā». */
@@ -1385,11 +1456,13 @@
       const endBox = el("div", "vz-zole-classic__end");
       const endMain = el("div", "vz-zole-end__main");
       endMain.appendChild(buildMatchScoreStrip(zole, myIdx));
+      endMain.appendChild(buildHandEndOutcomeBanner(zole, myIdx));
       const myPtsLine = buildEndMyTablePtsLine(zole, myIdx);
       if (myPtsLine) endMain.appendChild(myPtsLine);
       const teamEyes = buildEndTeamEyesCard(zole);
       if (teamEyes) endMain.appendChild(teamEyes);
-      endMain.appendChild(buildEndCenter(zole, zm));
+      const endFoot = buildEndCenter(zole, zm);
+      if (endFoot) endMain.appendChild(endFoot);
       let deltaLine = "";
       if (zole.tableDelta) {
         const parts = [];

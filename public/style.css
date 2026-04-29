@@ -7844,6 +7844,71 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   width: 100%;
   padding-bottom: 4px;
 }
+/* Partijas beigas: liels «tu uzvarēji / zaudēji» kopsavilkums */
+#board-zole-container .vz-zole-end__outcome {
+  width: 100%;
+  max-width: min(100%, 26rem);
+  margin: 4px 0 2px;
+  padding: 14px 16px 16px;
+  border-radius: 16px;
+  text-align: center;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.22);
+}
+#board-zole-container .vz-zole-end__outcome--win {
+  background: linear-gradient(
+    155deg,
+    rgba(22, 101, 52, 0.92) 0%,
+    rgba(5, 46, 22, 0.96) 100%
+  );
+  border-color: rgba(74, 222, 128, 0.45);
+}
+#board-zole-container .vz-zole-end__outcome--lose {
+  background: linear-gradient(
+    155deg,
+    rgba(127, 29, 29, 0.92) 0%,
+    rgba(69, 10, 10, 0.96) 100%
+  );
+  border-color: rgba(248, 113, 113, 0.4);
+}
+#board-zole-container .vz-zole-end__outcome--neutral {
+  background: linear-gradient(
+    155deg,
+    rgba(30, 41, 59, 0.92) 0%,
+    rgba(15, 23, 42, 0.96) 100%
+  );
+  border-color: rgba(148, 163, 184, 0.35);
+}
+#board-zole-container .vz-zole-end__outcome-title {
+  font-size: clamp(1.15rem, 3.8vw, 1.55rem);
+  font-weight: 900;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+#board-zole-container .vz-zole-end__outcome-title--win {
+  color: #ecfdf5;
+}
+#board-zole-container .vz-zole-end__outcome-title--lose {
+  color: #fef2f2;
+}
+#board-zole-container .vz-zole-end__outcome-title--neutral {
+  color: #f1f5f9;
+}
+#board-zole-container .vz-zole-end__outcome-sub {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.88);
+  text-align: center;
+}
+#board-zole-container .vz-zole-classic__msg--endfoot {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(254, 243, 199, 0.75);
+  padding: 6px 8px 0;
+}
 #board-zole-container .vz-zole-end__my-pts {
   font-size: 13px;
   font-weight: 700;
