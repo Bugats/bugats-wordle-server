@@ -1,14 +1,23 @@
 "use strict";
 
 /*
-  VĀRDU ZONA — game.js (2025-12-30)
+  VĀRDU ZONA — game.js (monolīts klients; pakāpeniski tiek šķelts modules/*.js)
 
-  Patch uzlabojumi:
-  - Admin pārbaude case-insensitive (Bugats/bugats u.c.)
-  - Robustāks /leaderboard un /missions parse (Array vai objekts)
-  - TOP10 avatāru cache ar TTL (24h), lai redz avatar izmaiņas
-  - Avatar upload: arī pie invalid faila notīra file input value
-  - Buy-token: pēc pirkuma mēģina refresh /me + missions, lai UI sync
+  Navigācija: IDE meklētājā ielīmē sekojošos komentāru tekstus (rindas grozās).
+    "// ==================== GRID / SPĒLES LOĢIKA"       — vārdu režģis, tastatūra, minējumi
+    "// ==================== EKRĀNA TASTATŪRA"           — KEYBOARD_LAYOUT, buildKeyboard
+    "// ==================== SOCKET ====================" — Socket.IO, duelis, galds
+    "// ==================== DM (privāts čats)"       — privātās ziņas
+    "// ==================== INIT ======================" — boot, fullscreen u.c.
+
+  WORD GRID apakšbloki (sīkāk — zem GRID sadaļas virsraksta):
+    "// ----- WORD GRID — ievade (normalizeLetter …)"
+    "// ----- WORD GRID — režģa DOM, glow, fit …"
+    "// ----- WORD GRID — «Atvērt 1 burtu», locked tiles …"
+    "// ----- WORD GRID — minējumi (challenge, solo, duelis) …"
+
+  Patch vēsture (īsi):
+  - Admin case-insensitive; leaderboard/missions parse; TOP10 avatar TTL; utt.
 */
 
 // ================== MODUĻI / KONFIGS ==================
@@ -6535,6 +6544,10 @@ async function handleProfileFriendAction() {
 }
 
 // ==================== GRID / SPĒLES LOĢIKA ====================
+// Solo / duelis / challenge izmanto state.gridTiles, keyboardButtons, revealHint.
+// Nākamais refaktora solis: izvilkt uz modules/word-grid.js (kopīgi palīgi + HTTP solo ceļš).
+
+// ----- WORD GRID — ievade (normalizeLetter, tastatūras burti, shift) -----
 
 // Latvian Shift karte
 const LATVIAN_MAP = {
@@ -6580,6 +6593,9 @@ function resetKeyboardForNewRound() {
   clearKeyboardStatuses();
   updateShiftVisual();
 }
+
+// ----- WORD GRID — režģa DOM, izmērs, glow (CSS vars --tile-size), fit -----
+
 let _gridGlowInit = false;
 let _gridGlowRaf = 0;
 let _gridGlowPulseTimer = null;
@@ -6870,6 +6886,8 @@ function updateRevealAbilityUI() {
   }
 }
 
+// ----- WORD GRID — «Atvērt 1 burtu», locked tiles, zaļo pareizo pozīciju turēšana -----
+
 function tileIsHintLocked(row, col) {
   const t = state.gridTiles?.[row]?.[col];
   return !!(t && t.dataset && t.dataset.locked === "1");
@@ -7137,7 +7155,9 @@ function showWinEffects(winRowIndex) {
   }
 }
 
-// ====== Solo minējums (HTTP /guess) ======
+// ----- WORD GRID — minējumi: izaicinājums (/challenge), solo (/guess), duelis (socket) -----
+
+// ====== Izaicinājums: minējums HTTP /challenge/.../guess ======
 async function submitChallengeGuess() {
   if (!state.challengeId || state.isLocked) return;
   const letters = [];
@@ -7255,6 +7275,7 @@ function formatYellowLetterError(missing) {
     : "Dzeltenie burti jāizmanto citā pozīcijā.";
 }
 
+// ====== Solo: galvenais minējums (HTTP POST /guess) ======
 async function submitGuess() {
   if (state.duelMode) {
     submitDuelGuess();
