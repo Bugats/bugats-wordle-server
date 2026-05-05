@@ -9497,6 +9497,32 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   #board-zole-container .vz-zole-table-hud__foot {
     font-size: 9px;
   }
+  /* Zole stiķa kārtis mobilajam: + solis ar clamp(vw); min ≥ bāze (84px), lai šaurā ekrānā nesamazinātu */
+  #board-zole-container .vz-zole-felt__cardSlot {
+    min-height: clamp(142px, 40vw, 166px);
+  }
+  #board-zole-container .vz-zole-felt__placeholder {
+    width: clamp(84px, 23vw, 92px);
+    height: clamp(118px, 32.3vw, 129px);
+  }
+  #board-zole-container .vz-zole-card--trick {
+    width: clamp(84px, 23vw, 92px);
+    height: clamp(118px, 32.3vw, 129px);
+  }
+  #board-zole-container .vz-zole-card--trick .vz-zole-card__corner {
+    font-size: clamp(11px, 3vw, 12px);
+  }
+  #board-zole-container .vz-zole-card--trick .vz-zole-card__corner--tl {
+    top: clamp(5px, 1.4vw, 6px);
+    left: clamp(4px, 1.1vw, 5px);
+  }
+  #board-zole-container .vz-zole-card--trick .vz-zole-card__corner--br {
+    bottom: clamp(5px, 1.4vw, 6px);
+    right: clamp(4px, 1.1vw, 5px);
+  }
+  #board-zole-container .vz-zole-card--trick .vz-zole-card__center {
+    font-size: clamp(30px, 8.5vw, 34px);
+  }
   .vz-dambrete-board td {
     width: 44px;
     height: 44px;
