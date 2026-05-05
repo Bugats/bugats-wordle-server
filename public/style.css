@@ -7461,10 +7461,14 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding-top: 44px;
   padding-bottom: 6px;
 }
-/* Izspēle: stiķa zona augšā (ne centrā), lai kārtis būtu tuvāk pretinieku avatāriem */
+/* Izspēle: stiķa zona pie rokas (felt-center column flex-end); trickWrap neaug kā «tilpējošs» bloks */
 #board-zole-container .vz-zole-classic__felt-center--trickplay {
-  justify-content: flex-start;
+  justify-content: flex-end;
   padding-top: 34px;
+  padding-bottom: 0;
+}
+#board-zole-container .vz-zole-classic__felt-center--trickplay .vz-zole-classic__trickWrap {
+  flex: 0 1 auto;
 }
 
 /* Roka + tabula: tabula absolūti labajā apakšējā stūrī zem kārtīm */
@@ -8754,6 +8758,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   #board-zole-container
   .vz-zole-classic__felt-center--trickplay {
   padding-top: 22px;
+  padding-bottom: 0;
 }
 .vz-board-modal--fullscreen
   .vz-board-modal-inner:has(#board-game-area.vz-board-zole-fs.vz-board-zole-compact-top)
