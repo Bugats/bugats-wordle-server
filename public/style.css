@@ -7454,13 +7454,30 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   display: flex;
   flex-direction: column;
   padding: 6px max(6px, env(safe-area-inset-left, 0px)) 6px max(6px, env(safe-area-inset-right, 0px));
-  background:
+  background-color: #0c4f2e;
+  /* Fona attēls (optional): ieliec `public/zole-felt.webp` — centrs + cover = zaļā ovāla vidus;
+     ja faila nav, pārlūks izlaiž url() un paliek gradienti. Virs attēla: tumšs slānis + vignette. */
+  background-image:
+    radial-gradient(
+      ellipse 95% 90% at 50% 50%,
+      rgba(0, 0, 0, 0) 35%,
+      rgba(0, 0, 0, 0.38) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(0, 12, 8, 0.32) 0%,
+      rgba(0, 8, 6, 0.42) 100%
+    ),
+    url("/zole-felt.webp"),
     radial-gradient(ellipse 120% 85% at 50% 0%, rgba(134, 239, 172, 0.22), transparent 52%),
     radial-gradient(ellipse 90% 55% at 50% 100%, rgba(0, 0, 0, 0.22), transparent 50%),
     radial-gradient(ellipse 100% 70% at 50% 15%, rgba(120, 200, 130, 0.38), transparent 55%),
     radial-gradient(circle at 20% 80%, rgba(0, 0, 0, 0.14), transparent 45%),
     radial-gradient(circle at 80% 75%, rgba(0, 0, 0, 0.12), transparent 40%),
     linear-gradient(168deg, #208f52 0%, #157a41 38%, #0c4f2e 72%, #082f1c 100%);
+  background-size: auto, auto, cover, auto, auto, auto, auto, auto, auto;
+  background-position: center, center, center, center, center, center, center, center, center;
+  background-repeat: no-repeat;
 }
 #board-zole-container .vz-zole-classic__felt--table {
   position: relative;
