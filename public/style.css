@@ -7461,6 +7461,11 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding-top: 44px;
   padding-bottom: 6px;
 }
+/* Izspēle: stiķa zona augšā (ne centrā), lai kārtis būtu tuvāk pretinieku avatāriem */
+#board-zole-container .vz-zole-classic__felt-center--trickplay {
+  justify-content: flex-start;
+  padding-top: 34px;
+}
 
 /* Roka + tabula: tabula absolūti labajā apakšējā stūrī zem kārtīm */
 #board-zole-container .vz-zole-classic__hand-stack {
@@ -8092,7 +8097,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   min-height: 0;
   padding: 2px 0 4px;
 }
@@ -8237,7 +8242,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 /* Kreisais un labais pretinieks nedaudz augstāk par vidu (stiķa «U» forma) */
 #board-zole-container .vz-zole-felt__seat--left,
 #board-zole-container .vz-zole-felt__seat--right {
-  transform: translateY(-14px);
+  transform: translateY(-22px);
 }
 #board-zole-container .vz-zole-felt__seat--me .vz-zole-felt__who {
   color: #a5f3fc;
@@ -8273,14 +8278,14 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   margin-top: -2px;
 }
 #board-zole-container .vz-zole-felt__cardSlot {
-  min-height: 132px;
+  min-height: 142px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 #board-zole-container .vz-zole-felt__placeholder {
-  width: 76px;
-  height: 108px;
+  width: 84px;
+  height: 118px;
   border-radius: 8px;
   border: 2px dashed rgba(255, 255, 255, 0.2);
   display: flex;
@@ -8329,8 +8334,8 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 /* Stiķis uz galda — lielāks par noklusējumu, mazāks par roku */
 #board-zole-container .vz-zole-card--trick {
-  width: 76px;
-  height: 108px;
+  width: 84px;
+  height: 118px;
   border-radius: 9px;
 }
 #board-zole-container .vz-zole-card--trick .vz-zole-card__corner {
@@ -8746,10 +8751,21 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding-bottom: 2px;
 }
 .vz-board-modal--fullscreen
+  #board-zole-container
+  .vz-zole-classic__felt-center--trickplay {
+  padding-top: 22px;
+}
+.vz-board-modal--fullscreen
   .vz-board-modal-inner:has(#board-game-area.vz-board-zole-fs.vz-board-zole-compact-top)
   #board-zole-container
   .vz-zole-classic__felt-center {
   padding-top: 26px;
+}
+.vz-board-modal--fullscreen
+  .vz-board-modal-inner:has(#board-game-area.vz-board-zole-fs.vz-board-zole-compact-top)
+  #board-zole-container
+  .vz-zole-classic__felt-center--trickplay {
+  padding-top: 16px;
 }
 .vz-board-modal--fullscreen #board-zole-container .vz-zole-classic__felt-center--end {
   padding-top: 30px;
@@ -8765,6 +8781,11 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 #board-games-modal:fullscreen #board-zole-container .vz-zole-classic__felt-center {
   padding-top: 30px;
+}
+#board-games-modal:fullscreen
+  #board-zole-container
+  .vz-zole-classic__felt-center--trickplay {
+  padding-top: 20px;
 }
 #board-games-modal:fullscreen #board-zole-container .vz-zole-classic__hand-stack {
   padding-bottom: clamp(58px, 15vw, 78px);
@@ -9387,14 +9408,14 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 /* Zole uz datora: nedaudz lielākas kārtis uz galda (roku mērogo JS) */
 @media (min-width: 900px) {
   #board-zole-container .vz-zole-felt__cardSlot {
-    min-height: 148px;
+    min-height: 162px;
   }
   #board-zole-container .vz-zole-card--trick {
-    width: 86px;
-    height: 122px;
+    width: 94px;
+    height: 132px;
   }
   #board-zole-container .vz-zole-card--trick .vz-zole-card__center {
-    font-size: 34px;
+    font-size: 36px;
   }
   #board-zole-container .vz-zole-card--sm {
     width: 56px;

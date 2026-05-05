@@ -1440,6 +1440,9 @@
     if (phase === "end") {
       feltCenter.classList.add("vz-zole-classic__felt-center--end");
     }
+    if (phase === "play") {
+      feltCenter.classList.add("vz-zole-classic__felt-center--trickplay");
+    }
 
     if (phase === "bid") {
       feltCenter.appendChild(buildBidCenter(zole, myIdx, onBid, zm));
