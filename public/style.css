@@ -7333,11 +7333,22 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     0 1px 0 rgba(255, 255, 255, 0.1) inset;
 }
 
-/* ========== Zole — klasiska mobilā (koks + filcs) ========== */
+/* ========== Zole — klasiska mobilā (koks + filcs), 2026 UI polish ========== */
 #board-zole-container {
   width: 100%;
   max-width: 100%;
   margin: 0 auto;
+  /* Kopīgas virsmas — glass / depth */
+  --zole-surface-veil: rgba(255, 255, 255, 0.07);
+  --zole-surface-border: rgba(255, 255, 255, 0.14);
+  --zole-surface-shadow: 0 4px 24px rgba(0, 0, 0, 0.35), 0 1px 0 var(--zole-surface-veil) inset;
+  --zole-ink: rgba(15, 23, 42, 0.45);
+  --zole-glass: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.02) 45%,
+    rgba(0, 0, 0, 0.15) 100%
+  );
 }
 #board-zole-container .vz-zole--classic {
   display: flex;
@@ -7345,13 +7356,23 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex: 1 1 auto;
   min-height: min(44dvh, 420px);
   width: 100%;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "SF Pro Text",
+    sans-serif;
   font-size: 12px;
-  line-height: 1.3;
+  line-height: 1.35;
   color: #fff;
-  border-radius: 10px;
+  border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  box-shadow:
+    0 4px 6px rgba(0, 0, 0, 0.12),
+    0 20px 50px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  -webkit-font-smoothing: antialiased;
 }
 .vz-board-modal--fullscreen #board-zole-container .vz-zole--classic {
   flex: 1 1 0;
@@ -7403,25 +7424,29 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 #board-zole-container .vz-zole-turn-banner {
   flex-shrink: 0;
   margin: 0;
-  padding: 6px 10px;
+  padding: 8px 12px;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.35;
   text-align: center;
   color: var(--vz-lv-white, #ffffff);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  /* Asins sarkans + šauras baltas malas (karoga joslas; teksts paliek uz sarkanā) */
-  background: linear-gradient(
-    180deg,
-    var(--vz-lv-blood-mid, #b02a3f) 0%,
-    var(--vz-lv-blood, #9d2235) 45%,
-    var(--vz-lv-blood-deep, #6a1726) 100%
-  );
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  border-radius: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, transparent 42%),
+    linear-gradient(
+      180deg,
+      var(--vz-lv-blood-mid, #b02a3f) 0%,
+      var(--vz-lv-blood, #9d2235) 45%,
+      var(--vz-lv-blood-deep, #6a1726) 100%
+    );
   border-top: 2px solid var(--vz-lv-white, #ffffff);
   border-left: 5px solid var(--vz-lv-white, #ffffff);
   border-right: 5px solid var(--vz-lv-white, #ffffff);
   border-bottom: 2px solid var(--vz-lv-white, #ffffff);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 8px 24px rgba(0, 0, 0, 0.28);
 }
 #board-zole-container .vz-zole-classic__felt {
   flex: 1 1 0;
@@ -7429,11 +7454,30 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   display: flex;
   flex-direction: column;
   padding: 6px max(6px, env(safe-area-inset-left, 0px)) 6px max(6px, env(safe-area-inset-right, 0px));
-  background:
-    radial-gradient(ellipse 100% 70% at 50% 15%, rgba(120, 200, 130, 0.35), transparent 55%),
-    radial-gradient(circle at 20% 80%, rgba(0, 0, 0, 0.12), transparent 45%),
-    radial-gradient(circle at 80% 75%, rgba(0, 0, 0, 0.1), transparent 40%),
-    linear-gradient(175deg, #1f7d45 0%, #156b3a 35%, #0d4a28 100%);
+  background-color: #0c4f2e;
+  /* Fona attēls (optional): ieliec `public/zole-felt.webp` — centrs + cover = zaļā ovāla vidus;
+     ja faila nav, pārlūks izlaiž url() un paliek gradienti. Virs attēla: tumšs slānis + vignette. */
+  background-image:
+    radial-gradient(
+      ellipse 95% 90% at 50% 50%,
+      rgba(0, 0, 0, 0) 35%,
+      rgba(0, 0, 0, 0.38) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(0, 12, 8, 0.32) 0%,
+      rgba(0, 8, 6, 0.42) 100%
+    ),
+    url("/zole-felt.webp"),
+    radial-gradient(ellipse 120% 85% at 50% 0%, rgba(134, 239, 172, 0.22), transparent 52%),
+    radial-gradient(ellipse 90% 55% at 50% 100%, rgba(0, 0, 0, 0.22), transparent 50%),
+    radial-gradient(ellipse 100% 70% at 50% 15%, rgba(120, 200, 130, 0.38), transparent 55%),
+    radial-gradient(circle at 20% 80%, rgba(0, 0, 0, 0.14), transparent 45%),
+    radial-gradient(circle at 80% 75%, rgba(0, 0, 0, 0.12), transparent 40%),
+    linear-gradient(168deg, #208f52 0%, #157a41 38%, #0c4f2e 72%, #082f1c 100%);
+  background-size: auto, auto, cover, auto, auto, auto, auto, auto, auto;
+  background-position: center, center, center, center, center, center, center, center, center;
+  background-repeat: no-repeat;
 }
 #board-zole-container .vz-zole-classic__felt--table {
   position: relative;
@@ -7461,6 +7505,15 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding-top: 44px;
   padding-bottom: 6px;
 }
+/* Izspēle: stiķa zona pie rokas (felt-center column flex-end); trickWrap neaug kā «tilpējošs» bloks */
+#board-zole-container .vz-zole-classic__felt-center--trickplay {
+  justify-content: flex-end;
+  padding-top: 34px;
+  padding-bottom: 0;
+}
+#board-zole-container .vz-zole-classic__felt-center--trickplay .vz-zole-classic__trickWrap {
+  flex: 0 1 auto;
+}
 
 /* Roka + tabula: tabula absolūti labajā apakšējā stūrī zem kārtīm */
 #board-zole-container .vz-zole-classic__hand-stack {
@@ -7481,13 +7534,18 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   bottom: max(0px, env(safe-area-inset-bottom, 0px));
   /* Virs rokas kārtīm (tām ir z-index 10–48); noklikšķināšana iet cauri uz kārtīm */
   z-index: 60;
-  width: min(46vw, 188px);
+  width: min(48vw, 198px);
+  min-width: 152px;
   max-width: calc(100% - 4px);
-  padding: 4px 5px 4px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+  padding: 6px 8px 6px;
+  border-radius: 12px;
+  background:
+    var(--zole-glass),
+    rgba(15, 23, 42, 0.52);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--zole-surface-border);
+  box-shadow: var(--zole-surface-shadow);
   pointer-events: none;
 }
 #board-zole-container .vz-zole-table-hud--felt-anchor {
@@ -7506,20 +7564,20 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   z-index: auto;
 }
 #board-zole-container .vz-zole-table-hud__title {
-  font-size: 6px;
+  font-size: 7px;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(253, 230, 138, 0.88);
-  margin-bottom: 3px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  padding-bottom: 2px;
+  color: rgba(253, 230, 138, 0.95);
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 3px;
 }
 #board-zole-container .vz-zole-table-hud__grid {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  font-size: 8px;
+  font-size: 9px;
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
 }
@@ -7532,7 +7590,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 #board-zole-container .vz-zole-table-hud__colhead {
   padding: 0 1px 3px 1px;
   font-weight: 800;
-  font-size: 7px;
+  font-size: 8px;
   text-align: center;
   color: rgba(255, 255, 255, 0.88);
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
@@ -7550,7 +7608,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 #board-zole-container .vz-zole-table-hud__rowhead {
   padding: 2px 3px 2px 0;
   font-weight: 800;
-  font-size: 7px;
+  font-size: 8px;
   text-align: right;
   color: rgba(255, 255, 255, 0.45);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
@@ -7560,18 +7618,18 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 #board-zole-container .vz-zole-table-hud__rowhead--hist {
   color: rgba(255, 255, 255, 0.32);
   font-weight: 700;
-  font-size: 6.5px;
+  font-size: 7.5px;
 }
 #board-zole-container .vz-zole-table-hud__cell {
   padding: 2px 1px;
   text-align: center;
   font-weight: 700;
-  font-size: 8px;
+  font-size: 9px;
   color: #fef9c3;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 #board-zole-container .vz-zole-table-hud__cell--hist {
-  font-size: 7px;
+  font-size: 8px;
   font-weight: 600;
   color: rgba(254, 249, 195, 0.72);
 }
@@ -7579,7 +7637,9 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   color: #e0f2fe;
 }
 #board-zole-container .vz-zole-table-hud__cell--active {
-  background: rgba(251, 191, 36, 0.08);
+  background: rgba(251, 191, 36, 0.14);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(250, 204, 21, 0.28);
 }
 #board-zole-container .vz-zole-table-hud__cell--neg {
   color: #fecaca;
@@ -7592,7 +7652,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 #board-zole-container .vz-zole-table-hud__foot {
   padding: 3px 0 0;
-  font-size: 7px;
+  font-size: 8px;
   font-weight: 700;
   text-align: center;
   color: rgba(255, 255, 255, 0.7);
@@ -7630,8 +7690,11 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+    0 1px 0 rgba(255, 255, 255, 0.35) inset;
   background: linear-gradient(
     145deg,
     var(--vz-lv-blood-mid, #b02a3f) 0%,
@@ -7785,14 +7848,24 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   font-weight: 700;
   color: #fff;
   text-align: center;
-  border-radius: 6px;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  background: linear-gradient(180deg, #a85a42 0%, #7c3a2e 48%, #5c2a22 100%);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 42%),
+    linear-gradient(180deg, #9d5a3d 0%, #6b3a2a 55%, #4a2618 100%);
   box-shadow:
-    0 4px 0 rgba(0, 0, 0, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    0 4px 0 rgba(0, 0, 0, 0.22),
+    0 12px 28px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
   cursor: pointer;
   touch-action: manipulation;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+#board-zole-container .vz-zole-bid-tile:focus-visible {
+  outline: 2px solid rgba(250, 204, 21, 0.65);
+  outline-offset: 2px;
 }
 #board-zole-container .vz-zole-bid-tile:active {
   transform: translateY(2px);
@@ -8092,7 +8165,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   min-height: 0;
   padding: 2px 0 4px;
 }
@@ -8116,7 +8189,7 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 #board-zole-container .vz-zole-classic__dock {
   flex-shrink: 0;
-  padding: 6px 2px 4px;
+  padding: 10px 8px 8px;
   margin-top: auto;
   width: 100%;
   max-width: 100%;
@@ -8126,13 +8199,24 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   /* Bez horizontālās ritināšanas — JS: max pārklājums + --vz-hand-scale */
   overflow-x: hidden;
   overflow-y: visible;
-  border-radius: 12px 12px 0 0;
-  transition: box-shadow 0.2s ease;
+  border-radius: 16px 16px 0 0;
+  transition: box-shadow 0.22s ease;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09) 0%, transparent 38%),
+    rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 -12px 40px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 #board-zole-container .vz-zole-classic__dock--my-turn {
   box-shadow:
-    0 -3px 0 0 rgba(34, 197, 94, 0.85),
-    0 -8px 24px rgba(34, 197, 94, 0.2);
+    0 -3px 0 0 rgba(34, 197, 94, 0.9),
+    0 -8px 32px rgba(34, 197, 94, 0.25),
+    0 -20px 48px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 #board-zole-container .vz-zole-classic__discardBar {
   display: flex;
@@ -8207,10 +8291,15 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   text-align: center;
   font-size: 9px;
   font-weight: 800;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.4);
-  margin-bottom: 4px;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  align-self: center;
 }
 #board-zole-container .vz-zole-felt__trick {
   display: flex;
@@ -8237,50 +8326,70 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 /* Kreisais un labais pretinieks nedaudz augstāk par vidu (stiķa «U» forma) */
 #board-zole-container .vz-zole-felt__seat--left,
 #board-zole-container .vz-zole-felt__seat--right {
-  transform: translateY(-14px);
+  transform: translateY(-22px);
 }
 #board-zole-container .vz-zole-felt__seat--me .vz-zole-felt__who {
-  color: #a5f3fc;
-  font-weight: 700;
+  color: #cffafe;
+  font-weight: 800;
+  text-shadow:
+    0 0 10px rgba(0, 0, 0, 0.65),
+    0 1px 3px rgba(0, 0, 0, 0.95);
 }
 #board-zole-container .vz-zole-felt__seat--turn .vz-zole-felt__who {
   color: #fef08a;
   font-weight: 800;
+  text-shadow:
+    0 0 10px rgba(0, 0, 0, 0.65),
+    0 1px 3px rgba(0, 0, 0, 0.95);
 }
 #board-zole-container .vz-zole-felt__seat--frozen {
   opacity: 0.92;
 }
 #board-zole-container .vz-zole-felt__who {
-  font-size: 10px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.96);
   text-align: center;
-  max-width: 92px;
+  max-width: 100px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.25;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.85),
+    0 0 12px rgba(0, 0, 0, 0.45);
 }
 #board-zole-container .vz-zole-felt__role {
-  font-size: 8px;
-  font-weight: 700;
-  line-height: 1.2;
-  color: rgba(253, 230, 138, 0.9);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.25;
+  color: rgba(254, 249, 195, 0.98);
   text-align: center;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-top: -2px;
+  margin-top: 2px;
+  padding: 1px 5px 2px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(253, 230, 138, 0.22);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
 }
 #board-zole-container .vz-zole-felt__cardSlot {
-  min-height: 132px;
+  min-height: 142px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 #board-zole-container .vz-zole-felt__placeholder {
-  width: 76px;
-  height: 108px;
+  width: 84px;
+  height: 118px;
   border-radius: 8px;
   border: 2px dashed rgba(255, 255, 255, 0.2);
   display: flex;
@@ -8296,13 +8405,19 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 #board-zole-container .vz-zole-felt__sub {
   font-size: 11px;
   font-weight: 700;
-  color: rgba(255, 251, 235, 0.95);
+  color: rgba(255, 251, 235, 0.98);
   text-align: center;
-  margin-top: 4px;
-  padding: 0 6px;
-  line-height: 1.3;
+  margin-top: 6px;
+  padding: 6px 10px;
+  line-height: 1.35;
   max-width: 100%;
   min-height: 1.3em;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 #board-zole-container .vz-zole-felt__sub:empty {
   display: none;
@@ -8313,12 +8428,13 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   box-sizing: border-box;
   width: 64px;
   height: 90px;
-  border-radius: 8px;
-  background: linear-gradient(165deg, #fefefe 0%, #ebe6dc 50%, #ddd8ce 100%);
-  border: 1px solid rgba(0, 0, 0, 0.38);
+  border-radius: 10px;
+  background: linear-gradient(168deg, #fffffe 0%, #f0ebe3 45%, #e0d9ce 100%);
+  border: 1px solid rgba(0, 0, 0, 0.32);
   box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    0 1px 0 rgba(255, 255, 255, 0.85) inset,
+    0 4px 14px rgba(0, 0, 0, 0.4),
+    0 1px 2px rgba(0, 0, 0, 0.2);
   font-family: Georgia, "Times New Roman", serif;
   flex-shrink: 0;
 }
@@ -8329,9 +8445,13 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 /* Stiķis uz galda — lielāks par noklusējumu, mazāks par roku */
 #board-zole-container .vz-zole-card--trick {
-  width: 76px;
-  height: 108px;
-  border-radius: 9px;
+  width: 84px;
+  height: 118px;
+  border-radius: 12px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 6px 20px rgba(0, 0, 0, 0.45),
+    0 2px 4px rgba(0, 0, 0, 0.2);
 }
 #board-zole-container .vz-zole-card--trick .vz-zole-card__corner {
   font-size: 11px;
@@ -8559,21 +8679,26 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding: 8px 12px;
   font-size: 12px;
   font-weight: 700;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   color: #fff;
   cursor: pointer;
   touch-action: manipulation;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 #board-zole-container .vz-zole-btn--primary {
-  border-color: rgba(255, 255, 255, 0.4);
+  border-color: rgba(255, 255, 255, 0.45);
   background: linear-gradient(
     180deg,
-    rgba(176, 42, 63, 0.92) 0%,
-    rgba(106, 23, 38, 0.88) 100%
+    rgba(200, 50, 70, 0.95) 0%,
+    rgba(130, 30, 45, 0.95) 100%
   );
   color: var(--vz-lv-white, #ffffff);
+  box-shadow:
+    0 3px 0 rgba(0, 0, 0, 0.28),
+    0 8px 22px rgba(157, 34, 53, 0.35);
 }
 #board-zole-container .vz-zole-btn--accent {
   border-color: rgba(251, 191, 36, 0.55);
@@ -8746,10 +8871,22 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   padding-bottom: 2px;
 }
 .vz-board-modal--fullscreen
+  #board-zole-container
+  .vz-zole-classic__felt-center--trickplay {
+  padding-top: 22px;
+  padding-bottom: 0;
+}
+.vz-board-modal--fullscreen
   .vz-board-modal-inner:has(#board-game-area.vz-board-zole-fs.vz-board-zole-compact-top)
   #board-zole-container
   .vz-zole-classic__felt-center {
   padding-top: 26px;
+}
+.vz-board-modal--fullscreen
+  .vz-board-modal-inner:has(#board-game-area.vz-board-zole-fs.vz-board-zole-compact-top)
+  #board-zole-container
+  .vz-zole-classic__felt-center--trickplay {
+  padding-top: 16px;
 }
 .vz-board-modal--fullscreen #board-zole-container .vz-zole-classic__felt-center--end {
   padding-top: 30px;
@@ -8765,6 +8902,11 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 }
 #board-games-modal:fullscreen #board-zole-container .vz-zole-classic__felt-center {
   padding-top: 30px;
+}
+#board-games-modal:fullscreen
+  #board-zole-container
+  .vz-zole-classic__felt-center--trickplay {
+  padding-top: 20px;
 }
 #board-games-modal:fullscreen #board-zole-container .vz-zole-classic__hand-stack {
   padding-bottom: clamp(58px, 15vw, 78px);
@@ -9387,14 +9529,14 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
 /* Zole uz datora: nedaudz lielākas kārtis uz galda (roku mērogo JS) */
 @media (min-width: 900px) {
   #board-zole-container .vz-zole-felt__cardSlot {
-    min-height: 148px;
+    min-height: 162px;
   }
   #board-zole-container .vz-zole-card--trick {
-    width: 86px;
-    height: 122px;
+    width: 94px;
+    height: 132px;
   }
   #board-zole-container .vz-zole-card--trick .vz-zole-card__center {
-    font-size: 34px;
+    font-size: 36px;
   }
   #board-zole-container .vz-zole-card--sm {
     width: 56px;
@@ -9420,6 +9562,62 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   }
   .vz-board-title { font-size: 16px; }
   .vz-board-desc { font-size: 12px; }
+  /* Zole TABULA HUD — mobilajam +1px salīdzinājumā ar bāzi; nedaudz platāks lodziņš */
+  #board-zole-container .vz-zole-table-hud {
+    width: min(50vw, 208px);
+    min-width: 158px;
+    padding: 5px 6px 5px;
+  }
+  #board-zole-container .vz-zole-table-hud__title {
+    font-size: 8px;
+  }
+  #board-zole-container .vz-zole-table-hud__grid {
+    font-size: 10px;
+  }
+  #board-zole-container .vz-zole-table-hud__colhead {
+    font-size: 9px;
+  }
+  #board-zole-container .vz-zole-table-hud__rowhead {
+    font-size: 9px;
+  }
+  #board-zole-container .vz-zole-table-hud__rowhead--hist {
+    font-size: 8.5px;
+  }
+  #board-zole-container .vz-zole-table-hud__cell {
+    font-size: 10px;
+  }
+  #board-zole-container .vz-zole-table-hud__cell--hist {
+    font-size: 9px;
+  }
+  #board-zole-container .vz-zole-table-hud__foot {
+    font-size: 9px;
+  }
+  /* Zole stiķa kārtis mobilajam: + solis ar clamp(vw); min ≥ bāze (84px), lai šaurā ekrānā nesamazinātu */
+  #board-zole-container .vz-zole-felt__cardSlot {
+    min-height: clamp(142px, 40vw, 166px);
+  }
+  #board-zole-container .vz-zole-felt__placeholder {
+    width: clamp(84px, 23vw, 92px);
+    height: clamp(118px, 32.3vw, 129px);
+  }
+  #board-zole-container .vz-zole-card--trick {
+    width: clamp(84px, 23vw, 92px);
+    height: clamp(118px, 32.3vw, 129px);
+  }
+  #board-zole-container .vz-zole-card--trick .vz-zole-card__corner {
+    font-size: clamp(11px, 3vw, 12px);
+  }
+  #board-zole-container .vz-zole-card--trick .vz-zole-card__corner--tl {
+    top: clamp(5px, 1.4vw, 6px);
+    left: clamp(4px, 1.1vw, 5px);
+  }
+  #board-zole-container .vz-zole-card--trick .vz-zole-card__corner--br {
+    bottom: clamp(5px, 1.4vw, 6px);
+    right: clamp(4px, 1.1vw, 5px);
+  }
+  #board-zole-container .vz-zole-card--trick .vz-zole-card__center {
+    font-size: clamp(30px, 8.5vw, 34px);
+  }
   .vz-dambrete-board td {
     width: 44px;
     height: 44px;
