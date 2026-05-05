@@ -8249,37 +8249,57 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   transform: translateY(-22px);
 }
 #board-zole-container .vz-zole-felt__seat--me .vz-zole-felt__who {
-  color: #a5f3fc;
-  font-weight: 700;
+  color: #cffafe;
+  font-weight: 800;
+  text-shadow:
+    0 0 10px rgba(0, 0, 0, 0.65),
+    0 1px 3px rgba(0, 0, 0, 0.95);
 }
 #board-zole-container .vz-zole-felt__seat--turn .vz-zole-felt__who {
   color: #fef08a;
   font-weight: 800;
+  text-shadow:
+    0 0 10px rgba(0, 0, 0, 0.65),
+    0 1px 3px rgba(0, 0, 0, 0.95);
 }
 #board-zole-container .vz-zole-felt__seat--frozen {
   opacity: 0.92;
 }
 #board-zole-container .vz-zole-felt__who {
-  font-size: 10px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.96);
   text-align: center;
-  max-width: 92px;
+  max-width: 100px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.25;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.85),
+    0 0 12px rgba(0, 0, 0, 0.45);
 }
 #board-zole-container .vz-zole-felt__role {
-  font-size: 8px;
-  font-weight: 700;
-  line-height: 1.2;
-  color: rgba(253, 230, 138, 0.9);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.25;
+  color: rgba(254, 249, 195, 0.98);
   text-align: center;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-top: -2px;
+  margin-top: 2px;
+  padding: 1px 5px 2px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(253, 230, 138, 0.22);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
 }
 #board-zole-container .vz-zole-felt__cardSlot {
   min-height: 142px;
