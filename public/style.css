@@ -379,6 +379,9 @@ summary:focus-visible {
   --vz-kb-key-bg: #161a2e;
   --vz-kb-key-border: #2d3250;
   --vz-kb-key-text: #8b92b0;
+  /* Tastatūra Tab / fokuss — redzams arī tumšā režģī */
+  --vz-focus-ring-color: rgba(147, 197, 253, 0.98);
+  --vz-focus-ring-offset: 2px;
 }
 
 /* Gaišs režīms – vienotāka palete */
@@ -416,6 +419,7 @@ summary:focus-visible {
   --vz-kb-key-bg: #f3f4f6;
   --vz-kb-key-border: #d1d5db;
   --vz-kb-key-text: #374151;
+  --vz-focus-ring-color: rgba(37, 99, 235, 0.95);
   color-scheme: light;
 }
 
@@ -450,6 +454,7 @@ summary:focus-visible {
   --vz-kb-key-bg: #222222;
   --vz-kb-key-border: #ffffff;
   --vz-kb-key-text: #ffffff;
+  --vz-focus-ring-color: #ffff00;
   color-scheme: dark;
 }
 
@@ -2538,6 +2543,21 @@ button.vz-friend-quick-duel:hover {
   transform-style: preserve-3d;
 }
 
+/* Nākamā rakstāmā ailīte — tā pati zīmes krāsa kā :focus-visible uz pogām */
+.vz-tile.vz-tile-caret {
+  outline: 3px solid var(--vz-focus-ring-color);
+  outline-offset: 3px;
+  position: relative;
+  z-index: 4;
+}
+
+/* Pilna rinda — gaida Enter (solo / duelis / izaicinājums) */
+.grid-row.vz-row-await-enter {
+  outline: 3px dashed var(--vz-focus-ring-color);
+  outline-offset: 8px;
+  border-radius: 10px;
+}
+
 .tile.flip,
 .vz-tile.flip {
   animation: vzTileFlip 0.8s ease-in-out;
@@ -2796,6 +2816,19 @@ button.vz-friend-quick-duel:hover {
 .kb-key:active {
   transform: translateY(1px) scale(0.98);
   filter: brightness(1.1);
+}
+
+.vz-key:focus:not(:focus-visible),
+.kb-key:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.vz-key:focus-visible,
+.kb-key:focus-visible {
+  outline: 3px solid var(--vz-focus-ring-color);
+  outline-offset: var(--vz-focus-ring-offset);
+  position: relative;
+  z-index: 3;
 }
 
 .kb-key.kb-key-press {
