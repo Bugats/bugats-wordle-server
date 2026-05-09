@@ -18,6 +18,7 @@
 
   Patch vēsture (īsi):
   - Admin case-insensitive; leaderboard/missions parse; TOP10 avatar TTL; utt.
+  - `public/script.js` izņemts — nekādā HTML vairs nelādēts, dubults codepath ar šo failu.
 */
 
 // ================== MODUĻI / KONFIGS ==================
@@ -7298,15 +7299,23 @@ function showWinEffects(winRowIndex) {
   }
 }
 
+/** Pašreizējās minējuma rindas burti (`dataset.letter`), garums `state.cols`. */
+function getCurrentRowLetters() {
+  const letters = [];
+  const cols = Math.max(0, Number(state.cols) || 0);
+  const row = state.gridTiles?.[state.currentRow];
+  for (let c = 0; c < cols; c++) {
+    letters.push(row?.[c]?.dataset?.letter || "");
+  }
+  return letters;
+}
+
 // ----- WORD GRID — minējumi: izaicinājums (/challenge), solo (/guess), duelis (socket) -----
 
 // ====== Izaicinājums: minējums HTTP /challenge/.../guess ======
 async function submitChallengeGuess() {
   if (!state.challengeId || state.isLocked) return;
-  const letters = [];
-  for (let c = 0; c < state.cols; c++) {
-    letters.push(state.gridTiles[state.currentRow]?.[c]?.dataset.letter || "");
-  }
+  const letters = getCurrentRowLetters();
   const guess = letters.join("");
   if (!guess || guess.length !== state.cols) return;
   if (state.currentRow > 0) {
@@ -7437,10 +7446,7 @@ async function submitGuess() {
     return;
   }
 
-  const letters = [];
-  for (let c = 0; c < state.cols; c++) {
-    letters.push(state.gridTiles[state.currentRow]?.[c]?.dataset.letter || "");
-  }
+  const letters = getCurrentRowLetters();
   const guess = letters.join("");
   if (!guess || guess.length !== state.cols) return;
 
@@ -7579,10 +7585,7 @@ function submitDuelGuess() {
     return;
   }
 
-  const letters = [];
-  for (let c = 0; c < state.cols; c++) {
-    letters.push(state.gridTiles[state.currentRow]?.[c]?.dataset.letter || "");
-  }
+  const letters = getCurrentRowLetters();
   const guess = letters.join("");
   if (!guess || guess.length !== state.cols) return;
 
