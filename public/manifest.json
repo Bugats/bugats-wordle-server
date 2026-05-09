@@ -1,0 +1,31 @@
+{
+  "name": "VĀRDU ZONA",
+  "short_name": "VĀRDU ZONA",
+  "description": "VĀRDU ZONA — latviešu vārdu spēle, šahs, dambrete un zole vienā lietotnē: rangi, misijas, dueļi un draugi.",
+  "lang": "lv",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1a0a0e",
+  "theme_color": "#9d2235",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "img/vardu-zona-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

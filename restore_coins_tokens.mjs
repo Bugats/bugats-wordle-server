@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { saveJsonAtomic } from "./lib/atomic-json.js";
 
 const USERS_FILE =
   process.env.USERS_FILE || path.join(process.cwd(), "users.json");
@@ -17,9 +18,7 @@ for (const u of arr) {
   u.tokens = (u.tokens || 0) + ADD_TOKENS;
 }
 
-const tmp = USERS_FILE + ".tmp";
-fs.writeFileSync(tmp, JSON.stringify(arr, null, 2), "utf8");
-fs.renameSync(tmp, USERS_FILE);
+saveJsonAtomic(USERS_FILE, arr);
 
 console.log(
   `OK: +${ADD_COINS} coins, +${ADD_TOKENS} tokens visiem (${arr.length} useri).`
