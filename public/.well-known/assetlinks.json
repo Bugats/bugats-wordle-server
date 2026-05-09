@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "lv.thezone.wordle",
+    "sha256_cert_fingerprints": [
+      "82:28:57:4B:3F:3C:59:80:45:A5:AE:6A:39:11:3F:83:93:8F:44:28:61:DE:2B:52:C6:0B:73:2B:39:55:D9:E1"
+    ]
+    }
+  }
+]

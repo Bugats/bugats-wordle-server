@@ -1,0 +1,10 @@
+# Cursor indeksam / meklēšanai — neiekļaut smagos / ģenerētos katalogus (ātrāks UI, mazāk OOM)
+node_modules/
+.git/
+.vite/
+dist/
+build/
+coverage/
+*.log
+.turbo/
+.cache/

@@ -1,0 +1,2007 @@
+<!DOCTYPE html>
+<html lang="lv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <title>VĀRDU ZONA</title>
+
+    <meta name="theme-color" content="#9d2235" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="manifest" href="manifest.json" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="icon" href="icon.svg?v=vz-2026-brand" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="img/vardu-zona-logo.png?v=vz-2026-brand" />
+    <meta
+      name="description"
+      content="VĀRDU ZONA — latviešu vārdu spēle, šahs, dambrete un zole vienā vietā: rangi, XP, čats, misijas un dueļi."
+    />
+    <meta
+      property="og:image"
+      content="https://bugats-wordle-server.onrender.com/img/vardu-zona-logo.png"
+    />
+
+    <!-- Perf: preconnect -->
+    <link rel="dns-prefetch" href="//bugats-wordle-server.onrender.com" />
+    <link rel="preconnect" href="https://bugats-wordle-server.onrender.com" crossorigin />
+
+    <link rel="dns-prefetch" href="//cdn.jsdelivr.net" />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+
+    <link rel="dns-prefetch" href="//fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="//fonts.gstatic.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Cinzel:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <link rel="dns-prefetch" href="//pagead2.googlesyndication.com" crossorigin />
+    <link rel="preconnect" href="https://pagead2.googlesyndication.com" crossorigin />
+    <link rel="dns-prefetch" href="//unpkg.com" />
+    <link rel="preconnect" href="https://unpkg.com" crossorigin />
+
+  <link rel="stylesheet" href="style.css?v=2026-05-06-board-opp-zole-prefetch" />
+
+    <!-- AdSense (site verification + ads loader) -->
+    <script
+      async
+      src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5535543949516195"
+      crossorigin="anonymous"></script>
+  </head>
+
+  <body class="vz-body-game">
+    <noscript>
+      <div class="vz-noscript-note">
+        Lai spēle darbotos, pārlūkā jābūt ieslēgtam JavaScript.
+      </div>
+    </noscript>
+
+    <!-- Ekrāna flash overlay (baseline saderība) -->
+    <div id="screen-flash" class="vz-screen-flash" aria-hidden="true"></div>
+
+    <!-- Līmeņa pacēluma animācija -->
+    <div id="vz-level-up-overlay" class="vz-level-up-overlay hidden" role="alert" aria-live="polite" title="Spied, lai aizvērtu">
+      <div class="vz-level-up-inner">
+        <div class="vz-level-up-badge">⬆️</div>
+        <p class="vz-level-up-title">Līmenis pacelts!</p>
+        <p class="vz-level-up-subtitle" id="vz-level-up-subtitle">L<span id="vz-level-up-num">1</span> — <span id="vz-level-up-title"></span></p>
+      </div>
+    </div>
+
+    <!-- Bez interneta -->
+    <div id="vz-offline-overlay" class="vz-offline-overlay hidden" role="alertdialog" aria-modal="true" aria-labelledby="vz-offline-title" aria-describedby="vz-offline-text">
+      <div class="vz-offline-inner">
+        <p id="vz-offline-title" class="vz-offline-title">Nav interneta</p>
+        <p id="vz-offline-text" class="vz-offline-text">Pārbaudi savienojumu un mēģini vēlreiz.</p>
+        <p id="vz-offline-hint" class="vz-offline-hint hidden"></p>
+        <p class="vz-offline-trust">
+          <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Coins / VIP / turnīri</a>
+          <span aria-hidden="true"> · </span>
+          <a href="privacy.html#stripe-maksajumi" target="_blank" rel="noopener">Maksājumi un privātums</a>
+        </p>
+        <div class="vz-offline-actions">
+          <button id="vz-offline-retry-btn" type="button" class="vz-offline-retry">Mēģināt vēlreiz</button>
+          <button id="vz-offline-login-btn" type="button" class="vz-offline-secondary hidden">Uz pieslēgšanos</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tutorial (pirmā spēle) -->
+    <div id="vz-tutorial-overlay" class="vz-tutorial-overlay hidden" role="dialog" aria-labelledby="vz-tutorial-title" aria-modal="true">
+      <div class="vz-tutorial-inner">
+        <div id="vz-tutorial-content" class="vz-tutorial-content"></div>
+        <div class="vz-tutorial-footer">
+          <span id="vz-tutorial-dots" class="vz-tutorial-dots"></span>
+          <div class="vz-tutorial-btns">
+            <button id="vz-tutorial-skip" type="button" class="vz-tutorial-btn vz-tutorial-skip">Izlaist</button>
+            <button id="vz-tutorial-next" type="button" class="vz-tutorial-btn vz-tutorial-next">Tālāk</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Play Store vērtējuma uzvednis (TWA) -->
+    <div id="vz-rate-overlay" class="vz-rate-overlay hidden" role="dialog" aria-labelledby="vz-rate-title" aria-modal="true">
+      <div class="vz-rate-inner">
+        <p id="vz-rate-title" class="vz-rate-title">Patīk VĀRDU ZONA?</p>
+        <p class="vz-rate-text">Ieliec 5★ Play Store vai atsūti atsauksmi.</p>
+        <div class="vz-rate-buttons">
+          <button id="vz-rate-later-btn" type="button" class="vz-rate-btn vz-rate-later">Vēlāk</button>
+          <a id="vz-rate-feedback-btn" href="mailto:thezone@news.thezone.lv?subject=V%C4%80RDU%20ZONA%20atsauksme" class="vz-rate-btn vz-rate-later">Atsauksme</a>
+          <a id="vz-rate-open-btn" href="https://play.google.com/store/apps/details?id=lv.thezone.wordle" target="_blank" rel="noopener" class="vz-rate-btn vz-rate-open">Atstāt vērtējumu</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="vz-game-container">
+      <!-- TOPBAR -->
+      <div class="vz-topbar">
+        <div class="vz-topbar-left">
+          <span id="vz-topbar-date"></span>
+          <span id="vz-topbar-time"></span>
+          <span id="vz-topbar-nameday"></span>
+        </div>
+        <div class="vz-topbar-right">
+          <span id="vz-topbar-weather"></span>
+
+          <!-- DUEL INBOX BTN (jauni) -->
+          <button
+            id="duel-inbox-btn"
+            class="vz-duel-inbox-btn"
+            type="button"
+            title="Dueļu aicinājumi"
+            aria-label="Dueļu aicinājumi">
+            ⚔️ Duelis
+            <span id="duel-inbox-badge" class="vz-duel-badge hidden" aria-label="Aicinājumu skaits">0</span>
+          </button>
+
+          <!-- GALDS: zole, šahs, dambrete -->
+          <button
+            id="board-games-btn"
+            class="vz-duel-inbox-btn"
+            type="button"
+            title="Zole, šahs, dambrete — viena vieta"
+            aria-label="Galds: zole, šahs, dambrete">
+            🎴 Galds
+            <span id="board-games-badge" class="vz-duel-badge hidden" aria-label="Tava kārta">!</span>
+          </button>
+
+          <button id="sound-toggle-btn" class="vz-sound-btn" type="button">🔊 Skaņa: ON</button>
+          <button id="logout-btn" type="button">Izlogoties</button>
+          <details class="vz-topbar-more">
+            <summary class="vz-topbar-more-trigger">⋯ Vairāk</summary>
+            <div class="vz-topbar-more-menu">
+              <button
+                id="theme-toggle-btn"
+                class="vz-topbar-link"
+                type="button"
+                title="Tēma: tumšs / gaišs / augsta kontrasta"
+                aria-label="Mainīt tēmu">
+                🌙 Tēma
+              </button>
+              <a
+                id="app-download-link"
+                class="vz-topbar-link"
+                href="https://play.google.com/store/apps/details?id=lv.thezone.wordle"
+                target="_blank"
+                rel="noopener"
+                title="Lejupielādēt VĀRDU ZONA no Play Store vai pievienot sākumekrānam">
+                📲 Lietotne
+              </a>
+              <a
+                class="vz-topbar-link"
+                href="coins-vip-turniri.html"
+                target="_blank"
+                rel="noopener"
+                >Coins / VIP / turnīri</a
+              >
+              <a class="vz-topbar-link" href="privacy.html" target="_blank" rel="noopener">Privatums</a>
+              <a class="vz-topbar-link" href="terms.html" target="_blank" rel="noopener">Noteikumi</a>
+              <a class="vz-topbar-link" href="copyright-trademark.html" target="_blank" rel="noopener"
+                >Autortiesības</a
+              >
+              <a class="vz-topbar-link" href="dmca.html" target="_blank" rel="noopener">DMCA</a>
+              <button id="vz-tutorial-reopen-btn" class="vz-topbar-link" type="button" title="Skatīt ievadu">📖 Tutorial</button>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <!-- LOGO – graffiti virsraksts -->
+      <div class="vz-logo-main">
+        <div id="vz-logo-fx" aria-hidden="true"></div>
+        <img src="img/vardu-zona-logo.png?v=vz-2026-brand" alt="VĀRDU ZONA" class="vz-logo-img" />
+        <span class="vz-logo-sub">Vārdi · šahs · dambrete · zole — viena lietotne</span>
+      </div>
+
+      <!-- SEZONA -->
+      <div class="vz-season-bar" id="season-box">
+        <span class="vz-season-label" id="season-title">Sezona ielādējas…</span>
+        <span id="season-countdown" class="vz-season-timer">—</span>
+
+        <!-- šo pogu rādām tikai adminam ar JS -->
+        <button id="season-start-btn" class="vz-season-start-btn u-hidden-initial" type="button">
+          Startēt sezonu
+        </button>
+      </div>
+
+      <!-- HOT STREAK -->
+      <div id="hot-streak-banner" class="vz-hot-banner u-hidden-initial">
+        🔥 HOT STREAK! 🔥
+      </div>
+
+      <div class="vz-main-layout">
+        <!-- KREISĀ PUSE -->
+        <div class="vz-left-area" id="vz-section-game">
+          <div class="vz-mobile-toggle">
+            <button id="mobile-fullscreen-btn" type="button">📱 Pilnekrāna spēle</button>
+          </div>
+
+          <div id="win-ticker" class="vz-win-ticker" aria-live="polite" aria-atomic="true"></div>
+          <p id="game-message" class="vz-game-message" role="status" aria-live="polite" aria-atomic="true"></p>
+
+          <div id="grid" class="vz-grid">
+  <div id="vz-phaser-fx" aria-hidden="true"></div>
+  <div id="vz-grid-fx" aria-hidden="true"></div>
+</div>
+
+          <div id="keyboard" class="vz-keyboard"></div>
+
+          <div class="vz-bottom-buttons">
+            <button id="new-round-btn" class="u-hidden-initial" type="button">Jauns raunds</button>
+          </div>
+
+          <div class="vz-region-race-card" id="region-race-card">
+            <div class="vz-card-header">Novadu sacīkste</div>
+            <div class="vz-region-help" id="region-help">
+              Uzvari raundus, dueli un PvP galda spēles — stiprini savu novadu tabulā; ar punktiem vari arī +1 / uzbrukt.
+            </div>
+            <div id="region-my-rank" class="vz-region-my-rank u-hidden-initial"></div>
+            <div class="vz-region-total">
+              <div class="vz-region-total-label">
+                Latvija kopā:
+                <span id="region-total-score">0</span>
+                / 500000
+              </div>
+              <div class="vz-region-total-bar">
+                <div id="region-total-fill" class="vz-region-total-fill"></div>
+              </div>
+            </div>
+            <div class="vz-region-actions">
+              <div class="vz-region-actions-row">
+                Novadu punkti:
+                <span id="region-points">0</span>
+              </div>
+              <div id="region-bonus-window" class="vz-region-status-row">
+                Bonusa logs: ielādē...
+              </div>
+              <div id="region-attack-cap" class="vz-region-status-row">
+                Uzbrukumu limits: ielādē...
+              </div>
+              <div class="vz-region-actions-row">
+                <button id="region-boost-btn" type="button" class="vz-region-action-btn">
+                  +1 savam novadam
+                </button>
+                <select id="region-attack-target" class="vz-region-action-select"></select>
+                <button id="region-attack-btn" type="button" class="vz-region-action-btn vz-region-action-danger">
+                  -1 pretiniekam
+                </button>
+              </div>
+            </div>
+            <ul id="region-rules" class="vz-region-rules"></ul>
+            <ul id="region-list" class="vz-region-list"></ul>
+          </div>
+        </div>
+
+        <!-- LABĀ PUSE -->
+        <div class="vz-right-area">
+          <div class="vz-side-groups">
+            <section class="vz-side-group">
+              <div class="vz-side-group-title">Galvenais</div>
+              <div class="vz-top-panels">
+                <!-- PROFILS -->
+                <div class="vz-player-card" id="vz-section-profile">
+                  <div class="vz-card-header">Tavs profils</div>
+
+                  <div class="vz-card-avatar-row">
+                    <div class="vz-avatar-circle">
+                      <img id="player-avatar-img" alt="Avatar" decoding="async" />
+                      <span id="player-avatar-initials">B</span>
+                    </div>
+
+                    <div class="vz-avatar-controls">
+                      <button id="player-avatar-upload-btn" type="button" class="vz-avatar-upload-btn">
+                        Mainīt bildi
+                      </button>
+                      <input id="player-avatar-file" class="u-hidden-initial" type="file" accept="image/*" />
+                    </div>
+                  </div>
+
+                  <div class="vz-card-row"><span>Nickname:</span><span id="player-name"></span></div>
+                  <a
+                    class="vz-play-test-inline"
+                    href="https://play.google.com/apps/testing/lv.thezone.wordle?safe=active"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >📲 1) Google Play — slēgtais tests (pievienoties)</a
+                  >
+                  <p class="vz-play-test-inline-note">
+                    <strong>NHL cepures izlozei</strong> paredzēti spēlētāji, kas lieto
+                    <strong>VĀRDU ZONU no Play</strong>: vispirms <strong>testa saite</strong>, tad
+                    <strong>instalē aplikāciju</strong>. Šeit pārlūkā — <strong>e-pasts</strong>, komandas
+                    <strong>cepure</strong> un <strong>pieteikšanās</strong> izlozei.
+                  </p>
+                  <div class="vz-card-row"><span>Novads:</span><span id="player-region">—</span></div>
+                  <div class="vz-card-row vz-title-row">
+                    <span>Tituls:</span><span id="player-title" class="vz-title-value">—</span>
+                  </div>
+                  <div class="vz-card-row"><span>Rank:</span><span id="player-rank"></span></div>
+                  <div class="vz-card-row"><span>XP:</span><span id="player-xp"></span></div>
+
+                  <div class="vz-xp-bar-wrapper">
+                    <div class="vz-xp-bar-bg">
+                      <div id="player-xp-bar" class="vz-xp-bar-fill"></div>
+                    </div>
+                    <div id="player-xp-label" class="vz-xp-bar-label"></div>
+                  </div>
+
+                  <div class="vz-card-row"><span>Punkti:</span><span id="player-score"></span></div>
+                  <div class="vz-card-row"><span>Streak:</span><span id="player-streak"></span></div>
+                  <div class="vz-card-row"><span>Lab. streak:</span><span id="player-best-streak"></span></div>
+                  <div class="vz-card-row"><span>Coins:</span><span id="player-coins"></span></div>
+                  <p class="vz-coins-hint">
+                    Viens atlikums visur VĀRDU ZONĀ: vārdu raundā vari <strong>iegūt un zaudēt</strong> coins
+                    spēlējot; <strong>Zolē, dambretē un šahā</strong> pēc partijas ar
+                    <strong>cilvēkiem</strong> coins var mainīties (uzvara / zaudējums). Pret
+                    <strong>botiem</strong> coins nemainās. Vari arī <strong>papildināt ar naudu</strong>
+                    caur Stripe, ja ieslēgts.
+                    <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Īss skaidrojums</a>
+                  </p>
+                  <p class="vz-trust-quick-links" role="navigation" aria-label="Uzticība un skaidrība">
+                    <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Kas ir coins / VIP / turnīri</a>
+                    <span class="vz-trust-quick-links__sep" aria-hidden="true">·</span>
+                    <a href="privacy.html#stripe-maksajumi" target="_blank" rel="noopener">Pirms maksājuma — privātums</a>
+                  </p>
+                  <div id="vz-stripe-coins-buy" class="vz-stripe-coins hidden">
+                    <div class="vz-stripe-coins__label">Pirkt coins (Stripe)</div>
+                    <div id="vz-stripe-coins-pack-list" class="vz-stripe-coins__packs"></div>
+                    <p class="vz-stripe-coins__note">
+                      Virtuālas monētas spēlē. Pēc apmaksas Stripe Checkout logā coins parasti ieskaitās dažu sekunžu laikā.
+                      <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Kas ir coins / VIP / turnīri</a>
+                      ·
+                      <a href="privacy.html#stripe-maksajumi" target="_blank" rel="noopener">Privātums un maksājumi</a>.
+                    </p>
+                    <p class="vz-stripe-coins__trust-line">
+                      Pirms pirkuma vari īsi izlasīt
+                      <a href="coins-vip-turniri.html" target="_blank" rel="noopener">«Kas ir coins»</a>
+                      un
+                      <a href="privacy.html#stripe-maksajumi" target="_blank" rel="noopener">kā apstrādā maksājumu</a>.
+                    </p>
+                  </div>
+                  <div class="vz-card-row"><span>Žetoni:</span><span id="player-tokens"></span></div>
+
+                  <div class="vz-card-row vz-card-row-medals">
+                    <span>Medaļas:</span>
+                    <div id="player-medals" class="vz-medals-strip"></div>
+                  </div>
+
+                  <details class="vz-profile-zole-hint">
+                    <summary class="vz-profile-zole-hint__sum">🃏 Zole — īsi termini</summary>
+                    <div class="vz-profile-zole-hint__body">
+                      <p><strong>Likšana (2 kārtas):</strong> <em>Lielais</em>, <em>Zole</em>, <em>Mazā zole</em> vai <em>Garām</em>. Ja abās kārtās visi garām → automātiski <strong>Galdiņš</strong> (visi pa sevi).</p>
+                      <p><strong>Lielais:</strong> 2 vidus kārtis, norok 2; uzvara ar <strong>61+</strong> acīm pret abiem mazajiem (kopā).</p>
+                      <p><strong>Zole:</strong> bez pirkuma; vidus kārtu acis mazo pusē.</p>
+                      <p><strong>Mazā zole:</strong> īpaša tabula (+12/−6 uzvarā, −14/+7 zaudējumā).</p>
+                      <p><strong>Galdiņš:</strong> zaudē tas, kam <strong>visvairāk acu</strong> stiķos.</p>
+                      <p class="vz-profile-zole-hint__note">Pilni noteikumi un stratēģija — zolei.lv; šeit nav līguma «Galds» un pules.</p>
+                    </div>
+                  </details>
+
+                  <hr class="vz-divider" />
+
+                  <button id="challenge-friend-btn" class="vz-share-btn" type="button" title="Izaicini draugu uz vienu vārdu">⚔️ Izaicināt draugu</button>
+                  <button id="share-btn" class="vz-share-btn" type="button">🔗 Dalīties ar VĀRDU ZONU</button>
+                  <button id="share-whatsapp-btn" class="vz-share-btn vz-share-btn-wa" type="button">
+                    💬 Dalīties WhatsApp
+                  </button>
+                  <button id="share-discord-btn" class="vz-share-btn vz-share-btn-discord" type="button">
+                    🎮 Dalīties Discord
+                  </button>
+                  <p class="vz-share-note">Padalies ar spēli.</p>
+                  <button id="share-result-btn" class="vz-share-btn u-hidden-initial" type="button">
+                    📣 Dalīties ar rezultātu
+                  </button>
+                  <button
+                    id="share-result-wa-btn"
+                    class="vz-share-btn vz-share-btn-wa u-hidden-initial"
+                    type="button">
+                    💬 Dalīties rezultātu WhatsApp
+                  </button>
+                  <button
+                    id="share-result-discord-btn"
+                    class="vz-share-btn vz-share-btn-discord u-hidden-initial"
+                    type="button">
+                    🎮 Dalīties rezultātu Discord
+                  </button>
+                  <p id="share-result-note" class="vz-share-note u-hidden-initial">Dalies ar savu rezultātu.</p>
+                </div>
+
+                <!-- ŠODIENAS MĒRĶIS (atgriešanās iemesls) -->
+                <div
+                  class="vz-leaderboard-card vz-daily-anchor-card"
+                  id="vz-daily-anchor-card"
+                  role="region"
+                  aria-labelledby="vz-daily-anchor-title">
+                  <div class="vz-card-header" id="vz-daily-anchor-title">
+                    Šodien VĀRDU ZONĀ
+                  </div>
+                  <a
+                    class="vz-play-test-hero"
+                    href="https://play.google.com/apps/testing/lv.thezone.wordle?safe=active"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >📲 1) Google Play — slēgtais tests VĀRDU ZONAI</a
+                  >
+                  <p class="vz-play-test-hero-note">
+                    Cepures izlozei: <strong>Play tests + VĀRDU ZONA</strong> no veikala, tad šeit profilā —
+                    <strong>e-pasts</strong>, <strong>NHL cepure</strong> un <strong>«Pieteikties»</strong>.
+                  </p>
+                  <p class="vz-daily-anchor-kicker" id="vz-daily-anchor-kicker">
+                    Tavs šodienas mērķis
+                  </p>
+                  <p class="vz-daily-anchor-headline" id="vz-daily-anchor-headline">
+                    Ielādē…
+                  </p>
+                  <p class="vz-daily-anchor-progress" id="vz-daily-anchor-progress"></p>
+                  <p class="vz-daily-anchor-hint vz-support-note" id="vz-daily-anchor-hint"></p>
+                  <div id="vz-giveaway-anchor" class="vz-giveaway-anchor hidden">
+                    <p class="vz-giveaway-anchor__title">🎁 NHL cepures izloze</p>
+                    <p class="vz-giveaway-anchor__text" id="vz-giveaway-anchor-text"></p>
+                    <a
+                      class="vz-giveaway-anchor__play-btn"
+                      href="https://play.google.com/apps/testing/lv.thezone.wordle?safe=active"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      >📲 Play — slēgtais tests (obligāti 1. solis)</a
+                    >
+                    <button type="button" class="mission-claim-btn vz-giveaway-anchor__btn" id="vz-giveaway-anchor-btn">
+                      Izlozei — atvērt profilu
+                    </button>
+                  </div>
+                </div>
+
+                <!-- MISIJAS -->
+                <div class="vz-leaderboard-card">
+                  <div class="vz-card-header">Dienas misijas</div>
+                  <ul id="missions-list" class="vz-missions-list"></ul>
+                </div>
+
+                <div class="vz-leaderboard-card" id="engagement-loop-card">
+                  <div class="vz-card-header">🎯 Ko darīt tālāk</div>
+                  <div id="engagement-loop-summary" class="mission-status">
+                    Ielādē nākamo soli…
+                  </div>
+                  <button
+                    id="engagement-loop-primary-btn"
+                    class="mission-claim-btn"
+                    type="button">
+                    Turpināt
+                  </button>
+                  <div id="engagement-loop-primary-note" class="vz-support-note"></div>
+                  <div
+                    id="engagement-loop-secondary-actions"
+                    class="vz-loop-secondary-actions"></div>
+                </div>
+
+                <!-- ONLINE -->
+                <div class="vz-online-card">
+                  <div class="vz-card-header">Online: <span id="online-count">0</span></div>
+                  <ul id="online-list" class="vz-online-list"></ul>
+                </div>
+
+                <div
+                  class="vz-leaderboard-card vz-social-pulse-card"
+                  id="vz-social-pulse-card"
+                  role="region"
+                  aria-labelledby="vz-social-pulse-title">
+                  <div class="vz-card-header" id="vz-social-pulse-title">Sociālais pulss</div>
+                  <div id="vz-social-pulse-body" class="vz-social-pulse-body">
+                    <p class="vz-support-note">Ielādē…</p>
+                  </div>
+                </div>
+
+                <!-- DRAUGI -->
+                <div class="vz-online-card" id="friends-card">
+                  <div class="vz-card-header">Draugi</div>
+                  <div class="vz-friends-add">
+                    <input id="friend-add-input" type="text" placeholder="Lietotājvārds" />
+                    <button id="friend-add-btn" type="button">Pievienot</button>
+                  </div>
+                  <div id="friends-invites" class="vz-friends-invites"></div>
+                  <div class="vz-friends-toolbar">
+                    <label class="vz-sr-only" for="friends-filter-input">Meklēt draugus</label>
+                    <input
+                      id="friends-filter-input"
+                      class="vz-friends-filter-input"
+                      type="search"
+                      inputmode="search"
+                      enterkeyhint="search"
+                      placeholder="Meklēt draugus…"
+                      autocomplete="off"
+                      spellcheck="false" />
+                  </div>
+                  <div class="vz-friends-list-scroll" id="friends-list-scroll">
+                    <ul id="friends-list" class="vz-friends-list"></ul>
+                  </div>
+                  <p class="vz-friends-list-hint vz-support-note" id="friends-list-hint" hidden>
+                    Saraksts ir ritināms — daudzi draugi neaizņem visu ekrānu.
+                  </p>
+                </div>
+
+                <!-- KLANI -->
+                <div class="vz-clan-card" id="vz-clan-card">
+                  <div class="vz-card-header">⚔️ Klans</div>
+                  <div id="vz-clan-content"></div>
+                  <div id="vz-clan-invites" class="vz-clan-invites hidden"></div>
+                  <div id="vz-clan-chat" class="vz-clan-chat hidden"></div>
+                </div>
+              </div>
+            </section>
+
+            <details class="vz-side-group vz-side-group-collapsible">
+              <summary class="vz-side-group-summary">Sacensības un rangi</summary>
+              <div class="vz-side-group-content">
+                <div class="vz-top-panels">
+                  <!-- TURNĪRI -->
+                  <div class="vz-leaderboard-card vz-tournament-card" id="tournament-card">
+                    <div class="vz-card-header">🏟️ Turnīri</div>
+                    <div id="tournament-status" class="vz-tournament-status">Ielādē turnīrus…</div>
+                    <div id="tournament-meta" class="vz-tournament-meta hidden"></div>
+                    <div class="vz-tournament-legend">“Var spēlēt” = vari spēlēt, “Gaida pretinieku” = pagaidi.</div>
+                    <details class="vz-mode-guide">
+                      <summary class="vz-mode-guide-summary">🧭 Režīmi īsumā</summary>
+                      <div class="vz-mode-guide-section">
+                        <div class="vz-mode-guide-title">Spēles modi</div>
+                        <ul class="vz-mode-guide-list">
+                          <li><strong>Classic:</strong> standarta.</li>
+                          <li><strong>Speed:</strong> svarīgs ātrums.</li>
+                          <li><strong>Accuracy:</strong> svarīga precizitāte.</li>
+                          <li><strong>Survival:</strong> kļūdas maksā dārgi.</li>
+                        </ul>
+                      </div>
+                      <div class="vz-mode-guide-section">
+                        <div class="vz-mode-guide-title">Turnīra režīmi</div>
+                        <ul class="vz-mode-guide-list">
+                          <li><strong>Izslēgšana:</strong> 1 zaudējums = ārā.</li>
+                          <li><strong>Dubultā:</strong> ārā pēc 2 zaudējumiem.</li>
+                          <li><strong>Apļa:</strong> visi pret visiem.</li>
+                        </ul>
+                      </div>
+                    </details>
+                    <div class="vz-tournament-flow">
+                      <div class="vz-card-header-sub">Vienota plūsma</div>
+                      <ul class="vz-tournament-flow-list">
+                        <li>1) Pieteicies nedēļas turnīram vai atver pēdējo turnīru sarakstā.</li>
+                        <li>2) Spēlē mačus un iesniedz rezultātu (vai auto), līdz bracketam ir gala.</li>
+                        <li>3) VIP istabas — privātiem bracketiem ar draugiem.</li>
+                      </ul>
+                    </div>
+                    <div id="tournament-schedule-line" class="vz-support-note">
+                      Fiksētais turnīrs: piektdien 20:00 (Rīga). Starts tikai, ja aizņemti visi sloti.
+                    </div>
+                    <div id="tournament-schedule-mode" class="vz-support-text">Turnīra režīms: —</div>
+                    <div id="tournament-schedule-slots" class="vz-support-text">Sloti: —</div>
+                    <button id="tournament-weekly-join-btn" class="mission-claim-btn" type="button">
+                      Pieteikties piektdienas turnīram
+                    </button>
+                    <div id="tournament-weekly-join-status" class="mission-status"></div>
+                    <ul id="tournament-rules-list" class="vz-missions-list"></ul>
+
+                    <div
+                      id="tournament-recent-wrap"
+                      class="vz-tournament-recent-wrap hidden"
+                      role="region"
+                      aria-labelledby="tournament-recent-title">
+                      <div id="tournament-recent-title" class="vz-card-header-sub">
+                        Pēdējie turnīri
+                      </div>
+                      <p class="vz-tournament-recent-hint vz-support-note">
+                        Noslēgtie un aktīvie — spied, lai atvērtu detaļās. Uzvarētājs rādās pēc bracketa
+                        pabeigšanas.
+                      </p>
+                      <ul id="tournament-recent-list" class="vz-tournament-recent-list"></ul>
+                    </div>
+
+                    <ul id="tournament-match-list" class="vz-tournament-list hidden"></ul>
+                    <div id="tournament-empty" class="hidden"></div>
+
+                    <div id="tournament-my-match" class="vz-tournament-my-match hidden">
+                      <div class="vz-card-header-sub">Mans mačs</div>
+                      <div id="tournament-my-match-text" class="vz-support-text">—</div>
+
+                      <div id="tournament-report-form" class="vz-tournament-report-form hidden">
+                        <label class="vz-tournament-score-field">
+                          <span id="tournament-score1-label">Spēlētājs 1</span>
+                          <input id="tournament-score1" type="number" min="0" max="99" inputmode="numeric" />
+                        </label>
+                        <label class="vz-tournament-score-field">
+                          <span id="tournament-score2-label">Spēlētājs 2</span>
+                          <input id="tournament-score2" type="number" min="0" max="99" inputmode="numeric" />
+                        </label>
+                        <button id="tournament-report-btn" class="mission-claim-btn" type="button">Iesniegt rezultātu</button>
+                      </div>
+
+                      <div id="tournament-report-status" class="mission-status"></div>
+                    </div>
+
+                    <div class="vz-tournament-actions">
+                      <button id="tournament-refresh-btn" class="vz-tournament-refresh-btn" type="button">
+                        Atjaunot
+                      </button>
+                    </div>
+
+                    <details id="vip-quick-tournament-panel" class="vz-vip-room-panel hidden">
+                      <summary class="vz-vip-room-summary">VIP ātrs turnīrs (bracket uzreiz)</summary>
+                      <div id="vip-quick-tournament-help" class="vz-support-text">
+                        Ar aktīvu VIP vari uzreiz izveidot turnīru ar dalībnieku sarakstu (bez istabas gaidīšanas).
+                        Izslēgšanai jābūt 2, 4, 8 vai 16 spēlētājiem. Tu vari būt sarakstā vai nē — ja nav, tavs
+                        vārds tiks pievienots automātiski.
+                      </div>
+                      <label class="vz-tournament-score-field">
+                        <span>Turnīra nosaukums</span>
+                        <input
+                          id="vip-quick-tournament-name"
+                          type="text"
+                          maxlength="64"
+                          placeholder="piem., Klana kauss"
+                          autocomplete="off" />
+                      </label>
+                      <div class="vz-vip-room-form-grid">
+                        <label class="vz-tournament-score-field">
+                          <span>Turnīra režīms</span>
+                          <select id="vip-quick-tournament-type">
+                            <option value="single_elimination">Izslēgšanas turnīrs</option>
+                            <option value="double_elimination">Dubultā izslēgšana</option>
+                            <option value="round_robin">Apļa turnīrs</option>
+                          </select>
+                        </label>
+                        <label class="vz-tournament-score-field">
+                          <span>Spēles mods</span>
+                          <select id="vip-quick-tournament-play-mode">
+                            <option value="classic">Classic</option>
+                            <option value="speed">Speed</option>
+                            <option value="accuracy">Accuracy</option>
+                            <option value="survival">Survival</option>
+                            <option value="dambrete">♟️ Dambrete</option>
+                            <option value="chess">♔ Šahs</option>
+                            <option value="zole">🃏 Zole</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label class="vz-tournament-score-field">
+                        <span>Dalībnieki (vārdi, katrs jaunā rindā vai ar komatu)</span>
+                        <textarea
+                          id="vip-quick-tournament-seeding"
+                          rows="5"
+                          maxlength="2000"
+                          placeholder="Anna&#10;Bērziņš&#10;Čalis"></textarea>
+                      </label>
+                      <button id="vip-quick-tournament-create-btn" class="mission-claim-btn" type="button">
+                        Izveidot turnīru
+                      </button>
+                      <div id="vip-quick-tournament-create-status" class="mission-status"></div>
+                    </details>
+
+                    <details id="vip-room-panel" class="vz-vip-room-panel hidden">
+                      <summary class="vz-vip-room-summary">VIP istabas (papildus režīms)</summary>
+                      <div id="vip-room-help" class="vz-support-text">
+                        VIP istaba: privāta spēle ar draugiem.
+                      </div>
+                      <label class="vz-tournament-score-field">
+                        <span>Istabas nosaukums</span>
+                        <input id="vip-room-name" type="text" maxlength="64" placeholder="Mana VIP istaba" />
+                      </label>
+                      <div class="vz-vip-room-form-grid">
+                        <label class="vz-tournament-score-field">
+                          <span>Turnīra režīms</span>
+                          <select id="vip-room-type">
+                            <option value="single_elimination">Izslēgšanas turnīrs</option>
+                            <option value="double_elimination">Dubultā izslēgšana</option>
+                            <option value="round_robin">Apļa turnīrs</option>
+                          </select>
+                        </label>
+                        <label class="vz-tournament-score-field">
+                          <span>Spēles mods</span>
+                          <select id="vip-room-play-mode">
+                            <option value="classic">Classic</option>
+                            <option value="speed">Speed</option>
+                            <option value="accuracy">Accuracy</option>
+                            <option value="survival">Survival</option>
+                            <option value="dambrete">♟️ Dambrete</option>
+                            <option value="chess">♔ Šahs</option>
+                            <option value="zole">🃏 Zole</option>
+                          </select>
+                        </label>
+                        <label class="vz-tournament-score-field">
+                          <span>Sloti</span>
+                          <select id="vip-room-slots">
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4" selected>4</option>
+                            <option value="5">5</option>
+                            <option value="6">6</option>
+                            <option value="7">7</option>
+                            <option value="8">8</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div id="vip-room-friends" class="vz-vip-room-friends"></div>
+                      <label class="vz-vip-room-clan-only">
+                        <input id="vip-room-clan-only" type="checkbox" />
+                        Tikai klana dalībniekiem
+                      </label>
+                      <button id="vip-room-create-btn" class="mission-claim-btn" type="button">
+                        Izveidot VIP istabu
+                      </button>
+                      <div id="vip-room-create-status" class="mission-status"></div>
+                      <div id="vip-room-list" class="vz-vip-room-list"></div>
+                    </details>
+                  </div>
+
+                  <!-- TOP 10 -->
+                  <div class="vz-leaderboard-card" id="vz-section-leaderboard">
+                    <div class="vz-card-header">TOP 10 spēlētāji</div>
+                    <ol id="lb-list" class="vz-lb-list"></ol>
+                    <div id="lb-target-line" class="vz-lb-target-line u-hidden-initial"></div>
+                  </div>
+
+                  <!-- WEEKLY CHALLENGE -->
+                  <div class="vz-leaderboard-card" id="weekly-card">
+                    <div class="vz-card-header">Nedēļas izaicinājums</div>
+                    <div class="vz-weekly-sub" id="weekly-sub">Šonedēļ</div>
+                    <ol id="weekly-list" class="vz-lb-list"></ol>
+                    <div id="weekly-you" class="vz-weekly-you"></div>
+                  </div>
+
+                  <!-- STREAK LĪDERI (sacensības) -->
+                  <div class="vz-leaderboard-card" id="streak-lb-card">
+                    <div class="vz-card-header">🔥 Streak līderi</div>
+                    <ol id="streak-list" class="vz-lb-list"></ol>
+                  </div>
+
+                  <!-- ŠODIENAS LĪDERI (sacensības) -->
+                  <div class="vz-leaderboard-card" id="daily-lb-card">
+                    <div class="vz-card-header">📅 Šodienas līderi</div>
+                    <ol id="daily-list" class="vz-lb-list"></ol>
+                  </div>
+
+                  <!-- HALL OF FAME -->
+                  <div class="vz-leaderboard-card hidden" id="hof-box">
+                    <div class="vz-card-header">🏆 Hall of Fame</div>
+                    <div id="hof-season1" class="vz-hof-row"></div>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <details class="vz-side-group vz-side-group-collapsible">
+              <summary class="vz-side-group-summary">Papildus</summary>
+              <div class="vz-side-group-content">
+                <div class="vz-top-panels">
+                  <!-- ATBALSTS -->
+                  <div class="vz-support-card">
+                    <div class="vz-card-header">Atbalsti VĀRDU ZONU</div>
+
+                    <button
+                      class="vz-support-btn"
+                      type="button"
+                      onclick="window.open('https://streamlabs.com/bugats1', '_blank', 'noopener,noreferrer')">
+                      Atbalstīt projektu
+                    </button>
+
+                    <p class="vz-support-note">Žetoni ir atbalsta bonuss.</p>
+
+                    <hr class="vz-divider" />
+
+                    <div class="vz-card-header-sub">Žetonu veikals (par coins)</div>
+                    <p class="vz-support-text">1 žetons = 150 coins.</p>
+
+                    <button id="buy-token-btn" class="vz-support-btn" type="button">Pirkt 1 žetonu (150 coins)</button>
+
+                    <p class="vz-support-note">1 žetons = 1 vieta uz laimes rata.</p>
+
+                    <hr class="vz-divider" />
+                    <div class="vz-card-header-sub">VIP (bez admin tiesībām)</div>
+                    <p id="vip-status" class="vz-support-text">VIP nav aktīvs.</p>
+                    <p class="vz-support-note">
+                      VIP ļauj veidot savus turnīrus. Admin tiesības nedod.
+                      <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Īsi par VIP un coins</a>
+                    </p>
+                    <button id="buy-vip-btn" class="vz-support-btn" type="button">VIP iegāde drīzumā</button>
+                    <p id="vip-buy-status" class="vz-support-note"></p>
+                  </div>
+
+                  <!-- RADIO -->
+                  <div class="vz-radio-card">
+                    <div class="vz-card-header">FONA MŪZIKA</div>
+                    <div id="radio-status" class="vz-radio-status">Mūzika izslēgta</div>
+
+                    <div class="vz-radio-controls">
+                      <button id="radio-toggle-btn" class="vz-radio-btn" type="button">▶ Spēlēt</button>
+                      <div class="vz-radio-volume-wrap">
+                        <span class="vz-radio-volume-label">Skaļums</span>
+                        <input id="radio-volume" type="range" min="0" max="1" step="0.01" value="0.6" />
+                      </div>
+                    </div>
+
+                    <div class="vz-radio-note">Atskaņo Wild Wide Walker (Behind Two Lines). Ieslēdz ar “Spēlēt”.</div>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <!-- ČATS -->
+          <div id="vz-section-chat">
+          <div class="vz-chat" id="chat-card">
+            <div class="vz-card-header">
+              Čats
+              <span id="chat-unread-badge" class="hidden">JAUNAS</span>
+              <span
+                id="chat-mention-badge"
+                class="vz-chat-mention-badge"
+                role="button"
+                tabindex="0"
+                aria-label="Atvērt pieminējumus">
+                🔔
+              </span>
+            </div>
+
+            <div id="chat-messages" class="vz-chat-messages"></div>
+
+           <div class="vz-chat-input-row">
+  <input
+    id="chat-input"
+    type="text"
+    maxlength="200"
+    placeholder="Raksti ziņu..."
+    autocomplete="off"
+    inputmode="text"
+    enterkeyhint="send" />
+ 
+  <button id="chat-emoji-btn" type="button" title="Emoji">🙂</button>
+  <div id="chat-emoji-panel" class="hidden" aria-label="Emoji panelis"></div>
+ 
+  <button id="chat-send-btn" type="button">Sūtīt</button>
+</div>
+          </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mobilā apakšējā navigācija -->
+      <nav class="vz-bottom-nav" id="vz-bottom-nav" aria-label="Galvenā navigācija">
+        <button type="button" class="vz-bottom-nav-btn vz-bottom-nav-active" data-scroll="vz-section-game" aria-current="page">🎮 Spēle</button>
+        <button type="button" class="vz-bottom-nav-btn" data-scroll="vz-section-leaderboard">🏆 TOP</button>
+        <button type="button" class="vz-bottom-nav-btn" data-scroll="vz-section-profile">👤 Profils</button>
+        <button type="button" class="vz-bottom-nav-btn" data-scroll="vz-section-chat">💬 Čats</button>
+      </nav>
+
+      <!-- TikTok + kā rakstīt Bugats + kontakts -->
+      <div class="vz-footer-link">
+        <span class="vz-how-to-write" title="Pareizrakstība">Bugats: ar lielo B</span>
+        <a href="mailto:thezone@news.thezone.lv" title="Sazināties ar Bugats">Sazināties: thezone@news.thezone.lv</a>
+        <a href="https://www.tiktok.com/@bugats" target="_blank" rel="noopener noreferrer">TikTok: @bugats</a>
+      </div>
+    </div>
+
+    <!-- ========================= -->
+    <!-- DUEL UI (jauns scaffolds) -->
+    <!-- ========================= -->
+
+    <!-- Toast zona (klusie aicinājumi, netraucē ievadi) -->
+    <div id="duel-toast-area" class="vz-duel-toast-area" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- Duel Inbox (saraksts ar pending aicinājumiem) -->
+    <div id="duel-inbox" class="vz-duel-inbox hidden" role="dialog" aria-label="Dueļu aicinājumi">
+      <div class="vz-duel-inbox-head">
+        <div class="vz-duel-inbox-title">⚔️ Dueļu aicinājumi</div>
+        <button id="duel-inbox-close" class="vz-duel-x" type="button" aria-label="Aizvērt">✕</button>
+      </div>
+
+      <div id="duel-inbox-list" class="vz-duel-inbox-list"></div>
+
+      <div class="vz-duel-inbox-foot">
+        <label class="vz-duel-dnd">
+          <input id="duel-dnd-toggle" type="checkbox" />
+          Netraucēt spēlē (aicinājumi tikai sarakstā)
+        </label>
+        <button id="duel-inbox-clear" class="vz-duel-ghost-btn" type="button">Notīrīt</button>
+      </div>
+    </div>
+
+    <!-- Pilnais invite modal (atveras tikai, kad lietotājs uzspiež uz toast / inbox) -->
+    <div id="duel-invite-modal" class="vz-duel-modal hidden" role="dialog" aria-modal="true" aria-label="Dueļa aicinājums">
+      <div class="vz-duel-modal-inner">
+        <button id="duel-invite-close" class="vz-duel-x" type="button" aria-label="Aizvērt">✕</button>
+
+        <div class="vz-duel-modal-top">
+          <div class="vz-duel-avatar">
+            <img id="duel-from-avatar" alt="Avatar" decoding="async" />
+            <span id="duel-from-initials">?</span>
+          </div>
+
+          <div class="vz-duel-meta">
+            <div class="vz-duel-title">
+              <span id="duel-from-name">Spēlētājs</span> aicina uz dueli
+            </div>
+            <div id="duel-from-sub" class="vz-duel-sub">—</div>
+
+            <div class="vz-duel-timer">
+              <div id="duel-timer-bar" class="vz-duel-timer-bar"></div>
+            </div>
+            <div id="duel-timer-text" class="vz-duel-timer-text">Atlikušas — s</div>
+          </div>
+        </div>
+
+        <div class="vz-duel-modal-actions">
+          <button id="duel-accept-btn" class="vz-duel-accept" type="button">Pieņemt</button>
+          <button id="duel-decline-btn" class="vz-duel-decline" type="button">Noraidīt</button>
+          <button id="duel-ignore-btn" class="vz-duel-ghost-btn" type="button">Ignorēt 5 min</button>
+        </div>
+
+        <div id="duel-invite-note" class="vz-duel-note"></div>
+      </div>
+    </div>
+
+    <!-- Ready / gatavošanās (lai duelis nesākas momentā) -->
+    <div id="duel-ready-modal" class="vz-duel-modal hidden" role="dialog" aria-modal="true" aria-label="Duelis pieņemts">
+      <div class="vz-duel-modal-inner">
+        <button id="duel-ready-close" class="vz-duel-x" type="button" aria-label="Aizvērt">✕</button>
+
+        <div class="vz-duel-ready-title">Duelis pieņemts</div>
+        <div id="duel-ready-opponent" class="vz-duel-sub">Pretinieks: —</div>
+
+        <div id="duel-ready-status" class="vz-duel-note">Gaidām, kad abi būs gatavi…</div>
+
+        <div class="vz-duel-modal-actions">
+          <button id="duel-ready-btn" class="vz-duel-accept" type="button">Esmu gatavs</button>
+          <button id="duel-cancel-btn" class="vz-duel-decline" type="button">Atcelt</button>
+          <button id="duel-after-round-btn" class="vz-duel-ghost-btn" type="button">Sākt pēc šī raunda</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Countdown (3..2..1) -->
+    <div id="duel-countdown" class="vz-duel-countdown hidden" aria-live="assertive">
+      <div id="duel-countdown-num" class="vz-duel-countdown-num">3</div>
+      <div id="duel-countdown-text" class="vz-duel-countdown-text">Duelis sākas…</div>
+    </div>
+
+    <!-- Result overlay (uzvarētājs + “ieziešana”) -->
+    <div id="duel-result-overlay" class="vz-duel-result hidden" role="dialog" aria-modal="true" aria-label="Dueļa rezultāts">
+      <div class="vz-duel-result-inner">
+        <div id="duel-result-title" class="vz-duel-result-title">DUELIS — UZVARĒTĀJS</div>
+
+        <div class="vz-duel-result-row">
+          <div class="vz-duel-avatar vz-duel-avatar-big">
+            <img id="duel-winner-avatar" alt="Avatar" decoding="async" />
+            <span id="duel-winner-initials">?</span>
+          </div>
+          <div class="vz-duel-result-meta">
+            <div id="duel-winner-name" class="vz-duel-result-name">—</div>
+            <div id="duel-result-reason" class="vz-duel-sub">—</div>
+          </div>
+        </div>
+
+        <div id="duel-result-rewards" class="vz-duel-note"></div>
+
+        <div class="vz-duel-modal-actions">
+          <button id="duel-result-close" class="vz-duel-accept" type="button">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROFILA POPUP -->
+    <div id="player-profile-popup" class="vz-profile-popup hidden">
+      <div class="vz-profile-popup-inner">
+        <button id="profile-popup-close" class="vz-profile-popup-close" type="button">✕</button>
+
+        <div class="vz-profile-avatar-row">
+          <div class="vz-avatar-circle vz-avatar-popup">
+            <img id="pp-avatar-img" alt="Avatar" decoding="async" />
+            <span id="pp-avatar-initials">B</span>
+          </div>
+        </div>
+
+        <h3 id="pp-username">Spēlētājs</h3>
+        <div class="vz-profile-title">
+          Tituls: <span id="pp-title" class="vz-title-value">—</span>
+        </div>
+
+        <div class="profile-row"><span>Novads:</span><span id="pp-region">—</span></div>
+        <div class="profile-row"><span>Rank:</span><span id="pp-rank"></span></div>
+        <div class="profile-row"><span>XP:</span><span id="pp-xp"></span></div>
+        <div class="profile-row"><span>Punkti:</span><span id="pp-score"></span></div>
+        <div class="profile-row"><span>Coins:</span><span id="pp-coins"></span></div>
+        <p class="vz-coins-hint vz-coins-hint--popup">
+          Tas pats atlikums visā VĀRDU ZONĀ — vārdi un galds (Zole, dambrete, šahs) pret cilvēkiem; pret botiem
+          nemainās; papildināšana ar Stripe, ja ieslēgts.
+          <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Īsi par coins</a>
+        </p>
+        <p class="vz-trust-quick-links vz-trust-quick-links--popup" role="navigation" aria-label="Uzticība un skaidrība">
+          <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Coins / VIP / turnīri</a>
+          <span class="vz-trust-quick-links__sep" aria-hidden="true">·</span>
+          <a href="privacy.html#stripe-maksajumi" target="_blank" rel="noopener">Pirms maksājuma</a>
+        </p>
+        <div id="pp-stripe-coins-buy" class="vz-stripe-coins vz-stripe-coins--popup hidden">
+          <div class="vz-stripe-coins__label">Pirkt coins</div>
+          <div id="pp-stripe-coins-pack-list" class="vz-stripe-coins__packs"></div>
+          <p class="vz-stripe-coins__note">
+            Pēc apmaksas coins ieskaitās automātiski.
+            <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Coins / VIP / turnīri</a>
+            ·
+            <a href="privacy.html#stripe-maksajumi" target="_blank" rel="noopener">Kā apstrādā maksājumu</a>.
+          </p>
+          <p class="vz-stripe-coins__trust-line">
+            Pirms pirkuma:
+            <a href="coins-vip-turniri.html" target="_blank" rel="noopener">kas ir coins</a>
+            ·
+            <a href="privacy.html#stripe-maksajumi" target="_blank" rel="noopener">maksājums un dati</a>
+          </p>
+        </div>
+        <div class="profile-row"><span>Žetoni:</span><span id="pp-tokens"></span></div>
+        <div class="profile-row"><span>Labākais streak:</span><span id="pp-best"></span></div>
+
+        <div class="profile-row">
+          <span>Medaļas:</span>
+          <span id="pp-medals" class="vz-medals-strip"></span>
+        </div>
+
+        <details class="vz-profile-zole-hint vz-profile-zole-hint--popup">
+          <summary class="vz-profile-zole-hint__sum">🃏 Zole — īsi termini</summary>
+          <div class="vz-profile-zole-hint__body">
+            <p><strong>Likšana:</strong> Lielais, Zole, Mazā zole, Garām (2 kārtas). Visi garām → Galdiņš.</p>
+            <p><strong>Lielais:</strong> pirkums, norok 2; 61+ acu pret mazajiem.</p>
+            <p><strong>Zole / Mazā zole / Galdiņš</strong> — kā galda spēles modālī.</p>
+          </div>
+        </details>
+
+        <div id="pp-email-block" class="vz-profile-email-block hidden">
+          <div class="vz-profile-email-label">E-pasts (tikai tev redzams)</div>
+          <p class="vz-profile-email-privacy">
+            <strong>NHL cepures izlozei</strong> paredzēti tie, kas <strong>ielādējuši VĀRDU ZONU</strong> no
+            Google Play (slēgtais tests). Šeit saglabā <strong>e-pastu</strong> — tas ir saziņai par izlozi; bez
+            tā pieteikties nevar. Citādi: reti jaunumi, bez spama; vari noņemt jebkurā brīdī.
+          </p>
+          <div class="vz-profile-email-row">
+            <input
+              id="pp-email-input"
+              type="email"
+              autocomplete="email"
+              placeholder="piemēram: tu@epasts.lv"
+            />
+            <button id="pp-email-save" class="mission-claim-btn" type="button">Saglabāt</button>
+          </div>
+          <button id="pp-email-remove" type="button" class="vz-profile-email-remove">Noņemt e-pastu</button>
+          <div id="pp-email-status" class="vz-profile-email-status"></div>
+        </div>
+
+        <div id="pp-nhl-giveaway-wrap" class="vz-profile-nhl-giveaway hidden">
+          <div class="vz-profile-nhl-giveaway__title">🏒 NHL cepures izlozei — tava komanda</div>
+          <p class="vz-profile-nhl-giveaway__hint">
+            Pēc aplikācijas no Play: izvēlies <strong>cepuri ar logo</strong> (vai raksti komandas nosaukumu) un
+            spied <strong>Saglabāt</strong>. Kopā ar augšā saglabātu <strong>e-pastu</strong> vari pieteikties
+            cepures izlozei.
+          </p>
+          <div id="pp-nhl-hat-grid" class="vz-nhl-hat-grid-host" aria-label="NHL komandas"></div>
+          <p class="vz-profile-nhl-giveaway__manual">Vai komandas nosaukums brīvā tekstā:</p>
+          <div class="vz-profile-nhl-giveaway__row">
+            <input
+              id="pp-nhl-team-input"
+              type="text"
+              maxlength="64"
+              autocomplete="off"
+              placeholder="piem., Rangers…"
+            />
+            <button id="pp-nhl-team-save" type="button" class="mission-claim-btn">Saglabāt</button>
+          </div>
+          <div id="pp-nhl-team-status" class="vz-profile-email-status"></div>
+        </div>
+
+        <div id="pp-beta-block" class="vz-profile-beta-block hidden">
+          <div class="vz-profile-beta-heading">🎁 NHL cepures izloze</div>
+          <div class="vz-profile-beta-badge" id="pp-beta-badge" aria-live="polite"></div>
+          <ol class="vz-profile-giveaway-steps" id="pp-giveaway-steps">
+            <li>
+              <strong>Google Play:</strong> spied uz <strong>slēgtā testa saites</strong> zemāk vai kartītē
+              «Šodien VĀRDU ZONĀ», pievienojies testam, tad Play veikalā
+              <strong>Lejupielādē / atjaunini VĀRDU ZONA</strong>.
+            </li>
+            <li>Šeit, pārlūkā: ievadi <strong>e-pastu</strong> augšā un spied <strong>Saglabāt</strong>.</li>
+            <li>
+              Izvēlies <strong>NHL komandas cepuri</strong> (vai tekstu) zemāk un spied <strong>Saglabāt</strong>.
+            </li>
+            <li>
+              Atzīmē piekrišanu un spied <strong>Pieteikties</strong> — tad esi <strong>NHL cepures izlozes</strong>
+              sarakstā (saziņai izmantosim šo e-pastu).
+            </li>
+          </ol>
+          <p id="pp-giveaway-email-gate" class="vz-profile-giveaway-email-gate hidden" role="status">
+            Vispirms saglabā e-pastu augšā — bez tā cepures izlozei pieteikties nevar.
+          </p>
+          <p class="vz-profile-beta-desc" id="pp-beta-desc"></p>
+          <label class="vz-profile-beta-check">
+            <input id="pp-beta-agree" type="checkbox" />
+            <span>Piekrītu: manu e-pastu drīkst lietot tikai saziņai par šo NHL cepures izlozi (un, ja atsevišķi norādīts, beta testiem); ne pārdošanai trešajām pusēm.</span>
+          </label>
+          <button id="pp-beta-submit" type="button" class="mission-claim-btn">Pieteikties NHL cepures izlozei</button>
+          <div id="pp-beta-status" class="vz-profile-email-status"></div>
+          <a
+            class="vz-profile-play-test-btn"
+            href="https://play.google.com/apps/testing/lv.thezone.wordle?safe=active"
+            target="_blank"
+            rel="noopener noreferrer"
+            >📲 Saņem Android testa versiju</a
+          >
+          <p class="vz-profile-play-test-hint">
+            Cepures izloze domāta <strong>aplikācijas lietotājiem</strong>: vispirms <strong>testa saite</strong>,
+            tad Play veikalā <strong>instalē vai atjaunini VĀRDU ZONA</strong>. Iespējams, izmanto to pašu e-pasta
+            adresi kā Google kontam.
+          </p>
+        </div>
+
+        <div class="profile-row profile-row--center-actions">
+          <button id="pp-msg-btn" class="vz-profile-msg-btn" type="button">Rakstīt personiski</button>
+          <div class="vz-profile-board-actions">
+            <button id="pp-invite-dambrete" class="vz-profile-invite-board" type="button" title="Izaicināt uz dambreti">♟️ Dambrete</button>
+            <button id="pp-invite-chess" class="vz-profile-invite-board" type="button" title="Izaicināt uz šahu">♔ Šahs</button>
+            <button id="pp-invite-zole" class="vz-profile-invite-board" type="button" title="Izaicināt uz zoli (tiešsaistē)">🃏 Zole</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NOVADA IZVĒLE -->
+    <div id="region-modal" class="vz-region-modal hidden">
+      <div class="vz-region-modal-inner">
+        <h3>Izvēlies savu novadu</h3>
+        <p class="vz-region-modal-sub">Novadu vēlāk mainīt nevar.</p>
+        <div class="vz-region-grid">
+          <button class="vz-region-btn" type="button" data-region="Zemgale">Zemgale</button>
+          <button class="vz-region-btn" type="button" data-region="Latgale">Latgale</button>
+          <button class="vz-region-btn" type="button" data-region="Vidzeme">Vidzeme</button>
+          <button class="vz-region-btn" type="button" data-region="Kurzeme">Kurzeme</button>
+        </div>
+        <div class="vz-region-modal-note">Izvēle tiek saglabāta uzreiz.</div>
+      </div>
+    </div>
+
+    <!-- Izaicinājums draugam: izveidot (kopēt linku) -->
+    <div id="challenge-create-modal" class="vz-modal-overlay hidden" role="dialog" aria-labelledby="challenge-create-title">
+      <div class="vz-modal-inner vz-challenge-modal">
+        <h3 id="challenge-create-title">Izaicināt draugu</h3>
+        <p class="vz-challenge-create-note">Kopē linku un nosūti draugam. Uzvar ar mazāk mēģinājumiem.</p>
+        <div class="vz-challenge-url-row">
+          <input id="challenge-share-url" type="text" readonly class="vz-challenge-url-input" />
+          <button id="challenge-copy-btn" type="button" class="vz-challenge-copy-btn">Kopēt</button>
+        </div>
+        <p id="challenge-copy-status" class="vz-challenge-copy-status"></p>
+        <button id="challenge-create-close" type="button" class="vz-modal-close-btn">Aizvērt</button>
+      </div>
+    </div>
+
+    <!-- Izaicinājums: pievienoties -->
+    <div id="challenge-join-modal" class="vz-modal-overlay hidden" role="dialog" aria-labelledby="challenge-join-title">
+      <div class="vz-modal-inner vz-challenge-modal">
+        <h3 id="challenge-join-title">Izaicinājums</h3>
+        <p id="challenge-join-text" class="vz-challenge-join-text"></p>
+        <div class="vz-challenge-join-btns">
+          <button id="challenge-join-accept" type="button" class="vz-btn-primary">Pievienoties</button>
+          <button id="challenge-join-decline" type="button" class="vz-btn-secondary">Nē</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Izaicinājums: rezultāts -->
+    <div id="challenge-result-overlay" class="vz-offline-overlay hidden" role="alert">
+      <div class="vz-offline-inner">
+        <p id="challenge-result-title" class="vz-offline-title"></p>
+        <p id="challenge-result-detail" class="vz-offline-text"></p>
+        <button id="challenge-result-close" type="button" class="vz-offline-retry">Spēlēt tālāk</button>
+      </div>
+    </div>
+
+    <!-- Lietotnes lejupielāde / pievienošana sākumekrānam -->
+    <div id="app-install-modal" class="vz-modal-overlay hidden" role="dialog" aria-labelledby="app-install-title">
+      <div class="vz-modal-inner vz-challenge-modal">
+        <h3 id="app-install-title">Lejupielādēt lietotni</h3>
+        <p class="vz-challenge-create-note">Vari pievienot spēli kā lietotni.</p>
+        <div id="app-install-pwa-row" class="vz-challenge-join-btns u-hidden-initial">
+          <button id="app-install-pwa-btn" type="button" class="vz-btn-primary">Pievienot sākumekrānam</button>
+        </div>
+        <p class="vz-challenge-create-note vz-app-install-platform-note">
+          <strong>Android:</strong> lejupielādē no Play Store.<br />
+          <strong>iPhone / iPad:</strong> Safari → izvēlne (kvadrāts ar bultiņu) → „Pievienot sākumekrānam”.<br />
+          <strong>Dators:</strong> Chrome izvēlnē → „Instalēt VĀRDU ZONA” vai „Pievienot sākumekrānam”.
+        </p>
+        <a
+          id="app-install-play-link"
+          class="vz-btn-primary vz-app-install-play-link"
+          href="https://play.google.com/store/apps/details?id=lv.thezone.wordle"
+          target="_blank"
+          rel="noopener">Atvērt Play Store</a>
+        <button id="app-install-close" type="button" class="vz-modal-close-btn vz-app-install-close-btn">Aizvērt</button>
+      </div>
+    </div>
+
+    <!-- Mention popup -->
+    <div id="chat-mention-popup" role="status" aria-live="polite" aria-atomic="true">
+      <div id="chat-mention-popup-text"></div>
+    </div>
+
+    <!-- AUDIO -->
+    <audio id="s-click" src="sounds/click.mp3" preload="auto"></audio>
+    <audio id="s-type" src="sounds/type.mp3" preload="auto"></audio>
+    <audio id="s-error" src="sounds/error.mp3" preload="auto"></audio>
+    <audio id="s-win" src="sounds/win2.mp3" preload="auto"></audio>
+    <audio id="s-lose" src="sounds/lose.mp3" preload="auto"></audio>
+    <audio id="s-coin" src="sounds/coins.mp3" preload="auto"></audio>
+    <audio id="s-token" src="sounds/token.mp3" preload="auto"></audio>
+
+    <!-- Radio -->
+    <audio id="vz-radio" preload="none" crossorigin="anonymous"></audio>
+
+    <!-- confetti -->
+    <script defer src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+    <!-- Socket.IO -->
+    <script defer src="https://bugats-wordle-server.onrender.com/socket.io/socket.io.js"></script>
+
+    <!-- Phaser 3 (grid FX background) -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
+    <script>
+      if (!window.Phaser) {
+        var p = document.createElement("script");
+        p.src = "https://unpkg.com/phaser@3/dist/phaser.min.js";
+        document.head.appendChild(p);
+      }
+    </script>
+
+    <!-- PIXI (grid FX overlay) -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.js"></script>
+<script>
+  if (!window.PIXI) {
+    var s = document.createElement("script");
+    s.src = "https://unpkg.com/pixi.js@7/dist/pixi.min.js";
+    document.head.appendChild(s);
+  }
+</script>
+
+    <!-- GSAP mikro-animācijām -->
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
+
+    <!-- Game moduļi (pakāpeniska monolīta sadalīšana) -->
+    <script defer src="modules/game-core.js?v=2026-03-28-friends-compact-grid"></script>
+    <script defer src="modules/services.js?v=2026-03-16-modsplit-1"></script>
+    <script defer src="modules/ui.js?v=2026-03-16-modsplit-1"></script>
+    <script defer src="modules/chat.js?v=2026-03-16-modsplit-1"></script>
+    <script defer src="modules/duel.js?v=2026-03-16-modsplit-1"></script>
+    <script defer src="modules/board-games.js?v=2026-04-07-lint-cleanup"></script>
+    <script defer src="modules/zole-legal.js?v=2026-03-24-zole-discard"></script>
+    <script defer src="modules/zole-board.js?v=2026-04-28-zole-end-outcome-banner"></script>
+    <script defer src="modules/tournaments.js?v=2026-03-16-modsplit-1"></script>
+    <script defer src="modules/nhl-giveaway-teams.js?v=2026-04-25-nhl-hats"></script>
+
+    <!-- Galvenais JS -->
+    <script defer src="game.js?v=2026-05-07-word-grid-dry"></script>
+
+    <!-- PHASER GRID FX (backdrop) -->
+    <script defer src="phaser-fx.js?v=2026-03-17"></script>
+
+    <!-- PHASER LOGO FX -->
+    <script defer src="phaser-logo.js?v=2026-03-19"></script>
+
+    <!-- GRID FX (jauns fails, neķeram game.js) -->
+    <script defer src="grid-fx.js?v=2026-03-27-correct-red-fx"></script>
+
+    <!-- Runtime config (env -> window.VZ_RUNTIME_CONFIG) -->
+    <script defer src="runtime-config.js"></script>
+
+    <!-- PWA -->
+    <script defer src="pwa.js?v=2026-03-26"></script>
+
+    <!-- SEZONAS + HOF UI (bez 2. socket savienojuma) -->
+    <script defer>
+      (function () {
+        const API_BASE = "https://bugats-wordle-server.onrender.com";
+        const TZ = "Europe/Riga";
+
+        const seasonTitleEl = document.getElementById("season-title");
+        const seasonCountdownEl = document.getElementById("season-countdown");
+        const seasonStartBtn = document.getElementById("season-start-btn");
+
+        const hofBox = document.getElementById("hof-box");
+        const hofRow = document.getElementById("hof-season1");
+
+        const ADMIN_USERNAMES = ["Bugats", "BugatsLV"];
+        const ADMIN_SET = new Set(ADMIN_USERNAMES.map((x) => String(x).toLowerCase()));
+
+        function getToken() {
+          return localStorage.getItem("vzToken") || localStorage.getItem("token") || "";
+        }
+        function getUsername() {
+          return (
+            localStorage.getItem("vzUsername") ||
+            localStorage.getItem("username") ||
+            localStorage.getItem("nick") ||
+            ""
+          );
+        }
+
+        function fmtDateTime(ts) {
+          try {
+            return new Date(ts).toLocaleString("lv-LV", { timeZone: TZ });
+          } catch {
+            return new Date(ts).toLocaleString();
+          }
+        }
+
+        function formatRemaining(ms) {
+          const totalSec = Math.max(0, Math.floor(ms / 1000));
+          const days = Math.floor(totalSec / (24 * 3600));
+          const hours = Math.floor((totalSec % (24 * 3600)) / 3600);
+          const mins = Math.floor((totalSec % 3600) / 60);
+          const parts = [];
+          if (days) parts.push(days + " d.");
+          if (hours) parts.push(hours + " h");
+          parts.push(mins + " min");
+          return parts.join(" ");
+        }
+
+        function renderHofTop(entry) {
+          if (!hofBox || !hofRow) return;
+
+          if (!entry || !entry.username) {
+            hofBox.classList.add("hidden");
+            hofRow.textContent = "";
+            return;
+          }
+
+          hofBox.classList.remove("hidden");
+
+          const name = String(entry.username || "");
+          const score = Number(entry.score || 0);
+          const xp = Number(entry.xp || 0);
+
+          hofRow.textContent = `Sezona ${entry.seasonId} čempions: ${name} (${score} punkti, ${xp} XP)`;
+        }
+
+        function renderSeason(season, hofTop) {
+          if (!seasonTitleEl || !seasonCountdownEl) return;
+
+          if (!season) {
+            seasonTitleEl.textContent = "Sezona ielādējas…";
+            seasonCountdownEl.textContent = "—";
+            return;
+          }
+
+          const name = season.name || `SEZONA ${season.id ?? ""}`.trim();
+          const endAt = Number(season.endAt || 0);
+
+          if (endAt > 0) seasonTitleEl.textContent = `${name} līdz ${fmtDateTime(endAt)}`;
+          else seasonTitleEl.textContent = name;
+
+          if (!season.active) {
+            if (endAt > 0 && Date.now() >= endAt) {
+              seasonCountdownEl.textContent = "Sezona ir beigusies";
+            } else {
+              seasonCountdownEl.textContent = "Sezona vēl nav sākusies";
+            }
+            renderHofTop(hofTop);
+            return;
+          }
+
+          if (!endAt) {
+            seasonCountdownEl.textContent = "Sezona aktīva (bez beigu datuma)";
+            renderHofTop(hofTop);
+            return;
+          }
+
+          const diff = endAt - Date.now();
+          if (diff <= 0) {
+            seasonCountdownEl.textContent = "Sezona ir beigusies";
+          } else {
+            seasonCountdownEl.textContent = "Palikušas " + formatRemaining(diff);
+          }
+
+          renderHofTop(hofTop);
+        }
+
+        async function fetchSeasonAndHof() {
+          const token = getToken();
+          if (!token) {
+            renderSeason(null, null);
+            return;
+          }
+
+          try {
+            const [seasonRes, hofRes] = await Promise.all([
+              fetch(API_BASE + "/season", {
+                headers: { Authorization: "Bearer " + token },
+              }),
+              fetch(API_BASE + "/season/hof", {
+                headers: { Authorization: "Bearer " + token },
+              }),
+            ]);
+
+            let season = null;
+            let hof = [];
+
+            if (seasonRes.ok) season = await seasonRes.json();
+            if (hofRes.ok) hof = await hofRes.json();
+
+            const hofTop = Array.isArray(hof) && hof[0] ? hof[0] : season?.hallOfFameTop || null;
+
+            renderSeason(season, hofTop);
+          } catch (e) {
+            console.error("season/hof fetch error:", e);
+          }
+        }
+
+        async function startSeason() {
+          const token = getToken();
+          if (!token || !seasonStartBtn) return;
+
+          seasonStartBtn.disabled = true;
+          try {
+            const res = await fetch(API_BASE + "/season/start", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: "Bearer " + token,
+              },
+            });
+            if (!res.ok) {
+              console.error("season/start failed:", await res.text());
+              return;
+            }
+            await fetchSeasonAndHof();
+          } catch (e) {
+            console.error("season/start error:", e);
+          } finally {
+            seasonStartBtn.disabled = false;
+          }
+        }
+
+        // show admin button (case-insensitive)
+        const u = String(getUsername() || "").toLowerCase();
+        if (u && ADMIN_SET.has(u) && seasonStartBtn) {
+          seasonStartBtn.style.display = "inline-block";
+          seasonStartBtn.addEventListener("click", startSeason);
+        }
+
+        // initial + poll
+        fetchSeasonAndHof();
+        setInterval(fetchSeasonAndHof, 60 * 1000);
+      })();
+    </script>
+
+    <!-- GALDA SPĒLES: body beigās, lai z-index būtu virs apakšējās nav un pilnekrāna joslām -->
+    <div
+      id="board-games-modal"
+      class="vz-board-modal hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="board-modal-title"
+      aria-describedby="board-modal-context">
+      <div class="vz-board-modal-inner" tabindex="-1" id="board-modal-inner">
+        <button id="board-modal-close" class="vz-duel-x" type="button" aria-label="Aizvērt galda logu">✕</button>
+        <h2 id="board-modal-title" class="vz-sr-only">Galds — Zole, šahs, dambrete</h2>
+        <div id="board-modal-topbar" class="vz-board-modal-topbar">
+          <button
+            id="board-back-words-btn"
+            type="button"
+            class="vz-board-back-words"
+            title="Atgriezties pie galvenā ekrāna. Aktīvā galda spēle turpinās; uzaicinājumi un gājiens arī čatā ar [VĀRDU ZONA — galds] un zem «Ziņojumi».">
+            ← VĀRDU ZONA
+          </button>
+          <p id="board-modal-context" class="vz-board-modal-context" role="status" aria-live="polite" aria-atomic="true"></p>
+        </div>
+        <div id="board-games-lobby" class="vz-board-lobby">
+          <h3 class="vz-board-title" id="board-lobby-heading">Galds</h3>
+          <p class="vz-board-desc">Izvēlies spēli — tad redzēsi tikai tai attiecīgās iespējas. Uzvaras dod novada un klana punktus.</p>
+          <div class="vz-board-game-pick" role="tablist" aria-label="Spēles izvēle">
+            <button
+              type="button"
+              id="board-pick-zole"
+              class="vz-board-game-pick__tab"
+              role="tab"
+              aria-selected="true"
+              aria-controls="board-panel-zole">
+              🃏 Zole
+            </button>
+            <button
+              type="button"
+              id="board-pick-chess"
+              class="vz-board-game-pick__tab"
+              role="tab"
+              aria-selected="false"
+              aria-controls="board-panel-chess">
+              ♔ Šahs
+            </button>
+            <button
+              type="button"
+              id="board-pick-dambrete"
+              class="vz-board-game-pick__tab"
+              role="tab"
+              aria-selected="false"
+              aria-controls="board-panel-dambrete">
+              ♟️ Dambrete
+            </button>
+          </div>
+          <div class="vz-board-bot-diff-global" aria-label="Pret botu grūtība">
+            <p class="vz-board-bot-label">🤖 Pret botu: grūtība</p>
+            <div class="vz-board-bot-diff">
+              <label><input type="radio" name="board-bot-diff" value="easy" /> Vājš</label>
+              <label><input type="radio" name="board-bot-diff" value="medium" checked /> Vidējs</label>
+              <label><input type="radio" name="board-bot-diff" value="hard" /> Spēcīgs</label>
+            </div>
+          </div>
+          <div
+            id="board-panel-zole"
+            class="vz-board-game-panel vz-board-game-panel--active"
+            role="tabpanel"
+            aria-labelledby="board-pick-zole">
+          <div id="board-zole-mode-wrap" class="vz-board-dambrete-mode" aria-label="Zoles režīms">
+            <span class="vz-board-dambrete-mode-label">Zoles režīms</span>
+            <div class="vz-board-dambrete-mode-radios">
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-zole-mode" value="online_3p" checked />
+                3 cilvēki — istaba</label
+              >
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-zole-mode" value="online_2p" />
+                2 cilvēki + bots</label
+              >
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-zole-mode" value="vs_bot" /> Tikai pret botiem</label
+              >
+            </div>
+          </div>
+          <div id="board-zole-room-zone" class="vz-board-zole-room-zone hidden" aria-labelledby="board-zole-room-zone-title">
+            <div
+              id="board-zole-3p-open-lobbies"
+              class="vz-board-zole-open-lobbies vz-board-zole-open-lobbies--hero hidden"
+              aria-labelledby="board-zole-3p-open-lobbies-title">
+              <h4 id="board-zole-3p-open-lobbies-title" class="vz-board-zole-open-lobbies__title">
+                Zole — atvērtās 3 cilvēku istabas
+              </h4>
+              <p class="vz-board-zole-open-lobbies__intro">
+                Citu spēlētāju istabas ar brīvām vietām. Skaties likmi un sastāvu, tad spied «Pievienoties». Vai izveido savu istabu zemāk.
+              </p>
+              <div class="vz-board-zole-open-lobbies__scroll">
+                <table class="vz-board-zole-open-lobbies__table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Saimnieks</th>
+                      <th scope="col">Vieta</th>
+                      <th scope="col">Likme</th>
+                      <th scope="col">Darbība</th>
+                    </tr>
+                  </thead>
+                  <tbody id="board-zole-3p-open-lobbies-body"></tbody>
+                </table>
+              </div>
+              <div
+                id="board-zole-3p-open-lobbies-empty"
+                class="vz-board-zole-open-lobbies__empty hidden"
+                role="status"
+                aria-live="polite"></div>
+            </div>
+            <h4 id="board-zole-room-zone-title" class="vz-board-zole-room-zone__title">
+              🃏 Tava istaba — 3 spēlētāji
+            </h4>
+            <p class="vz-board-zole-room-zone__intro">
+              Spied «Izveidot istabu», tad uzaicini divus spēlētājus vai izmanto «Zole» uzaicinājumu no lobija. Kad visas 3 vietas aizņemtas, spēle sākas automātiski.
+            </p>
+            <div class="vz-board-zole-stake-row">
+              <label for="board-zole-3p-stake" class="vz-board-label">Coins par tabulas punktu</label>
+              <select id="board-zole-3p-stake" class="vz-board-zole-stake-select" title="Pēc partijas: coins mainās proporcionāli tabulas punktiem. 0 = fiksēti +10/−4 kā citur.">
+                <option value="0" selected>0 — kā parasti (+10 uzvara)</option>
+                <option value="1">1 coin / punkts</option>
+                <option value="2">2 coins / punkts</option>
+                <option value="3">3 coins / punkts</option>
+                <option value="4">4 coins / punkts</option>
+                <option value="5">5 coins / punkts (max)</option>
+              </select>
+              <p class="vz-board-hint vz-board-zole-stake-hint">
+                Likme attiecas uz visu istabu. Trešais spēlētājs to redz uzaicinājumā. Mainīt drīkst tikai saimnieks, kamēr nav 3 vietās.
+              </p>
+            </div>
+            <div id="board-zole-3p-lobby-entry" class="vz-board-zole-3p-entry hidden">
+              <button type="button" class="vz-board-invite-btn js-zole-create-lobby">
+                Izveidot zoles istabu (gaida 3 spēlētājus)
+              </button>
+            </div>
+            <div id="board-zole-3p-lobby" class="vz-board-zole-3p-lobby hidden" aria-live="polite">
+              <p id="board-zole-3p-lobby-text" class="vz-board-zole-3p-text">
+                <span id="board-zole-3p-lobby-core"></span>
+                <span id="board-zole-3p-invite-countdown" class="vz-board-zole-invite-countdown hidden" aria-live="polite"></span>
+              </p>
+              <div id="board-zole-3p-host-actions" class="hidden">
+                <label for="board-zole-3p-third" class="vz-board-label">Spēlētāja lietotājvārds</label>
+                <input id="board-zole-3p-third" type="text" placeholder="uzaicināt uz istabu" autocomplete="username" />
+                <div class="vz-board-zole-3p-btns">
+                  <button id="board-zole-3p-invite-third" type="button" class="vz-board-invite-btn">Uzaicināt</button>
+                  <button id="board-zole-3p-cancel-lobby" type="button" class="vz-board-resign">Atcelt istabu</button>
+                </div>
+              </div>
+              <p id="board-zole-3p-guest-hint" class="vz-board-hint hidden">Gaidām saimnieku vai citus spēlētājus…</p>
+              <div id="board-zole-3p-guest-actions" class="hidden">
+                <button id="board-zole-3p-leave-lobby" type="button" class="vz-board-resign">Pamest istabu</button>
+              </div>
+            </div>
+          </div>
+            <div class="vz-board-invite-btns vz-board-invite-btns--single">
+              <button id="board-invite-zole" type="button" class="vz-board-invite-btn">Uzaicināt uz zoli</button>
+            </div>
+          <div class="vz-board-bot-section">
+            <p class="vz-board-bot-label">🤖 Zole pret botiem</p>
+            <div class="vz-board-bot-btns vz-board-bot-btns--single">
+              <button id="board-vsbot-zole" type="button" class="vz-board-invite-btn">Sākt pret botiem</button>
+            </div>
+          </div>
+          </div>
+
+          <div id="board-invite-friend-block" class="vz-board-invite-friend hidden">
+            <p class="vz-board-divider">— Draugs tiešsaistē —</p>
+            <label for="board-invite-username" class="vz-board-label">Pretinieka lietotājvārds</label>
+            <input id="board-invite-username" type="text" placeholder="piemēram: spēlētājs123" autocomplete="username" aria-describedby="board-invite-hint" />
+            <span id="board-invite-hint" class="vz-board-hint"></span>
+          </div>
+
+          <div
+            id="board-panel-chess"
+            class="vz-board-game-panel"
+            role="tabpanel"
+            aria-labelledby="board-pick-chess"
+            hidden>
+          <div
+            id="board-chess-open-seats"
+            class="vz-board-zole-open-lobbies hidden"
+            aria-labelledby="board-chess-open-seats-title">
+            <h4 id="board-chess-open-seats-title" class="vz-board-zole-open-lobbies__title">
+              Šahs — gaida pretinieku
+            </h4>
+            <p class="vz-board-zole-open-lobbies__intro">
+              Publicētā vieta izmanto <strong>šaha laiku no PvP izvēlnes</strong> zemāk. «Pievienoties» nosūta pieprasījumu saimniekam.
+            </p>
+            <div class="vz-board-zole-open-lobbies__scroll">
+              <table class="vz-board-zole-open-lobbies__table">
+                <thead>
+                  <tr>
+                    <th scope="col">Spēlētājs</th>
+                    <th scope="col">Laiks</th>
+                    <th scope="col">Darbība</th>
+                  </tr>
+                </thead>
+                <tbody id="board-chess-open-seats-body"></tbody>
+              </table>
+            </div>
+            <div
+              id="board-chess-open-seats-empty"
+              class="vz-board-zole-open-lobbies__empty hidden"
+              role="status"
+              aria-live="polite"></div>
+            <div class="vz-board-open-seat-publish">
+              <button type="button" id="board-chess-open-seat-publish" class="vz-board-invite-btn vz-board-invite-btn--ghost">
+                Publicēt: gaidu ar izvēlēto PvP laiku
+              </button>
+              <button type="button" id="board-chess-open-seat-cancel" class="vz-board-resign vz-board-open-seat-publish__cancel hidden">
+                Noņemt mani no saraksta
+              </button>
+            </div>
+          </div>
+            <div class="vz-board-chess-time-row" id="board-chess-time-row">
+              <label for="board-chess-time-preset" class="vz-board-label">Šaha laiks (PvP)</label>
+              <select id="board-chess-time-preset" class="vz-board-chess-time-select" title="Tiek lietots uzaicinājumam, revānšam, atvērtai vietai un profila «Šahs». Izvēle tiek atcerēta šajā ierīcē.">
+                <option value="1+0">1 min + 0 s (bullet)</option>
+                <option value="2+1">2 min + 1 s</option>
+                <option value="3+0">3 min + 0 s</option>
+                <option value="3+2">3 min + 2 s</option>
+                <option value="5+0">5 min + 0 s</option>
+                <option value="5+3">5 min + 3 s</option>
+                <option value="5+5">5 min + 5 s</option>
+                <option value="10+0">10 min + 0 s (klasika)</option>
+                <option value="10+5">10 min + 5 s</option>
+                <option value="15+0">15 min + 0 s</option>
+                <option value="15+10">15 min + 10 s</option>
+                <option value="25+10">25 min + 10 s</option>
+              </select>
+            </div>
+            <div class="vz-board-invite-btns vz-board-invite-btns--single">
+              <button id="board-invite-chess" type="button" class="vz-board-invite-btn">Uzaicināt uz šahu</button>
+            </div>
+            <div class="vz-board-bot-section">
+              <p class="vz-board-bot-label">🤖 Šahs pret botu</p>
+              <div class="vz-board-bot-btns vz-board-bot-btns--single">
+                <button id="board-vsbot-chess" type="button" class="vz-board-invite-btn">Sākt pret botu</button>
+              </div>
+            </div>
+            <div class="vz-board-chess-time-row vz-board-chess-time-row--vsbot" id="board-chess-time-row-vsbot">
+              <label for="board-chess-time-preset-vsbot" class="vz-board-label">Šaha laiks (pret botu)</label>
+              <select id="board-chess-time-preset-vsbot" class="vz-board-chess-time-select">
+                <option value="1+0">1 min + 0 s (bullet)</option>
+                <option value="2+1">2 min + 1 s</option>
+                <option value="3+0">3 min + 0 s</option>
+                <option value="3+2">3 min + 2 s</option>
+                <option value="5+0">5 min + 0 s</option>
+                <option value="5+3">5 min + 3 s</option>
+                <option value="5+5">5 min + 5 s</option>
+                <option value="10+0">10 min + 0 s</option>
+                <option value="10+5">10 min + 5 s</option>
+                <option value="15+0">15 min + 0 s</option>
+                <option value="15+10">15 min + 10 s</option>
+                <option value="25+10">25 min + 10 s</option>
+              </select>
+            </div>
+          </div>
+
+          <div
+            id="board-panel-dambrete"
+            class="vz-board-game-panel"
+            role="tabpanel"
+            aria-labelledby="board-pick-dambrete"
+            hidden>
+          <div id="board-dambrete-mode-wrap" class="vz-board-dambrete-mode" aria-label="Dambretes noteikumi">
+            <span class="vz-board-dambrete-mode-label">Dambretes režīms</span>
+            <div class="vz-board-dambrete-mode-radios">
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-dambrete-variant" value="russian" checked />
+                Krievijas šaškas</label
+              >
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-dambrete-variant" value="english" /> Angļu dambrete</label
+              >
+            </div>
+          </div>
+          <div
+            id="board-dambrete-open-seats"
+            class="vz-board-zole-open-lobbies hidden"
+            aria-labelledby="board-dambrete-open-seats-title">
+            <h4 id="board-dambrete-open-seats-title" class="vz-board-zole-open-lobbies__title">
+              Dambrete — gaida pretinieku
+            </h4>
+            <p class="vz-board-zole-open-lobbies__intro">
+              Spēlētāji, kas publicējuši brīvu vietu. «Pievienoties» nosūta pieprasījumu saimniekam — viņš var pieņemt vai noraidīt.
+            </p>
+            <div class="vz-board-zole-open-lobbies__scroll">
+              <table class="vz-board-zole-open-lobbies__table">
+                <thead>
+                  <tr>
+                    <th scope="col">Spēlētājs</th>
+                    <th scope="col">Režīms</th>
+                    <th scope="col">Darbība</th>
+                  </tr>
+                </thead>
+                <tbody id="board-dambrete-open-seats-body"></tbody>
+              </table>
+            </div>
+            <div
+              id="board-dambrete-open-seats-empty"
+              class="vz-board-zole-open-lobbies__empty hidden"
+              role="status"
+              aria-live="polite"></div>
+            <div class="vz-board-open-seat-publish">
+              <button type="button" id="board-dambrete-open-seat-publish" class="vz-board-invite-btn vz-board-invite-btn--ghost">
+                Publicēt: gaidu pēc izvēlētā dambretes režīma
+              </button>
+              <button type="button" id="board-dambrete-open-seat-cancel" class="vz-board-resign vz-board-open-seat-publish__cancel hidden">
+                Noņemt mani no saraksta
+              </button>
+            </div>
+          </div>
+            <div class="vz-board-invite-btns vz-board-invite-btns--single">
+              <button id="board-invite-dambrete" type="button" class="vz-board-invite-btn">Uzaicināt uz dambreti</button>
+            </div>
+            <div class="vz-board-bot-section">
+              <p class="vz-board-bot-label">🤖 Dambrete pret botu</p>
+              <div class="vz-board-bot-btns vz-board-bot-btns--single">
+                <button id="board-vsbot-dambrete" type="button" class="vz-board-invite-btn">Sākt pret botu</button>
+              </div>
+            </div>
+          </div>
+          <div id="board-invite-pending" class="vz-board-pending hidden" role="status" aria-live="polite">
+            <span id="board-invite-pending-text">Gaidām atbildi…</span>
+            <button type="button" id="board-invite-pending-cancel" class="vz-board-pending-cancel hidden">
+              Atcelt uzaicinājumu
+            </button>
+          </div>
+          <details class="vz-board-rules">
+            <summary class="vz-board-rules-summary">📖 Īsi noteikumi</summary>
+            <div class="vz-board-rules-content">
+              <p><strong>Dambrete — izvēlies režīmu:</strong> <em>Krievijas šaškas</em> — bārdiņa iet uz priekšu, ķer visos virzienos; dāma slīd un ķer tālu pa diagonāli; promocija var notikt ķeršanas laikā. <em>Angļu dambrete</em> — bārdiņa tikai uz priekšu, ķer tikai uz priekšu; dāma vienu lauciņu visos virzienos.</p>
+              <p><strong>Šahs:</strong> Standarta šaha noteikumi. Uzvar tas, kas izveido matu pretinieka karalim.</p>
+              <p><strong>Zole</strong> (pēc <a href="https://zolei.lv/zoles-noteikumi/" target="_blank" rel="noopener">zolei.lv</a>): spēlē <strong>26 kārtis</strong> — <em>kāravi</em> ♦ no dūža līdz septītniekam; pārējie masti ♣ ♥ ♠ no dūža līdz devītniekam.</p>
+              <p><strong>Kas ir trumpji (lāči):</strong> <em>visas dāmas un visi kalpi</em> jebkurā mastā, un <em>visas pārējās ♦ kāravas kārtis</em> (dūzis, desmitnieks, kungs, 9, 8, 7). Stiķī jebkurš trumpis ir stiprāks par jebkuru <strong>parasto</strong> kārti. Dāmu un kalpu stiprums pēc mastiem: kreicis → pīķis → ercens → kāravs. ♦ „garā” masta kārtu secība: dūzis, desmitnieks, kungs, devītnieks, astotnieks, septītnieks.</p>
+              <p><strong>Kas ir parastās kārtis:</strong> tikai ♣, ♥ un ♠ — <strong>dūzis, desmitnieks, kungs, devītnieks</strong> (šajos mastos nav 8 un 7). Tās <em>nav</em> trumpji. Pēc <strong>vadības masta</strong> (ko izlika pirmais stiķī) parasto kārtu stiprums: dūzis, tad desmitnieks, tad kungs.</p>
+              <p><strong>Sekšana:</strong> <strong>Dāma un kalps vienmēr ir trumpa kārtis</strong>. Kad vada <strong>parasto</strong> mastu (♣/♥/♠ A,10,K,9), vispirms jāspēlē <strong>parastā</strong> kārta <strong>tajā pašā mastā</strong>, ja tāda ir rokā. Ja <strong>parastās</strong> šī masta <strong>nav</strong> — drīkst <strong>atmesties</strong> (jebkuru citu mastu) <strong>vai</strong> pēc izvēles <strong>pārsist ar trumpi</strong> (t.sk. vadības masta dāmu/kalpu). Kad vada <strong>trumpi</strong>, jāliek <strong>trumpis</strong>, kamēr kāds ir rokā; ja <strong>nav neviena trumpja</strong> — tikai <strong>parastā</strong>. Stiķī jebkurš trumpis pārspēj parasto.</p>
+              <p><strong>Acis:</strong> dūzis 11, desmitnieks 10, kungs 4, dāma 3, kalps 2; devītnieks, astotnieks, septītnieks — 0.</p>
+              <p><strong>Lielais</strong> ņem 2 vidus kārtis, <strong>norok 2</strong> — to acis pieskaita viņa stiķiem; uzvara ar <strong>61+</strong> acīm pret abiem mazajiem (acis kopā). <strong>Zole</strong> — bez pirkuma; vidus kārtu acis mazo pusē. <strong>Mazā zole</strong> — uzvara: +12 lielajam, −6 katram mazajam; zaudējums: −14 lielajam, +7 katram mazajam. Pārējā tabula (lielais/zole) kā klasiskajos noteikumos (t.sk. mazajiem &lt;30 acu, bezstiķis, visi stiķi, 91+ zolei).</p>
+              <p><strong>Likšana šeit (3 spēlētāji):</strong> divas kārtas — katrā vari teikt <strong>garām</strong> vai pieteikt <strong>Lielais / Zole / Mazā zole</strong>. <em>Galdiņu</em> (visi pa sevi; zaudē ar <strong>visvairāk acu</strong>) <strong>neizvēlas ar pogu</strong> — tas sākas <strong>automātiski</strong>, ja <strong>1. un 2. kārtā visi iet garām</strong>. <em>Galds</em> (pēc stiķu skaita) šeit nav. Pilnajā noteikumu tekstā bieži seko <strong>pule</strong> — <strong>šeit pules nav</strong>. Pret botiem: vairākas partijas, uzkrātā tabula. Likšanas sākums rotē. Stratēģija — skat. zolei.lv.</p>
+              <p><strong>Tiešsaiste:</strong> <em>3 cilvēki</em> — spēlētājs izveido istabu, izvēlas <strong>coins par tabulas punktu</strong> (vai 0 = fiksēti +10/−4), tad uzaicina divus; kad trīs vietas aizņemtas, spēle sākas. Vai 2+boti / tikai pret botiem.</p>
+            </div>
+          </details>
+          <div class="vz-board-leaderboards">
+            <details class="vz-board-lb">
+              <summary>🏆 Dambretes TOP</summary>
+              <div id="board-lb-dambrete" class="vz-board-lb-list"></div>
+            </details>
+            <details class="vz-board-lb">
+              <summary>🏆 Šaha TOP</summary>
+              <div id="board-lb-chess" class="vz-board-lb-list"></div>
+            </details>
+            <details class="vz-board-lb">
+              <summary>🏆 Zoles uzvaras</summary>
+              <div id="board-lb-zole" class="vz-board-lb-list"></div>
+            </details>
+          </div>
+        </div>
+        <div id="board-games-invite" class="vz-board-invite hidden">
+          <p class="vz-board-invite-text">
+            <span id="board-invite-from"></span> aicina uz <span id="board-invite-type"></span>
+            <span id="board-invite-dambrete-variant" class="hidden"></span>
+          </p>
+          <p id="board-invite-zole-stake" class="vz-board-invite-stake hidden"></p>
+          <p id="board-invite-chess-time" class="vz-board-invite-stake hidden"></p>
+          <p class="vz-board-invite-sub">Uzvaras dod novada un klana punktus. Šaham augšā redzamais laiks ir tas pats, kas spēlē.</p>
+          <p id="board-invite-expires" class="vz-board-invite-expires hidden" aria-live="polite"></p>
+          <div class="vz-board-invite-actions">
+            <button id="board-invite-accept" type="button">Pieņemt</button>
+            <button id="board-invite-decline" type="button">Noraidīt</button>
+          </div>
+        </div>
+        <div id="board-game-area" class="vz-board-game-area hidden">
+          <div class="vz-board-game-header">
+            <button
+              id="board-compact-back-words-btn"
+              type="button"
+              class="vz-board-compact-back-words hidden"
+              title="Atgriezties pie VĀRDU ZONAS galvenā ekrāna; zole turpinās fonā."
+              aria-label="Atpakaļ pie VĀRDU ZONAS galvenā ekrāna">
+              ← Galvenais
+            </button>
+            <div class="vz-board-game-header-cluster">
+              <div class="vz-board-game-meta">
+                <span id="board-game-type" class="vz-board-game-type"></span>
+                <span id="board-game-turn" class="vz-board-game-turn" aria-live="polite"></span>
+              </div>
+              <div id="board-opponent-chips-wrap" class="vz-board-opponent-chips-wrap hidden">
+                <button
+                  type="button"
+                  id="board-opponent-chip"
+                  class="vz-board-opponent-chip hidden"
+                  aria-label="Atvērt pretinieka profilu">
+                  <span class="vz-board-opponent-chip__avatar" aria-hidden="true">
+                    <img
+                      class="vz-board-opponent-chip__img"
+                      alt=""
+                      decoding="async" />
+                    <span class="vz-board-opponent-chip__initials"></span>
+                  </span>
+                  <span class="vz-board-opponent-chip__name"></span>
+                </button>
+                <button
+                  type="button"
+                  id="board-opponent-chip-2"
+                  class="vz-board-opponent-chip hidden"
+                  aria-label="Atvērt otrā pretinieka profilu">
+                  <span class="vz-board-opponent-chip__avatar" aria-hidden="true">
+                    <img
+                      class="vz-board-opponent-chip__img"
+                      alt=""
+                      decoding="async" />
+                    <span class="vz-board-opponent-chip__initials"></span>
+                  </span>
+                  <span class="vz-board-opponent-chip__name"></span>
+                </button>
+              </div>
+            </div>
+            <div class="vz-board-game-header-actions">
+              <button
+                id="board-browser-fs-btn"
+                type="button"
+                class="vz-board-fs-browser hidden"
+                aria-pressed="false"
+                title="Paslēpj pārlūka adreses joslu (ja pārlūks atļauj). iPhone: pievieno sākumekrānam vai izmanto «Pilnekrāna spēle» galvenajā izvēlnē.">
+                Pilnekrāns
+              </button>
+              <button id="board-resign-btn" type="button" class="vz-board-resign" title="Beigt spēli un zaudēt">Padoties</button>
+            </div>
+          </div>
+          <p id="board-zole-stake-banner" class="vz-board-zole-stake-banner hidden" aria-live="polite"></p>
+          <div
+            id="board-chess-clocks"
+            class="vz-board-chess-clocks hidden"
+            role="group"
+            aria-label="Šaha laika kontrole">
+            <div class="vz-board-chess-clock">
+              <span id="board-chess-clock-0-label" class="vz-board-chess-clock__who"></span>
+              <span id="board-chess-clock-0" class="vz-board-chess-clock__time" aria-live="polite">—</span>
+            </div>
+            <div class="vz-board-chess-clock">
+              <span id="board-chess-clock-1-label" class="vz-board-chess-clock__who"></span>
+              <span id="board-chess-clock-1" class="vz-board-chess-clock__time" aria-live="polite">—</span>
+            </div>
+          </div>
+          <div
+            id="board-chess-draw-ui"
+            class="vz-board-chess-draw-ui hidden"
+            role="group"
+            aria-label="Šaha neizšķirts">
+            <p id="board-chess-draw-hint" class="vz-board-chess-draw-hint hidden" aria-live="polite"></p>
+            <p id="board-chess-draw-move-rule" class="vz-board-chess-draw-move-rule hidden">
+              Pēc katra gājiena aktivais neizšķirta piedāvājums tiek atcelts — ja gribi vēlreiz, piedāvā no jauna pēc tam, kad atkal ir tavs gājiens.
+            </p>
+            <div class="vz-board-chess-draw-btns">
+              <button type="button" id="board-chess-draw-offer" class="vz-board-chess-draw-btn">
+                Piedāvāt neizšķirtu
+              </button>
+              <button
+                type="button"
+                id="board-chess-draw-accept"
+                class="vz-board-chess-draw-btn vz-board-chess-draw-btn--accept hidden">
+                Pieņemt neizšķirtu
+              </button>
+              <button
+                type="button"
+                id="board-chess-draw-decline"
+                class="vz-board-chess-draw-btn vz-board-chess-draw-btn--decline hidden">
+                Noraidīt neizšķirtu
+              </button>
+              <button
+                type="button"
+                id="board-chess-claim-draw"
+                class="vz-board-chess-draw-btn vz-board-chess-draw-btn--claim hidden"
+                title="Ja ir izpildīts 50 gājienu likums vai trīskāršs atkārtojums, vari pieteikt neizšķirtu savā gājienā.">
+                Pieteikt neizšķirtu (50 gāj. / trīskāršs)
+              </button>
+            </div>
+          </div>
+          <details id="board-game-hint-wrap" class="vz-board-hint-wrap" open>
+            <summary id="board-game-hint-summary" class="vz-board-hint-summary">
+              Palīdzība
+            </summary>
+            <div id="board-game-hint" class="vz-board-game-hint vz-board-game-hint--body" role="status">
+              Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt
+            </div>
+          </details>
+          <div id="board-dambrete-container" class="vz-board-container hidden"></div>
+          <div id="board-chess-container" class="vz-board-container hidden"></div>
+          <div id="board-zole-container" class="vz-board-container hidden"></div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="board-result-overlay"
+      class="vz-board-result-overlay hidden"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="board-result-title"
+      aria-describedby="board-result-detail"
+    >
+      <div class="vz-board-result-card">
+        <p id="board-result-eyebrow" class="vz-board-result-eyebrow"></p>
+        <p id="board-result-title" class="vz-board-result-title"></p>
+        <p id="board-result-detail" class="vz-board-result-detail"></p>
+        <p id="board-result-zole-note" class="vz-board-result-zole-note hidden" aria-live="polite"></p>
+        <p id="board-result-coins" class="vz-board-result-coins hidden"></p>
+        <p id="board-result-rematch-status" class="vz-board-result-rematch-status hidden" aria-live="polite"></p>
+        <div class="vz-board-result-actions">
+          <button type="button" id="board-result-rematch" class="vz-board-result-btn vz-board-result-btn--primary hidden">
+            Revānšs
+          </button>
+          <button type="button" id="board-result-play-again-vsbot" class="vz-board-result-btn vz-board-result-btn--secondary hidden">
+            Vēlreiz pret botu
+          </button>
+          <button type="button" id="board-result-close" class="vz-board-result-btn">
+            Sapratu
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </body>
+</html>

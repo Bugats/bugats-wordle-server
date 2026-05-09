@@ -1,0 +1,32 @@
+/branding/
+/twa/keystore/
+/twa/.gradle/
+/twa/app/
+/twa/build/
+/twa/gradle/
+/twa/gradlew
+/twa/gradlew.bat
+/twa/manifest-checksum.txt
+/twa/store_icon.png
+/twa/build.gradle
+/twa/gradle.properties
+/twa/settings.gradle
+/twa/app-release-*.aab
+/twa/app-release-*.apk
+/twa/app-release-*.apk.idsig
+/twa/app-release-unsigned-aligned.apk
+
+# Node (atkarības necommitojam — izmanto `npm ci` / `npm install`)
+node_modules/
+
+# Lokālie / izvilkumi no servera (datu faili paliek uz diska, bet ne PR)
+/users.json
+/seasons.json
+/wheel.json
+/tournaments.json
+/tournaments.brackets.json
+/clans.json
+
+# Atomārās saglabāšanas pagaidu faili (skat. server.js saveJsonAtomic)
+/tmp/*
+!/tmp/.gitkeep
