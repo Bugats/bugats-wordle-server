@@ -3541,6 +3541,7 @@ async function startChallengeRound(challengeId) {
     if (c.status === "finished") {
       showChallengeResult(c.winner, c.attempts1, c.attempts2, c.player1);
     }
+    syncGridCaretHighlight();
   } catch (err) {
     console.error("startChallengeRound:", err);
     if (gameMessageEl)
@@ -6760,6 +6761,7 @@ function resetGrid(len) {
 
   renderEngagementLoopCard();
   scheduleFitGrid();
+  syncGridCaretHighlight();
 }
 
 async function startNewRound() {
@@ -6822,6 +6824,7 @@ async function startNewRound() {
     }
     state.roundFinished = false;
     renderEngagementLoopCard();
+    syncGridCaretHighlight();
   } catch (err) {
     console.error("start-round kļūda:", err);
     if (gameMessageEl)
@@ -6903,6 +6906,47 @@ function skipHintLockedForward() {
   }
 }
 
+/** Nākamā ailīte / gaidāma rinda — redzama līdzīgi kā tastatūras :focus-visible (Tab + rakstīšana). */
+function syncGridCaretHighlight() {
+  if (!state.gridTiles?.length) return;
+
+  for (let r = 0; r < state.rows; r++) {
+    const rowSeen = new Set();
+    for (let c = 0; c < state.cols; c++) {
+      const t = state.gridTiles[r]?.[c];
+      if (!t) continue;
+      t.classList.remove("vz-tile-caret");
+      const rowEl = t.closest?.(".grid-row");
+      if (rowEl && !rowSeen.has(rowEl)) {
+        rowSeen.add(rowEl);
+        rowEl.classList.remove("vz-row-await-enter");
+      }
+    }
+  }
+
+  if (state.roundFinished) return;
+  if (state.currentRow >= state.rows) return;
+
+  const pendingEnter =
+    state.currentCol >= state.cols &&
+    !state.isLocked &&
+    state.currentRow < state.rows;
+
+  if (pendingEnter) {
+    const rowEl =
+      state.gridTiles[state.currentRow]?.[0]?.closest?.(".grid-row");
+    if (rowEl) rowEl.classList.add("vz-row-await-enter");
+    return;
+  }
+
+  if (state.isLocked) return;
+
+  if (state.currentCol < state.cols) {
+    const t = state.gridTiles[state.currentRow]?.[state.currentCol];
+    if (t) t.classList.add("vz-tile-caret");
+  }
+}
+
 function applyRevealHintFromRow(pos, letter, fromRow = state.currentRow) {
   const L = String(letter || "").toUpperCase();
 
@@ -6932,6 +6976,7 @@ function applyRevealHintFromRow(pos, letter, fromRow = state.currentRow) {
   }
 
   skipHintLockedForward();
+  syncGridCaretHighlight();
 }
 function applyCorrectLocksFromPattern(fromRowExclusive, guessLetters, pattern) {
   if (!Array.isArray(pattern) || !Array.isArray(guessLetters)) return;
@@ -7005,6 +7050,7 @@ async function useRevealLetter() {
   } finally {
     state.isLocked = false;
     updateRevealAbilityUI();
+    syncGridCaretHighlight();
   }
 }
 
@@ -7031,6 +7077,7 @@ function addLetter(ch) {
   playKeyNote(ch);
   pulseSoundFx("type", fxPointFromTile(tile));
   pulseGridGlow();
+  syncGridCaretHighlight();
 }
 
 function deleteLetter() {
@@ -7054,6 +7101,7 @@ function deleteLetter() {
   playControlNote("backspace");
   pulseSoundFx("backspace", fxPointFromTile(tile));
   pulseGridGlow();
+  syncGridCaretHighlight();
 }
 
 function flashRow(rowIndex) {
@@ -7191,6 +7239,7 @@ async function submitChallengeGuess() {
     state.currentRow++;
     state.currentCol = 0;
     skipHintLockedForward();
+    syncGridCaretHighlight();
     if (data.win) playSound(sWin);
     if (data.finished) state.challengeFinished = true;
     if (data.bothDone) {
@@ -7210,6 +7259,7 @@ async function submitChallengeGuess() {
       flashRow(state.currentRow);
   } finally {
     state.isLocked = false;
+    syncGridCaretHighlight();
   }
 }
 
@@ -7354,6 +7404,7 @@ async function submitGuess() {
       }, unlockAfter);
 
       setTimeout(recordWinAndMaybeShowRatePrompt, unlockAfter + 600);
+      syncGridCaretHighlight();
       return;
     }
 
@@ -7384,6 +7435,7 @@ async function submitGuess() {
         } catch {}
       }, unlockAfter);
 
+      syncGridCaretHighlight();
       return;
     }
 
@@ -7414,6 +7466,7 @@ async function submitGuess() {
         updatePlayerCard(me);
         refreshMissions();
       } catch {}
+      syncGridCaretHighlight();
     }, unlockAfter);
   } catch (err) {
     console.error("/guess kļūda:", err);
@@ -7421,6 +7474,7 @@ async function submitGuess() {
       gameMessageEl.textContent = err.message || "Kļūda minējumā.";
     state.isLocked = false;
     playSound(sError);
+    syncGridCaretHighlight();
   }
 }
 
@@ -11863,6 +11917,7 @@ function initSocket() {
     setTimeout(() => {
       state.isLocked = false;
       startDuelTimer(exp, sn);
+      syncGridCaretHighlight();
     }, delayMs);
   });
 
@@ -11895,9 +11950,11 @@ function initSocket() {
       setTimeout(() => {
         state.isLocked = false;
         startDuelTimer(exp, sn);
+        syncGridCaretHighlight();
       }, delayMs);
     } else {
       startDuelTimer(exp, sn);
+      syncGridCaretHighlight();
     }
 
     (history || []).forEach((h, r) => {
@@ -11913,6 +11970,7 @@ function initSocket() {
     state.currentRow = (history || []).length;
     state.currentCol = 0;
     skipHintLockedForward();
+    syncGridCaretHighlight();
   }); // <-- ŠIS AIZVER socket.on("duel.resume", ...)
 
   const onDuelGuessResult = async (payload) => {
@@ -11931,6 +11989,7 @@ function initSocket() {
       state.isLocked = true;
       renderEngagementLoopCard();
       setTimeout(recordWinAndMaybeShowRatePrompt, unlockAfter + 600);
+      syncGridCaretHighlight();
       return;
     }
 
@@ -11941,6 +12000,7 @@ function initSocket() {
       state.roundFinished = true;
       state.isLocked = true;
       renderEngagementLoopCard();
+      syncGridCaretHighlight();
       return;
     }
 
@@ -11949,6 +12009,7 @@ function initSocket() {
       state.currentCol = 0;
       skipHintLockedForward();
       state.isLocked = false;
+      syncGridCaretHighlight();
     }, unlockAfter);
 
     setTimeout(async () => {
