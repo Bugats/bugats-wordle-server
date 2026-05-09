@@ -707,6 +707,57 @@ function boardGamePlayerIndex(players, username) {
   return -1;
 }
 
+/** Dambrete / šahs: pretinieka kartīte (iniciāļi / kešots avatārs + vārds); klikšķis → openProfile */
+function syncBoardOpponentChip() {
+  const wrap = document.getElementById("board-opponent-chip");
+  const img = document.getElementById("board-opponent-chip-img");
+  const initials = document.getElementById("board-opponent-chip-initials");
+  const nameEl = document.getElementById("board-opponent-chip-name");
+  if (!wrap || !img || !initials || !nameEl) return;
+
+  const gid = boardState.gameId;
+  const t = boardState.type;
+  const players = boardState.players;
+  const show =
+    !!gid &&
+    (t === "dambrete" || t === "chess") &&
+    Array.isArray(players) &&
+    players.length >= 2;
+
+  if (!show) {
+    wrap.classList.add("hidden");
+    wrap.disabled = true;
+    delete wrap.dataset.username;
+    return;
+  }
+
+  const myIdx = boardGamePlayerIndex(players, state.username);
+  if (myIdx !== 0 && myIdx !== 1) {
+    wrap.classList.add("hidden");
+    wrap.disabled = true;
+    delete wrap.dataset.username;
+    return;
+  }
+
+  const oppIdx = 1 - myIdx;
+  const oppName = String(players[oppIdx] || "").trim();
+  if (!oppName) {
+    wrap.classList.add("hidden");
+    wrap.disabled = true;
+    delete wrap.dataset.username;
+    return;
+  }
+
+  wrap.classList.remove("hidden");
+  wrap.disabled = false;
+  wrap.dataset.username = oppName;
+  nameEl.textContent = oppName;
+
+  const local = getLocalAvatarEntry(oppName);
+  const url = local && local.url ? local.url : null;
+  setAvatar(img, initials, url, oppName);
+}
+
 /**
  * Dambrete/šahs: `turn` ir 0 vai 1. Dažreiz no servera/JSON nāk kā virkne (`"0"`) —
  * tad `myIdx === turn` un `myPlayerIdx === turnIdx` kļūst par false un lauki nav klikšķināmi.
@@ -13336,6 +13387,7 @@ function renderBoardGame() {
   syncBoardModalContext();
   syncChessClockDom();
   syncChessDrawControls();
+  syncBoardOpponentChip();
 }
 
 async function handleChessCellClick(r, c, isPiece) {
@@ -13774,6 +13826,13 @@ function bindBoardGames() {
       if (!boardState.gameId || !state.socket) return;
       state.socket.emit("board.resign", { gameId: boardState.gameId });
     });
+  const oppChipBtn = document.getElementById("board-opponent-chip");
+  if (oppChipBtn) {
+    oppChipBtn.addEventListener("click", () => {
+      const u = String(oppChipBtn.dataset.username || "").trim();
+      if (u) void openProfile(u);
+    });
+  }
   document
     .getElementById("board-chess-draw-offer")
     ?.addEventListener("click", () => {

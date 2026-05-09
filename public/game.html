@@ -48,7 +48,7 @@
     <link rel="dns-prefetch" href="//unpkg.com" />
     <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-  <link rel="stylesheet" href="style.css?v=2026-04-27-vz-logo-file" />
+  <link rel="stylesheet" href="style.css?v=2026-05-06-board-opp-chip" />
 
     <!-- AdSense (site verification + ads loader) -->
     <script
@@ -1284,7 +1284,7 @@
     <script defer src="modules/nhl-giveaway-teams.js?v=2026-04-25-nhl-hats"></script>
 
     <!-- Galvenais JS -->
-    <script defer src="game.js?v=2026-04-27-hat-giveaway-flow"></script>
+    <script defer src="game.js?v=2026-05-06-board-opp-chip"></script>
 
     <!-- PHASER GRID FX (backdrop) -->
     <script defer src="phaser-fx.js?v=2026-03-17"></script>
@@ -1862,9 +1862,26 @@
               aria-label="Atpakaļ pie VĀRDU ZONAS galvenā ekrāna">
               ← Galvenais
             </button>
-            <div class="vz-board-game-meta">
-              <span id="board-game-type" class="vz-board-game-type"></span>
-              <span id="board-game-turn" class="vz-board-game-turn" aria-live="polite"></span>
+            <div class="vz-board-game-header-cluster">
+              <div class="vz-board-game-meta">
+                <span id="board-game-type" class="vz-board-game-type"></span>
+                <span id="board-game-turn" class="vz-board-game-turn" aria-live="polite"></span>
+              </div>
+              <button
+                type="button"
+                id="board-opponent-chip"
+                class="vz-board-opponent-chip hidden"
+                aria-label="Atvērt pretinieka profilu">
+                <span class="vz-board-opponent-chip__avatar" aria-hidden="true">
+                  <img
+                    id="board-opponent-chip-img"
+                    class="vz-board-opponent-chip__img"
+                    alt=""
+                    decoding="async" />
+                  <span id="board-opponent-chip-initials" class="vz-board-opponent-chip__initials"></span>
+                </span>
+                <span id="board-opponent-chip-name" class="vz-board-opponent-chip__name"></span>
+              </button>
             </div>
             <div class="vz-board-game-header-actions">
               <button
