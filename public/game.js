@@ -707,55 +707,147 @@ function boardGamePlayerIndex(players, username) {
   return -1;
 }
 
-/** Dambrete / šahs: pretinieka kartīte (iniciāļi / kešots avatārs + vārds); klikšķis → openProfile */
+/** Ielādē avatārus no /profile, ja lokālajā kešā vēl nav (tikai attēla URL). */
+let boardOppAvatarPrefetchGen = 0;
+let lastBoardOppAvatarPrefetchKey = "";
+const _boardOppAvatarSession = Object.create(null);
+
+function boardOpponentChipAvatarUrl(username) {
+  if (!username) return null;
+  const loc = getLocalAvatarEntry(username);
+  if (loc && loc.url) return loc.url;
+  return _boardOppAvatarSession[String(username).toLowerCase()] || null;
+}
+
+function fillOpponentChipButton(username, chipBtn) {
+  if (!chipBtn) return;
+  if (!username) {
+    chipBtn.classList.add("hidden");
+    chipBtn.disabled = true;
+    delete chipBtn.dataset.username;
+    return;
+  }
+  const img = chipBtn.querySelector(".vz-board-opponent-chip__img");
+  const initials = chipBtn.querySelector(".vz-board-opponent-chip__initials");
+  const nameEl = chipBtn.querySelector(".vz-board-opponent-chip__name");
+  if (!img || !initials || !nameEl) return;
+  chipBtn.classList.remove("hidden");
+  chipBtn.disabled = false;
+  chipBtn.dataset.username = username;
+  nameEl.textContent = username;
+  const url = boardOpponentChipAvatarUrl(username);
+  setAvatar(img, initials, url, username);
+}
+
+function maybePrefetchBoardOpponentAvatars(names) {
+  const list = [
+    ...new Set(
+      (names || []).map((n) => String(n || "").trim()).filter(Boolean)
+    ),
+  ];
+  if (!state.token || list.length === 0) return;
+  const need = list.filter((u) => !boardOpponentChipAvatarUrl(u));
+  if (need.length === 0) return;
+  const key = `${boardState.gameId}|${list.slice().sort().join(",")}|${need.slice().sort().join(",")}`;
+  if (key === lastBoardOppAvatarPrefetchKey) return;
+  lastBoardOppAvatarPrefetchKey = key;
+
+  const gen = ++boardOppAvatarPrefetchGen;
+  void (async () => {
+    for (const u of need) {
+      if (gen !== boardOppAvatarPrefetchGen) return;
+      try {
+        const data = await apiGet("/profile/" + encodeURIComponent(u));
+        if (gen !== boardOppAvatarPrefetchGen) return;
+        if (data && data.avatarUrl) {
+          const un = String(data.username || u).trim() || u;
+          setLocalAvatar(un, data.avatarUrl, data.avatarUrlExpiresAt);
+          _boardOppAvatarSession[String(un).toLowerCase()] = data.avatarUrl;
+        }
+      } catch (_) {}
+    }
+    if (gen !== boardOppAvatarPrefetchGen) return;
+    syncBoardOpponentChip();
+  })();
+}
+
+/** Dambrete, šahs, Zole: pretinieku kartītes; klikšķis → openProfile; avatārs no keša vai pēc /profile prefetch. */
 function syncBoardOpponentChip() {
-  const wrap = document.getElementById("board-opponent-chip");
-  const img = document.getElementById("board-opponent-chip-img");
-  const initials = document.getElementById("board-opponent-chip-initials");
-  const nameEl = document.getElementById("board-opponent-chip-name");
-  if (!wrap || !img || !initials || !nameEl) return;
+  const wrap = document.getElementById("board-opponent-chips-wrap");
+  const chip1 = document.getElementById("board-opponent-chip");
+  const chip2 = document.getElementById("board-opponent-chip-2");
+  if (!wrap || !chip1 || !chip2) return;
 
   const gid = boardState.gameId;
+  if (!gid) {
+    lastBoardOppAvatarPrefetchKey = "";
+    boardOppAvatarPrefetchGen++;
+    for (const k of Object.keys(_boardOppAvatarSession)) delete _boardOppAvatarSession[k];
+    wrap.classList.add("hidden");
+    fillOpponentChipButton(null, chip1);
+    fillOpponentChipButton(null, chip2);
+    return;
+  }
+
   const t = boardState.type;
   const players = boardState.players;
-  const show =
-    !!gid &&
-    (t === "dambrete" || t === "chess") &&
-    Array.isArray(players) &&
-    players.length >= 2;
 
-  if (!show) {
-    wrap.classList.add("hidden");
-    wrap.disabled = true;
-    delete wrap.dataset.username;
+  if (t === "dambrete" || t === "chess") {
+    if (!Array.isArray(players) || players.length < 2) {
+      wrap.classList.add("hidden");
+      fillOpponentChipButton(null, chip1);
+      fillOpponentChipButton(null, chip2);
+      return;
+    }
+    const myIdx = boardGamePlayerIndex(players, state.username);
+    if (myIdx !== 0 && myIdx !== 1) {
+      wrap.classList.add("hidden");
+      fillOpponentChipButton(null, chip1);
+      fillOpponentChipButton(null, chip2);
+      return;
+    }
+    const oppName = String(players[1 - myIdx] || "").trim();
+    if (!oppName) {
+      wrap.classList.add("hidden");
+      fillOpponentChipButton(null, chip1);
+      fillOpponentChipButton(null, chip2);
+      return;
+    }
+    wrap.classList.remove("hidden");
+    fillOpponentChipButton(oppName, chip1);
+    fillOpponentChipButton(null, chip2);
+    maybePrefetchBoardOpponentAvatars([oppName]);
     return;
   }
 
-  const myIdx = boardGamePlayerIndex(players, state.username);
-  if (myIdx !== 0 && myIdx !== 1) {
-    wrap.classList.add("hidden");
-    wrap.disabled = true;
-    delete wrap.dataset.username;
+  if (t === "zole" && Array.isArray(players) && players.length >= 3) {
+    const myIdx = boardGamePlayerIndex(players, state.username);
+    if (myIdx < 0) {
+      wrap.classList.add("hidden");
+      fillOpponentChipButton(null, chip1);
+      fillOpponentChipButton(null, chip2);
+      return;
+    }
+    const opps = [0, 1, 2]
+      .filter((i) => i !== myIdx)
+      .map((i) => String(players[i] || "").trim())
+      .filter(Boolean);
+    if (opps.length < 1) {
+      wrap.classList.add("hidden");
+      fillOpponentChipButton(null, chip1);
+      fillOpponentChipButton(null, chip2);
+      return;
+    }
+    wrap.classList.remove("hidden");
+    fillOpponentChipButton(opps[0] || null, chip1);
+    fillOpponentChipButton(opps[1] || null, chip2);
+    maybePrefetchBoardOpponentAvatars(opps);
     return;
   }
 
-  const oppIdx = 1 - myIdx;
-  const oppName = String(players[oppIdx] || "").trim();
-  if (!oppName) {
-    wrap.classList.add("hidden");
-    wrap.disabled = true;
-    delete wrap.dataset.username;
-    return;
-  }
-
-  wrap.classList.remove("hidden");
-  wrap.disabled = false;
-  wrap.dataset.username = oppName;
-  nameEl.textContent = oppName;
-
-  const local = getLocalAvatarEntry(oppName);
-  const url = local && local.url ? local.url : null;
-  setAvatar(img, initials, url, oppName);
+  wrap.classList.add("hidden");
+  fillOpponentChipButton(null, chip1);
+  fillOpponentChipButton(null, chip2);
 }
 
 /**
@@ -13826,10 +13918,12 @@ function bindBoardGames() {
       if (!boardState.gameId || !state.socket) return;
       state.socket.emit("board.resign", { gameId: boardState.gameId });
     });
-  const oppChipBtn = document.getElementById("board-opponent-chip");
-  if (oppChipBtn) {
-    oppChipBtn.addEventListener("click", () => {
-      const u = String(oppChipBtn.dataset.username || "").trim();
+  const oppChipsWrap = document.getElementById("board-opponent-chips-wrap");
+  if (oppChipsWrap) {
+    oppChipsWrap.addEventListener("click", (e) => {
+      const btn = e.target.closest(".vz-board-opponent-chip");
+      if (!btn || btn.disabled || btn.classList.contains("hidden")) return;
+      const u = String(btn.dataset.username || "").trim();
       if (u) void openProfile(u);
     });
   }

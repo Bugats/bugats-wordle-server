@@ -6882,6 +6882,13 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   flex-direction: column;
   gap: 6px;
 }
+.vz-board-opponent-chips-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
 .vz-board-opponent-chip {
   display: inline-flex;
   align-items: center;
