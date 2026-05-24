@@ -118,7 +118,7 @@
         resolution: Math.min(2, window.devicePixelRatio || 1),
         powerPreference: "low-power",
       });
-    } catch (e) {
+    } catch {
       try { delete grid.dataset.vzGridFxInit; } catch (_) {}
       return;
     }
@@ -261,7 +261,7 @@
       const cy = (r.top - gridRect.top) + r.height / 2;
 
       let color = 0x3f51ff;
-      if (type === "correct") color = 0x00ff7f;
+      if (type === "correct") color = 0xc43d52;
       else if (type === "present") color = 0xffd54f;
       else if (type === "absent") color = 0x5a5d7a;
 

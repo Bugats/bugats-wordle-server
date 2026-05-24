@@ -45,6 +45,14 @@ if (tabSignupBtn) {
 }
 setAuthTab(window.location.hash === "#signup" ? "signup" : "login");
 
+try {
+  const n = sessionStorage.getItem("vz_auth_notice");
+  if (n && String(n).trim()) {
+    showAuthError(String(n).trim());
+    sessionStorage.removeItem("vz_auth_notice");
+  }
+} catch {}
+
 // Referrāla kods no URL (?ref=Username)
 function getReferralFromUrl() {
   try {
@@ -98,7 +106,7 @@ async function apiPost(path, payload) {
   let data;
   try {
     data = JSON.parse(text);
-  } catch (e) {
+  } catch {
     console.error("Non-JSON response:", text);
     throw new Error("Servera kļūda (nav korekts JSON).");
   }

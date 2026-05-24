@@ -20,7 +20,6 @@ const VZDuel = window.VZDuel || {};
 const VZTournaments = window.VZTournaments || {};
 
 const {
-  ADMIN_SET,
   AUTH_KEYS,
   DISALLOWED_KEYS,
   REGION_META,
@@ -33,7 +32,7 @@ const {
 } = VZGameCore;
 
 const { createApiBase, fetchWithTimeout, readJsonOrThrow } = VZServices;
-const { $, createEl, safeText, applyRankColor } = VZUI;
+const { $, createEl, applyRankColor } = VZUI;
 
 function escapeHtml(s) {
   return String(s || "")
@@ -42,13 +41,58 @@ function escapeHtml(s) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
-const {
-  dmNormalizeMessageForStore,
-  dmObjectToThreads,
-  dmSanitizeMeta,
-  dmStorageKey,
-  dmThreadsToObject,
-} = VZChat;
+
+/** Tikai lokālās statiskās lapas tukšo bloku saitēm (XSS riska mazināšana). */
+function vzSafeTrustPageHref(href) {
+  const base = String(href || "")
+    .trim()
+    .split("#")[0]
+    .toLowerCase();
+  const allowed = new Set([
+    "coins-vip-turniri.html",
+    "privacy.html",
+    "terms.html",
+  ]);
+  if (!allowed.has(base)) return "";
+  const raw = String(href || "").trim();
+  if (raw.includes("..") || raw.includes("\\")) return "";
+  return raw;
+}
+
+/** Vienots mīksts tukšā stāvokļa bloks (īss virsraksts + 1 rindiņa + opcionāla saite). */
+function fillVzEmptyState(el, options = {}) {
+  if (!el) return;
+  const glyph = String(options.glyph ?? "✦").trim() || "✦";
+  const title = String(options.title || "").trim();
+  const text = String(options.text || "").trim();
+  const compact = !!options.compact;
+  const linkHref = vzSafeTrustPageHref(options.linkHref);
+  const linkLabel = String(options.linkLabel || "").trim();
+  const extra = String(options.extraClass || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  el.className = [
+    "vz-empty-state",
+    compact ? "vz-empty-state--compact" : "",
+    ...extra,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const g = escapeHtml(glyph);
+  const t = title
+    ? `<p class="vz-empty-state__title">${escapeHtml(title)}</p>`
+    : "";
+  const x = text
+    ? `<p class="vz-empty-state__text">${escapeHtml(text)}</p>`
+    : "";
+  const link =
+    linkHref && linkLabel
+      ? `<p class="vz-empty-state__link-wrap"><a class="vz-empty-state__link" href="${escapeHtml(linkHref)}" target="_blank" rel="noopener">${escapeHtml(linkLabel)}</a></p>`
+      : "";
+  el.innerHTML = `<div class="vz-empty-state__glyph" aria-hidden="true">${g}</div>${t}${x}${link}`;
+}
+const { dmObjectToThreads, dmStorageKey, dmThreadsToObject } = VZChat;
 const { buildDuelExtraText, isDuelDrawReason } = VZDuel;
 const {
   normalizeTournamentList,
@@ -458,10 +502,6 @@ function getLocalAvatarEntry(username) {
   }
   return entry;
 }
-function getLocalAvatar(username) {
-  const entry = getLocalAvatarEntry(username);
-  return entry?.url || null;
-}
 function setLocalAvatar(username, dataUrl, expiresAt) {
   const key = avatarStorageKey(username);
   const exp = Number(expiresAt) || 0;
@@ -501,6 +541,10 @@ let tournamentSocketRefreshTimer = null;
 let engagementLoopTimer = null;
 let engagementLoopBusy = false;
 let currentProfileName = null; // popupā atvērtais profila vārds
+
+/** Fokusa atgriešanai pēc galda modāļa / rezultāta overlay */
+let _boardModalFocusReturn = null;
+let _boardResultFocusReturn = null;
 
 // kešs citu spēlētāju mini avatāriem (username -> url vai null)
 const avatarCache = new Map();
@@ -546,6 +590,14 @@ const playerScoreEl = $("#player-score");
 const playerStreakEl = $("#player-streak");
 const playerBestStreakEl = $("#player-best-streak");
 const playerCoinsEl = $("#player-coins");
+const stripeCoinsBuyEl = document.getElementById("vz-stripe-coins-buy");
+const stripeCoinsPackListEl = document.getElementById(
+  "vz-stripe-coins-pack-list"
+);
+const ppStripeCoinsBuyEl = document.getElementById("pp-stripe-coins-buy");
+const ppStripeCoinsPackListEl = document.getElementById(
+  "pp-stripe-coins-pack-list"
+);
 const playerTokensEl = $("#player-tokens");
 const playerMedalsStripEl = $("#player-medals");
 
@@ -580,6 +632,14 @@ const themeToggleBtn = document.getElementById("theme-toggle-btn");
 // Bez interneta + Play Store vērtējums
 const offlineOverlayEl = document.getElementById("vz-offline-overlay");
 const offlineRetryBtn = document.getElementById("vz-offline-retry-btn");
+const offlineLoginBtn = document.getElementById("vz-offline-login-btn");
+const offlineTitleEl = document.getElementById("vz-offline-title");
+const offlineTextEl = document.getElementById("vz-offline-text");
+const offlineHintEl = document.getElementById("vz-offline-hint");
+
+let _vzConnIssueOverlayTimer = null;
+let _vzConnIssueLastKey = "";
+
 const rateOverlayEl = document.getElementById("vz-rate-overlay");
 const tutorialOverlayEl = document.getElementById("vz-tutorial-overlay");
 const tutorialContentEl = document.getElementById("vz-tutorial-content");
@@ -624,6 +684,127 @@ const duelExtraMsgEl = document.getElementById("duel-result-reason");
 const duelOkBtn = document.getElementById("duel-result-close");
 
 // GALDA SPĒLES (dambrete, šahs)
+function boardGamePlayerIndex(players, username) {
+  if (!username || !Array.isArray(players)) return -1;
+  const want = String(username).trim().toLowerCase();
+  for (let i = 0; i < players.length; i++) {
+    if (
+      String(players[i] || "")
+        .trim()
+        .toLowerCase() === want
+    )
+      return i;
+  }
+  return -1;
+}
+
+/**
+ * Dambrete/šahs: `turn` ir 0 vai 1. Dažreiz no servera/JSON nāk kā virkne (`"0"`) —
+ * tad `myIdx === turn` un `myPlayerIdx === turnIdx` kļūst par false un lauki nav klikšķināmi.
+ */
+function normalizeTwoPlayerTurn(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 0;
+  return n === 1 ? 1 : 0;
+}
+
+function normalizeBoardTurnFromPayload(raw, gameType) {
+  if (gameType === "zole") {
+    const n = Math.floor(Number(raw));
+    if (Number.isFinite(n) && n >= 0 && n <= 2) return n;
+    return 0;
+  }
+  return normalizeTwoPlayerTurn(raw);
+}
+
+/** Zole: `boardState.turn` nav vienīgais indikators (likšana / norakšana / spēle). */
+function boardZoleIsHumanTurn(myIdx, zole) {
+  if (myIdx < 0 || !zole) return false;
+  const ph = zole.phase;
+  if (ph === "bid") return myIdx === (zole.bidTurn ?? 0);
+  if (ph === "discard" && zole.contract === "big")
+    return myIdx === zole.contractorIdx;
+  if (ph === "play") return myIdx === (zole.turn ?? 0);
+  return false;
+}
+
+/** Atslēga, lai «Tava kārta» čatā nerādītos atkārtoti vienā un tajā pašā gājienā (Zole: fāze + stiķis). */
+function galdaTurnNotifyDedupeKey(gameType, gameId, partial) {
+  const id = gameId != null ? String(gameId) : "";
+  const z = partial?.zole;
+  if (gameType === "zole" && z && typeof z === "object") {
+    const ph = String(z.phase || "");
+    if (ph === "bid") return `${id}:bid:${z.bidTurn ?? 0}`;
+    if (ph === "discard")
+      return `${id}:disc:${z.contractorIdx ?? 0}:${String(z.contract || "")}`;
+    if (ph === "play")
+      return `${id}:play:tp${z.tricksPlayed ?? 0}:tl${z.trickLeader ?? ""}:tr${z.turn ?? 0}`;
+    return `${id}:z:${ph}`;
+  }
+  const turn = normalizeBoardTurnFromPayload(
+    partial?.turn,
+    gameType || "dambrete"
+  );
+  let mv = "";
+  if (gameType === "chess") {
+    mv = String(partial?.move ?? partial?.san ?? "").trim();
+  } else if (gameType === "dambrete" && partial?.move != null) {
+    try {
+      mv = JSON.stringify(partial.move);
+    } catch (_) {
+      mv = "";
+    }
+  }
+  return `${id}:t${turn}${mv ? ":" + mv : ""}`;
+}
+
+/** Rinda: ātri nomainot izvēli pirms pirmās /moves atbildes, pieprasījumi nedrīkst pārklāties. */
+function queueBoardLegalMovesFetch(clickedCell, gameType) {
+  const gid = boardState.gameId;
+  if (!gid) return;
+  boardMovesFetchChain = boardMovesFetchChain
+    .then(async () => {
+      if (!boardState.gameId || boardState.gameId !== gid) return;
+      if (
+        !boardState.selectedCell ||
+        boardState.selectedCell[0] !== clickedCell[0] ||
+        boardState.selectedCell[1] !== clickedCell[1]
+      ) {
+        return;
+      }
+      const fetchId = ++boardLegalMovesFetchId;
+      try {
+        const data = await apiGet(`/board/${boardState.gameId}/moves`);
+        if (fetchId !== boardLegalMovesFetchId) return;
+        if (
+          boardState.selectedCell &&
+          boardState.selectedCell[0] === clickedCell[0] &&
+          boardState.selectedCell[1] === clickedCell[1]
+        ) {
+          if (gameType === "chess") {
+            const base = data && typeof data === "object" ? data : {};
+            boardState.legalMoves = {
+              moves: Array.isArray(base.moves) ? base.moves : [],
+              promotionGroups:
+                base.promotionGroups && typeof base.promotionGroups === "object"
+                  ? base.promotionGroups
+                  : {},
+            };
+            if (base.chessDrawState) {
+              boardState.chessDrawState = base.chessDrawState;
+            }
+          } else {
+            boardState.legalMoves = data || { jumps: [], moves: [] };
+          }
+          renderBoardGame();
+        }
+      } catch {}
+    })
+    .catch(() => {});
+}
+
+let boardLegalMovesFetchId = 0;
+let boardMovesFetchChain = Promise.resolve();
 let boardState = {
   gameId: null,
   type: null,
@@ -631,9 +812,1549 @@ let boardState = {
   turn: 0,
   board: null,
   fen: null,
+  zole: null,
+  zoleMode: null,
+  /** Zole pret botiem: pēc partijas gaida izvēli — nākamā partija vai pēdējā (atcelt auto). */
+  zoleVsBotNextHandPending: false,
+  vsBot: false,
+  dambreteVariant: null,
   selectedCell: null,
   legalMoves: { jumps: [], moves: [] },
+  /** Zole 3P: coins par vienu tabulas punktu (0 = fiksēta uzvara). */
+  zole3pCoinsPerPoint: 0,
+  /** Šahs: servera pulksteņa momentuzņēmums + lokāla ekstrapolācija */
+  chessClock: null,
+  /** Šahs: neizšķirta piedāvājums / pieteikumu indikatori no servera */
+  chessDrawState: null,
+  /** Šahs: gaida promocijas SAN izvēli (vairāki derīgi uz vienu lauku) */
+  chessPromotionPick: null,
 };
+
+const BOARD_BOT_DISPLAY_NAME = "VZBot";
+const ZOLE_BOT_USERNAMES = new Set(["ZoleBot1", "ZoleBot2"]);
+
+/** Pēdējais galda rezultāts — revānša pogai */
+let lastBoardResultSnapshot = null;
+/** Lai «[VĀRDU ZONA — galds] Tava kārta» nerādītos atkārtoti katram board.move (piem., šaha pulkstenis). */
+let _lastGaldaTurnNotifyKey = null;
+
+/** Pēc nosūtīta gājiena: ja ilgi nav `board.move`, vienu reizi statusa kanālā (tīkla glitch bez disconnect). */
+let _boardMoveResponseWaitGen = 0;
+let _boardMoveResponseWaitTimer = null;
+const BOARD_MOVE_RESPONSE_WAIT_MS = 4500;
+
+function disarmBoardMoveResponseWait() {
+  if (_boardMoveResponseWaitTimer != null) {
+    clearTimeout(_boardMoveResponseWaitTimer);
+    _boardMoveResponseWaitTimer = null;
+  }
+  _boardMoveResponseWaitGen++;
+}
+
+function armBoardMoveResponseWait() {
+  if (!state.socket?.connected || !boardState.gameId) return;
+  disarmBoardMoveResponseWait();
+  const capturedGen = _boardMoveResponseWaitGen;
+  _boardMoveResponseWaitTimer = setTimeout(() => {
+    _boardMoveResponseWaitTimer = null;
+    if (capturedGen !== _boardMoveResponseWaitGen) return;
+    if (!boardState.gameId) return;
+    appendVzStatusMessage(
+      "Gājiens nosūtīts — vēl nav servera atbildes. Ja laukums ilgi nemainās, pārbaudi tīklu; pēc atjaunošanās spēle parasti sinhronizējas (piem. board.resume)."
+    );
+  }, BOARD_MOVE_RESPONSE_WAIT_MS);
+}
+
+let boardInviteOutgoingInterval = null;
+let boardInviteIncomingInterval = null;
+let boardResultAutoCloseTimer = null;
+const BOARD_RESULT_OVERLAY_AUTO_MS = 45 * 1000;
+
+let _chessClockRaf = null;
+
+function clearBoardInviteOutgoingInterval() {
+  if (boardInviteOutgoingInterval != null) {
+    clearInterval(boardInviteOutgoingInterval);
+    boardInviteOutgoingInterval = null;
+  }
+}
+
+function clearBoardInviteIncomingInterval() {
+  if (boardInviteIncomingInterval != null) {
+    clearInterval(boardInviteIncomingInterval);
+    boardInviteIncomingInterval = null;
+  }
+}
+
+function clearBoardResultAutoCloseTimer() {
+  if (boardResultAutoCloseTimer != null) {
+    clearTimeout(boardResultAutoCloseTimer);
+    boardResultAutoCloseTimer = null;
+  }
+}
+
+function syncBoardInvitePendingUi() {
+  const pending = document.getElementById("board-invite-pending");
+  const text = document.getElementById("board-invite-pending-text");
+  const cancelBtn = document.getElementById("board-invite-pending-cancel");
+  if (!pending || !text) return;
+  const exp = Number(pending.dataset.expiresAt) || 0;
+  const target = String(pending.dataset.waitTarget || "").trim();
+  const toHost = pending.dataset.waitMode === "to_host";
+  const rematch = pending.dataset.pendingRematch === "1";
+  const gameType = String(pending.dataset.pendingGameType || "").toLowerCase();
+  const chessLine = String(pending.dataset.pendingChessLine || "").trim();
+  const invSec = Math.max(
+    0,
+    Math.floor(Number(pending.dataset.pendingInviteSec) || 0)
+  );
+  const left = Math.max(0, Math.ceil((exp - Date.now()) / 1000));
+  if (left > 0 && target) {
+    let line = "";
+    if (toHost) {
+      line = `Gaidām, kad ${target} pieņems pievienošanos no saraksta… Atlikušas ${left}s`;
+    } else if (rematch) {
+      line = `Revānšs nosūtīts: ${target}. Atlikušas ${left}s`;
+    } else {
+      line = `Uzaicinājums nosūtīts: ${target}. Atlikušas ${left}s`;
+    }
+    if (invSec > 0) line += ` (maks. ${invSec}s).`;
+    else line += ".";
+    if (gameType === "chess" && chessLine) line += ` ${chessLine}`;
+    text.textContent = line;
+    if (cancelBtn) cancelBtn.classList.remove("hidden");
+  } else if (target) {
+    text.textContent = "Termiņš beidzies.";
+    if (cancelBtn) cancelBtn.classList.add("hidden");
+  }
+}
+
+function startBoardInviteOutgoingWait(expiresAt, targetUsername, opts = {}) {
+  clearBoardInviteOutgoingInterval();
+  const pending = document.getElementById("board-invite-pending");
+  if (!pending) return;
+  pending.dataset.expiresAt = String(Number(expiresAt) || 0);
+  pending.dataset.waitTarget = String(targetUsername || "").trim();
+  pending.dataset.waitMode = opts.toHost ? "to_host" : "";
+  pending.dataset.pendingRematch = opts.rematch ? "1" : "";
+  pending.dataset.pendingGameType = String(opts.gameType || "").trim();
+  pending.dataset.pendingChessLine = String(opts.chessClockLine || "").trim();
+  const sec = Math.max(0, Math.round(Number(opts.inviteTimeoutMs) / 1000) || 0);
+  pending.dataset.pendingInviteSec = sec > 0 ? String(sec) : "";
+  pending.classList.remove("hidden");
+  syncBoardInvitePendingUi();
+  boardInviteOutgoingInterval = setInterval(() => {
+    syncBoardInvitePendingUi();
+    const left =
+      Math.ceil(
+        ((Number(pending.dataset.expiresAt) || 0) - Date.now()) / 1000
+      ) || 0;
+    if (left <= 0) clearBoardInviteOutgoingInterval();
+  }, 1000);
+}
+
+function stopBoardInviteOutgoingWait() {
+  clearBoardInviteOutgoingInterval();
+  const pending = document.getElementById("board-invite-pending");
+  const cancelBtn = document.getElementById("board-invite-pending-cancel");
+  if (pending) {
+    pending.classList.add("hidden");
+    pending.dataset.expiresAt = "";
+    pending.dataset.waitTarget = "";
+    pending.dataset.waitMode = "";
+    pending.dataset.pendingRematch = "";
+    pending.dataset.pendingGameType = "";
+    pending.dataset.pendingChessLine = "";
+    pending.dataset.pendingInviteSec = "";
+  }
+  if (cancelBtn) cancelBtn.classList.add("hidden");
+}
+
+function syncBoardInviteIncomingExpiryUi() {
+  const invite = document.getElementById("board-games-invite");
+  const expEl = document.getElementById("board-invite-expires");
+  if (!invite || !expEl) return;
+  const exp = Number(invite.dataset.inviteExpiresAt) || 0;
+  if (!exp || invite.classList.contains("hidden")) {
+    expEl.textContent = "";
+    expEl.classList.add("hidden");
+    return;
+  }
+  const left = Math.max(0, Math.ceil((exp - Date.now()) / 1000));
+  if (left <= 0) {
+    expEl.textContent = "Termiņš beidzies.";
+    expEl.classList.remove("hidden");
+    return;
+  }
+  expEl.textContent = `Atlikušas ${left}s`;
+  expEl.classList.remove("hidden");
+}
+
+function startBoardInviteIncomingExpiry() {
+  clearBoardInviteIncomingInterval();
+  syncBoardInviteIncomingExpiryUi();
+  boardInviteIncomingInterval = setInterval(() => {
+    syncBoardInviteIncomingExpiryUi();
+    const invite = document.getElementById("board-games-invite");
+    const exp = Number(invite?.dataset?.inviteExpiresAt) || 0;
+    if (
+      !invite ||
+      invite.classList.contains("hidden") ||
+      Math.ceil((exp - Date.now()) / 1000) <= 0
+    ) {
+      clearBoardInviteIncomingInterval();
+    }
+  }, 1000);
+}
+
+function stopChessClockTick() {
+  if (_chessClockRaf != null) {
+    cancelAnimationFrame(_chessClockRaf);
+    _chessClockRaf = null;
+  }
+}
+
+function scheduleChessClockTick() {
+  if (_chessClockRaf != null) return;
+  _chessClockRaf = requestAnimationFrame(function tick() {
+    _chessClockRaf = null;
+    if (
+      boardState.type !== "chess" ||
+      !boardState.gameId ||
+      !boardState.chessClock
+    ) {
+      return;
+    }
+    syncChessClockDomCore();
+    _chessClockRaf = requestAnimationFrame(tick);
+  });
+}
+
+function ingestChessClockPayload(payload) {
+  const c = payload?.chessClock;
+  if (!c || !Array.isArray(c.remainingMs) || c.remainingMs.length < 2) {
+    boardState.chessClock = null;
+    return;
+  }
+  const now = Date.now();
+  boardState.chessClock = {
+    remainingMs: [
+      Math.max(0, Math.floor(Number(c.remainingMs[0]) || 0)),
+      Math.max(0, Math.floor(Number(c.remainingMs[1]) || 0)),
+    ],
+    incrementMs: Math.max(0, Math.floor(Number(c.incrementMs) || 0)),
+    initialMsPerSide: Math.max(0, Math.floor(Number(c.initialMsPerSide) || 0)),
+    lastServerNow: Number(c.serverNow) || now,
+    clientReceivedAt: now,
+  };
+}
+
+function ingestChessDrawStatePayload(s) {
+  if (!s || typeof s !== "object") {
+    boardState.chessDrawState = null;
+    return;
+  }
+  boardState.chessDrawState = {
+    drawOfferFrom: s.drawOfferFrom || null,
+    claimFifty: !!s.claimFifty,
+    claimThreefold: !!s.claimThreefold,
+    halfMoveClock:
+      typeof s.halfMoveClock === "number"
+        ? s.halfMoveClock
+        : Math.max(0, Math.floor(Number(s.halfMoveClock) || 0)),
+  };
+}
+
+function syncChessDrawControls() {
+  const wrap = document.getElementById("board-chess-draw-ui");
+  const hint = document.getElementById("board-chess-draw-hint");
+  const moveRule = document.getElementById("board-chess-draw-move-rule");
+  const offerBtn = document.getElementById("board-chess-draw-offer");
+  const acceptBtn = document.getElementById("board-chess-draw-accept");
+  const declineBtn = document.getElementById("board-chess-draw-decline");
+  const claimBtn = document.getElementById("board-chess-claim-draw");
+  if (!wrap || !offerBtn || !acceptBtn || !claimBtn) return;
+
+  const ingame =
+    boardState.gameId &&
+    boardState.type === "chess" &&
+    boardState.fen &&
+    !boardState.vsBot;
+  wrap.classList.toggle("hidden", !ingame);
+  if (moveRule) moveRule.classList.toggle("hidden", !ingame);
+  if (!ingame) {
+    if (hint) hint.classList.add("hidden");
+    return;
+  }
+
+  const ds = boardState.chessDrawState;
+  const myIdx = boardGamePlayerIndex(boardState.players, state.username);
+  const myTurn = myIdx === boardState.turn;
+  const offerFrom = ds?.drawOfferFrom ? String(ds.drawOfferFrom).trim() : "";
+  const me = String(state.username || "").trim();
+  const offeredToMe =
+    offerFrom && me && offerFrom.toLowerCase() !== me.toLowerCase();
+
+  offerBtn.classList.toggle("hidden", !myTurn);
+  /** Pieņemt / noraidīt drīkst jebkurā brīdī, kamēr piedāvājums ir aktīvs (FIDE). */
+  acceptBtn.classList.toggle("hidden", !offeredToMe);
+  if (declineBtn) declineBtn.classList.toggle("hidden", !offeredToMe);
+  const canClaim = myTurn && !!(ds?.claimFifty || ds?.claimThreefold);
+  claimBtn.classList.toggle("hidden", !canClaim);
+
+  if (hint) {
+    const parts = [];
+    if (offerFrom) {
+      let offerLine;
+      if (offeredToMe && myTurn) {
+        offerLine = `${offerFrom} piedāvā neizšķirtu — vari pieņemt vai noraidīt.`;
+      } else if (offeredToMe && !myTurn) {
+        offerLine = `${offerFrom} piedāvā neizšķirtu — vari pieņemt vai noraidīt arī ārpus sava gājiena.`;
+      } else if (offerFrom.toLowerCase() === me.toLowerCase()) {
+        offerLine = "Tu piedāvāji neizšķirtu — gaida pretinieka atbildi.";
+      } else {
+        offerLine = `${offerFrom} piedāvā neizšķirtu.`;
+      }
+      parts.push(offerLine);
+    }
+    if (typeof ds?.halfMoveClock === "number") {
+      parts.push(
+        `Pusgājienu skaitītājs (50 gāj. likums): ${ds.halfMoveClock}/100.`
+      );
+    }
+    if (ds?.claimThreefold && myTurn) {
+      parts.push(
+        "Ir trīskāršs atkārtojums — savā gājienā vari pieteikt neizšķirtu."
+      );
+    }
+    if (ds?.claimFifty && myTurn) {
+      parts.push(
+        "Ir izpildīts 50 gājienu likums — savā gājienā vari pieteikt neizšķirtu."
+      );
+    }
+    hint.textContent = parts.join(" ");
+    hint.classList.toggle("hidden", parts.length === 0);
+  }
+}
+
+function formatChessClockMs(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, "0")}`;
+}
+
+function syncChessClockDomCore() {
+  const wrap = document.getElementById("board-chess-clocks");
+  const t0 = document.getElementById("board-chess-clock-0");
+  const t1 = document.getElementById("board-chess-clock-1");
+  const l0 = document.getElementById("board-chess-clock-0-label");
+  const l1 = document.getElementById("board-chess-clock-1-label");
+  const clk = boardState.chessClock;
+  const cells = wrap?.querySelectorAll(".vz-board-chess-clock");
+  if (!wrap || !t0 || !t1 || !clk) return;
+  const skew = clk.clientReceivedAt - clk.lastServerNow;
+  const serverNowEst = Date.now() - skew;
+  const sinceSnap = Math.max(0, serverNowEst - clk.lastServerNow);
+  const turn = boardState.turn;
+  let w = clk.remainingMs[0] - (turn === 0 ? sinceSnap : 0);
+  let b = clk.remainingMs[1] - (turn === 1 ? sinceSnap : 0);
+  w = Math.max(0, w);
+  b = Math.max(0, b);
+  const p0 = boardState.players[0] || "?";
+  const p1 = boardState.players[1] || "?";
+  const bot0 = String(p0).trim() === BOARD_BOT_DISPLAY_NAME;
+  const bot1 = String(p1).trim() === BOARD_BOT_DISPLAY_NAME;
+  if (l0) l0.textContent = bot0 ? "Bots (baltais)" : `${p0} (baltais)`;
+  if (l1) l1.textContent = bot1 ? "Bots (melnais)" : `${p1} (melnais)`;
+  t0.textContent = bot0 && boardState.vsBot ? "∞" : formatChessClockMs(w);
+  t1.textContent = bot1 && boardState.vsBot ? "∞" : formatChessClockMs(b);
+  if (cells && cells.length >= 2) {
+    cells[0].classList.toggle("vz-board-chess-clock--active", turn === 0);
+    cells[1].classList.toggle("vz-board-chess-clock--active", turn === 1);
+    cells[0].classList.toggle(
+      "vz-board-chess-clock--low",
+      w > 0 && w <= 30_000
+    );
+    cells[1].classList.toggle(
+      "vz-board-chess-clock--low",
+      b > 0 && b <= 30_000
+    );
+  }
+}
+
+function syncChessClockDom() {
+  const wrap = document.getElementById("board-chess-clocks");
+  const cells = wrap?.querySelectorAll(".vz-board-chess-clock");
+  if (
+    !wrap ||
+    boardState.type !== "chess" ||
+    !boardState.gameId ||
+    !boardState.chessClock
+  ) {
+    stopChessClockTick();
+    if (wrap) wrap.classList.add("hidden");
+    if (cells) {
+      cells[0]?.classList.remove(
+        "vz-board-chess-clock--active",
+        "vz-board-chess-clock--low"
+      );
+      cells[1]?.classList.remove(
+        "vz-board-chess-clock--active",
+        "vz-board-chess-clock--low"
+      );
+    }
+    return;
+  }
+  wrap.classList.remove("hidden");
+  syncChessClockDomCore();
+  scheduleChessClockTick();
+}
+
+/** Atvērtā 3 spēlētāju zoles istaba (līdz spēles sākumam vai atcelšanai) */
+let zole3pLobbySnapshot = null;
+let zole3pThirdInviteInterval = null;
+
+function stopZole3pThirdInviteTicker() {
+  if (zole3pThirdInviteInterval != null) {
+    clearInterval(zole3pThirdInviteInterval);
+    zole3pThirdInviteInterval = null;
+  }
+}
+
+function clearZole3pThirdInviteCountdown() {
+  stopZole3pThirdInviteTicker();
+  const cd = document.getElementById("board-zole-3p-invite-countdown");
+  if (cd) {
+    cd.textContent = "";
+    cd.classList.add("hidden");
+  }
+}
+
+function syncZole3pThirdInviteCountdownFromSnapshot() {
+  const snap = zole3pLobbySnapshot;
+  const cd = document.getElementById("board-zole-3p-invite-countdown");
+  if (!snap?.zoleLobby || !cd) {
+    clearZole3pThirdInviteCountdown();
+    return;
+  }
+  const exp = Number(snap.thirdInviteExpiresAt) || 0;
+  const invited = snap.invitedThird;
+  if (!invited || !exp) {
+    clearZole3pThirdInviteCountdown();
+    return;
+  }
+  stopZole3pThirdInviteTicker();
+  const tick = () => {
+    const left = Math.max(0, Math.ceil((exp - Date.now()) / 1000));
+    if (left <= 0) {
+      stopZole3pThirdInviteTicker();
+      cd.textContent =
+        " Termiņš beidzies — vari uzaicināt citu vai atkārtoti sūtīt.";
+      cd.classList.remove("hidden");
+      return;
+    }
+    cd.textContent = ` Trešā atbilde: atlikušas ${left}s.`;
+    cd.classList.remove("hidden");
+  };
+  tick();
+  zole3pThirdInviteInterval = setInterval(tick, 1000);
+}
+
+/** Servera saraksts ar brīvajām 3P zoles istabām (globāls broadcast) */
+let zole3pOpenLobbiesCache = { rooms: [], serverNow: 0 };
+let zole3pOpenLobbyPollTimer = null;
+
+/** Publiskās PvP vietas šaham / dambretēm */
+let boardOpenSeatsCache = { chess: [], dambrete: [], serverNow: 0 };
+let boardOpenSeatsPollTimer = null;
+
+function clearBoardOpenSeatsPoll() {
+  if (boardOpenSeatsPollTimer != null) {
+    clearInterval(boardOpenSeatsPollTimer);
+    boardOpenSeatsPollTimer = null;
+  }
+}
+
+function scheduleBoardOpenSeatsPoll() {
+  clearBoardOpenSeatsPoll();
+  if (!state.socket || typeof state.socket.emit !== "function") return;
+  boardOpenSeatsPollTimer = setInterval(() => {
+    try {
+      state.socket.emit("board.requestOpenSeats");
+    } catch (_) {}
+  }, 15000);
+}
+
+function dambreteVariantLabelClient(v) {
+  const x = String(v || "russian").toLowerCase();
+  return x === "english" ? "Angļu dambrete" : "Krievijas šaškas";
+}
+
+function renderBoardOpenSeatsTable(kind) {
+  const wrapId =
+    kind === "chess" ? "board-chess-open-seats" : "board-dambrete-open-seats";
+  const tbodyId =
+    kind === "chess"
+      ? "board-chess-open-seats-body"
+      : "board-dambrete-open-seats-body";
+  const emptyId =
+    kind === "chess"
+      ? "board-chess-open-seats-empty"
+      : "board-dambrete-open-seats-empty";
+  const wrap = document.getElementById(wrapId);
+  const tbody = document.getElementById(tbodyId);
+  const emptyEl = document.getElementById(emptyId);
+  if (!wrap || !tbody) return;
+  const rows =
+    kind === "chess"
+      ? Array.isArray(boardOpenSeatsCache?.chess)
+        ? boardOpenSeatsCache.chess
+        : []
+      : Array.isArray(boardOpenSeatsCache?.dambrete)
+        ? boardOpenSeatsCache.dambrete
+        : [];
+  const me = String(state.username || "")
+    .trim()
+    .toLowerCase();
+  const inGame = !!boardState.gameId;
+  if (emptyEl) {
+    if (rows.length === 0) {
+      fillVzEmptyState(emptyEl, {
+        glyph: kind === "chess" ? "♔" : "♟️",
+        title: "Neviens negaida pretinieku",
+        text: "Publicē savu vietu zemāk vai uzaicini draugu.",
+        compact: true,
+        extraClass: "vz-board-zole-open-lobbies__empty-inner",
+      });
+      emptyEl.classList.remove("hidden");
+    } else {
+      emptyEl.classList.add("hidden");
+      emptyEl.innerHTML = "";
+    }
+  }
+  if (rows.length === 0) {
+    tbody.innerHTML = "";
+    syncMyBoardOpenSeatButtons();
+    return;
+  }
+  const html = rows.map((r) => {
+    const host = String(r?.host || "—");
+    const hostLc = host.trim().toLowerCase();
+    const detail =
+      kind === "chess"
+        ? String(r?.chessClockPreset || "—").trim() || "—"
+        : dambreteVariantLabelClient(r?.dambreteVariant);
+    let btnLabel = "Pievienoties";
+    let disabled = false;
+    let title = "";
+    if (hostLc && me && hostLc === me) {
+      btnLabel = "Tu";
+      disabled = true;
+      title = "Tava publicētā vieta.";
+    } else if (inGame) {
+      disabled = true;
+      title = "Vispirms beidz pašreizējo spēli.";
+    }
+    const dataType = kind === "chess" ? "chess" : "dambrete";
+    return `<tr data-open-seat-host="${escapeHtml(host)}" data-open-seat-type="${dataType}">
+      <td>${escapeHtml(host)}</td>
+      <td>${escapeHtml(detail)}</td>
+      <td><button type="button" class="vz-board-zole-open-lobbies__join js-board-open-seat-join" data-open-seat-host="${escapeHtml(host)}" data-open-seat-type="${dataType}" ${disabled ? "disabled" : ""} title="${escapeHtml(title)}">${escapeHtml(btnLabel)}</button></td>
+    </tr>`;
+  });
+  tbody.innerHTML = html.join("");
+  syncMyBoardOpenSeatButtons();
+}
+
+function syncMyBoardOpenSeatButtons() {
+  const me = String(state.username || "")
+    .trim()
+    .toLowerCase();
+  const chessList = Array.isArray(boardOpenSeatsCache?.chess)
+    ? boardOpenSeatsCache.chess
+    : [];
+  const dList = Array.isArray(boardOpenSeatsCache?.dambrete)
+    ? boardOpenSeatsCache.dambrete
+    : [];
+  const inChess = chessList.some(
+    (r) =>
+      String(r?.host || "")
+        .trim()
+        .toLowerCase() === me
+  );
+  const inDamb = dList.some(
+    (r) =>
+      String(r?.host || "")
+        .trim()
+        .toLowerCase() === me
+  );
+  document
+    .getElementById("board-chess-open-seat-publish")
+    ?.classList.toggle("hidden", inChess);
+  document
+    .getElementById("board-chess-open-seat-cancel")
+    ?.classList.toggle("hidden", !inChess);
+  document
+    .getElementById("board-dambrete-open-seat-publish")
+    ?.classList.toggle("hidden", inDamb);
+  document
+    .getElementById("board-dambrete-open-seat-cancel")
+    ?.classList.toggle("hidden", !inDamb);
+}
+
+function syncBoardOpenSeatsPanelVisibility() {
+  const chessWrap = document.getElementById("board-chess-open-seats");
+  const dambWrap = document.getElementById("board-dambrete-open-seats");
+  const lobbyEl = document.getElementById("board-games-lobby");
+  const lobbyVisible = lobbyEl && !lobbyEl.classList.contains("hidden");
+  const inInvite = (() => {
+    const invite = document.getElementById("board-games-invite");
+    return invite && !invite.classList.contains("hidden");
+  })();
+  const tab = getBoardLobbyGameTab();
+  const baseShow = lobbyVisible && !inInvite && !boardState.gameId;
+  const showChess = baseShow && tab === "chess";
+  const showDamb = baseShow && tab === "dambrete";
+  if (chessWrap) {
+    chessWrap.classList.toggle("hidden", !showChess);
+    if (showChess) {
+      renderBoardOpenSeatsTable("chess");
+      scheduleBoardOpenSeatsPoll();
+    }
+  }
+  if (dambWrap) {
+    dambWrap.classList.toggle("hidden", !showDamb);
+    if (showDamb) {
+      renderBoardOpenSeatsTable("dambrete");
+      scheduleBoardOpenSeatsPoll();
+    }
+  }
+  if (!showChess && !showDamb) {
+    clearBoardOpenSeatsPoll();
+    return;
+  }
+  try {
+    state.socket?.emit("board.requestOpenSeats");
+  } catch (_) {}
+}
+
+function clearZole3pOpenLobbyPoll() {
+  if (zole3pOpenLobbyPollTimer != null) {
+    clearInterval(zole3pOpenLobbyPollTimer);
+    zole3pOpenLobbyPollTimer = null;
+  }
+}
+
+function scheduleZole3pOpenLobbyPoll() {
+  clearZole3pOpenLobbyPoll();
+  if (!state.socket || typeof state.socket.emit !== "function") return;
+  zole3pOpenLobbyPollTimer = setInterval(() => {
+    try {
+      state.socket.emit("board.zoleRequestOpenLobbies");
+    } catch (_) {}
+  }, 12000);
+}
+
+function renderZole3pOpenLobbyTable() {
+  const wrap = document.getElementById("board-zole-3p-open-lobbies");
+  const tbody = document.getElementById("board-zole-3p-open-lobbies-body");
+  const emptyEl = document.getElementById("board-zole-3p-open-lobbies-empty");
+  if (!wrap || !tbody) return;
+  const me = String(state.username || "")
+    .trim()
+    .toLowerCase();
+  const inGame = !!boardState.gameId;
+  const inLobby = !!zole3pLobbySnapshot?.zoleLobby;
+  const myLobbyId = inLobby
+    ? String(zole3pLobbySnapshot?.lobbyId || "").trim()
+    : "";
+  const rooms = Array.isArray(zole3pOpenLobbiesCache?.rooms)
+    ? zole3pOpenLobbiesCache.rooms
+    : [];
+  if (emptyEl) {
+    if (rooms.length === 0) {
+      fillVzEmptyState(emptyEl, {
+        glyph: "🃏",
+        title: "Vēl neviena atvērta istaba",
+        text: "Izveido savu zemāk vai atgriezies pēc brīža.",
+        compact: true,
+        extraClass: "vz-board-zole-open-lobbies__empty-inner",
+      });
+      emptyEl.classList.remove("hidden");
+    } else {
+      emptyEl.classList.add("hidden");
+      emptyEl.innerHTML = "";
+    }
+  }
+  if (rooms.length === 0) {
+    tbody.innerHTML = "";
+    return;
+  }
+  const rows = rooms.map((r) => {
+    const lid = String(r?.lobbyId || "").trim();
+    const host = String(r?.host || "—");
+    const n = Math.max(0, Math.floor(Number(r?.playerCount) || 0));
+    const open = Math.max(0, Math.floor(Number(r?.openSeats) || 0));
+    const stake = String(r?.stakeLabel || "—");
+    const pending = !!r?.hasPendingInvite;
+    const inThis =
+      me &&
+      Array.isArray(r?.players) &&
+      r.players.some((p) => String(p || "").toLowerCase() === me);
+    let btnLabel = "Pievienoties";
+    let disabled = false;
+    let title = "";
+    if (inGame) {
+      disabled = true;
+      title = "Vispirms beidz pašreizējo spēli.";
+    } else if (inLobby && !inThis) {
+      disabled = true;
+      title = "Vispirms pamet savu istabu.";
+    } else if (pending) {
+      disabled = true;
+      title = "Saimnieks gaida uzaicināta spēlētāja atbildi.";
+    } else if (inThis) {
+      btnLabel = myLobbyId === lid ? "Atvērt" : "Jau istabā";
+      disabled = myLobbyId === lid ? false : true;
+      title =
+        myLobbyId === lid
+          ? "Atver lobby skatu."
+          : "Tu jau esi šīs istabas dalībnieks.";
+    }
+    const oc = open > 0 && !pending ? `${n}/3` : `${n}/3 · gaida`;
+    return `<tr data-zole-lobby-id="${escapeHtml(lid)}">
+      <td>${escapeHtml(host)}</td>
+      <td>${escapeHtml(oc)}</td>
+      <td>${escapeHtml(stake)}</td>
+      <td><button type="button" class="vz-board-zole-open-lobbies__join js-zole-open-lobby-join" data-zole-lobby-id="${escapeHtml(lid)}" ${disabled ? "disabled" : ""} title="${escapeHtml(title)}">${escapeHtml(btnLabel)}</button></td>
+    </tr>`;
+  });
+  tbody.innerHTML = rows.join("");
+}
+
+function syncZole3pOpenLobbyPanelVisibility() {
+  const wrap = document.getElementById("board-zole-3p-open-lobbies");
+  if (!wrap) return;
+  const lobbyEl = document.getElementById("board-games-lobby");
+  const lobbyVisible = lobbyEl && !lobbyEl.classList.contains("hidden");
+  const inInvite = (() => {
+    const invite = document.getElementById("board-games-invite");
+    return invite && !invite.classList.contains("hidden");
+  })();
+  const inZoleRoomFlow =
+    getSelectedBoardZoleMode() === "online_3p" ||
+    !!zole3pLobbySnapshot?.zoleLobby;
+  const onZoleTab = getBoardLobbyGameTab() === "zole";
+  const show =
+    lobbyVisible &&
+    !inInvite &&
+    inZoleRoomFlow &&
+    !boardState.gameId &&
+    onZoleTab;
+  wrap.classList.toggle("hidden", !show);
+  if (show) {
+    renderZole3pOpenLobbyTable();
+    scheduleZole3pOpenLobbyPoll();
+  } else {
+    clearZole3pOpenLobbyPoll();
+  }
+  syncBoardOpenSeatsPanelVisibility();
+}
+
+function syncZole3pStakeSelectFromLobby() {
+  const sel = document.getElementById("board-zole-3p-stake");
+  if (!sel) return;
+  if (!zole3pLobbySnapshot?.zoleLobby) {
+    sel.disabled = false;
+    return;
+  }
+  const cpp = Math.max(
+    0,
+    Math.min(
+      5,
+      Math.floor(Number(zole3pLobbySnapshot?.zole3pCoinsPerPoint) || 0)
+    )
+  );
+  sel.value = String(cpp);
+  const host = String(zole3pLobbySnapshot?.host || "").trim();
+  const me = String(state.username || "").trim();
+  const isHost = host && me && host.toLowerCase() === me.toLowerCase();
+  const n = (zole3pLobbySnapshot?.players || []).length;
+  sel.disabled = !isHost || n >= 3;
+}
+
+function syncZoleStakeBannerInGameArea() {
+  const el = document.getElementById("board-zole-stake-banner");
+  if (!el) return;
+  const cpp = Math.max(
+    0,
+    Math.min(5, Math.floor(Number(boardState.zole3pCoinsPerPoint) || 0))
+  );
+  const is3p =
+    boardState.type === "zole" &&
+    boardState.zoleMode === "online_3p" &&
+    !boardState.vsBot;
+  if (!is3p || cpp <= 0) {
+    el.classList.add("hidden");
+    el.textContent = "";
+    return;
+  }
+  el.classList.remove("hidden");
+  el.textContent = `Likme šajā spēlē: ${cpp} coins par katru tabulas punktu (+/− pēc partijas tabulas).`;
+}
+
+function updateZole3pLobbyUI(payload) {
+  const box = document.getElementById("board-zole-3p-lobby");
+  const textEl = document.getElementById("board-zole-3p-lobby-text");
+  const hostAct = document.getElementById("board-zole-3p-host-actions");
+  const guestHint = document.getElementById("board-zole-3p-guest-hint");
+  const guestLeave = document.getElementById("board-zole-3p-guest-actions");
+  const lobby = document.getElementById("board-games-lobby");
+  const pending = document.getElementById("board-invite-pending");
+  if (!payload?.zoleLobby) {
+    zole3pLobbySnapshot = null;
+    clearZole3pThirdInviteCountdown();
+    if (box) box.classList.add("hidden");
+    if (pending) pending.classList.add("hidden");
+    if (payload?.cancelled) appendGaldaSystemMessage("Zoles istaba atcelta.");
+    syncZole3pStakeSelectFromLobby();
+    syncBoardDambreteModePanelVisibility();
+    syncZole3pOpenLobbyPanelVisibility();
+    syncBoardOpenSeatsPanelVisibility();
+    return;
+  }
+  zole3pLobbySnapshot = payload;
+  syncZole3pStakeSelectFromLobby();
+  const host = payload.host || "";
+  const players = payload.players || [];
+  const me = String(state.username || "").trim();
+  const isHost = host && me && host.trim().toLowerCase() === me.toLowerCase();
+  const inLobby = players.some(
+    (p) => me && String(p).trim().toLowerCase() === me.toLowerCase()
+  );
+  if (box) box.classList.remove("hidden");
+  if (lobby) lobby.classList.remove("hidden");
+  const gameArea = document.getElementById("board-game-area");
+  const inviteEl = document.getElementById("board-games-invite");
+  if (gameArea) gameArea.classList.add("hidden");
+  if (inviteEl) inviteEl.classList.add("hidden");
+  if (pending) pending.classList.add("hidden");
+  const invited = payload.invitedThird;
+  const n = players.length;
+  const cpp = Math.max(
+    0,
+    Math.min(5, Math.floor(Number(payload.zole3pCoinsPerPoint) || 0))
+  );
+  const stakeTxt =
+    cpp > 0
+      ? ` Likme: ${cpp} coins/tabulas punkts.`
+      : " Likme: kā parasti (+10 uzvara, −4 zaudējums).";
+  const coreEl = document.getElementById("board-zole-3p-lobby-core");
+  if (coreEl) {
+    if (n >= 3) {
+      coreEl.textContent = `Istabā 3 spēlētāji — spēle sākas… (${players.join(", ")})`;
+    } else {
+      const wait =
+        invited != null && invited !== ""
+          ? ` Gaidām atbildi no: ${invited}.`
+          : "";
+      coreEl.textContent = `Zoles istaba · saimnieks: ${host}. Spēlētāji (${n}/3): ${players.join(", ") || "—"}.${wait}${stakeTxt} Kad būs 3, spēle sākas automātiski.`;
+    }
+  } else if (textEl) {
+    if (n >= 3) {
+      textEl.textContent = `Istabā 3 spēlētāji — spēle sākas… (${players.join(", ")})`;
+    } else {
+      const wait =
+        invited != null && invited !== ""
+          ? ` Gaidām atbildi no: ${invited}.`
+          : "";
+      textEl.textContent = `Zoles istaba · saimnieks: ${host}. Spēlētāji (${n}/3): ${players.join(", ") || "—"}.${wait}${stakeTxt} Kad būs 3, spēle sākas automātiski.`;
+    }
+  }
+  syncZole3pThirdInviteCountdownFromSnapshot();
+  if (hostAct) hostAct.classList.toggle("hidden", !isHost);
+  if (guestHint)
+    guestHint.classList.toggle("hidden", isHost || !inLobby || n >= 3);
+  if (guestLeave)
+    guestLeave.classList.toggle("hidden", !inLobby || isHost || n >= 3);
+  syncBoardDambreteModePanelVisibility();
+  syncZole3pOpenLobbyPanelVisibility();
+  syncBoardOpenSeatsPanelVisibility();
+}
+
+function normalizeDambreteVariantClient(v) {
+  return String(v || "russian").toLowerCase() === "english"
+    ? "english"
+    : "russian";
+}
+
+function boardDambreteModeLabel(variant) {
+  return normalizeDambreteVariantClient(variant) === "english"
+    ? "Angļu dambrete"
+    : "Krievijas šaškas";
+}
+
+function getSelectedBoardDambreteVariant() {
+  const el = document.querySelector(
+    'input[name="board-dambrete-variant"]:checked'
+  );
+  return normalizeDambreteVariantClient(el?.value);
+}
+
+function getSelectedBoardZoleMode() {
+  const el = document.querySelector('input[name="board-zole-mode"]:checked');
+  const v = String(el?.value || "online_3p").toLowerCase();
+  if (v === "vs_bot") return "vs_bot";
+  if (v === "online_2p") return "online_2p";
+  return "online_3p";
+}
+
+const CHESS_PVP_PRESET_STORAGE = "vz_chess_pvp_preset_v1";
+const CHESS_BOT_PRESET_STORAGE = "vz_chess_bot_preset_v1";
+const BOARD_LOBBY_GAME_TAB_STORAGE = "vz_board_lobby_game_tab_v1";
+
+function getBoardLobbyGameTab() {
+  try {
+    const v = String(sessionStorage.getItem(BOARD_LOBBY_GAME_TAB_STORAGE) || "")
+      .toLowerCase()
+      .trim();
+    if (v === "chess" || v === "dambrete" || v === "zole") return v;
+  } catch (_) {}
+  return "zole";
+}
+
+function setBoardLobbyGameTab(tab) {
+  const t =
+    String(tab || "").toLowerCase() === "chess"
+      ? "chess"
+      : String(tab || "").toLowerCase() === "dambrete"
+        ? "dambrete"
+        : "zole";
+  try {
+    sessionStorage.setItem(BOARD_LOBBY_GAME_TAB_STORAGE, t);
+  } catch (_) {}
+  return t;
+}
+
+/** Lobija augšējās pogas: tikai viena spēle redzama (Zole / šahs / dambrete). */
+function syncBoardGamePickTab() {
+  const tab = getBoardLobbyGameTab();
+  const tabs = {
+    zole: document.getElementById("board-pick-zole"),
+    chess: document.getElementById("board-pick-chess"),
+    dambrete: document.getElementById("board-pick-dambrete"),
+  };
+  const panels = {
+    zole: document.getElementById("board-panel-zole"),
+    chess: document.getElementById("board-panel-chess"),
+    dambrete: document.getElementById("board-panel-dambrete"),
+  };
+  const inviteBlock = document.getElementById("board-invite-friend-block");
+  const hint = document.getElementById("board-invite-hint");
+  const zm = getSelectedBoardZoleMode();
+  const showFriend =
+    tab === "chess" ||
+    tab === "dambrete" ||
+    (tab === "zole" && (zm === "online_2p" || zm === "online_3p"));
+  if (inviteBlock) inviteBlock.classList.toggle("hidden", !showFriend);
+  if (hint) {
+    if (tab === "chess") {
+      hint.innerHTML =
+        "Ievadi vārdu kā čatā. Šaha laiks augšā — tas pats uzaicinājumam, revānšam un publicētajai vietai.";
+    } else if (tab === "dambrete") {
+      hint.textContent =
+        "Ievadi vārdu kā čatā. Dambretes režīms (krievu / angļu) ir augšā.";
+    } else if (tab === "zole" && zm === "online_3p") {
+      hint.innerHTML =
+        "3 cilvēkiem vispirms «Izveidot zoles istabu», tad uzaicini ar šo lauku. 2 cilvēkiem + bots — uzaicini vienu draugu.";
+    } else if (tab === "zole" && zm === "online_2p") {
+      hint.textContent = "Uzaicini vienu draugu; trešais būs bots.";
+    } else {
+      hint.textContent = "";
+    }
+  }
+  for (const k of ["zole", "chess", "dambrete"]) {
+    const b = tabs[k];
+    const p = panels[k];
+    const on = k === tab;
+    if (b) {
+      b.classList.toggle("vz-board-game-pick__tab--active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+      b.tabIndex = on ? 0 : -1;
+    }
+    if (p) {
+      p.classList.toggle("vz-board-game-panel--active", on);
+      if (on) p.removeAttribute("hidden");
+      else p.setAttribute("hidden", "");
+    }
+  }
+  const head = document.getElementById("board-lobby-heading");
+  if (head) {
+    head.textContent =
+      tab === "chess" ? "Šahs" : tab === "dambrete" ? "Dambrete" : "Zole";
+  }
+  syncBoardChessTimeRowVisibility();
+  syncBoardOpenSeatsPanelVisibility();
+  syncZole3pOpenLobbyPanelVisibility();
+  syncBoardModalContext();
+}
+
+function persistChessPresetSelect(sel, storageKey) {
+  if (!sel || !storageKey) return;
+  try {
+    localStorage.setItem(storageKey, String(sel.value || "").trim());
+  } catch {}
+}
+
+function chessSelectHasPreset(selectEl, preset) {
+  const v = String(preset || "").trim();
+  if (!selectEl || !v) return false;
+  return Array.from(selectEl.options || []).some((o) => o.value === v);
+}
+
+function applyChessPresetFromStorage() {
+  const pvp = document.getElementById("board-chess-time-preset");
+  const bot = document.getElementById("board-chess-time-preset-vsbot");
+  try {
+    const pv = String(
+      localStorage.getItem(CHESS_PVP_PRESET_STORAGE) || ""
+    ).trim();
+    if (pvp && chessSelectHasPreset(pvp, pv)) pvp.value = pv;
+  } catch {}
+  try {
+    const bv = String(
+      localStorage.getItem(CHESS_BOT_PRESET_STORAGE) || ""
+    ).trim();
+    if (bot && chessSelectHasPreset(bot, bv)) bot.value = bv;
+  } catch {}
+}
+
+function getChessClockPresetForPvp() {
+  const sel = document.getElementById("board-chess-time-preset");
+  return String(sel?.value || "10+0").trim() || "10+0";
+}
+
+function getChessClockPresetForVsBot() {
+  const sel = document.getElementById("board-chess-time-preset-vsbot");
+  return String(sel?.value || "10+0").trim() || "10+0";
+}
+
+/** Viena rindiņa par šaha laiku (uzaicinājums / gaidīšana) — tā pati loģika kā ienākošā modālī. */
+function formatChessClockHumanLine(payload) {
+  if (!payload || typeof payload !== "object") return "";
+  const pr =
+    String(payload.chessClockPreset || "").trim() ||
+    (payload.chessInitialMs != null
+      ? `${Math.round(Number(payload.chessInitialMs) / 60000)}+${Math.round(
+          Number(payload.chessIncrementMs || 0) / 1000
+        )}`
+      : "");
+  if (!pr) return "";
+  const [a, b] = pr.split("+");
+  const inc = String(b ?? "0").trim();
+  return inc !== "0" && inc !== ""
+    ? `Šaha laiks: ${a} min katram + ${inc} s pēc gājiena.`
+    : `Šaha laiks: ${a} min katram (bez pielikuma).`;
+}
+
+function syncBoardChessTimeRowVisibility() {
+  const rowPvp = document.getElementById("board-chess-time-row");
+  const rowBot = document.getElementById("board-chess-time-row-vsbot");
+  const onChessTab = getBoardLobbyGameTab() === "chess";
+  if (rowPvp) rowPvp.classList.toggle("hidden", !onChessTab);
+  if (rowBot) rowBot.classList.toggle("hidden", !onChessTab);
+}
+
+function boardZoleModeLabel(mode) {
+  if (mode === "vs_bot") return "pret botiem";
+  if (mode === "online_2p") return "2 cilvēki + bots";
+  if (mode === "online_3p") return "3 cilvēki (istaba)";
+  return String(mode || "");
+}
+
+function hideBoardResultOverlay() {
+  clearBoardResultAutoCloseTimer();
+  document
+    .getElementById("board-result-play-again-vsbot")
+    ?.classList.add("hidden");
+  document.getElementById("board-result-overlay")?.classList.add("hidden");
+  document.getElementById("board-result-rematch")?.classList.add("hidden");
+  document
+    .getElementById("board-result-rematch-status")
+    ?.classList.add("hidden");
+  const modal = document.getElementById("board-games-modal");
+  const inner = document.getElementById("board-modal-inner");
+  if (modal && !modal.classList.contains("hidden") && inner) {
+    inner.focus({ preventScroll: true });
+  } else if (
+    _boardResultFocusReturn &&
+    typeof _boardResultFocusReturn.focus === "function"
+  ) {
+    try {
+      _boardResultFocusReturn.focus({ preventScroll: true });
+    } catch (_) {}
+  }
+  _boardResultFocusReturn = null;
+}
+
+function boardGameOpponentName(players, vsBot) {
+  const arr = players || [];
+  const me = state.username;
+  const idx = boardGamePlayerIndex(arr, me);
+  if (
+    arr.length === 3 &&
+    boardState.type === "zole" &&
+    boardState.zoleMode === "online_3p"
+  ) {
+    const others = arr.filter((_, i) => i !== idx);
+    return others.length ? others.join(", ") : "pretinieki";
+  }
+  const opp = idx === 0 ? arr[1] : arr[0];
+  if (!opp) return "pretinieks";
+  if (vsBot && String(opp) === BOARD_BOT_DISPLAY_NAME) return "botu (VZBot)";
+  return String(opp);
+}
+
+function boardResultHumanOpponentUsername(players) {
+  const arr = players || [];
+  const meLc = String(state.username || "")
+    .trim()
+    .toLowerCase();
+  const humans = arr.filter((p) => {
+    const s = String(p || "").trim();
+    if (!s) return false;
+    if (s === BOARD_BOT_DISPLAY_NAME) return false;
+    if (ZOLE_BOT_USERNAMES.has(s)) return false;
+    return true;
+  });
+  const others = humans.filter(
+    (p) =>
+      String(p || "")
+        .trim()
+        .toLowerCase() !== meLc
+  );
+  if (others.length !== 1) return "";
+  return String(others[0] || "").trim();
+}
+
+function isBoardResultRematchEligible(snap) {
+  if (!snap || snap.vsBot) return false;
+  const t = snap.gameType;
+  if (t !== "dambrete" && t !== "chess" && t !== "zole") return false;
+  if (t === "zole" && snap.zoleMode !== "online_2p") return false;
+  return !!snap.opponentUsername;
+}
+
+function syncBoardResultRematchUi() {
+  const btn = document.getElementById("board-result-rematch");
+  const st = document.getElementById("board-result-rematch-status");
+  const overlay = document.getElementById("board-result-overlay");
+  if (st) {
+    st.textContent = "";
+    st.classList.add("hidden");
+  }
+  if (!btn) return;
+  const show =
+    overlay &&
+    !overlay.classList.contains("hidden") &&
+    isBoardResultRematchEligible(lastBoardResultSnapshot);
+  btn.classList.toggle("hidden", !show);
+  btn.disabled = false;
+  if (show) clearBoardResultAutoCloseTimer();
+}
+
+function sendBoardRematchInvite() {
+  const snap = lastBoardResultSnapshot;
+  if (!isBoardResultRematchEligible(snap)) return;
+  if (!boardGamesEnsureSocketConnected()) return;
+  const opp = snap.opponentUsername;
+  const type = snap.gameType;
+  const payload = { type, opponentUsername: opp };
+  if (type === "dambrete")
+    payload.dambreteVariant = snap.dambreteVariant || "russian";
+  if (type === "zole") payload.zoleMode = "online_2p";
+  if (type === "chess")
+    payload.chessClockPreset =
+      snap.chessClockPreset || getChessClockPresetForPvp();
+  state.socket.emit("board.rematchRequest", payload);
+  const st = document.getElementById("board-result-rematch-status");
+  if (st) {
+    st.textContent = `Revānša uzaicinājums nosūtīts: ${opp}. Gaidām atbildi…`;
+    st.classList.remove("hidden");
+  }
+  const btn = document.getElementById("board-result-rematch");
+  if (btn) btn.disabled = true;
+  hideBoardResultOverlay();
+  showBoardModal();
+  appendGaldaSystemMessage(`Revānšs: uzaicinājums nosūtīts ${opp}.`);
+}
+
+function formatZoleTablePts(n) {
+  if (n == null || n === "") return "0";
+  const v = Number(n);
+  if (!Number.isFinite(v)) return String(n);
+  if (v > 0) return `+${v}`;
+  return String(v);
+}
+
+/** Zole 3P: aprēķinātie coins pēc likmes (tabulas p. × coins par punktu). */
+function zole3pCoinsFromTableLine(snap, username, coinsPerTablePoint) {
+  const cpp = Math.floor(Number(coinsPerTablePoint) || 0);
+  if (cpp <= 0 || !snap || !Array.isArray(snap.tableDelta)) return "";
+  const pl = Array.isArray(snap.players) ? snap.players : [];
+  const myI = boardGamePlayerIndex(pl, username);
+  if (myI < 0) return "";
+  const t = Number(snap.tableDelta[myI]);
+  if (!Number.isFinite(t) || t === 0) return "";
+  const coins = t * cpp;
+  if (!Number.isFinite(coins) || coins === 0) return "";
+  const sign = coins > 0 ? "+" : "";
+  return ` Coins (${cpp} × tabulas punkti šajā partijā): ${sign}${coins}.`;
+}
+
+/** Zole: skaidra rindiņa «cik tabulas punktu man šajā partijā / kopā mačā». */
+function zoleMyTablePtsLine(snap, username) {
+  if (!snap || !Array.isArray(snap.tableDelta) || snap.tableDelta.length < 3)
+    return "";
+  const players = Array.isArray(snap.players) ? snap.players : [];
+  const me = String(username || "")
+    .trim()
+    .toLowerCase();
+  if (!me) return "";
+  let myI = -1;
+  for (let i = 0; i < players.length; i++) {
+    if (
+      String(players[i] || "")
+        .trim()
+        .toLowerCase() === me
+    ) {
+      myI = i;
+      break;
+    }
+  }
+  if (myI < 0) return "";
+  const p = Number(snap.tableDelta[myI]);
+  const part = `Tavai tabulai šajā partijā: ${formatZoleTablePts(p)} p.`;
+  const cumArr = snap.cumulativeTableDelta;
+  if (!Array.isArray(cumArr) || cumArr.length <= myI) return ` ${part}`;
+  const k = Number(cumArr[myI]);
+  if (!Number.isFinite(k)) return ` ${part}`;
+  return ` ${part} Kopā šajā mačā: ${formatZoleTablePts(k)} p.`;
+}
+
+function zoleBuriedKittyEyesLine(snap) {
+  const lr = snap?.lastResult;
+  if (!lr || typeof lr !== "object") return "";
+  const parts = [];
+  if (typeof lr.buriedEyesTotal === "number" && lr.buriedEyesTotal > 0) {
+    parts.push(
+      `Noraktās 2 kārtis lielajam: +${lr.buriedEyesTotal} acis tabulā.`
+    );
+  }
+  if (
+    typeof lr.kittyEyesToOpponents === "number" &&
+    lr.kittyEyesToOpponents > 0
+  ) {
+    parts.push(
+      `Divas vidus kārtis: kopā ${lr.kittyEyesToOpponents} acis mazajiem (pret līgumdevēju).`
+    );
+  }
+  if (!parts.length) return "";
+  return " " + parts.join(" ");
+}
+
+function zoleResultExtraLine(snap) {
+  const lr = snap?.lastResult;
+  const players = Array.isArray(snap?.players) ? snap.players : [];
+  const nm = (i) =>
+    typeof i === "number" && i >= 0 && players[i] ? String(players[i]) : "?";
+  const mazoPair = (cidx) => {
+    if (typeof cidx !== "number") return "?";
+    return [0, 1, 2]
+      .filter((i) => i !== cidx)
+      .map((i) => nm(i))
+      .join(" un ");
+  };
+  if (!lr || !lr.kind) return "";
+  if (lr.kind === "galdins" && !lr.tie && lr.loserNoTricks)
+    return ` Galdiņš: bezstiķis — ${nm(lr.loserIdx)} (0 stiķi).`;
+  if (lr.kind === "galds" && lr.loserNoTricks)
+    return ` Galds: bezstiķis — ${nm(lr.loserIdx)} (0 stiķi).`;
+  if (lr.kind === "big" && lr.win && lr.opponentsNoTricks)
+    return ` Mazajiem bezstiķis (${mazoPair(lr.contractorIdx)} — kopā 0 stiķu).`;
+  if (lr.kind === "big" && !lr.win && lr.contractorNoTricks)
+    return ` Lielajam bezstiķis (${nm(lr.contractorIdx)} — 0 stiķi).`;
+  if (lr.kind === "zole" && lr.win && lr.allTricks) return " Visi stiķi.";
+  if (lr.kind === "zole" && !lr.win && lr.contractorNoTricks)
+    return ` Lielajam bezstiķis (${nm(lr.contractorIdx)} — 0 stiķi).`;
+  return "";
+}
+
+/** Zole 2P PvP: tabula vs coins — modālī un čatā tikai kopā ar +/- coins. */
+const ZOLE_2P_TABULA_VS_COINS_NOTE =
+  "Tabula — zoles punkti mačā. Coins — virtuālā bilance profilā; šeit tās mainās pēc fiksētas summas par uzvaru vai zaudējumu (nav likmes «par tabulas punktu» kā 3 cilvēku istabā).";
+
+/** Zole 3P: skaidro likmes sasaisti ar tabulu (čats + modālis). */
+function zole3pStakeTableCoinsNote(coinsPerPoint) {
+  const c = Math.floor(Number(coinsPerPoint) || 0);
+  if (c <= 0) return "";
+  return ` Likme istabā: ${c} coins par katru tavu tabulas punktu šajā partijā — coins izmaiņa = tabulas punkti × ${c} (tā pati formula čatā un rezultātā).`;
+}
+
+function showBoardGameResult(payload) {
+  const overlay = document.getElementById("board-result-overlay");
+  const eyebrow = document.getElementById("board-result-eyebrow");
+  const titleEl = document.getElementById("board-result-title");
+  const detailEl = document.getElementById("board-result-detail");
+  const zoleNoteEl = document.getElementById("board-result-zole-note");
+  const coinsEl = document.getElementById("board-result-coins");
+  if (!overlay || !titleEl || !detailEl) return;
+
+  const gameType = payload?.type || boardState.type || "dambrete";
+  const vsBot = !!payload?.vsBot;
+  const players = payload?.players || boardState.players || [];
+  const winner = payload?.winner ?? null;
+  const reason = String(payload?.reason || "finished");
+  const resignedBy = payload?.resignedBy;
+  const coinsGain = Number(payload?.coinsGain) || 0;
+  const coinsLoss = Number(payload?.coinsLoss) || 0;
+  const me = state.username;
+  const oppName = boardGameOpponentName(players, vsBot);
+  const oppPhrase =
+    vsBot && oppName.startsWith("botu") ? oppName : `pret ${oppName}`;
+  const dVar =
+    gameType === "dambrete"
+      ? normalizeDambreteVariantClient(
+          payload?.dambreteVariant ?? boardState.dambreteVariant
+        )
+      : null;
+
+  let chessPresetSnap = "";
+  if (gameType === "chess" && boardState.chessClock) {
+    const ck = boardState.chessClock;
+    chessPresetSnap = `${Math.max(
+      1,
+      Math.round((Number(ck.initialMsPerSide) || 600000) / 60000)
+    )}+${Math.max(0, Math.round((Number(ck.incrementMs) || 0) / 1000))}`;
+  }
+  lastBoardResultSnapshot = {
+    gameType,
+    vsBot,
+    zoleMode: gameType === "zole" ? boardState.zoleMode : null,
+    dambreteVariant: gameType === "dambrete" ? dVar : null,
+    opponentUsername: boardResultHumanOpponentUsername(players),
+    chessClockPreset: gameType === "chess" ? chessPresetSnap : undefined,
+  };
+
+  overlay.classList.remove(
+    "vz-board-result--win",
+    "vz-board-result--loss",
+    "vz-board-result--draw"
+  );
+
+  let title = "";
+  let detail = "";
+  let eyebrowText =
+    gameType === "chess"
+      ? "ŠAHS · SPĒLES REZULTĀTS"
+      : gameType === "zole"
+        ? "ZOLE · SPĒLES REZULTĀTS"
+        : `DAMBRETE · ${boardDambreteModeLabel(dVar).toUpperCase()} · REZULTĀTS`;
+
+  const iWon =
+    winner &&
+    me &&
+    String(winner).trim().toLowerCase() === String(me).trim().toLowerCase();
+  const iLost = winner && me && !iWon;
+
+  if (!winner) {
+    if (gameType === "chess" && reason === "timeout") {
+      title = "Laiks beidzies";
+      const to = payload?.timedOutPlayer;
+      detail = to
+        ? `${to} neizdarīja gājienu laikā — neizšķirts tabulā (nav mata).`
+        : "Kādam beidzās laiks — spēle beigusies bez uzvarētāja.";
+      overlay.classList.add("vz-board-result--draw");
+    } else if (
+      gameType === "zole" &&
+      vsBot &&
+      reason === "zole_vs_bot_last_hand_done"
+    ) {
+      title = "Mačs beidzies";
+      detail =
+        "Pēdējā partija pret botiem ir izspēlēta. Vari turpināt VĀRDU ZONU (vārdi) vai atvērt «Galda spēles» jaunai spēlei.";
+      overlay.classList.add("vz-board-result--draw");
+    } else {
+      title = "Neizšķirts";
+      if (gameType === "chess" && reason === "draw_agreement") {
+        const by = payload?.agreedBy;
+        const from = payload?.offeredBy;
+        detail =
+          by && from
+            ? `Abas puses vienojās par neizšķirtu (${from} piedāvāja, ${by} pieņēma).`
+            : "Abas puses vienojās par neizšķirtu.";
+      } else if (gameType === "chess" && reason === "draw_claim_fifty") {
+        detail = `${payload?.claimedBy || "Spēlētājs"} pieteica neizšķirtu pēc 50 gājienu likuma.`;
+      } else if (gameType === "chess" && reason === "draw_claim_threefold") {
+        detail = `${payload?.claimedBy || "Spēlētājs"} pieteica neizšķirtu pēc trīskārša atkārtojuma.`;
+      } else if (gameType === "chess" && reason === "draw_claim_both") {
+        detail = `${payload?.claimedBy || "Spēlētājs"} pieteica neizšķirtu (50 gājienu likums un trīskāršs atkārtojums).`;
+      } else {
+        detail =
+          reason === "draw"
+            ? "Partija beidzās neizšķirti."
+            : "Spēle beigusies bez uzvarētāja.";
+      }
+      overlay.classList.add("vz-board-result--draw");
+    }
+  } else if (iWon) {
+    title = "Uzvara";
+    if (reason === "timeout") {
+      detail = vsBot
+        ? "Tu uzvarēji — botam beidzās laiks."
+        : `Tu uzvarēji — pretiniekam beidzās laiks${oppName ? ` (${oppName})` : ""}.`;
+    } else if (reason === "resign") {
+      detail =
+        resignedBy &&
+        String(resignedBy).trim().toLowerCase() !==
+          String(me).trim().toLowerCase()
+          ? vsBot
+            ? "Bots padodas — uzvara tev."
+            : `Tu uzvarēji — ${oppName} padodas.`
+          : `Tu uzvarēji ${oppPhrase}.`;
+    } else if (reason === "checkmate") {
+      detail = `Tu uzvarēji ar matu ${oppPhrase}.`;
+    } else if (gameType === "zole") {
+      const snap = payload?.zole || boardState.zole;
+      const tab = zoleMyTablePtsLine(snap, me);
+      const cppStake = Math.floor(
+        Number(
+          payload?.zole3pCoinsPerPoint ?? boardState.zole3pCoinsPerPoint
+        ) || 0
+      );
+      const coinStake = zole3pCoinsFromTableLine(snap, me, cppStake);
+      detail =
+        (boardState.zoleMode === "online_3p"
+          ? "Labākais tabulas rezultāts (3 cilvēki, bez bota)."
+          : boardState.zoleMode === "online_2p"
+            ? "Labākais tabulas rezultāts (2 cilvēki + bots)."
+            : "Labākais tabulas rezultāts (pret botiem).") +
+        tab +
+        coinStake +
+        zoleBuriedKittyEyesLine(snap) +
+        zoleResultExtraLine(snap);
+    } else {
+      detail = `Tu uzvarēji ${oppPhrase}.`;
+    }
+    overlay.classList.add("vz-board-result--win");
+  } else {
+    title = "Zaudējums";
+    if (reason === "timeout") {
+      detail = "Tev beidzās laiks — zaudēji uz laiku.";
+    } else if (reason === "resign") {
+      detail =
+        resignedBy &&
+        String(resignedBy).trim().toLowerCase() ===
+          String(me).trim().toLowerCase()
+          ? "Tu padodies — spēle zaudēta."
+          : vsBot
+            ? `Tu zaudēji — uzvarēja ${oppName}.`
+            : `Tu zaudēji pret ${String(winner)}.`;
+    } else if (reason === "checkmate") {
+      detail = vsBot
+        ? `Tu zaudēji — ${oppName} uzvarēja ar matu.`
+        : `Tu zaudēji — ${String(winner)} uzvarēja ar matu.`;
+    } else if (gameType === "zole") {
+      const snap = payload?.zole || boardState.zole;
+      const tab = zoleMyTablePtsLine(snap, me);
+      const cppStake = Math.floor(
+        Number(
+          payload?.zole3pCoinsPerPoint ?? boardState.zole3pCoinsPerPoint
+        ) || 0
+      );
+      const coinStake = zole3pCoinsFromTableLine(snap, me, cppStake);
+      detail =
+        `Uz tabulas uzvarēja ${String(winner)}.${tab}` +
+        coinStake +
+        zoleBuriedKittyEyesLine(snap) +
+        zoleResultExtraLine(snap);
+    } else {
+      detail = vsBot
+        ? `Tu zaudēji — uzvarēja ${oppName}.`
+        : `Tu zaudēji — uzvarēja ${String(winner)}.`;
+    }
+    overlay.classList.add("vz-board-result--loss");
+  }
+
+  if (eyebrow) eyebrow.textContent = eyebrowText;
+  titleEl.textContent = title;
+  detailEl.textContent = detail;
+
+  const zoleCppModal = Math.floor(
+    Number(payload?.zole3pCoinsPerPoint ?? boardState.zole3pCoinsPerPoint) || 0
+  );
+  if (zoleNoteEl) {
+    zoleNoteEl.textContent = "";
+    zoleNoteEl.classList.add("hidden");
+    if (gameType === "zole" && !vsBot) {
+      if (boardState.zoleMode === "online_3p") {
+        if (zoleCppModal > 0) {
+          zoleNoteEl.textContent = `Likme istabā: ${zoleCppModal} coins par katru tavu tabulas punktu šajā partijā. Zemāk redzamā coins izmaiņa = tabulas punkti × ${zoleCppModal} (tas pats aprēķins kā čatā).`;
+          zoleNoteEl.classList.remove("hidden");
+        } else {
+          zoleNoteEl.textContent =
+            "Šai istabai nav likmes par tabulas punktu — coins mainās pēc fiksētas PvP summas (tabula joprojām nosaka vietu un uzvarētāju).";
+          zoleNoteEl.classList.remove("hidden");
+        }
+      }
+    }
+  }
+
+  if (coinsEl) {
+    if (vsBot) {
+      coinsEl.textContent = "Pret botu coins nemainās.";
+      coinsEl.classList.remove("hidden");
+    } else if (iWon && coinsGain > 0) {
+      coinsEl.textContent =
+        gameType === "zole" && boardState.zoleMode === "online_2p"
+          ? `+${coinsGain} coins. ${ZOLE_2P_TABULA_VS_COINS_NOTE}`
+          : `+${coinsGain} coins`;
+      coinsEl.classList.remove("hidden");
+    } else if (iLost && coinsLoss > 0) {
+      coinsEl.textContent =
+        gameType === "zole" && boardState.zoleMode === "online_2p"
+          ? `−${coinsLoss} coins. ${ZOLE_2P_TABULA_VS_COINS_NOTE}`
+          : `−${coinsLoss} coins`;
+      coinsEl.classList.remove("hidden");
+    } else {
+      coinsEl.textContent = "";
+      coinsEl.classList.add("hidden");
+    }
+  }
+
+  const againBtn = document.getElementById("board-result-play-again-vsbot");
+  if (againBtn) {
+    const showAgain = !!vsBot && !!gameType && gameType !== "zole";
+    againBtn.classList.toggle("hidden", !showAgain);
+    againBtn.dataset.gameType = showAgain ? gameType : "";
+  }
+
+  overlay.classList.remove("hidden");
+  syncBoardResultRematchUi();
+  _boardResultFocusReturn = document.activeElement;
+  document.getElementById("board-result-close")?.focus({ preventScroll: true });
+
+  const remBtn = document.getElementById("board-result-rematch");
+  const showRematch = remBtn && !remBtn.classList.contains("hidden");
+  clearBoardResultAutoCloseTimer();
+  if (!showRematch) {
+    boardResultAutoCloseTimer = setTimeout(() => {
+      const ov = document.getElementById("board-result-overlay");
+      if (ov && !ov.classList.contains("hidden")) hideBoardResultOverlay();
+    }, BOARD_RESULT_OVERLAY_AUTO_MS);
+  }
+}
 
 // TOP10 + ONLINE
 const lbListEl = $("#lb-list");
@@ -650,6 +2371,13 @@ const hofSeason1El = document.getElementById("hof-season1");
 
 // Misijas
 const missionsListEl = $("#missions-list");
+const dailyAnchorKickerEl = $("#vz-daily-anchor-kicker");
+const dailyAnchorHeadlineEl = $("#vz-daily-anchor-headline");
+const dailyAnchorProgressEl = $("#vz-daily-anchor-progress");
+const dailyAnchorHintEl = $("#vz-daily-anchor-hint");
+const giveawayAnchorWrapEl = document.getElementById("vz-giveaway-anchor");
+const giveawayAnchorTextEl = document.getElementById("vz-giveaway-anchor-text");
+const giveawayAnchorBtnEl = document.getElementById("vz-giveaway-anchor-btn");
 const engagementLoopCardEl = $("#engagement-loop-card");
 const engagementLoopSummaryEl = $("#engagement-loop-summary");
 const engagementLoopPrimaryBtnEl = $("#engagement-loop-primary-btn");
@@ -689,6 +2417,18 @@ const tournamentScheduleSlotsEl = $("#tournament-schedule-slots");
 const tournamentWeeklyJoinBtnEl = $("#tournament-weekly-join-btn");
 const tournamentWeeklyJoinStatusEl = $("#tournament-weekly-join-status");
 const tournamentRulesListEl = $("#tournament-rules-list");
+const tournamentRecentWrapEl = $("#tournament-recent-wrap");
+const tournamentRecentListEl = $("#tournament-recent-list");
+const vipQuickTournamentPanelEl = $("#vip-quick-tournament-panel");
+const vipQuickTournamentHelpEl = $("#vip-quick-tournament-help");
+const vipQuickTournamentNameEl = $("#vip-quick-tournament-name");
+const vipQuickTournamentTypeEl = $("#vip-quick-tournament-type");
+const vipQuickTournamentPlayModeEl = $("#vip-quick-tournament-play-mode");
+const vipQuickTournamentSeedingEl = $("#vip-quick-tournament-seeding");
+const vipQuickTournamentCreateBtnEl = $("#vip-quick-tournament-create-btn");
+const vipQuickTournamentCreateStatusEl = $(
+  "#vip-quick-tournament-create-status"
+);
 const vipRoomPanelEl = $("#vip-room-panel");
 const vipRoomHelpEl = $("#vip-room-help");
 const vipRoomNameEl = $("#vip-room-name");
@@ -702,6 +2442,10 @@ const vipRoomListEl = $("#vip-room-list");
 
 // Draugi
 const friendsListEl = $("#friends-list");
+const friendsListScrollEl = $("#friends-list-scroll");
+const friendsListHintEl = $("#friends-list-hint");
+const friendsFilterInputEl = $("#friends-filter-input");
+const friendsCardEl = $("#friends-card");
 const friendsInvitesEl = $("#friends-invites");
 const friendAddInputEl = $("#friend-add-input");
 const friendAddBtnEl = $("#friend-add-btn");
@@ -819,6 +2563,18 @@ const ppEmailInputEl = $("#pp-email-input");
 const ppEmailSaveBtn = $("#pp-email-save");
 const ppEmailStatusEl = $("#pp-email-status");
 const ppEmailRemoveBtn = document.getElementById("pp-email-remove");
+const ppBetaBlockEl = document.getElementById("pp-beta-block");
+const ppBetaBadgeEl = document.getElementById("pp-beta-badge");
+const ppBetaDescEl = document.getElementById("pp-beta-desc");
+const ppBetaAgreeEl = document.getElementById("pp-beta-agree");
+const ppBetaSubmitBtn = document.getElementById("pp-beta-submit");
+const ppBetaStatusEl = document.getElementById("pp-beta-status");
+const ppGiveawayEmailGateEl = document.getElementById("pp-giveaway-email-gate");
+const ppNhlGiveawayWrapEl = document.getElementById("pp-nhl-giveaway-wrap");
+const ppNhlHatGridEl = document.getElementById("pp-nhl-hat-grid");
+const ppNhlTeamInputEl = document.getElementById("pp-nhl-team-input");
+const ppNhlTeamSaveBtn = document.getElementById("pp-nhl-team-save");
+const ppNhlTeamStatusEl = document.getElementById("pp-nhl-team-status");
 
 // Novads (modal)
 const regionModalEl = document.getElementById("region-modal");
@@ -838,8 +2594,6 @@ const regionAttackCapEl = document.getElementById("region-attack-cap");
 const regionRulesEl = document.getElementById("region-rules");
 
 // Audio MP3
-const sClick = $("#s-click");
-const sType = $("#s-type");
 const sError = $("#s-error");
 const sWin = $("#s-win");
 const sLose = $("#s-lose");
@@ -982,11 +2736,17 @@ function applyAuthSessionFromPayload(payload, fallbackUsername = "") {
 function handleAuthExpiredRedirect() {
   if (authRedirectTriggered) return;
   authRedirectTriggered = true;
+  try {
+    sessionStorage.setItem(
+      "vz_auth_notice",
+      "Sesija beigusies. Ielogojies vēlreiz."
+    );
+  } catch {}
   clearStoredAuth();
   try {
     clearOneSignalIdentity();
   } catch {}
-  window.location.href = "index.html";
+  window.location.href = "index.html#session";
 }
 
 async function tryRefreshAccessToken() {
@@ -1022,7 +2782,13 @@ async function apiRequest(path, options = {}, canRetryAuth = true) {
     headers.Authorization = "Bearer " + state.token;
   }
   const requestOptions = { ...options, headers };
-  const res = await fetchWithTimeout(API_BASE + path, requestOptions);
+  let res;
+  try {
+    res = await fetchWithTimeout(API_BASE + path, requestOptions);
+  } catch (err) {
+    showConnectionIssueOverlay(classifyApiFailure(err));
+    throw err;
+  }
   try {
     return await readJsonOrThrow(res);
   } catch (err) {
@@ -1031,7 +2797,23 @@ async function apiRequest(path, options = {}, canRetryAuth = true) {
       Number(err?.status) === 401 &&
       path !== "/auth/refresh" &&
       !!state.refreshToken;
-    if (!shouldRetry) throw err;
+    if (!shouldRetry) {
+      const info = classifyApiFailure(err);
+      const st = Number(err?.status);
+      if (
+        info.key === "client" &&
+        st >= 400 &&
+        st < 500 &&
+        st !== 401 &&
+        st !== 403
+      ) {
+        appendSystemMessage(info.text);
+        if (gameMessageEl) gameMessageEl.textContent = info.text;
+      } else {
+        showConnectionIssueOverlay(info);
+      }
+      throw err;
+    }
     const refreshed = await tryRefreshAccessToken();
     if (!refreshed) {
       handleAuthExpiredRedirect();
@@ -1047,6 +2829,55 @@ async function apiPost(path, body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body || {}),
   });
+}
+
+async function startStripeCoinCheckout(packId) {
+  const id = String(packId || "").trim();
+  if (!id) return;
+  const data = await apiPost("/api/stripe/create-checkout-session", {
+    packId: id,
+  });
+  const url = data && data.url;
+  if (url && typeof url === "string") {
+    window.location.href = url;
+  }
+}
+
+function fillStripeCoinPackList(container) {
+  if (!container) return;
+  const packs = state.stripeCoinPacks || [];
+  container.innerHTML = "";
+  for (const p of packs) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "vz-stripe-coins__btn";
+    btn.textContent = p.label || `${p.coins} coins`;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        await startStripeCoinCheckout(p.id);
+      } catch (e) {
+        appendSystemMessage(
+          ((e && e.message) || "Neizdevās atvērt maksājumu.") +
+            " Īsi par coins: «⋯ Vairāk» → «Coins / VIP / turnīri»."
+        );
+        btn.disabled = false;
+      }
+    });
+    container.appendChild(btn);
+  }
+}
+
+function syncStripeCoinsBuyUi() {
+  const on = !!state.stripeCoinsEnabled && (state.stripeCoinPacks || []).length;
+  if (stripeCoinsBuyEl) {
+    stripeCoinsBuyEl.classList.toggle("hidden", !on);
+    if (on) fillStripeCoinPackList(stripeCoinsPackListEl);
+  }
+  if (ppStripeCoinsBuyEl) {
+    ppStripeCoinsBuyEl.classList.toggle("hidden", !on);
+    if (on) fillStripeCoinPackList(ppStripeCoinsPackListEl);
+  }
 }
 
 async function apiGet(path) {
@@ -1206,11 +3037,118 @@ function setOfflineOverlay(show) {
   else offlineOverlayEl.classList.add("hidden");
 }
 
+function classifyApiFailure(err) {
+  const status = Number(err?.status);
+  const msg = String(err?.message || "").toLowerCase();
+  if (status === 401 || status === 403)
+    return {
+      key: "auth",
+      title: "Piekļuve beigusies",
+      text: "Tava sesija vairs nav derīga vai nav tiesību šai darbībai. Ielogojies vēlreiz.",
+      hint: "",
+      showLogin: true,
+    };
+  if (status >= 500 && status < 600)
+    return {
+      key: "server",
+      title: "Servera kļūda",
+      text: "Serveris atbild ar kļūdu. Tas parasti ir īslaicīgi — pamēģini vēlreiz pēc brīža.",
+      hint: status ? `Kods: ${status}` : "",
+      showLogin: false,
+    };
+  if (status === 429)
+    return {
+      key: "rate",
+      title: "Pārāk daudz pieprasījumu",
+      text: "Uz brīdi esi nosūtījis pārāk daudz pieprasījumu. Pagaidi un mēģini vēlreiz.",
+      hint: "",
+      showLogin: false,
+    };
+  if (status === 408 || status === 504)
+    return {
+      key: "timeout",
+      title: "Noildze",
+      text: "Serveris neatbildēja laikā. Pārbaudi savienojumu un mēģini vēlreiz.",
+      hint: "",
+      showLogin: false,
+    };
+  if (
+    msg.includes("tīkls neatbildēja") ||
+    msg.includes("pieslēgties serverim") ||
+    msg.includes("failed to fetch") ||
+    msg.includes("networkerror") ||
+    msg.includes("load failed")
+  )
+    return {
+      key: "network",
+      title: "Savienojuma problēma",
+      text: "Neizdevās sasniegt serveri. Pārbaudi internetu vai mēģini vēlāk.",
+      hint: "",
+      showLogin: false,
+    };
+  if (status >= 400)
+    return {
+      key: "client",
+      title: "Pieprasījums neizdevās",
+      text:
+        String(err?.message || "").trim() || "Neizdevās izpildīt pieprasījumu.",
+      hint: status ? `Kods: ${status}` : "",
+      showLogin: false,
+    };
+  return {
+    key: "unknown",
+    title: "Kaut kas nogāja greizi",
+    text:
+      String(err?.message || "").trim() || "Nezināma kļūda. Pamēģini vēlreiz.",
+    hint: "",
+    showLogin: false,
+  };
+}
+
+function showConnectionIssueOverlay(info, opts = {}) {
+  const silent = !!opts.silent;
+  const title = info?.title || "Savienojuma problēma";
+  const text = info?.text || "Mēģini vēlreiz.";
+  const hint = info?.hint || "";
+  const showLogin = !!info?.showLogin;
+  const key = String(info?.key || "");
+
+  if (offlineTitleEl) offlineTitleEl.textContent = title;
+  if (offlineTextEl) offlineTextEl.textContent = text;
+  if (offlineHintEl) {
+    offlineHintEl.textContent = hint;
+    offlineHintEl.classList.toggle("hidden", !hint);
+  }
+  if (offlineLoginBtn) offlineLoginBtn.classList.toggle("hidden", !showLogin);
+  if (offlineRetryBtn) {
+    offlineRetryBtn.textContent = showLogin
+      ? "Atjaunot lapu"
+      : "Mēģināt vēlreiz";
+  }
+  setOfflineOverlay(true);
+
+  if (!silent && key && key !== _vzConnIssueLastKey) {
+    _vzConnIssueLastKey = key;
+    const galLine = `${title}: ${text}${hint ? ` — ${hint}` : ""}`;
+    appendVzStatusMessage(galLine);
+  }
+  if (_vzConnIssueOverlayTimer != null) {
+    clearTimeout(_vzConnIssueOverlayTimer);
+    _vzConnIssueOverlayTimer = null;
+  }
+  if (opts.autoHideMs && opts.autoHideMs > 0) {
+    _vzConnIssueOverlayTimer = setTimeout(() => {
+      setOfflineOverlay(false);
+      _vzConnIssueOverlayTimer = null;
+    }, opts.autoHideMs);
+  }
+}
+
+/** Īsts PWA / «pievienots sākumekrānam» — ne jau parasts pārlūks fullscreen režīmā. */
 function isTwa() {
   if (typeof window === "undefined") return false;
   try {
     if (window.matchMedia("(display-mode: standalone)").matches) return true;
-    if (window.matchMedia("(display-mode: fullscreen)").matches) return true;
     if (navigator.standalone === true) return true;
     return false;
   } catch {
@@ -1378,19 +3316,40 @@ function handleRatePromptFeedback() {
 }
 
 // ==================== TUTORIAL ====================
-const TUTORIAL_STORAGE_KEY = "vz_tutorial_seen";
+const TUTORIAL_STORAGE_KEY = "vz_tutorial_seen_v4";
+const LV_KEYBOARD_HINT_STORAGE = "vz_lv_keyboard_hint_shown";
 const TUTORIAL_STEPS = [
   {
     title: "Laipni lūdzam VĀRDU ZONĀ!",
-    body: "Uzminē vārdu 6 mēģinājumos. Izmanto klaviatūru vai pieskāršanos.",
+    body: "Uzmini vārdu ierobežotā skaitā mēģinājumu. Zem režģa ir tastatūra — vari arī rakstīt uz datora.",
+  },
+  {
+    title: "Pirmie soļi",
+    body: "1) Spēle ir zem logo un sezonas joslas. 2) Pēc ievada spied «Jauns raunds» (ja redzams). 3) Lejā atver «Sacensības un rangi», lai redzētu TOP, misijas un turnīrus.",
+  },
+  {
+    title: "Latviešu tastatūra (QWERTY)",
+    body: "Burti kā uz latviešu QWERTY, tikai bez Q, W, X un Y — latviešu vārdos tie parasti nav. Nospied SHIFT (oranžs), lai iegūtu Ā, Č, Ē, Ģ, Ī, Ķ, Ļ, Ņ, Š, Ū, Ž. Atkārtoti SHIFT — atpakaļ uz parastajiem burtiem.",
+  },
+  {
+    title: "Draugi, duelis, galds",
+    body: "Viss ir VĀRDU ZONĀ: profilā pievieno draugus. Draugu sarakstā redzams statuss (Spēlē / Gaida / Brīvs / Offline) un poga «⚔ Duelis» — viens klikšķis uz vārdu dueli. Augšā ♟️ «Galda spēles» — šahs, dambrete, zole. Lejā «Sacensības un rangi» — TOP, misijas, turnīri.",
+  },
+  {
+    title: "Coins un uzticība",
+    body: "Viens virtuālais atlikums visās spēlēs. Īss skaidrojums: izvēlnē «⋯ Vairāk» → «Coins / VIP / turnīri». Pirms naudas pirkuma — saite «Privātums un maksājumi» pie Stripe pakotnēm.",
+  },
+  {
+    title: "Šodienas mērķis",
+    body: "Sadaļā «Sacensības un rangi» kartīte «Šodien VĀRDU ZONĀ» parāda vienu skaidru soli — dienas lādi, misiju vai bonusu. Zem tās ir pilns misiju saraksts.",
   },
   {
     title: "Kā minēt",
-    body: "Raksti burtus un nospied Enter. Vārds ir 6 burti.",
+    body: "Izvēlies burtus, saliec vārdu un nospied ENTER (vai taustiņu Enter). Garums atkarīgs no raunda (bieži 5 vai 6 burti).",
   },
   {
-    title: "Zaļš = pareizā vieta",
-    body: "Burts ir vārdā un pareizajā vietā.",
+    title: "Sarkans = pareizā vieta",
+    body: "Burts ir vārdā un pareizajā vietā (sarkanā rūtiņā).",
     example: ["A", "B", "C", "D", "E", "F"],
     exampleStatus: [
       "correct",
@@ -1402,7 +3361,7 @@ const TUTORIAL_STEPS = [
     ],
   },
   {
-    title: "Dzeltenš = pareizs burts, nepareiza vieta",
+    title: "Dzeltens = pareizs burts, nepareiza vieta",
     body: "Burts ir vārdā, bet citā ailē. Izmanto to nākamajā minējumā.",
     example: ["A", "B", "C", "D", "E", "F"],
     exampleStatus: [
@@ -1421,6 +3380,13 @@ const TUTORIAL_STEPS = [
     exampleStatus: ["absent", "absent", "absent", "absent", "absent", "absent"],
   },
 ];
+
+function showFirstSessionHintAfterTutorial() {
+  try {
+    if (localStorage.getItem(LV_KEYBOARD_HINT_STORAGE) === "1") return;
+    localStorage.setItem(LV_KEYBOARD_HINT_STORAGE, "pending");
+  } catch {}
+}
 
 function showTutorialIfNeeded() {
   try {
@@ -1473,6 +3439,7 @@ function showTutorial() {
       localStorage.setItem(TUTORIAL_STORAGE_KEY, "1");
     } catch {}
     tutorialOverlayEl.classList.add("hidden");
+    showFirstSessionHintAfterTutorial();
   }
 
   if (tutorialSkipBtn) {
@@ -1574,7 +3541,6 @@ async function startChallengeRound(challengeId) {
 
 function applyCorrectLocksFromHistory(history) {
   if (!Array.isArray(history)) return;
-  const pattern = { correct: 3, present: 2, absent: 1 };
   history.forEach((h, rowIndex) => {
     const p = h?.pattern || [];
     p.forEach((status, colIndex) => {
@@ -1977,6 +3943,7 @@ function renderRegionRules(rules) {
     : [];
   const fallback = [
     "Par uzvarām iegūsti novada punktus.",
+    "Duelis un galda spēles pret cilvēkiem arī stiprina novadu tabulā.",
     "Ar +1 palīdzi savam novadam.",
     "Ar -1 samazini izvēlēto pretinieku.",
   ];
@@ -2144,7 +4111,7 @@ function updateVipUi(me) {
     } else if (active) {
       vipStatusEl.textContent = `VIP aktīvs līdz ${formatVipUntil(
         until
-      )} · vari veidot turnīru.`;
+      )} · sadaļā «Turnīri» vari veidot ātru turnīru vai VIP istabu.`;
     } else {
       vipStatusEl.textContent = "VIP nav aktīvs.";
     }
@@ -2211,11 +4178,23 @@ function updatePlayerCard(me) {
   if (typeof me.email === "string") {
     state.email = me.email;
   }
+  state.betaTester = !!me.betaTester;
+  state.betaOptInRequestedAt = Math.max(
+    0,
+    Math.floor(Number(me.betaOptInRequestedAt) || 0)
+  );
+  if (typeof me.giveawayNhlTeam === "string") {
+    state.giveawayNhlTeam = me.giveawayNhlTeam;
+  }
+  if (typeof me.giveawayNhlAbbr === "string") {
+    state.giveawayNhlAbbr = me.giveawayNhlAbbr;
+  }
   if (playerTitleEl) {
     const title = String(me.title || "").trim();
     playerTitleEl.textContent = title || "—";
     playerTitleEl.classList.toggle("vz-title-empty", !title);
   }
+  state.regionBoost = Math.max(0, Math.floor(me.regionBoost || 0));
   updateRegionPointsUi(me.regionPoints || 0, me.region || "");
   if (Array.isArray(me.blockedUsers)) {
     dmSetBlockedUsers(me.blockedUsers);
@@ -2285,6 +4264,12 @@ function updatePlayerCard(me) {
     playerCoinsEl.textContent = me.coins;
   }
 
+  state.stripeCoinsEnabled = !!me.stripeCoinsEnabled;
+  state.stripeCoinPacks = Array.isArray(me.stripeCoinPacks)
+    ? me.stripeCoinPacks
+    : [];
+  syncStripeCoinsBuyUi();
+
   if (playerTokensEl) playerTokensEl.textContent = me.tokens;
   updateVipUi(me);
   syncPendingOfflineDuelInvites(me, true);
@@ -2343,7 +4328,10 @@ function updatePlayerCard(me) {
     }
   }
 
+  state.lastMeForSocial = me;
   renderClanCard(me);
+  renderSocialPulse();
+  renderDailyAnchorCard();
 }
 
 function renderClanCard(me) {
@@ -2395,11 +4383,35 @@ function renderClanCard(me) {
   }
 
   if (clan) {
+    const wg = clan.weeklyGoal;
+    const weeklyBlock =
+      wg && typeof wg === "object"
+        ? `<div class="vz-clan-weekly-goal" role="status" aria-live="polite">
+        <div class="vz-clan-weekly-goal__head">
+          <span class="vz-clan-weekly-goal__label">${escapeHtml(wg.label || "Nedēļas mērķis")}</span>
+          ${
+            clan.canManage
+              ? `<span class="vz-clan-weekly-goal__edit">
+            <label class="vz-sr-only" for="vz-clan-weekly-goal-target">Mērķa skaits (5–500)</label>
+            <input id="vz-clan-weekly-goal-target" type="number" min="5" max="500" step="1" value="${escapeHtml(String(Math.max(5, Math.min(500, Number(wg.target) || 10))))}" />
+            <button type="button" id="vz-clan-weekly-goal-save">Saglabāt mērķi</button>
+          </span>`
+              : ""
+          }
+        </div>
+        <div class="vz-clan-weekly-goal__bar-wrap" aria-hidden="true">
+          <div class="vz-clan-weekly-goal__bar" style="width:${Math.min(100, Math.max(0, Number(wg.pct) || 0))}%"></div>
+        </div>
+        <div class="vz-clan-weekly-goal__nums">${escapeHtml(String(Math.max(0, Math.floor(Number(wg.progress) || 0))))} / ${escapeHtml(String(Math.max(1, Math.floor(Number(wg.target) || 1))))}${wg.done ? " · ✓" : ""}</div>
+        <p class="vz-clan-weekly-goal__hint">Skaita tikai PvP uzvaras šahā, dambretē un zolē (ne pret botu).</p>
+      </div>`
+        : "";
     contentEl.innerHTML = `
       <div class="vz-clan-info">
         <strong>[${escapeHtml(clan.tag || "")}] ${escapeHtml(clan.name || "")}</strong>
         <span>${clan.memberCount || 0} dalībnieki · ${clan.totalXp || 0} XP</span>
       </div>
+      ${weeklyBlock}
       <div class="vz-clan-members">
         ${(clan.members || [])
           .map(
@@ -2516,6 +4528,29 @@ function bindClanActions(container, clan) {
   const leaveBtn = container.querySelector("#vz-clan-leave-btn");
   const chatInput = container.querySelector("#vz-clan-chat-input");
   const chatSend = container.querySelector("#vz-clan-chat-send");
+  const wgSave = container.querySelector("#vz-clan-weekly-goal-save");
+  const wgTarget = container.querySelector("#vz-clan-weekly-goal-target");
+
+  if (wgSave && wgTarget && clan?.canManage) {
+    wgSave.addEventListener("click", async () => {
+      const n = Math.floor(Number(wgTarget.value));
+      if (!Number.isFinite(n) || n < 5 || n > 500) {
+        appendSystemMessage("Nedēļas mērķim jābūt no 5 līdz 500.");
+        return;
+      }
+      try {
+        const data = await apiPost("/clan/weekly-goal", { target: n });
+        if (data?.me) updatePlayerCard(data.me);
+        else if (data?.clan && state.me) {
+          state.me.clan = data.clan;
+          renderClanCard(state.me);
+        }
+        appendSystemMessage("Klana nedēļas mērķis atjaunināts.");
+      } catch (err) {
+        appendSystemMessage(err?.message || "Neizdevās saglabāt mērķi.");
+      }
+    });
+  }
 
   if (inviteBtn && inviteInput) {
     inviteBtn.addEventListener("click", async () => {
@@ -2841,6 +4876,176 @@ function setProfileEmailStatus(message, kind) {
   if (kind === "error") ppEmailStatusEl.classList.add("vz-error");
 }
 
+function setNhlTeamProfileStatus(message, kind) {
+  if (!ppNhlTeamStatusEl) return;
+  ppNhlTeamStatusEl.textContent = message || "";
+  ppNhlTeamStatusEl.classList.remove("vz-ok", "vz-error");
+  if (kind === "ok") ppNhlTeamStatusEl.classList.add("vz-ok");
+  if (kind === "error") ppNhlTeamStatusEl.classList.add("vz-error");
+}
+
+function syncNhlHatPickerUi(selectedAbbr) {
+  const g = window.VZNhlGiveaway;
+  if (!ppNhlHatGridEl || !g || typeof g.renderHatPicker !== "function") return;
+  g.renderHatPicker(ppNhlHatGridEl, {
+    selectedAbbr,
+    onPick: handleNhlHatPick,
+  });
+}
+
+async function handleNhlHatPick(abbr) {
+  if (!state.token) return;
+  const a = String(abbr || "")
+    .trim()
+    .toUpperCase();
+  if (!a) return;
+  if (ppNhlTeamSaveBtn) ppNhlTeamSaveBtn.disabled = true;
+  setNhlTeamProfileStatus("", "");
+  try {
+    const data = await apiPost("/giveaway/nhl-team", { abbr: a });
+    state.giveawayNhlAbbr = String(data?.giveawayNhlAbbr || a || "").trim();
+    state.giveawayNhlTeam = String(data?.giveawayNhlTeam || "").trim();
+    if (data?.me) updatePlayerCard(data.me);
+    if (Array.isArray(data?.missions) && data?.bonus != null) {
+      renderMissions(data.missions, data.bonus);
+    }
+    if (ppNhlTeamInputEl) ppNhlTeamInputEl.value = "";
+    syncNhlHatPickerUi(state.giveawayNhlAbbr);
+    syncGiveawayEmailGateUi();
+    setNhlTeamProfileStatus("Komandas cepure saglabāta.", "ok");
+    appendSystemMessage("🏒 NHL komandas cepure izlozei saglabāta.");
+  } catch (err) {
+    setNhlTeamProfileStatus(err.message || "Neizdevās saglabāt.", "error");
+  } finally {
+    if (ppNhlTeamSaveBtn) ppNhlTeamSaveBtn.disabled = false;
+  }
+}
+
+async function handleProfileNhlTeamSave() {
+  if (!state.token || !ppNhlTeamInputEl) return;
+  const raw = String(ppNhlTeamInputEl.value || "").trim();
+  if (ppNhlTeamSaveBtn) ppNhlTeamSaveBtn.disabled = true;
+  setNhlTeamProfileStatus("", "");
+  try {
+    const data = await apiPost("/giveaway/nhl-team", { team: raw });
+    state.giveawayNhlTeam = String(data?.giveawayNhlTeam || raw || "").trim();
+    state.giveawayNhlAbbr = String(data?.giveawayNhlAbbr || "").trim();
+    if (data?.me) updatePlayerCard(data.me);
+    if (Array.isArray(data?.missions) && data?.bonus != null) {
+      renderMissions(data.missions, data.bonus);
+    }
+    if (ppNhlTeamInputEl) {
+      if (state.giveawayNhlAbbr) {
+        ppNhlTeamInputEl.value = "";
+      } else {
+        ppNhlTeamInputEl.value = state.giveawayNhlTeam || "";
+      }
+    }
+    syncNhlHatPickerUi(state.giveawayNhlAbbr);
+    syncGiveawayEmailGateUi();
+    setNhlTeamProfileStatus("Saglabāts.", "ok");
+    appendSystemMessage("🏒 NHL klubs izlozei saglabāts.");
+  } catch (err) {
+    setNhlTeamProfileStatus(err.message || "Neizdevās saglabāt.", "error");
+  } finally {
+    if (ppNhlTeamSaveBtn) ppNhlTeamSaveBtn.disabled = false;
+  }
+}
+
+function setBetaProfileStatus(message, kind) {
+  if (!ppBetaStatusEl) return;
+  ppBetaStatusEl.textContent = message || "";
+  ppBetaStatusEl.classList.remove("vz-ok", "vz-error");
+  if (kind === "ok") ppBetaStatusEl.classList.add("vz-ok");
+  if (kind === "error") ppBetaStatusEl.classList.add("vz-error");
+}
+
+function hasSavedProfileEmailForGiveaway() {
+  return String(state.email || "").trim().length > 0;
+}
+
+function hasNhlHatPickForGiveaway() {
+  const ab = String(state.giveawayNhlAbbr || "").trim();
+  if (ab) return true;
+  return Boolean(String(state.giveawayNhlTeam || "").trim());
+}
+
+/** Izlozes bloks: e-pasts + NHL cepure pirms pieteikšanās. */
+function syncGiveawayEmailGateUi() {
+  const has = hasSavedProfileEmailForGiveaway();
+  const hat = hasNhlHatPickForGiveaway();
+  const opted =
+    Math.max(0, Math.floor(Number(state.betaOptInRequestedAt) || 0)) > 0;
+  const done = opted || !!state.betaTester;
+  if (ppGiveawayEmailGateEl) {
+    ppGiveawayEmailGateEl.classList.toggle("hidden", has || done);
+  }
+  if (ppBetaSubmitBtn && !state.betaTester && !opted) {
+    const can = has && hat;
+    ppBetaSubmitBtn.disabled = !can;
+    if (!has) {
+      ppBetaSubmitBtn.title =
+        "Vispirms saglabā e-pastu augšā (obligāti izlozei).";
+    } else if (!hat) {
+      ppBetaSubmitBtn.title =
+        "Vispirms zemāk izvēlies NHL komandas cepuri (vai ieraksti komandas nosaukumu) un spied «Saglabāt».";
+    } else {
+      ppBetaSubmitBtn.title = "";
+    }
+  }
+}
+
+async function handleProfileBetaOptIn() {
+  if (!state.token) return;
+  if (!hasSavedProfileEmailForGiveaway()) {
+    setBetaProfileStatus(
+      "NHL cepures izlozei vajag saglabātu e-pastu. Augšā ievadi e-pastu un spied «Saglabāt».",
+      "error"
+    );
+    ppGiveawayEmailGateEl?.classList.remove("hidden");
+    ppEmailInputEl?.focus?.();
+    return;
+  }
+  if (!hasNhlHatPickForGiveaway()) {
+    setBetaProfileStatus(
+      "Lai pieteiktos cepures izlozei, vispirms zemāk izvēlies komandas cepuri ar logo (vai ieraksti nosaukumu) un spied «Saglabāt».",
+      "error"
+    );
+    ppNhlHatGridEl?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+    return;
+  }
+  if (!ppBetaAgreeEl?.checked) {
+    setBetaProfileStatus("Atzīmē rūtiņu ar piekrišanu.", "error");
+    return;
+  }
+  if (ppBetaSubmitBtn) ppBetaSubmitBtn.disabled = true;
+  setBetaProfileStatus("", "");
+  try {
+    const data = await apiPost("/beta/opt-in", { agree: true });
+    state.betaOptInRequestedAt = Math.max(
+      0,
+      Math.floor(Number(data?.betaOptInRequestedAt) || 0)
+    );
+    state.betaTester = !!data?.betaTester;
+    if (data?.me) updatePlayerCard(data.me);
+    if (Array.isArray(data?.missions) && data?.bonus != null) {
+      renderMissions(data.missions, data.bonus);
+    }
+    setBetaProfileStatus("Pieteikums saglabāts. Paldies!", "ok");
+    renderDailyAnchorCard();
+    if (state.username) {
+      const fresh = await apiGet(
+        "/profile/" + encodeURIComponent(state.username)
+      );
+      showPlayerProfile(fresh);
+    }
+  } catch (err) {
+    setBetaProfileStatus(err.message || "Neizdevās pieteikties.", "error");
+  } finally {
+    if (ppBetaSubmitBtn) ppBetaSubmitBtn.disabled = false;
+  }
+}
+
 async function handleProfileEmailSave() {
   if (!state.token || !ppEmailInputEl) return;
   const raw = String(ppEmailInputEl.value || "").trim();
@@ -2850,6 +5055,8 @@ async function handleProfileEmailSave() {
     const saved = data?.email ?? "";
     state.email = saved;
     ppEmailInputEl.value = saved;
+    syncGiveawayEmailGateUi();
+    renderDailyAnchorCard();
     setProfileEmailStatus(
       saved ? "Saglabāts." : "E-pasts noņemts.",
       saved ? "ok" : ""
@@ -2871,6 +5078,8 @@ async function handleProfileEmailRemove() {
     await apiPost("/email", { email: "" });
     state.email = "";
     ppEmailInputEl.value = "";
+    syncGiveawayEmailGateUi();
+    renderDailyAnchorCard();
     setProfileEmailStatus("E-pasts noņemts. Vairs nesaņemsi jaunumus.", "ok");
   } catch (err) {
     setProfileEmailStatus(err.message || "Neizdevās noņemt.", "error");
@@ -2950,9 +5159,78 @@ function showPlayerProfile(data) {
     ppEmailBlockEl.classList.toggle("hidden", !isSelf);
   }
   if (isSelf && ppEmailInputEl) {
+    if (typeof data.email === "string") state.email = data.email;
     ppEmailInputEl.value = data.email || state.email || "";
   }
   setProfileEmailStatus("", "");
+
+  if (ppBetaBlockEl) {
+    ppBetaBlockEl.classList.toggle("hidden", !isSelf);
+  }
+  if (ppNhlGiveawayWrapEl) {
+    ppNhlGiveawayWrapEl.classList.toggle("hidden", !isSelf);
+  }
+  if (isSelf && ppNhlTeamInputEl) {
+    const ab = String(
+      data.giveawayNhlAbbr ?? state.giveawayNhlAbbr ?? ""
+    ).trim();
+    if (ab) {
+      ppNhlTeamInputEl.value = "";
+    } else {
+      ppNhlTeamInputEl.value = String(
+        data.giveawayNhlTeam ?? state.giveawayNhlTeam ?? ""
+      ).trim();
+    }
+  }
+  if (isSelf) {
+    setNhlTeamProfileStatus("", "");
+    syncNhlHatPickerUi(
+      String(data.giveawayNhlAbbr ?? state.giveawayNhlAbbr ?? "").trim()
+    );
+  }
+  if (isSelf) {
+    const beta = !!data.betaTester;
+    const reqAt = Math.max(
+      0,
+      Math.floor(Number(data.betaOptInRequestedAt) || 0)
+    );
+    state.betaTester = beta;
+    state.betaOptInRequestedAt = reqAt;
+    if (ppBetaBadgeEl) {
+      ppBetaBadgeEl.textContent = beta
+        ? "Tu esi aplikācijas beta testers"
+        : reqAt > 0
+          ? "Pieteikums NHL cepures izlozei — saņemts"
+          : "";
+      ppBetaBadgeEl.classList.toggle("hidden", !beta && !reqAt);
+    }
+    if (ppBetaDescEl) {
+      ppBetaDescEl.textContent = beta
+        ? "Paldies par palīdzību testēt VĀRDU ZONU. Ja vēlies izstāties, raksti administratoram."
+        : reqAt > 0
+          ? "Esi NHL cepures izlozes sarakstā. Saziņai izmantosim tavu saglabāto e-pastu (citi spēlētāji to neredz)."
+          : "Cepures izlozei domāti tie, kas lieto VĀRDU ZONU no Play: vispirms tests un aplikācija, tad šeit e-pasts, NHL cepure un šī poga ar piekrišanu. Administrators redz tavu lietotājvārdu un e-pastu sarakstam.";
+    }
+    if (ppBetaAgreeEl) {
+      ppBetaAgreeEl.checked = false;
+      ppBetaAgreeEl.disabled = beta || reqAt > 0;
+    }
+    if (ppBetaSubmitBtn) {
+      ppBetaSubmitBtn.textContent = beta
+        ? "Jau beta testers"
+        : reqAt > 0
+          ? "Pieteikums saņemts"
+          : "Pieteikties NHL cepures izlozei";
+      if (beta || reqAt > 0) {
+        ppBetaSubmitBtn.disabled = true;
+        ppBetaSubmitBtn.title = "";
+      } else {
+        syncGiveawayEmailGateUi();
+      }
+    }
+    setBetaProfileStatus("", "");
+    syncGiveawayEmailGateUi();
+  }
 
   let duelBtn = document.getElementById("vz-profile-duel-btn");
   const inner =
@@ -3069,6 +5347,8 @@ function hidePlayerProfile() {
   if (!profilePopupEl) return;
   profilePopupEl.classList.add("hidden");
   setProfileEmailStatus("", "");
+  setBetaProfileStatus("", "");
+  setNhlTeamProfileStatus("", "");
 }
 
 async function openProfile(username) {
@@ -3096,6 +5376,156 @@ function handleProfileDuelClick() {
 }
 
 // ==================== DIENAS MISIJAS ====================
+function formatMissionRewardsShort(rw) {
+  if (!rw || typeof rw !== "object") return "";
+  const parts = [];
+  if (rw.xp) parts.push(`+${rw.xp} XP`);
+  if (rw.coins) parts.push(`+${rw.coins} coins`);
+  if (rw.tokens) parts.push(`+${rw.tokens} žetoni`);
+  return parts.join(", ");
+}
+
+/** Viena skaidra «kāpēc atgriezties šodien» rinda — Daily Chest + dienas misijas. */
+function buildDailyAnchorSummary() {
+  const missions = Array.isArray(state.missions) ? state.missions : [];
+  const bonus = state.missionBonus;
+
+  if (_chestStatus?.available) {
+    const st = Math.max(0, Math.floor(Number(_chestStatus.streak) || 0));
+    return {
+      kicker: st > 0 ? `Dienas streak: ${st}` : "Ātra atlīdzība",
+      headline: "Atvērt dienas lādi",
+      progress: "Vienu reizi dienā — coins, XP un reizēm žetons.",
+      hint: "Pēc tam turpini vārdu raundu vai misijas zemāk.",
+    };
+  }
+
+  if (!state.betaTester) {
+    const hasEmail = String(state.email || "").trim().length > 0;
+    const opted =
+      Math.max(0, Math.floor(Number(state.betaOptInRequestedAt) || 0)) > 0;
+    if (!opted) {
+      const hat = hasNhlHatPickForGiveaway();
+      return {
+        kicker: "NHL cepures izloze",
+        headline: hasEmail
+          ? hat
+            ? "Piesakies cepures izlozei — viss gandrīz gatavs"
+            : "Piesakies cepures izlozei — saglabā NHL cepuri"
+          : "Cepures izlozei vajag e-pastu profilā",
+        progress: hasEmail
+          ? hat
+            ? "Play testa saite → VĀRDU ZONA no veikala. Profilā piekrišana un «Pieteikties»."
+            : "Profilā izvēlies komandas cepuri (vai tekstu) un «Saglabāt», tad piekrišana un «Pieteikties»."
+          : "1) Play tests + VĀRDU ZONA. 2) Profilā e-pasts. 3) NHL cepure. 4) «Pieteikties».",
+        hint: "Spied «Izlozei — atvērt profilu» zemāk.",
+        showGiveawayCta: true,
+      };
+    }
+  }
+
+  const claimM = missions.find((m) => m && m.isCompleted && !m.isClaimed);
+  if (claimM) {
+    const rw = formatMissionRewardsShort(claimM.rewards);
+    return {
+      kicker: "Misija gatava",
+      headline: "Saņem dienas misijas balvu",
+      progress: String(claimM.title || "Misija").slice(0, 140),
+      hint: rw
+        ? `Balva: ${rw}. Spied «Saņemt» pie misijas zemāk.`
+        : "Spied «Saņemt» pie misijas zemāk.",
+    };
+  }
+
+  if (bonus && bonus.isCompleted && !bonus.isClaimed) {
+    const rw = formatMissionRewardsShort(bonus.rewards);
+    return {
+      kicker: "Visas misijas izpildītas",
+      headline: "Saņem dienas bonusu",
+      progress: "Bonus par visām misijām šodien.",
+      hint: rw
+        ? `Balva: ${rw}. Spied «Saņemt» pie bonusa zemāk.`
+        : "Spied «Saņemt» pie bonusa zemāk.",
+    };
+  }
+
+  const inProg = missions.find(
+    (m) =>
+      m &&
+      !m.isCompleted &&
+      Math.max(0, Math.floor(Number(m.progress) || 0)) <
+        Math.max(1, Math.floor(Number(m.target) || 1))
+  );
+  if (inProg) {
+    const p = Math.max(0, Math.floor(Number(inProg.progress) || 0));
+    const t = Math.max(1, Math.floor(Number(inProg.target) || 1));
+    const rw = formatMissionRewardsShort(inProg.rewards);
+    return {
+      kicker: "Dienas misija",
+      headline: String(inProg.title || "Turpini dienas misiju").slice(0, 140),
+      progress: `Progress: ${Math.min(p, t)}/${t}`,
+      hint: rw
+        ? `Pabeidz līdz ${t}, lai iegūtu: ${rw}.`
+        : "Detalizētāk — saraksts zemāk.",
+    };
+  }
+
+  if (missions.length > 0) {
+    return {
+      kicker: "Dienas progress",
+      headline: "Pārbaudi dienas misijas",
+      progress: "",
+      hint: "Ja viss izpildīts, saņem bonusu vai sāc jaunu raundu.",
+    };
+  }
+
+  return {
+    kicker: "Sveicināti",
+    headline: "Sāc raundu vai uzaicini uz dueli",
+    progress: "",
+    hint: "Dienas misijas parādās pēc ielādes — skaties sarakstu zemāk.",
+  };
+}
+
+function renderDailyAnchorCard() {
+  if (!dailyAnchorHeadlineEl) return;
+  const s = buildDailyAnchorSummary();
+  if (dailyAnchorKickerEl) dailyAnchorKickerEl.textContent = s.kicker || "";
+  dailyAnchorHeadlineEl.textContent = s.headline || "";
+  if (dailyAnchorProgressEl) {
+    const pr = String(s.progress || "").trim();
+    dailyAnchorProgressEl.textContent = pr;
+    dailyAnchorProgressEl.classList.toggle("hidden", !pr);
+  }
+  if (dailyAnchorHintEl) dailyAnchorHintEl.textContent = s.hint || "";
+  const showGa = !!s.showGiveawayCta && !!state.token;
+  if (giveawayAnchorWrapEl) {
+    giveawayAnchorWrapEl.classList.toggle("hidden", !showGa);
+  }
+  if (giveawayAnchorTextEl) {
+    const em = String(state.email || "").trim();
+    const hat = hasNhlHatPickForGiveaway();
+    giveawayAnchorTextEl.textContent = showGa
+      ? em
+        ? hat
+          ? "E-pasts + NHL cepure saglabāti — Play tests un VĀRDU ZONA, tad profilā «Pieteikties» cepures izlozei."
+          : "E-pasts saglabāts — profilā izvēlies NHL cepuri un «Saglabāt», tad «Pieteikties»."
+        : "Cepures izlozei: Play tests → VĀRDU ZONA → profilā e-pasts, NHL cepure un «Pieteikties»."
+      : "";
+  }
+}
+
+function syncGiveawayAnchorButton() {
+  if (!giveawayAnchorBtnEl) return;
+  giveawayAnchorBtnEl.onclick = () => {
+    document.getElementById("vz-section-profile")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    if (state.username) void openProfile(state.username);
+  };
+}
+
 function renderMissions(missions, bonus) {
   if (!missionsListEl) return;
   state.missions = Array.isArray(missions) ? missions : [];
@@ -3108,12 +5538,14 @@ function renderMissions(missions, bonus) {
     status.textContent = "Šodien nav pieejamu misiju.";
     li.appendChild(status);
     missionsListEl.appendChild(li);
+    renderDailyAnchorCard();
     renderEngagementLoopCard();
     return;
   }
 
   missions.forEach((m) => {
     const li = createEl("li", "mission-item");
+    if (m.type === "nhl_giveaway_submit") li.classList.add("mission-item--nhl");
 
     const title = createEl("div", "mission-title");
     title.textContent = m.title;
@@ -3133,6 +5565,13 @@ function renderMissions(missions, bonus) {
       const rewardsEl = createEl("div", "mission-rewards");
       rewardsEl.textContent = "Balva: " + rewardParts.join(", ");
       li.appendChild(rewardsEl);
+    }
+
+    if (m.type === "nhl_giveaway_submit") {
+      const hint = createEl("div", "mission-nhl-hint");
+      hint.textContent =
+        "Tikai tiem, kas lieto VĀRDU ZONU no Play: 1) tests + aplikācija · 2) e-pasts + NHL cepure profilā · 3) «Pieteikties» cepures izlozei.";
+      li.appendChild(hint);
     }
 
     const bottom = createEl("div", "mission-bottom");
@@ -3207,6 +5646,7 @@ function renderMissions(missions, bonus) {
 
     missionsListEl.appendChild(li);
   }
+  renderDailyAnchorCard();
   renderEngagementLoopCard();
 }
 
@@ -3335,8 +5775,8 @@ function buildEngagementLoopActions() {
     actions.push({
       key: "open_daily_chest",
       type: "open_daily_chest",
-      label: "Atvērt Daily Chest",
-      note: "Atver lādi uzreiz, lai nezaudētu dienas loop tempu.",
+      label: "Atvērt dienas lādi",
+      note: "Atver lādi uzreiz — coins, XP un dienas streak.",
     });
   }
 
@@ -3537,6 +5977,7 @@ function renderEngagementLoopCard() {
       engagementLoopSecondaryActionsEl.appendChild(btn);
     });
   }
+  renderDailyAnchorCard();
   animateLoopCardTransition(primaryChanged);
 }
 
@@ -3592,9 +6033,117 @@ async function claimMissionBonus() {
 }
 
 // ==================== DRAUGI ====================
+/**
+ * Draugu / online īss statuss — bez «sociālā tīkla» sienas: Spēlē / Gaida / Brīvs / Offline.
+ * @returns {{ label: string, sub: string, title: string, tone: "busy"|"wait"|"room"|"free"|"off" }|null}
+ */
+function getFriendPresenceUi(p, online) {
+  if (!online) {
+    return {
+      label: "Offline",
+      sub: "",
+      title: "Nav tiešsaistē — dueli var nosūtīt, viņš redzēs, kad ienāks.",
+      tone: "off",
+    };
+  }
+  if (!p || typeof p !== "object") {
+    return {
+      label: "Brīvs",
+      sub: "",
+      title: "Tiešsaistē — vari uzaicināt uz dueli.",
+      tone: "free",
+    };
+  }
+  const inGame = !!p.inBoardGame;
+  const lobby = !!p.zole3pLobby;
+  const invite = p.pendingBoardInvite;
+  const lastHand = !!p.zoleVsBotLastHand;
+
+  if (inGame) {
+    return {
+      label: "Spēlē",
+      sub: "galds",
+      title: "Aktīva galda spēle (šahs, dambrete vai zole).",
+      tone: "busy",
+    };
+  }
+  if (invite && invite.from) {
+    const rem = !!invite.rematch;
+    return {
+      label: "Gaida",
+      sub: rem ? "revānšs" : "aicinājums",
+      title: rem
+        ? `Gaida galda revānšu no ${invite.from}.`
+        : `Gaida galda uzaicinājumu no ${invite.from}.`,
+      tone: "wait",
+    };
+  }
+  if (lobby) {
+    return {
+      label: "Istaba",
+      sub: "Zole 3P",
+      title:
+        "Atvērta Zoles 3 cilvēku istaba — var būt aizņemts ar uzaicinājumiem.",
+      tone: "room",
+    };
+  }
+  if (lastHand) {
+    return {
+      label: "Spēlē",
+      sub: "Zole · pēdējā",
+      title: "Zole pret botiem — pēdējā partija šajā mačā.",
+      tone: "busy",
+    };
+  }
+  return {
+    label: "Brīvs",
+    sub: "",
+    title: "Tiešsaistē — vari uzaicināt uz vārdu dueli.",
+    tone: "free",
+  };
+}
+
+/** Online sarakstam — kompakta viena rindiņa (saderība ar veco UI). */
+function formatSocialPresenceFromPayload(p) {
+  const online = true;
+  const ui = getFriendPresenceUi(p, online);
+  if (!ui) return null;
+  const line = ui.sub ? `${ui.label} · ${ui.sub}` : ui.label;
+  return { text: line, title: ui.title };
+}
+
+function inviteFriendQuickDuel(friendName) {
+  const target = String(friendName || "").trim();
+  if (!target) return;
+  if (!state.socket || !state.socket.connected) {
+    appendSystemMessage(
+      "Nav servera savienojuma — uzaicinājumu nevar nosūtīt."
+    );
+    return;
+  }
+  if (
+    target.toLowerCase() ===
+    String(state.username || "")
+      .trim()
+      .toLowerCase()
+  ) {
+    appendSystemMessage("Nevari izaicināt sevi.");
+    return;
+  }
+  state.socket.emit("duel.challenge", { target, ranked: true });
+  appendSystemMessage(`⚔ Nosūtīju dueli uz: ${target}.`);
+  document.getElementById("vz-section-game")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+}
+
 function applyFriendsPayload(payload) {
   if (!payload || typeof payload !== "object") return;
   state.friends = Array.isArray(payload.friends) ? payload.friends : [];
+  state.friendSummaries = Array.isArray(payload.friendSummaries)
+    ? payload.friendSummaries
+    : [];
   state.friendInvitesIn = Array.isArray(payload.incoming)
     ? payload.incoming
     : [];
@@ -3602,9 +6151,64 @@ function applyFriendsPayload(payload) {
     ? payload.outgoing
     : [];
   renderFriends();
+  renderSocialPulse();
   updateProfileFriendButton();
   renderVipRoomPanel();
   renderEngagementLoopCard();
+}
+
+function friendSummaryMap() {
+  const m = new Map();
+  for (const s of state.friendSummaries || []) {
+    const n = String(s?.name || "")
+      .trim()
+      .toLowerCase();
+    if (n) m.set(n, s);
+  }
+  return m;
+}
+
+function renderSocialPulse() {
+  const wrap = document.getElementById("vz-social-pulse-body");
+  if (!wrap) return;
+  const me = state.lastMeForSocial;
+  const clan = me?.clan;
+  const friends = Array.isArray(state.friends) ? state.friends : [];
+  const onlineFriends = friends.filter((n) =>
+    state.onlineUsers.has(
+      String(n || "")
+        .trim()
+        .toLowerCase()
+    )
+  );
+  const parts = [];
+
+  if (clan?.weeklyGoal) {
+    const wg = clan.weeklyGoal;
+    const pct = Math.min(100, Math.max(0, Number(wg.pct) || 0));
+    const done = !!wg.done;
+    parts.push(
+      `<div class="vz-social-pulse-block"><strong>Klans · ${escapeHtml(
+        wg.label || "Nedēļas mērķis"
+      )}</strong><div class="vz-social-pulse-bar" aria-hidden="true"><span style="width:${pct}%"></span></div><div class="vz-social-pulse-nums">${escapeHtml(
+        String(Math.max(0, Math.floor(Number(wg.progress) || 0)))
+      )} / ${escapeHtml(
+        String(Math.max(1, Math.floor(Number(wg.target) || 1)))
+      )}${done ? " · ✓" : ""}</div><p class="vz-social-pulse-note">PvP galda uzvaras (ne pret botu). Nedēļa: ${escapeHtml(
+        String(wg.weekKey || "")
+      )}.</p></div>`
+    );
+  } else {
+    parts.push(
+      `<p class="vz-social-pulse-note">Nav klana — nedēļas kopējais mērķis nav pieejams. Vari izveidot vai pievienoties klanam zemāk.</p>`
+    );
+  }
+
+  parts.push(
+    `<div class="vz-social-pulse-block"><strong>Draugi tiešsaistē</strong>: ${onlineFriends.length} no ${friends.length}.</div>`
+  );
+
+  wrap.innerHTML = parts.join("");
 }
 
 function friendRelation(name) {
@@ -3672,43 +6276,166 @@ function renderFriends() {
     !state.friendInvitesIn.length &&
     !state.friendInvitesOut.length
   ) {
-    const empty = createEl("div", "mission-status");
-    empty.textContent = "Nav draugu. Pievieno kādu!";
+    const empty = createEl("div");
+    fillVzEmptyState(empty, {
+      glyph: "🤝",
+      title: "Draugu saraksts ir tukšs",
+      text: "Ievadi spēlētāja vārdu augšā un spied «Pievienot» — tad vari uzaicināt uz dueli vai galdu.",
+      linkHref: "coins-vip-turniri.html",
+      linkLabel: "Kas ir coins / VIP / turnīri",
+    });
     friendsInvitesEl.appendChild(empty);
     return;
   }
 
-  state.friends.forEach((name) => {
+  const sumByName = friendSummaryMap();
+  const nFriends = state.friends.length;
+  const filterLc = String(state.friendListFilter || "")
+    .trim()
+    .toLowerCase();
+  const useCompact = nFriends >= 8;
+  if (friendsCardEl) {
+    friendsCardEl.classList.toggle("vz-friends-card--compact", useCompact);
+  }
+
+  let namesToShow = state.friends.filter((raw) => {
+    const nm = String(raw || "").trim();
+    if (!filterLc) return true;
+    return nm.toLowerCase().includes(filterLc);
+  });
+  namesToShow = namesToShow.slice().sort((a, b) => {
+    const ka = String(a || "")
+      .trim()
+      .toLowerCase();
+    const kb = String(b || "")
+      .trim()
+      .toLowerCase();
+    const oa = (sumByName.get(ka)?.online ?? state.onlineUsers.has(ka)) ? 1 : 0;
+    const ob = (sumByName.get(kb)?.online ?? state.onlineUsers.has(kb)) ? 1 : 0;
+    if (ob !== oa) return ob - oa;
+    return String(a).localeCompare(String(b), "lv");
+  });
+
+  if (!namesToShow.length && filterLc) {
+    const li = createEl("li", "vz-friend-row vz-friend-row--filter-empty");
+    li.textContent = "Nav draugu, kas atbilst meklējumam.";
+    friendsListEl.appendChild(li);
+  }
+
+  for (const name of namesToShow) {
     const row = createEl("li", "vz-friend-row");
     const left = createEl("div", "vz-friend-left");
-    const dot = createEl("span", "vz-friend-status");
-    const online = state.onlineUsers.has(
-      String(name || "")
-        .trim()
-        .toLowerCase()
-    );
-    if (online) dot.classList.add("vz-friend-online");
-    left.appendChild(dot);
+    const top = createEl("div", "vz-friend-top");
+    const key = String(name || "")
+      .trim()
+      .toLowerCase();
+    const summary = sumByName.get(key);
+    const online = summary?.online ?? state.onlineUsers.has(key);
+    const mini =
+      summary && typeof summary === "object"
+        ? {
+            inBoardGame: !!summary.inBoardGame,
+            zole3pLobby: !!summary.zole3pLobby,
+            zoleVsBotLastHand: !!summary.zoleVsBotLastHand,
+            pendingBoardInvite: summary.pendingBoardInvite || null,
+          }
+        : state.onlineMiniByUser?.get(key);
+    const presUi = getFriendPresenceUi(mini, online);
+
+    const badge = createEl("span", "vz-friend-pres-badge");
+    badge.textContent = presUi.label;
+    badge.title = presUi.title;
+    badge.classList.add(`vz-friend-pres-badge--${presUi.tone}`);
+    top.appendChild(badge);
 
     const nick = createEl("span", "vz-friend-name clickable-username");
     nick.textContent = name;
     nick.addEventListener("click", () => openProfile(name));
-    left.appendChild(nick);
+    top.appendChild(nick);
+    left.appendChild(top);
+
+    const tag = String(summary?.clanTag || "")
+      .trim()
+      .toUpperCase();
+    const metaBits = [];
+    if (presUi.sub) metaBits.push(presUi.sub);
+    if (summary?.sameClan && tag) metaBits.push(`[${tag}]`);
+    else if (summary?.sameClan) metaBits.push("klans");
+    else if (tag) metaBits.push(`[${tag}]`);
+    if (metaBits.length) {
+      const meta = createEl(
+        "span",
+        "vz-friend-meta-inline",
+        metaBits.join(" · ")
+      );
+      const clanHint = summary?.sameClan
+        ? "Draugs ir tajā pašā klanā kā tu."
+        : tag
+          ? "Drauga klana tags."
+          : "";
+      meta.title = [presUi.title, clanHint].filter(Boolean).join(" ");
+      left.appendChild(meta);
+    }
+
     row.appendChild(left);
 
     const actions = createEl("div", "vz-friend-actions");
+    const duelBtn = document.createElement("button");
+    duelBtn.type = "button";
+    duelBtn.className = "vz-friend-quick-duel";
+    if (useCompact) {
+      duelBtn.textContent = "⚔";
+      duelBtn.setAttribute("aria-label", `Duelis: ${name}`);
+    } else {
+      duelBtn.textContent = "⚔ Duelis";
+      duelBtn.setAttribute("aria-label", `Izaicināt uz dueli: ${name}`);
+    }
+    duelBtn.title =
+      "Izaicināt uz vārdu dueli (tiešsaistē vai offline — saņems paziņojumu)";
+    duelBtn.addEventListener("click", () => inviteFriendQuickDuel(name));
     const dmBtn = document.createElement("button");
-    dmBtn.textContent = "DM";
+    dmBtn.className = "vz-friend-icon-btn";
+    dmBtn.type = "button";
+    dmBtn.textContent = useCompact ? "✉" : "DM";
+    dmBtn.title = "Privātās ziņas";
+    dmBtn.setAttribute("aria-label", `DM: ${name}`);
     dmBtn.addEventListener("click", () => openDmWith(name));
     const rmBtn = document.createElement("button");
-    rmBtn.textContent = "Noņemt";
+    rmBtn.className = "vz-friend-icon-btn vz-friend-icon-btn--danger";
+    rmBtn.type = "button";
+    rmBtn.textContent = useCompact ? "✕" : "Noņemt";
+    rmBtn.title = "Noņemt no draugiem";
+    rmBtn.setAttribute("aria-label", `Noņemt draugu: ${name}`);
     rmBtn.addEventListener("click", () => friendRemove(name));
+    actions.appendChild(duelBtn);
     actions.appendChild(dmBtn);
     actions.appendChild(rmBtn);
     row.appendChild(actions);
 
     friendsListEl.appendChild(row);
-  });
+  }
+
+  if (friendsListHintEl) {
+    friendsListHintEl.hidden = nFriends <= 8;
+    if (nFriends > 8) {
+      friendsListHintEl.textContent =
+        "Saraksts ir kompakts un ritināms — meklē pēc vārda, tiešsaistē augšā.";
+    }
+  }
+  if (friendsListScrollEl) {
+    const shown = namesToShow.length;
+    const label =
+      filterLc && shown !== nFriends
+        ? `Draugu saraksts (${shown} no ${nFriends})`
+        : nFriends
+          ? `Draugu saraksts (${nFriends})`
+          : "Draugu saraksts";
+    friendsListScrollEl.setAttribute("aria-label", label);
+  }
+  if (friendsFilterInputEl && document.activeElement !== friendsFilterInputEl) {
+    const want = String(state.friendListFilter || "");
+    if (friendsFilterInputEl.value !== want) friendsFilterInputEl.value = want;
+  }
 }
 
 async function refreshFriends() {
@@ -4066,8 +6793,17 @@ async function startNewRound() {
       state.currentCol = 0;
       skipHintLockedForward();
     }
-    if (gameMessageEl)
-      gameMessageEl.textContent = `Jauns raunds (${len} burti).`;
+    if (gameMessageEl) {
+      let msg = `Jauns raunds (${len} burti).`;
+      try {
+        if (localStorage.getItem(LV_KEYBOARD_HINT_STORAGE) === "pending") {
+          localStorage.setItem(LV_KEYBOARD_HINT_STORAGE, "1");
+          msg +=
+            " Pareizā vieta = sarkana rūtiņa; dzeltens = burts ir, bet citā vietā. Tastatūra: latviešu QWERTY (bez Q, W, X, Y); SHIFT = Ā, Č, Ē… Palīdzība: 📖 Tutorial augšā.";
+        }
+      } catch {}
+      gameMessageEl.textContent = msg;
+    }
     state.roundFinished = false;
     renderEngagementLoopCard();
   } catch (err) {
@@ -4810,7 +7546,7 @@ function hideDuelResultOverlay() {
 }
 
 // ==================== EKRĀNA TASTATŪRA ====================
-// Bez Q/W/X/Y
+// Latviešu QWERTY apakškopa: bez Q, W, X, Y (latviešu vārdos reti / nav vajadzīgi)
 const KEYBOARD_LAYOUT = [
   ["E", "R", "T", "U", "I", "O", "P"],
   ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
@@ -4834,7 +7570,14 @@ function buildKeyboard() {
       const btn = createEl("button", "kb-key");
       btn.textContent = key;
 
-      if (key === "SHIFT") btn.classList.add("kb-shift");
+      if (key === "SHIFT") {
+        btn.classList.add("kb-shift");
+        btn.setAttribute(
+          "title",
+          "Latviešu diakritiķi: Ā Č Ē Ģ Ī Ķ Ļ Ņ Š Ū Ž. Nospied vēlreiz, lai atgrieztos pie A–Z."
+        );
+        btn.setAttribute("aria-label", "Pārslēgt latviešu burtus ar strīpiņu");
+      }
       if (key === "ENTER") btn.classList.add("kb-enter");
       if (key === "⌫") btn.classList.add("kb-backspace");
 
@@ -5412,9 +8155,14 @@ function renderVipRoomFriendPicker(canCreate) {
   vipRoomFriendsEl.appendChild(summary);
 
   if (!state.friends.length) {
-    const empty = createEl("div", "vz-vip-room-friends-empty");
-    empty.textContent =
-      "Nav draugu sarakstā. Pievieno draugus, lai aizpildītu tukšos slotus.";
+    const empty = createEl("div");
+    fillVzEmptyState(empty, {
+      glyph: "👥",
+      title: "Nav draugu sarakstā",
+      text: "Pievieno draugus profilā, tad izvēlies tos slotos.",
+      compact: true,
+      extraClass: "vz-vip-room-friends-empty",
+    });
     vipRoomFriendsEl.appendChild(empty);
     return;
   }
@@ -5441,8 +8189,14 @@ function renderVipRoomList() {
   vipRoomListEl.innerHTML = "";
   const rooms = Array.isArray(state.vipRooms) ? state.vipRooms : [];
   if (!rooms.length) {
-    const empty = createEl("div", "mission-status");
-    empty.textContent = "VIP istabu ielūgumu nav.";
+    const empty = createEl("div");
+    fillVzEmptyState(empty, {
+      glyph: "🏆",
+      title: "Nav VIP istabu",
+      text: "Izveido istabu, kad tev ir tiesības.",
+      compact: true,
+      extraClass: "mission-status",
+    });
     vipRoomListEl.appendChild(empty);
     return;
   }
@@ -5581,10 +8335,141 @@ function renderVipRoomList() {
   });
 }
 
+const VIP_TOURNAMENT_SEEDING_MAX = 16;
+
+function parseVipQuickTournamentSeeding(raw) {
+  const text = String(raw || "");
+  const parts = text
+    .split(/[\n,;]+/)
+    .map((s) =>
+      String(s || "")
+        .replace(/\s+/g, " ")
+        .trim()
+    )
+    .filter(Boolean);
+  const seen = new Set();
+  const out = [];
+  for (const p of parts) {
+    const slice = p.slice(0, 30);
+    const key = slice.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(slice);
+    if (out.length >= VIP_TOURNAMENT_SEEDING_MAX) break;
+  }
+  const me = String(state.username || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (me) {
+    const mk = me.toLowerCase();
+    if (!out.some((n) => String(n).toLowerCase() === mk)) {
+      out.unshift(me.slice(0, 30));
+    }
+  }
+  return out;
+}
+
+function isPowerOfTwo(n) {
+  const v = Math.floor(Number(n) || 0);
+  return v > 0 && (v & (v - 1)) === 0;
+}
+
+function setVipQuickTournamentCreateStatus(message, kind = "") {
+  if (!vipQuickTournamentCreateStatusEl) return;
+  vipQuickTournamentCreateStatusEl.textContent = String(message || "");
+  vipQuickTournamentCreateStatusEl.classList.remove("vz-ok", "vz-error");
+  if (kind === "ok") vipQuickTournamentCreateStatusEl.classList.add("vz-ok");
+  if (kind === "error")
+    vipQuickTournamentCreateStatusEl.classList.add("vz-error");
+}
+
+function renderVipQuickTournamentPanel() {
+  if (!vipQuickTournamentPanelEl) return;
+  const canCreate = !!state.canCreateTournament;
+  vipQuickTournamentPanelEl.classList.toggle("hidden", !canCreate);
+  if (vipQuickTournamentHelpEl)
+    vipQuickTournamentHelpEl.classList.toggle("hidden", !canCreate);
+  const toggleField = (el, hidden) => {
+    if (!el) return;
+    const field = el.closest(".vz-tournament-score-field");
+    if (field) field.classList.toggle("hidden", hidden);
+    else el.classList.toggle("hidden", hidden);
+  };
+  toggleField(vipQuickTournamentNameEl, !canCreate);
+  toggleField(vipQuickTournamentTypeEl, !canCreate);
+  toggleField(vipQuickTournamentPlayModeEl, !canCreate);
+  toggleField(vipQuickTournamentSeedingEl, !canCreate);
+  if (vipQuickTournamentCreateBtnEl)
+    vipQuickTournamentCreateBtnEl.classList.toggle("hidden", !canCreate);
+  if (vipQuickTournamentCreateStatusEl)
+    vipQuickTournamentCreateStatusEl.classList.toggle("hidden", !canCreate);
+  if (!canCreate) setVipQuickTournamentCreateStatus("");
+}
+
+async function handleVipQuickTournamentCreate() {
+  if (!state.token || !state.canCreateTournament) return;
+  const name = String(vipQuickTournamentNameEl?.value || "").trim();
+  if (!name) {
+    setVipQuickTournamentCreateStatus("Norādi turnīra nosaukumu.", "error");
+    return;
+  }
+  const type = String(vipQuickTournamentTypeEl?.value || "single_elimination");
+  const playMode = String(vipQuickTournamentPlayModeEl?.value || "classic");
+  const seeding = parseVipQuickTournamentSeeding(
+    vipQuickTournamentSeedingEl?.value || ""
+  );
+  if (seeding.length < 2) {
+    setVipQuickTournamentCreateStatus(
+      "Vajag vismaz 2 dalībniekus (vārdi tekstā vai tu tiksi pievienots automātiski).",
+      "error"
+    );
+    return;
+  }
+  if (type === "single_elimination" && !isPowerOfTwo(seeding.length)) {
+    setVipQuickTournamentCreateStatus(
+      "Izslēgšanas turnīram jābūt 2, 4, 8 vai 16 dalībniekiem.",
+      "error"
+    );
+    return;
+  }
+  try {
+    if (vipQuickTournamentCreateBtnEl)
+      vipQuickTournamentCreateBtnEl.disabled = true;
+    const autoReportOnly =
+      playMode === "dambrete" || playMode === "chess" || playMode === "zole"
+        ? false
+        : true;
+    const resp = await apiPost("/tournaments", {
+      name,
+      type,
+      playMode,
+      seeding,
+      autoReportOnly,
+    });
+    const tid = resp?.tournament?.id;
+    setVipQuickTournamentCreateStatus(
+      tid != null ? `Turnīrs #${tid} izveidots.` : "Turnīrs izveidots.",
+      "ok"
+    );
+    if (vipQuickTournamentNameEl) vipQuickTournamentNameEl.value = "";
+    if (vipQuickTournamentSeedingEl) vipQuickTournamentSeedingEl.value = "";
+    await refreshTournamentCard(true);
+  } catch (err) {
+    setVipQuickTournamentCreateStatus(
+      err.message || "Neizdevās izveidot turnīru.",
+      "error"
+    );
+  } finally {
+    if (vipQuickTournamentCreateBtnEl)
+      vipQuickTournamentCreateBtnEl.disabled = false;
+  }
+}
+
 function renderVipRoomPanel() {
   if (!vipRoomPanelEl) return;
   const hasRooms = Array.isArray(state.vipRooms) && state.vipRooms.length > 0;
   const canCreate = !!state.canCreateTournament;
+  renderVipQuickTournamentPanel();
   vipRoomPanelEl.classList.toggle("hidden", !canCreate && !hasRooms);
   if (!canCreate && !hasRooms) return;
 
@@ -5860,6 +8745,56 @@ function showTournamentMatchStartModal(message) {
   overlay.classList.remove("hidden");
 }
 
+function renderTournamentRecentList() {
+  if (!tournamentRecentWrapEl || !tournamentRecentListEl) return;
+  const list = Array.isArray(state.recentTournaments)
+    ? state.recentTournaments
+    : [];
+  if (!list.length) {
+    tournamentRecentWrapEl.classList.add("hidden");
+    tournamentRecentListEl.innerHTML = "";
+    return;
+  }
+  tournamentRecentWrapEl.classList.remove("hidden");
+  tournamentRecentListEl.innerHTML = "";
+  for (const t of list) {
+    const id = Number(t?.id);
+    if (!Number.isFinite(id) || id < 1) continue;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "vz-tournament-recent-item";
+    const st = String(t?.status || "active").toLowerCase();
+    const done = st === "completed" || st === "archived";
+    const nm = String(t?.name || `Turnīrs #${id}`).trim() || `Turnīrs #${id}`;
+    const titleEl = createEl("span", "vz-tournament-recent-item__title", nm);
+    const parts = [];
+    parts.push(done ? "Pabeigts" : "Aktīvs");
+    const champ = String(t?.championName || "").trim();
+    if (champ) parts.push(`🏆 ${champ}`);
+    const metaEl = createEl(
+      "span",
+      "vz-tournament-recent-item__meta",
+      parts.join(" · ")
+    );
+    btn.appendChild(titleEl);
+    btn.appendChild(metaEl);
+    if (t?.iParticipated) {
+      const badge = createEl(
+        "span",
+        "vz-tournament-recent-item__badge",
+        "Tu biji"
+      );
+      btn.appendChild(badge);
+    }
+    btn.addEventListener("click", () => {
+      state.tournamentActiveId = id;
+      state.tournamentHintTournamentId = id;
+      void refreshTournamentCard(true);
+    });
+    tournamentRecentListEl.appendChild(btn);
+  }
+}
+
 function clearTournamentCardUi() {
   if (tournamentMetaEl) {
     tournamentMetaEl.textContent = "";
@@ -5871,7 +8806,7 @@ function clearTournamentCardUi() {
   }
   if (tournamentEmptyEl) {
     tournamentEmptyEl.textContent = "";
-    tournamentEmptyEl.classList.add("hidden");
+    tournamentEmptyEl.className = "hidden";
   }
   if (tournamentMyMatchEl) tournamentMyMatchEl.classList.add("hidden");
   if (tournamentMyMatchTextEl) tournamentMyMatchTextEl.textContent = "—";
@@ -6017,7 +8952,27 @@ function renderTournamentCard(meta, details) {
     ? String(details.finalStandings?.[0]?.name || "").trim()
     : "";
   if (championName && tournamentEmptyEl) {
-    tournamentEmptyEl.textContent = `Uzvarētājs: ${championName}`;
+    const doneAt = Math.max(0, Number(meta?.completedAt) || 0);
+    const when =
+      doneAt > 0
+        ? new Date(doneAt).toLocaleString("lv-LV", {
+            timeZone: "Europe/Riga",
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "";
+    fillVzEmptyState(tournamentEmptyEl, {
+      glyph: "🏆",
+      title: "Turnīrs noslēgts",
+      text: when
+        ? `Uzvarētājs: ${championName} · noslēgts ${when}`
+        : `Uzvarētājs: ${championName}`,
+      compact: true,
+      extraClass: "mission-status",
+    });
     tournamentEmptyEl.classList.remove("hidden");
   }
 
@@ -6041,7 +8996,13 @@ function renderTournamentCard(meta, details) {
       });
       tournamentMatchListEl.classList.remove("hidden");
     } else if (!championName && tournamentEmptyEl) {
-      tournamentEmptyEl.textContent = "Šobrīd nav aktīvu maču.";
+      fillVzEmptyState(tournamentEmptyEl, {
+        glyph: "📋",
+        title: "Nav aktīvu maču",
+        text: "Gaidām nākamo kārtu vai atjauninājumu.",
+        compact: true,
+        extraClass: "mission-status",
+      });
       tournamentEmptyEl.classList.remove("hidden");
     }
   }
@@ -6170,8 +9131,12 @@ async function refreshTournamentCard(force = false) {
       listPayload?.schedule
     );
     state.vipRooms = normalizeVipRoomList(listPayload?.vipRooms);
+    state.recentTournaments = Array.isArray(listPayload?.recentTournaments)
+      ? listPayload.recentTournaments
+      : [];
     renderTournamentSchedule();
     renderVipRoomPanel();
+    renderTournamentRecentList();
     const list = normalizeTournamentList(listPayload);
     state.tournaments = list;
 
@@ -6408,6 +9373,7 @@ function updateOnlineList(payload) {
   const myName = (state.username || "").trim();
   const visibleCount = players.length;
   const onlineSet = new Set();
+  const miniMap = new Map();
 
   players.forEach((p) => {
     let username = "";
@@ -6428,11 +9394,11 @@ function updateOnlineList(payload) {
     }
 
     if (!username) return;
-    onlineSet.add(
-      String(username || "")
-        .trim()
-        .toLowerCase()
-    );
+    const uKey = String(username || "")
+      .trim()
+      .toLowerCase();
+    onlineSet.add(uKey);
+    if (p && typeof p === "object") miniMap.set(uKey, p);
 
     const li = document.createElement("li");
     if (username === myName) li.classList.add("vz-online-self");
@@ -6467,6 +9433,14 @@ function updateOnlineList(payload) {
     const badge = buildRegionBadge(region, "vz-region-badge-online");
     if (badge) li.appendChild(badge);
     li.appendChild(span);
+    const pres = formatSocialPresenceFromPayload(p);
+    if (pres) {
+      const pr = document.createElement("span");
+      pr.className = "vz-online-presence";
+      pr.textContent = pres.text;
+      pr.title = pres.title;
+      li.appendChild(pr);
+    }
 
     ul.appendChild(li);
   });
@@ -6475,7 +9449,9 @@ function updateOnlineList(payload) {
     typeof count === "number" && count > 0 ? count : visibleCount;
   countEl.textContent = String(finalCount);
   state.onlineUsers = onlineSet;
+  state.onlineMiniByUser = miniMap;
   renderFriends();
+  renderSocialPulse();
 }
 
 // ==================== HALL OF FAME ====================
@@ -6776,6 +9752,25 @@ function appendSystemMessage(text) {
   _lastSystemAt = now;
 
   appendChatMessage({ username: "SYSTEM", text: t, ts: now });
+}
+
+/** Publiskā čata sistēmas ziņas par galdu — ar [VĀRDU ZONA — galds], lai atšķirtu no vārdu raunda čata. */
+function appendGaldaSystemMessage(text) {
+  const s = String(text ?? "").trim();
+  if (!s) return;
+  const line = `[VĀRDU ZONA — galds] ${s}`;
+  appendSystemMessage(line);
+  if (gameMessageEl) gameMessageEl.textContent = line;
+}
+
+/** Vienots statusa kanāls: čats + #game-message (VĀRDU ZONA + sinhr. ar galdu). */
+const VZ_STATUS_PREFIX = "[VĀRDU ZONA]";
+function appendVzStatusMessage(detail) {
+  const s = String(detail ?? "").trim();
+  if (!s) return;
+  const line = `${VZ_STATUS_PREFIX} ${s}`;
+  appendSystemMessage(line);
+  if (gameMessageEl) gameMessageEl.textContent = line;
 }
 
 function clearUnreadIfNeeded() {
@@ -7722,9 +10717,12 @@ function dmRenderInbox() {
 
   if (!items.length) {
     const empty = document.createElement("div");
-    empty.style.opacity = "0.8";
-    empty.textContent =
-      "Inbox tukšs. Atver profilu un spied “Rakstīt privāti”.";
+    fillVzEmptyState(empty, {
+      glyph: "✉️",
+      title: "Vēl nav sarunu",
+      text: "Profilā spied «Rakstīt privāti».",
+      compact: true,
+    });
     box.appendChild(empty);
     return;
   }
@@ -8406,19 +11404,91 @@ function initSocket() {
     showDuelInvite(payload);
   });
   socket.on("connect", () => {
-    if (_socketEverConnected) appendSystemMessage("Savienojums atjaunots.");
-    else appendSystemMessage("Pieslēgts VĀRDU ZONAS serverim.");
+    const hadPrior = _socketEverConnected;
     _socketEverConnected = true;
+    if (hadPrior) {
+      appendVzStatusMessage(
+        "Savienojums atjaunots — čats, duēļi un galda spēles sinhronizējas ar serveri."
+      );
+      if (boardState?.gameId) {
+        appendVzStatusMessage(
+          "Ja esi vidū galda spēlē, gaidi īsu brīdi — serveris var nosūtīt atjauninātu stāvokli (board.resume)."
+        );
+      }
+    } else {
+      appendVzStatusMessage(
+        "Pieslēgts serverim — viss (vārdi, čats, galds) darbojas reāllaikā."
+      );
+    }
+    if (navigator.onLine) {
+      if (_vzConnIssueOverlayTimer != null) {
+        clearTimeout(_vzConnIssueOverlayTimer);
+        _vzConnIssueOverlayTimer = null;
+      }
+      setOfflineOverlay(false);
+      _vzConnIssueLastKey = "";
+    }
+  });
+
+  socket.on("coins:purchased", async (payload) => {
+    const added = Math.max(0, Number(payload?.added) || 0);
+    if (added) {
+      appendSystemMessage(`💰 +${added} coins — pateicamies par pirkumu!`);
+    }
+    try {
+      const me2 = await apiGet("/me");
+      updatePlayerCard(me2);
+    } catch {}
   });
 
   socket.on("connect_error", (err) => {
     console.error("Socket connect_error:", err && (err.message || err));
-    appendSystemMessage("Neizdevās pieslēgties čatam.");
+    const msg = String(err?.message || "").toLowerCase();
+    const jwt =
+      msg.includes("jwt") ||
+      msg.includes("token") ||
+      msg.includes("unauthorized") ||
+      msg.includes("forbidden");
+    if (jwt) {
+      showConnectionIssueOverlay(
+        {
+          key: "socket_auth",
+          title: "Piekļuve čatam un galdam",
+          text: "Savienojums noraidīts — iespējams, beidzies sesijas tokens. Ielogojies vēlreiz vai atjauno lapu.",
+          hint: "",
+          showLogin: true,
+        },
+        { silent: true }
+      );
+      appendVzStatusMessage(
+        "Sesija nav derīga reāllaikam — ielogojies vēlreiz vai atjauno lapu (čats un galds)."
+      );
+    } else {
+      showConnectionIssueOverlay(
+        {
+          key: "socket_net",
+          title: "Nav tiešsaistes savienojuma",
+          text: "Neizdevās pieslēgties reāllaika serverim. Pārbaudi internetu; pēc atjaunošanās viss sinhronizēsies.",
+          hint: "",
+          showLogin: false,
+        },
+        { autoHideMs: 7000, silent: true }
+      );
+      appendVzStatusMessage(
+        "Īslaicīgi zudis reāllaika savienojums — mēģinu atkal; pēc atjaunošanās viss sinhronizēsies."
+      );
+    }
   });
 
   socket.on("disconnect", (reason) => {
+    disarmBoardMoveResponseWait();
     if (reason === "io client disconnect") return;
-    appendSystemMessage("Atvienots no servera.");
+    const inGalds = !!(boardState?.gameId || zole3pLobbySnapshot?.zoleLobby);
+    appendVzStatusMessage(
+      inGalds
+        ? "Atvienots no servera — neaizver modāļus; pēc atkārtotas pieslēgšanās galds un istaba ielādēsies no servera."
+        : "Atvienots no servera — pēc atkārtotas pieslēgšanās čats un spēle sinhronizēsies."
+    );
   });
 
   socket.on("chatHistory", (payload) => {
@@ -8521,6 +11591,7 @@ function initSocket() {
     try {
       const me = await apiGet("/me");
       updatePlayerCard(me);
+      renderSocialPulse();
     } catch (_) {}
   });
 
@@ -8670,7 +11741,11 @@ function initSocket() {
   });
 
   socket.on("forceDisconnect", ({ reason }) => {
-    appendSystemMessage("Tevi atvienoja: " + (reason || ""));
+    appendVzStatusMessage(
+      "Serveris atvienoja sesiju" +
+        (reason ? `: ${reason}` : "") +
+        ". Atjauno lapu vai ielogojies vēlreiz."
+    );
     socket.disconnect();
   });
 
@@ -8895,6 +11970,7 @@ function initSocket() {
     try {
       const me = await apiGet("/me");
       updatePlayerCard(me);
+      await refreshRegionStats();
     } catch {}
 
     if (youWin || winner || isDraw) {
@@ -8950,38 +12026,282 @@ function initSocket() {
     const from = payload?.from || "?";
     const type = payload?.type || "dambrete";
     showBoardInviteModal(from, type, payload);
+    const typeLv =
+      type === "chess" ? "šahu" : type === "zole" ? "zoli" : "dambreti";
+    const rem = !!payload?.rematch;
+    appendGaldaSystemMessage(
+      rem
+        ? `${from} piedāvā revānšu (${typeLv}). Atver «Galda spēles» (VĀRDU ZONA), lai pieņemtu vai noraidītu.`
+        : `${from} uzaicina uz ${typeLv}. Atver «Galda spēles» (VĀRDU ZONA), lai pieņemtu vai noraidītu.`
+    );
   });
-  socket.on("board.inviteSent", () => {
-    const pending = document.getElementById("board-invite-pending");
-    if (pending) pending.classList.remove("hidden");
+  socket.on("board.inviteSent", (payload) => {
+    const target = String(payload?.target || "").trim();
+    const exp = Number(payload?.expiresAt) || Date.now() + 60 * 1000;
+    const gt = String(payload?.type || "").toLowerCase();
+    const chessLine = gt === "chess" ? formatChessClockHumanLine(payload) : "";
+    if (target)
+      startBoardInviteOutgoingWait(exp, target, {
+        toHost: !!payload?.toHost,
+        rematch: !!payload?.rematch,
+        gameType: gt,
+        chessClockLine: chessLine,
+        inviteTimeoutMs: payload?.inviteTimeoutMs,
+      });
+    const sec = Math.max(
+      1,
+      Math.round(Number(payload?.inviteTimeoutMs) / 1000) || 60
+    );
+    let sys = payload?.rematch
+      ? `Revānšs nosūtīts — gaidām ${target} līdz ${sec}s.`
+      : payload?.toHost
+        ? `Pieprasījums saimniekam — gaidām līdz ${sec}s.`
+        : `Uzaicinājums nosūtīts — gaidām ${target} līdz ${sec}s.`;
+    if (gt === "chess" && chessLine) sys += ` ${chessLine}`;
+    appendGaldaSystemMessage(sys);
+    appendVzStatusMessage(sys);
+  });
+  socket.on("board.inviteDeclined", (payload) => {
+    stopBoardInviteOutgoingWait();
+    const by = String(payload?.by || "").trim();
+    appendGaldaSystemMessage(
+      by ? `${by} noraidīja galda uzaicinājumu.` : "Uzaicinājums noraidīts."
+    );
+  });
+  socket.on("board.inviteCancelled", (payload) => {
+    clearBoardInviteIncomingInterval();
+    const by = String(payload?.by || "").trim();
+    hideBoardInviteModal();
+    appendGaldaSystemMessage(
+      by ? `${by} atsauca galda uzaicinājumu.` : "Uzaicinājums atcelts."
+    );
+  });
+  socket.on("board.inviteDeclineOk", () => {
+    hideBoardInviteModal();
+    appendGaldaSystemMessage("Tu noraidīji uzaicinājumu.");
+  });
+  socket.on("board.inviteCancelOk", () => {
+    stopBoardInviteOutgoingWait();
+    appendGaldaSystemMessage("Uzaicinājums atcelts.");
+  });
+  function handleBoardInviteOrRematchTimedOut(payload, rematchOnly) {
+    stopBoardInviteOutgoingWait();
+    const from = String(payload?.from || "").trim();
+    const target = String(payload?.target || "").trim();
+    const rem = !!payload?.rematch;
+    if (rematchOnly && !rem) return;
+    if (!rematchOnly && rem) return;
+    const me = String(state.username || "")
+      .trim()
+      .toLowerCase();
+    const invSec = Math.max(
+      1,
+      Math.round(Number(payload?.inviteTimeoutMs) / 1000) || 60
+    );
+    if (from && me === from.toLowerCase()) {
+      const line = rem
+        ? `${target || "Pretinieks"} neatbildēja uz revānšu (${invSec}s).`
+        : `${target || "Pretinieks"} neatbildēja uz uzaicinājumu (${invSec}s).`;
+      appendGaldaSystemMessage(line);
+      appendVzStatusMessage(line);
+    } else if (target && me === target.toLowerCase()) {
+      appendGaldaSystemMessage(
+        rem
+          ? `Revānša uzaicinājuma termiņš beidzies (${invSec}s) — vari sūtīt jaunu.`
+          : `Uzaicinājuma termiņš beidzies (${invSec}s) — vari sūtīt jaunu vai gaidīt citu.`
+      );
+      appendVzStatusMessage(
+        rem
+          ? `Galda revānšs beidzies (${invSec}s) — vari mēģināt vēlreiz.`
+          : `Galda uzaicinājums beidzies (${invSec}s) — vari mēģināt vēlreiz.`
+      );
+    }
+  }
+
+  socket.on("board.inviteTimedOut", (payload) => {
+    handleBoardInviteOrRematchTimedOut(payload, false);
+  });
+  socket.on("board.rematchTimedOut", (payload) => {
+    handleBoardInviteOrRematchTimedOut(payload, true);
+  });
+  socket.on("board.zoleThirdInviteTimedOut", (payload) => {
+    const t = String(payload?.target || "").trim();
+    const sec = Math.max(
+      1,
+      Math.round(Number(payload?.thirdInviteTtlMs) / 1000) || 90
+    );
+    const line = t
+      ? `Trešā vieta (${t}) neatbildēja ${sec}s — vari uzaicināt citu.`
+      : `Trešā vieta neatbildēja ${sec}s — vari uzaicināt citu.`;
+    appendGaldaSystemMessage(line);
+    appendVzStatusMessage(line);
+  });
+  socket.on("board.zoleThirdInviteSent", () => {
+    appendGaldaSystemMessage(
+      "Zoles uzaicinājums trešajam spēlētājam nosūtīts."
+    );
+  });
+  socket.on("board.zoleLobby", (payload) => {
+    updateZole3pLobbyUI(payload);
+  });
+  socket.on("board.zoleOpenLobbies", (payload) => {
+    zole3pOpenLobbiesCache = {
+      rooms: Array.isArray(payload?.rooms) ? payload.rooms : [],
+      serverNow: Number(payload?.serverNow) || Date.now(),
+    };
+    syncZole3pOpenLobbyPanelVisibility();
+  });
+  socket.on("board.openSeats", (payload) => {
+    boardOpenSeatsCache = {
+      chess: Array.isArray(payload?.chess) ? payload.chess : [],
+      dambrete: Array.isArray(payload?.dambrete) ? payload.dambrete : [],
+      serverNow: Number(payload?.serverNow) || Date.now(),
+    };
+    syncBoardOpenSeatsPanelVisibility();
   });
   socket.on("board.error", (payload) => {
-    appendSystemMessage(payload?.message || "Galda spēles kļūda.");
+    disarmBoardMoveResponseWait();
+    appendGaldaSystemMessage(payload?.message || "Kļūda galdā (VĀRDU ZONA).");
+  });
+  socket.on("board.chessDrawState", (payload) => {
+    if (payload?.gameId !== boardState.gameId) return;
+    if (boardState.type !== "chess") return;
+    ingestChessDrawStatePayload(payload?.chessDrawState);
+    syncChessDrawControls();
   });
   socket.on("board.start", (payload) => {
-    hideBoardModal();
+    stopBoardInviteOutgoingWait();
+    lastBoardResultSnapshot = null;
+    zole3pLobbySnapshot = null;
+    document.getElementById("board-zole-3p-lobby")?.classList.add("hidden");
+    syncBoardDambreteModePanelVisibility();
+    /* Neaizvērt modāli — startBoardGame atver spēles zonu; citādi Zole paliek aiz hidden. */
     startBoardGame(payload);
-    const myIdx = (payload?.players || []).indexOf(state.username);
-    const isMyTurn = myIdx === (payload?.turn ?? 0);
+    const t = payload?.type || "dambrete";
+    const label = t === "chess" ? "Šahs" : t === "zole" ? "Zole" : "Dambrete";
+    appendGaldaSystemMessage(`${label} — spēle sākusies.`);
+    const myIdx = boardGamePlayerIndex(payload?.players || [], state.username);
+    const isMyTurn =
+      myIdx === normalizeBoardTurnFromPayload(payload?.turn ?? 0, t);
     updateBoardGameBadge(isMyTurn);
+    const gid = payload?.gameId ?? boardState.gameId;
+    if (isMyTurn && gid != null) {
+      _lastGaldaTurnNotifyKey = galdaTurnNotifyDedupeKey(t, gid, {
+        turn: payload?.turn,
+        zole: t === "zole" ? payload?.zole : undefined,
+      });
+      appendGaldaSystemMessage("Tava kārta galda spēlē.");
+    }
   });
   socket.on("board.resume", (payload) => {
     startBoardGame(payload);
-    const myIdx = (payload?.players || []).indexOf(state.username);
-    const isMyTurn = myIdx === (payload?.turn ?? 0);
+    appendVzStatusMessage(
+      "Galda spēle sinhronizēta ar serveri — vari turpināt. Ja iepriekš nebija «atvienots» ziņojuma, tas ir normāli pēc pārlādēšanas vai tīkla pārslēgšanās."
+    );
+    const myIdx = boardGamePlayerIndex(payload?.players || [], state.username);
+    const t = payload?.type || "dambrete";
+    const isMyTurn =
+      myIdx === normalizeBoardTurnFromPayload(payload?.turn ?? 0, t);
     updateBoardGameBadge(isMyTurn);
+    const gid = payload?.gameId ?? boardState.gameId;
+    if (isMyTurn && gid != null) {
+      _lastGaldaTurnNotifyKey = galdaTurnNotifyDedupeKey(t, gid, {
+        turn: payload?.turn,
+        zole: t === "zole" ? payload?.zole : undefined,
+      });
+      appendGaldaSystemMessage("Tava kārta galda spēlē.");
+    }
   });
   socket.on("board.move", (payload) => {
     if (payload?.gameId !== boardState.gameId) return;
+    disarmBoardMoveResponseWait();
+    boardLegalMovesFetchId++;
+    boardMovesFetchChain = Promise.resolve();
     boardState.board = payload?.board || boardState.board;
     boardState.fen = payload?.fen || boardState.fen;
-    boardState.turn = payload?.turn ?? boardState.turn;
+    boardState.turn = normalizeBoardTurnFromPayload(
+      payload?.turn != null ? payload.turn : boardState.turn,
+      boardState.type || "dambrete"
+    );
+    if (boardState.type === "zole" && payload?.zole) {
+      boardState.zole = payload.zole;
+    }
+    if (boardState.type === "zole" && boardState.vsBot) {
+      if (payload?.zoleSeriesNewHand) {
+        boardState.zoleVsBotNextHandPending = false;
+      }
+      if (payload?.zoleVsBotNextHandCancelled) {
+        boardState.zoleVsBotNextHandPending = false;
+      }
+    }
+    if (
+      boardState.type === "zole" &&
+      boardState.zoleMode === "vs_bot" &&
+      payload?.zoleSeriesHandEnd
+    ) {
+      boardState.zoleVsBotNextHandPending = true;
+      appendGaldaSystemMessage(
+        "Partija beigusies — tabula atjaunināta. Izvēlies «Nākamā partija» vai «Pēdējā partija»."
+      );
+    }
+    if (
+      boardState.type === "zole" &&
+      boardState.zoleMode === "vs_bot" &&
+      payload?.zoleVsBotNextHandCancelled
+    ) {
+      appendGaldaSystemMessage(
+        "Izvēlējies pēdējo partiju — citi tiešsaistē redz atzīmi «pēdējā partija»; pēc tās mačs beigsies."
+      );
+    }
+    if (boardState.type === "zole" && payload?.zoleMode != null) {
+      const m = String(payload.zoleMode).toLowerCase();
+      if (m === "vs_bot") boardState.zoleMode = "vs_bot";
+      else if (m === "online_3p") boardState.zoleMode = "online_3p";
+      else boardState.zoleMode = "online_2p";
+    }
+    if (boardState.type === "dambrete" && payload?.dambreteVariant != null) {
+      boardState.dambreteVariant = normalizeDambreteVariantClient(
+        payload.dambreteVariant
+      );
+    }
+    if (boardState.type === "chess" && payload?.chessClock) {
+      ingestChessClockPayload(payload);
+    }
+    if (boardState.type === "chess" && payload?.chessDrawState) {
+      ingestChessDrawStatePayload(payload.chessDrawState);
+    }
+    if (
+      boardState.type === "chess" &&
+      !boardState.vsBot &&
+      payload?.chessDrawInvalidatedByMove
+    ) {
+      appendGaldaSystemMessage(
+        "Neizšķirta piedāvājums atcelts — pēc gājiena tas vairs nav spēkā (vari piedāvāt no jauna savā gājienā)."
+      );
+    }
     boardState.selectedCell = null;
+    boardState.chessPromotionPick = null;
+    // Obligāti notīrīt — pretējā gadījumā paliek iepriekšējās kārtas jumps/moves
+    // pret jauno laukumu (piem. pēc bota gājiena) un neviens kauliņš nav klikšķināms līdz refresh.
+    boardState.legalMoves = { jumps: [], moves: [] };
     renderBoardGame();
-    const myIdx = boardState.players.indexOf(state.username);
-    const isMyTurn = myIdx === boardState.turn;
+    const myIdx = boardGamePlayerIndex(boardState.players, state.username);
+    const isMyTurn =
+      boardState.type === "zole" && boardState.zole
+        ? boardZoleIsHumanTurn(myIdx, boardState.zole)
+        : myIdx === boardState.turn;
     if (isMyTurn) {
-      appendSystemMessage("♟️ Tava kārta galda spēlē!");
+      const turnKey = galdaTurnNotifyDedupeKey(
+        boardState.type,
+        boardState.gameId,
+        boardState.type === "zole"
+          ? { zole: boardState.zole, turn: boardState.turn }
+          : payload
+      );
+      if (turnKey !== _lastGaldaTurnNotifyKey) {
+        _lastGaldaTurnNotifyKey = turnKey;
+        appendGaldaSystemMessage("Tava kārta galda spēlē.");
+      }
       const modal = document.getElementById("board-games-modal");
       if (modal && modal.classList.contains("hidden")) {
         const gameArea = document.getElementById("board-game-area");
@@ -8992,18 +12312,51 @@ function initSocket() {
       }
       updateBoardGameBadge(true);
     } else {
+      _lastGaldaTurnNotifyKey = null;
       updateBoardGameBadge(false);
     }
+    syncBoardModalFullscreen();
   });
   socket.on("board.end", (payload) => {
     if (payload?.gameId !== boardState.gameId) return;
+    if (payload?.type === "zole" && payload?.zoleMode != null) {
+      const m = String(payload.zoleMode).toLowerCase();
+      if (m === "vs_bot") boardState.zoleMode = "vs_bot";
+      else if (m === "online_3p") boardState.zoleMode = "online_3p";
+      else boardState.zoleMode = "online_2p";
+    }
     const winner = payload?.winner;
-    const reason = payload?.reason || "finished";
     const coinsGain = payload?.coinsGain || 0;
     const coinsLoss = payload?.coinsLoss || 0;
+    const meChat = state.username;
+    const zoleSnapForEnd = payload?.zole || boardState.zole;
+    let resultPayload = payload;
+    if (payload?.type === "zole") {
+      resultPayload = { ...payload };
+      if (!resultPayload.zole && boardState.zole)
+        resultPayload.zole = boardState.zole;
+      if (
+        resultPayload.zole3pCoinsPerPoint == null &&
+        boardState.zole3pCoinsPerPoint > 0
+      ) {
+        resultPayload.zole3pCoinsPerPoint = boardState.zole3pCoinsPerPoint;
+      }
+    }
+    disarmBoardMoveResponseWait();
     boardState.gameId = null;
+    _lastGaldaTurnNotifyKey = null;
+    const won =
+      winner &&
+      String(winner).trim().toLowerCase() ===
+        String(state.username || "")
+          .trim()
+          .toLowerCase();
+    const zole2pPvP =
+      payload?.type === "zole" &&
+      !payload?.vsBot &&
+      boardState.zoleMode === "online_2p";
     let msg = "";
-    if (winner === state.username) {
+    if (won) {
       msg = coinsGain
         ? `♟️ Tu uzvarēji! +${coinsGain} coins`
         : "♟️ Tu uzvarēji!";
@@ -9012,11 +12365,35 @@ function initSocket() {
     } else {
       msg = "♟️ Spēle beidzās (neizšķirts).";
     }
-    appendSystemMessage(msg);
+    if (payload?.type === "zole" && zoleSnapForEnd) {
+      const cppChat = Math.floor(
+        Number(
+          payload?.zole3pCoinsPerPoint ?? boardState.zole3pCoinsPerPoint
+        ) || 0
+      );
+      const zExtra = (
+        zoleMyTablePtsLine(zoleSnapForEnd, meChat) +
+        zole3pCoinsFromTableLine(zoleSnapForEnd, meChat, cppChat) +
+        zoleBuriedKittyEyesLine(zoleSnapForEnd)
+      ).trim();
+      if (zExtra) msg += " " + zExtra;
+      if (zole2pPvP && (Number(coinsGain) > 0 || Number(coinsLoss) > 0)) {
+        msg += " " + ZOLE_2P_TABULA_VS_COINS_NOTE;
+      }
+      if (boardState.zoleMode === "online_3p" && cppChat > 0) {
+        const stakeNote = zole3pStakeTableCoinsNote(cppChat).trim();
+        if (stakeNote) msg += " " + stakeNote;
+      }
+    }
+    appendGaldaSystemMessage(msg.replace(/^♟️\s*/, ""));
+    showBoardGameResult(resultPayload);
     hideBoardGameArea();
     updateBoardGameBadge(false);
     apiGet("/me")
-      .then(updatePlayerCard)
+      .then((me) => {
+        updatePlayerCard(me);
+        return refreshRegionStats();
+      })
       .catch(() => {});
   });
   socket.on("board:leaderboard", () => {
@@ -9027,33 +12404,136 @@ function initSocket() {
   });
 }
 
+function syncBoardModalContext() {
+  const el = document.getElementById("board-modal-context");
+  if (!el) return;
+  const modal = document.getElementById("board-games-modal");
+  if (!modal || modal.classList.contains("hidden")) {
+    el.textContent = "";
+    return;
+  }
+  const invite = document.getElementById("board-games-invite");
+  const gameArea = document.getElementById("board-game-area");
+  const inInvite = invite && !invite.classList.contains("hidden");
+  const inGame = gameArea && !gameArea.classList.contains("hidden");
+  if (inInvite) {
+    const from = invite?.dataset?.from || "?";
+    const type = invite?.dataset?.type || "dambrete";
+    const typeLv =
+      type === "chess" ? "šahu" : type === "zole" ? "zoli" : "dambreti";
+    el.textContent = `Uzaicinājums: ${from} → ${typeLv}`;
+    return;
+  }
+  if (inGame && boardState.gameId) {
+    const t = boardState.type || "dambrete";
+    const label = t === "chess" ? "Šahs" : t === "zole" ? "Zole" : "Dambrete";
+    const ph = boardState.type === "zole" && boardState.zole?.phase;
+    const phaseLv =
+      ph === "bid"
+        ? "likšana"
+        : ph === "discard"
+          ? "norakšana"
+          : ph === "play"
+            ? "spēle"
+            : ph === "end"
+              ? "beigas"
+              : "";
+    el.textContent = phaseLv ? `${label} · ${phaseLv}` : `${label} · spēle`;
+    return;
+  }
+  if (zole3pLobbySnapshot?.zoleLobby && !boardState.gameId) {
+    const h = zole3pLobbySnapshot.host || "?";
+    const n = (zole3pLobbySnapshot.players || []).length;
+    el.textContent = `Zoles istaba · ${n}/3 · saimnieks: ${h}`;
+    return;
+  }
+  const tab = getBoardLobbyGameTab();
+  const gameHint =
+    tab === "chess"
+      ? "Šahs — izvēlies laiku vai uzaicini."
+      : tab === "dambrete"
+        ? "Dambrete — izvēlies režīmu vai uzaicini."
+        : "Zole — izvēlies režīmu zemāk.";
+  el.textContent = gameHint;
+}
+
+function syncBoardDambreteModePanelVisibility() {
+  const wrap = document.getElementById("board-dambrete-mode-wrap");
+  const zoleWrap = document.getElementById("board-zole-mode-wrap");
+  const zoleRoomZone = document.getElementById("board-zole-room-zone");
+  const zoleRoomEntry = document.getElementById("board-zole-3p-lobby-entry");
+  const invite = document.getElementById("board-games-invite");
+  const inInvite = invite && !invite.classList.contains("hidden");
+  if (wrap) wrap.classList.toggle("hidden", !!inInvite);
+  if (zoleWrap) zoleWrap.classList.toggle("hidden", !!inInvite);
+  const inZoleRoomFlow =
+    getSelectedBoardZoleMode() === "online_3p" ||
+    !!zole3pLobbySnapshot?.zoleLobby;
+  const showRoomZone = !inInvite && inZoleRoomFlow;
+  if (zoleRoomZone) zoleRoomZone.classList.toggle("hidden", !showRoomZone);
+  const show3pEntry =
+    !inInvite &&
+    getSelectedBoardZoleMode() === "online_3p" &&
+    !zole3pLobbySnapshot?.zoleLobby;
+  if (zoleRoomEntry) zoleRoomEntry.classList.toggle("hidden", !show3pEntry);
+  syncBoardChessTimeRowVisibility();
+  syncBoardModalContext();
+  syncZole3pOpenLobbyPanelVisibility();
+  syncBoardOpenSeatsPanelVisibility();
+}
+
 function showBoardModal() {
+  hideBoardResultOverlay();
   const modal = document.getElementById("board-games-modal");
   const lobby = document.getElementById("board-games-lobby");
   const invite = document.getElementById("board-games-invite");
   const gameArea = document.getElementById("board-game-area");
+  const inner = document.getElementById("board-modal-inner");
+  const overlay = document.getElementById("board-result-overlay");
+  if (modal && modal.classList.contains("hidden")) {
+    _boardModalFocusReturn = document.activeElement;
+  }
   if (modal) modal.classList.remove("hidden");
   if (boardState.gameId) {
     if (lobby) lobby.classList.add("hidden");
     if (invite) invite.classList.add("hidden");
     if (gameArea) gameArea.classList.remove("hidden");
     renderBoardGame();
+    syncBoardModalFullscreen();
+    syncZole3pOpenLobbyPanelVisibility();
   } else {
     if (lobby) lobby.classList.remove("hidden");
     if (invite) invite.classList.add("hidden");
     if (gameArea) gameArea.classList.add("hidden");
+    if (zole3pLobbySnapshot && !boardState.gameId)
+      updateZole3pLobbyUI(zole3pLobbySnapshot);
     loadBoardLeaderboards();
+    syncBoardModalFullscreen();
+  }
+  syncBoardDambreteModePanelVisibility();
+  if (!boardState.gameId) syncBoardGamePickTab();
+  syncBoardModalContext();
+  syncZole3pOpenLobbyPanelVisibility();
+  syncBoardOpenSeatsPanelVisibility();
+  if (inner && (!overlay || overlay.classList.contains("hidden"))) {
+    requestAnimationFrame(() => {
+      try {
+        inner.focus({ preventScroll: true });
+      } catch (_) {}
+    });
   }
 }
 
 async function loadBoardLeaderboards() {
   try {
-    const [d, c] = await Promise.all([
+    const [d, c, z] = await Promise.all([
       apiGet("/board/leaderboard/dambrete"),
       apiGet("/board/leaderboard/chess"),
+      apiGet("/board/leaderboard/zole"),
     ]);
     const dEl = document.getElementById("board-lb-dambrete");
     const cEl = document.getElementById("board-lb-chess");
+    const zEl = document.getElementById("board-lb-zole");
     if (dEl && d?.list) {
       dEl.innerHTML =
         d.list
@@ -9072,48 +12552,273 @@ async function loadBoardLeaderboards() {
           )
           .join("") || "<p>Vēl nav spēlētāju</p>";
     }
+    if (zEl && z?.list) {
+      zEl.innerHTML =
+        z.list
+          .map(
+            (r) =>
+              `<div class="vz-board-lb-row"><span class="vz-board-lb-place">${r.place}.</span><span>${escapeHtml(r.username)}</span><span class="vz-board-lb-elo">${r.wins} uzvaras</span></div>`
+          )
+          .join("") || "<p>Vēl nav spēlētāju</p>";
+    }
   } catch {}
 }
 
-function hideBoardModal() {
+async function exitBoardBrowserFullscreenIfActive() {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+  } catch {}
+}
+
+function syncBoardBrowserFullscreenUi() {
+  const btn = document.getElementById("board-browser-fs-btn");
   const modal = document.getElementById("board-games-modal");
-  if (modal) modal.classList.add("hidden");
+  if (!btn || !modal) return;
+  const zoleOn =
+    !!boardState.gameId &&
+    boardState.type === "zole" &&
+    modal.classList.contains("vz-board-modal--fullscreen") &&
+    !modal.classList.contains("hidden");
+  const inFs = document.fullscreenElement === modal;
+  const hideForPwa = isTwa();
+  btn.classList.toggle("hidden", !zoleOn || hideForPwa);
+  btn.setAttribute("aria-pressed", inFs ? "true" : "false");
+  btn.textContent = inFs ? "Pārlūks" : "Pilnekrāns";
+  btn.title = hideForPwa
+    ? ""
+    : inFs
+      ? "Atgriezties pie parastā pārlūka skata (adrese redzama)."
+      : "Paslēpt pārlūka adreses joslu un izmantot visu ekrānu. Ja nedarbojas — iPhone: pievieno spēli sākumekrānam; Android: «Pilnekrāna spēle» galvenajā izvēlnē.";
+}
+
+function syncBoardModalFullscreen() {
+  const modal = document.getElementById("board-games-modal");
+  if (!modal) return;
+  if (modal.classList.contains("hidden")) {
+    modal.classList.remove("vz-board-modal--fullscreen");
+    syncBoardBrowserFullscreenUi();
+    return;
+  }
+  const zoleFs = boardState.gameId && boardState.type === "zole";
+  modal.classList.toggle("vz-board-modal--fullscreen", !!zoleFs);
+  syncBoardBrowserFullscreenUi();
+}
+
+function hideBoardModal() {
+  clearZole3pOpenLobbyPoll();
+  hideBoardResultOverlay();
+  void exitBoardBrowserFullscreenIfActive();
+  const modal = document.getElementById("board-games-modal");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.classList.remove("vz-board-modal--fullscreen");
+  }
+  syncBoardBrowserFullscreenUi();
+  syncBoardDambreteModePanelVisibility();
+  syncBoardModalContext();
+  if (
+    _boardModalFocusReturn &&
+    typeof _boardModalFocusReturn.focus === "function"
+  ) {
+    try {
+      _boardModalFocusReturn.focus({ preventScroll: true });
+    } catch (_) {}
+  }
+  _boardModalFocusReturn = null;
 }
 
 function showBoardInviteModal(from, type, payload) {
+  hideBoardResultOverlay();
   const modal = document.getElementById("board-games-modal");
   const lobby = document.getElementById("board-games-lobby");
   const invite = document.getElementById("board-games-invite");
+  const inner = document.getElementById("board-modal-inner");
+  if (modal && modal.classList.contains("hidden")) {
+    _boardModalFocusReturn = document.activeElement;
+  }
   if (modal) modal.classList.remove("hidden");
   if (lobby) lobby.classList.add("hidden");
   if (invite) {
     invite.classList.remove("hidden");
     const fromEl = document.getElementById("board-invite-from");
     const typeEl = document.getElementById("board-invite-type");
+    const varEl = document.getElementById("board-invite-dambrete-variant");
     if (fromEl) fromEl.textContent = from;
-    if (typeEl) typeEl.textContent = type === "chess" ? "šahu" : "dambreti";
+    const rem = !!payload?.rematch;
+    if (typeEl) {
+      let base = rem
+        ? type === "chess"
+          ? "šahu (revānšs)"
+          : type === "zole"
+            ? "zoli (revānšs)"
+            : "dambreti (revānšs)"
+        : type === "chess"
+          ? "šahu"
+          : type === "zole"
+            ? "zoli"
+            : "dambreti";
+      if (!rem && payload?.fromOpenSeatList)
+        base += " — pievienošanās no saraksta";
+      typeEl.textContent = base;
+    }
     invite.dataset.from = from;
     invite.dataset.type = type || "dambrete";
+    invite.dataset.inviteId = String(payload?.inviteId || "").trim();
+    const invExp = Number(payload?.expiresAt) || 0;
+    invite.dataset.inviteExpiresAt = invExp > 0 ? String(invExp) : "";
+    const dv =
+      type === "dambrete"
+        ? normalizeDambreteVariantClient(payload?.dambreteVariant)
+        : "russian";
+    invite.dataset.dambreteVariant = dv;
+    let zm = "";
+    if (type === "zole") {
+      const raw = String(payload?.zoleMode || "").toLowerCase();
+      if (raw === "vs_bot") zm = "vs_bot";
+      else if (raw === "online_2p") zm = "online_2p";
+      else if (raw === "online_3p") zm = "online_3p";
+      else zm = "online_2p";
+    }
+    invite.dataset.zoleMode = zm;
+    const z3 = !!(payload && payload.zoleThirdSeat);
+    invite.dataset.zoleThirdSeat = z3 ? "1" : "";
+    invite.dataset.zoleLobbyId = z3
+      ? String(payload?.zoleLobbyId || "").trim()
+      : "";
+    const stakeEl = document.getElementById("board-invite-zole-stake");
+    const chessTimeEl = document.getElementById("board-invite-chess-time");
+    if (stakeEl) {
+      if (type === "zole" && z3) {
+        const cpp = Math.max(
+          0,
+          Math.min(5, Math.floor(Number(payload?.zole3pCoinsPerPoint) || 0))
+        );
+        if (cpp > 0) {
+          stakeEl.textContent = `Likme istabā: ${cpp} coins par katru tabulas punktu (+/− pēc partijas).`;
+          stakeEl.classList.remove("hidden");
+        } else {
+          stakeEl.textContent = "";
+          stakeEl.classList.add("hidden");
+        }
+      } else {
+        stakeEl.textContent = "";
+        stakeEl.classList.add("hidden");
+      }
+    }
+    if (chessTimeEl) {
+      if (type === "chess") {
+        const line = formatChessClockHumanLine(payload);
+        if (line) {
+          chessTimeEl.textContent = line;
+          chessTimeEl.classList.remove("hidden");
+        } else {
+          chessTimeEl.textContent = "";
+          chessTimeEl.classList.add("hidden");
+        }
+      } else {
+        chessTimeEl.textContent = "";
+        chessTimeEl.classList.add("hidden");
+      }
+    }
+    if (varEl) {
+      if (type === "chess") {
+        varEl.textContent = "";
+        varEl.classList.add("hidden");
+      } else if (type === "zole") {
+        varEl.textContent = z3
+          ? "Zole: 3 cilvēki (trešā vieta)"
+          : `Režīms: ${boardZoleModeLabel(zm)}`;
+        varEl.classList.remove("hidden");
+      } else {
+        varEl.textContent = `Režīms: ${boardDambreteModeLabel(dv)}`;
+        varEl.classList.remove("hidden");
+      }
+    }
+  }
+  if (type === "chess") setBoardLobbyGameTab("chess");
+  else if (type === "zole") setBoardLobbyGameTab("zole");
+  else setBoardLobbyGameTab("dambrete");
+  syncBoardModalFullscreen();
+  syncBoardDambreteModePanelVisibility();
+  syncBoardModalContext();
+  syncZole3pOpenLobbyPanelVisibility();
+  syncBoardOpenSeatsPanelVisibility();
+  startBoardInviteIncomingExpiry();
+  if (inner) {
+    requestAnimationFrame(() => {
+      try {
+        inner.focus({ preventScroll: true });
+      } catch (_) {}
+    });
   }
 }
 
 function hideBoardInviteModal() {
+  clearBoardInviteIncomingInterval();
   const invite = document.getElementById("board-games-invite");
-  if (invite) invite.classList.add("hidden");
+  if (invite) {
+    invite.classList.add("hidden");
+    invite.dataset.inviteExpiresAt = "";
+  }
+  document.getElementById("board-invite-zole-stake")?.classList.add("hidden");
+  document.getElementById("board-invite-chess-time")?.classList.add("hidden");
+  document.getElementById("board-invite-expires")?.classList.add("hidden");
   showBoardModal();
+  syncBoardDambreteModePanelVisibility();
+  syncBoardOpenSeatsPanelVisibility();
 }
 
 function startBoardGame(payload) {
+  disarmBoardMoveResponseWait();
+  _lastGaldaTurnNotifyKey = null;
+  hideBoardResultOverlay();
+  boardLegalMovesFetchId++;
+  boardMovesFetchChain = Promise.resolve();
+  if (window.VZZoleBoardTrickHold?.reset) {
+    window.VZZoleBoardTrickHold.reset();
+  }
   boardState = {
     gameId: payload?.gameId,
     type: payload?.type || "dambrete",
     players: payload?.players || [],
-    turn: payload?.turn ?? 0,
+    turn: normalizeBoardTurnFromPayload(
+      payload?.turn ?? 0,
+      payload?.type || "dambrete"
+    ),
     board: payload?.board ? payload.board.map((r) => r.slice()) : null,
     fen: payload?.fen || null,
+    zole: payload?.type === "zole" ? payload?.zole || null : null,
+    zoleMode:
+      payload?.type === "zole"
+        ? (() => {
+            const m = String(payload?.zoleMode || "").toLowerCase();
+            if (m === "vs_bot") return "vs_bot";
+            if (m === "online_2p") return "online_2p";
+            if (m === "online_3p") return "online_3p";
+            return payload?.vsBot ? "vs_bot" : "online_2p";
+          })()
+        : null,
+    vsBot: !!payload?.vsBot,
+    zoleVsBotNextHandPending: payload?.type === "zole" && !!payload?.vsBot,
+    dambreteVariant:
+      payload?.type === "dambrete"
+        ? normalizeDambreteVariantClient(payload?.dambreteVariant)
+        : null,
     selectedCell: null,
     legalMoves: { jumps: [], moves: [] },
+    zole3pCoinsPerPoint: (() => {
+      if (payload?.type !== "zole") return 0;
+      const m = String(payload?.zoleMode || "").toLowerCase();
+      if (m !== "online_3p") return 0;
+      const c = Math.floor(Number(payload?.zole3pCoinsPerPoint) || 0);
+      return Math.max(0, Math.min(5, c));
+    })(),
+    chessClock: null,
+    chessDrawState: null,
+    chessPromotionPick: null,
   };
+  ingestChessClockPayload(payload);
+  ingestChessDrawStatePayload(payload?.chessDrawState);
   const gameArea = document.getElementById("board-game-area");
   const lobby = document.getElementById("board-games-lobby");
   const modal = document.getElementById("board-games-modal");
@@ -9121,17 +12826,46 @@ function startBoardGame(payload) {
   if (lobby) lobby.classList.add("hidden");
   if (modal) modal.classList.remove("hidden");
   renderBoardGame();
+  syncZoleStakeBannerInGameArea();
+  syncBoardModalFullscreen();
+  syncBoardDambreteModePanelVisibility();
+  syncBoardModalContext();
+  syncZole3pOpenLobbyPanelVisibility();
 }
 
 function hideBoardGameArea() {
+  disarmBoardMoveResponseWait();
+  stopChessClockTick();
+  if (window.VZZoleBoardTrickHold?.reset) {
+    window.VZZoleBoardTrickHold.reset();
+  }
   if (window.VZBoardGames?.resetDambreteTable) {
     window.VZBoardGames.resetDambreteTable();
   }
+  void exitBoardBrowserFullscreenIfActive();
   const gameArea = document.getElementById("board-game-area");
   const modal = document.getElementById("board-games-modal");
-  if (gameArea) gameArea.classList.add("hidden");
+  if (gameArea) {
+    gameArea.classList.add("hidden");
+    gameArea.classList.remove(
+      "vz-board-zole-play",
+      "vz-board-zole-fs",
+      "vz-board-zole-compact-top",
+      "vz-board-zole-header-meta--hide"
+    );
+  }
+  document.getElementById("board-modal-topbar")?.classList.remove("hidden");
+  document
+    .getElementById("board-compact-back-words-btn")
+    ?.classList.add("hidden");
   if (modal) modal.classList.add("hidden");
+  if (modal) modal.classList.remove("vz-board-modal--fullscreen");
+  syncBoardBrowserFullscreenUi();
   updateBoardGameBadge(false);
+  document.getElementById("board-zole-stake-banner")?.classList.add("hidden");
+  syncBoardModalContext();
+  clearZole3pOpenLobbyPoll();
+  clearBoardOpenSeatsPoll();
 }
 
 function updateBoardGameBadge(show) {
@@ -9146,25 +12880,381 @@ function updateBoardGameBadge(show) {
   }
 }
 
+function dambreteSelectedIsValidJumpOrigin() {
+  const jumps = boardState.legalMoves?.jumps || [];
+  if (!jumps.length || !boardState.selectedCell) return true;
+  const [r, c] = boardState.selectedCell;
+  for (let i = 0; i < jumps.length; i++) {
+    const first = jumps[i].jumps && jumps[i].jumps[0];
+    if (first && first.from[0] === r && first.from[1] === c) return true;
+  }
+  return false;
+}
+
+/** Viena šūnas apzīmējums kā šahā (a1–h8), der arī dambretes galdiņam. */
+function boardCellAlgebraic(r, c) {
+  if (typeof r !== "number" || typeof c !== "number") return "";
+  if (r < 0 || r > 7 || c < 0 || c > 7) return "";
+  return String.fromCharCode(97 + c) + (8 - r);
+}
+
+/** Dambrete: baltais redz apgrieztu galdu — hintā rādam to pašu lauka vārdu kā uz ekrāna. */
+function dambreteHintSquare(r, c) {
+  const myIdx = boardGamePlayerIndex(boardState.players, state.username);
+  if (boardState.type !== "dambrete" || myIdx !== 0) {
+    return boardCellAlgebraic(r, c);
+  }
+  return boardCellAlgebraic(7 - r, 7 - c);
+}
+
+function countDambreteValidDestinations(fromR, fromC, legalMoves) {
+  if (!legalMoves) return 0;
+  const set = new Set();
+  for (const m of legalMoves.moves || []) {
+    if (m.from[0] === fromR && m.from[1] === fromC && m.to && m.to.length >= 2)
+      set.add(`${m.to[0]},${m.to[1]}`);
+  }
+  for (const j of legalMoves.jumps || []) {
+    const seq = j.jumps || [];
+    const first = seq[0];
+    const last = seq[seq.length - 1];
+    if (
+      first &&
+      last &&
+      first.from[0] === fromR &&
+      first.from[1] === fromC &&
+      last.to &&
+      last.to.length >= 2
+    )
+      set.add(`${last.to[0]},${last.to[1]}`);
+  }
+  return set.size;
+}
+
+function countChessValidDestinations(fromR, fromC, legalMoves) {
+  if (!legalMoves?.moves?.length) return 0;
+  const fromSq = boardCellAlgebraic(fromR, fromC);
+  let n = 0;
+  for (const m of legalMoves.moves) {
+    if (m.from === fromSq) n++;
+  }
+  return n;
+}
+
 function renderBoardGame() {
+  if (
+    boardState.type === "zole" &&
+    boardState.zole &&
+    window.VZZoleBoardTrickHold?.onZoleSnapshot
+  ) {
+    window.VZZoleBoardTrickHold.onZoleSnapshot(boardState.zole, () => {
+      renderBoardGame();
+    });
+  }
   const typeEl = document.getElementById("board-game-type");
   const turnEl = document.getElementById("board-game-turn");
   const dambreteContainer = document.getElementById("board-dambrete-container");
   const chessContainer = document.getElementById("board-chess-container");
-  if (typeEl)
-    typeEl.textContent = boardState.type === "chess" ? "♔ Šahs" : "♟️ Dambrete";
-  const myIdx = boardState.players.indexOf(state.username);
-  const isMyTurn = myIdx === boardState.turn;
-  const turnName = boardState.players[boardState.turn] || "?";
-  if (turnEl)
-    turnEl.textContent = isMyTurn ? "Tava kārta" : `${turnName} gājienā`;
+  const zoleContainer = document.getElementById("board-zole-container");
+  const gameAreaEl = document.getElementById("board-game-area");
+  if (gameAreaEl) {
+    const ingame = !!boardState.gameId;
+    gameAreaEl.classList.toggle(
+      "vz-board-game-area--chess",
+      ingame && boardState.type === "chess"
+    );
+    gameAreaEl.classList.toggle(
+      "vz-board-game-area--dambrete",
+      ingame && boardState.type === "dambrete"
+    );
+  }
+  const modalTopbar = document.getElementById("board-modal-topbar");
+  const compactBackBtn = document.getElementById(
+    "board-compact-back-words-btn"
+  );
+  const zoleCompactTop =
+    boardState.gameId &&
+    boardState.type === "zole" &&
+    boardState.zole &&
+    boardState.zole.phase !== "end";
+  if (modalTopbar) {
+    modalTopbar.classList.toggle("hidden", !!zoleCompactTop);
+  }
+  if (compactBackBtn) {
+    compactBackBtn.classList.toggle("hidden", !zoleCompactTop);
+  }
+  if (gameAreaEl) {
+    const zPlay =
+      boardState.type === "zole" && boardState.zole?.phase === "play";
+    const zoleGameOn =
+      boardState.gameId && boardState.type === "zole" && !!boardState.zole;
+    gameAreaEl.classList.toggle("vz-board-zole-play", zPlay);
+    gameAreaEl.classList.toggle("vz-board-zole-fs", zoleGameOn);
+    gameAreaEl.classList.toggle("vz-board-zole-compact-top", !!zoleCompactTop);
+  }
+  if (typeEl) {
+    if (boardState.type === "chess") typeEl.textContent = "♔ Šahs";
+    else if (boardState.type === "zole") typeEl.textContent = "";
+    else
+      typeEl.textContent = `♟️ Dambrete (${boardDambreteModeLabel(boardState.dambreteVariant)})`;
+  }
+  const myIdx = boardGamePlayerIndex(boardState.players, state.username);
+  const zoleBidTurn =
+    boardState.type === "zole" && boardState.zole?.phase === "bid"
+      ? boardState.zole.bidTurn
+      : null;
+  const isMyTurn =
+    zoleBidTurn != null
+      ? myIdx === zoleBidTurn
+      : boardState.type === "zole" &&
+          boardState.zole?.phase === "discard" &&
+          boardState.zole?.contract === "big"
+        ? myIdx === boardState.zole.contractorIdx
+        : myIdx === boardState.turn;
+  if (
+    boardState.type === "dambrete" &&
+    isMyTurn &&
+    boardState.selectedCell &&
+    !dambreteSelectedIsValidJumpOrigin()
+  ) {
+    boardState.selectedCell = null;
+  }
+  const turnName =
+    zoleBidTurn != null
+      ? boardState.players[zoleBidTurn] || "?"
+      : boardState.players[boardState.turn] || "?";
+  if (turnEl) {
+    if (boardState.type === "zole" && boardState.zole?.phase === "bid") {
+      turnEl.textContent = isMyTurn
+        ? "Tava likšanas kārta"
+        : `${turnName} likšanā`;
+    } else if (
+      boardState.type === "zole" &&
+      boardState.zole?.phase === "discard"
+    ) {
+      turnEl.textContent = isMyTurn ? "Tava kārta" : "Lielais norok…";
+    } else if (boardState.type === "zole" && boardState.zole?.phase === "end") {
+      turnEl.textContent = "Partija beigusies";
+    } else if (
+      boardState.type === "zole" &&
+      boardState.zole?.phase === "play"
+    ) {
+      /* Spēles laikā gājienu rāda zilā josla + zaļais apakšteksts; šeit tikai pretinieka vārds. */
+      turnEl.textContent = isMyTurn ? "" : turnName;
+    } else {
+      turnEl.textContent = isMyTurn ? "Tava kārta" : `${turnName} gājienā`;
+    }
+    turnEl.classList.toggle(
+      "vz-board-game-turn--active",
+      isMyTurn &&
+        (boardState.type === "dambrete" || boardState.type === "chess")
+    );
+  }
+  if (gameAreaEl && boardState.type === "zole" && zoleCompactTop) {
+    const hideMetaRow = boardState.zole?.phase === "play" && isMyTurn;
+    gameAreaEl.classList.toggle("vz-board-zole-header-meta--hide", hideMetaRow);
+  } else if (gameAreaEl) {
+    gameAreaEl.classList.remove("vz-board-zole-header-meta--hide");
+  }
   const hintEl = document.getElementById("board-game-hint");
-  if (hintEl)
-    hintEl.textContent = isMyTurn
-      ? "Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt"
-      : "Gaidām pretinieka gājienu";
+  const hintWrap = document.getElementById("board-game-hint-wrap");
+  const hintSum = document.getElementById("board-game-hint-summary");
+  if (hintWrap && hintSum) {
+    if (boardState.type === "chess" || boardState.type === "dambrete") {
+      hintSum.textContent = "Īsi par gājienu";
+      hintWrap.removeAttribute("open");
+    } else if (boardState.type === "zole") {
+      hintSum.textContent = "Palīdzība";
+      hintWrap.setAttribute("open", "");
+    } else {
+      hintSum.textContent = "Palīdzība";
+      hintWrap.removeAttribute("open");
+    }
+  }
+  if (hintEl) {
+    if (boardState.type === "zole") {
+      if (boardState.zole?.phase === "bid") {
+        const br = boardState.zole.bidRound === 2 ? 2 : 1;
+        hintEl.textContent = isMyTurn
+          ? br === 1
+            ? "1. kārta: Lielais, Zole vai Mazā zole — vai garām. Galdiņš nesākas ar pogu; ja 1. un 2. kārtā visi iet garām, tas ieslēdzas pats (visi pa sevi, zaudē ar visvairāk acu)."
+            : "2. kārta: tās pašas iespējas (bez atsevišķa «Galdiņš»). Ja atkal visi iet garām — automātiski Galdiņš. Pret botiem pēc partijas nākamā (~2,5 s), tabula uzkrājas."
+          : boardState.zoleMode === "vs_bot"
+            ? "Gaidām bota likšanu…"
+            : "Gaidām citu spēlētāju likšanu…";
+      } else if (
+        boardState.zole?.phase === "discard" &&
+        boardState.zole?.contract === "big"
+      ) {
+        hintEl.textContent = isMyTurn
+          ? "Pēc norakšanas tās 2 kārtu acis pieskaitās tev."
+          : "Gaida lielais.";
+      } else if (boardState.zole?.phase === "end") {
+        hintEl.textContent =
+          boardState.zoleMode === "vs_bot"
+            ? boardState.zoleVsBotNextHandPending
+              ? "Spied «Nākamā partija» vai «Pēdējā partija» (tiešsaistē redzama atzīme; pēc pēdējās partijas mačs beidzas un atgriežies pie VĀRDU ZONAS — vārdu raunda). Atkāpties — pamest uzreiz."
+              : "Šī bija pēdējā partija šajā mačā. Vari sākt jaunu spēli no lobija vai aizvērt modāli."
+            : "Skaties tabulas punktus zemāk. Uzvarētājs pēc spēles — labākais +/− šajā partijā.";
+      } else if (boardState.zole?.phase === "play") {
+        hintEl.textContent =
+          "Sekšana — labajā apakšā kompakta tabula; pilna tabula un noteikumi — «Punkti · noteikumi» zemāk. Trumpji — «Sekšana un trumpji».";
+      } else {
+        const c = boardState.zole?.contract;
+        let galHint = " Uzvara ar 61+ acīm, ja esi lielais / zole.";
+        if (c === "galdins")
+          galHint = " Galdiņš: zaudē tas, kam visvairāk acu stiķos.";
+        else if (c === "galds")
+          galHint =
+            " Galds: zaudē tas, kam visvairāk stiķu; ja vienādi — kam vairāk acu.";
+        hintEl.textContent = isMyTurn
+          ? `Spied uz kārtas (sekšana: parastā vada → vispirms parastā tā mastā; ja parastās nav — atmesties vai trumpis; trumpis vada → trumpis, ja nav — parastā).${galHint}`
+          : boardState.zoleMode === "vs_bot"
+            ? "Gaidām Zole botu gājienu…"
+            : boardState.zoleMode === "online_2p"
+              ? "Gaidām otra spēlētāja vai bota gājienu…"
+              : "Gaidām otra spēlētāja gājienu…";
+      }
+    } else if (!isMyTurn) {
+      hintEl.textContent =
+        boardState.type === "chess" && boardState.chessClock
+          ? "Gaidām pretinieka gājienu. Laiks tērējas tikai viņa pusē."
+          : "Gaidām pretinieka gājienu.";
+    } else if (boardState.type === "dambrete") {
+      const jumpsOn = (boardState.legalMoves?.jumps || []).length > 0;
+      const sel = boardState.selectedCell;
+      if (jumpsOn && !sel) {
+        hintEl.innerHTML =
+          '<strong>Jālēkt.</strong> Spied uz sava kauliņa ar <strong class="vz-hint-mark vz-hint-mark--gold">zelta aplīti</strong> — tad parādīsies <strong class="vz-hint-mark vz-hint-mark--move">atļauto</strong> mērķa lauki. Citus savus kauliņus šajā brīdī nevar izvēlēties.';
+      } else if (jumpsOn && sel) {
+        const sq = dambreteHintSquare(sel[0], sel[1]);
+        const n = countDambreteValidDestinations(
+          sel[0],
+          sel[1],
+          boardState.legalMoves
+        );
+        hintEl.innerHTML =
+          n > 0
+            ? `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Tagad spied <strong class="vz-hint-mark vz-hint-mark--move">atļauto</strong> lauciņu (${n} ${n === 1 ? "iespēja" : "iespējas"}) — lēciena beigas. Citur — citu sākuma kauliņu.`
+            : `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied citu kauliņu ar <strong class="vz-hint-mark vz-hint-mark--gold">zelta aplīti</strong> vai atļauto mērķi.`;
+      } else if (sel) {
+        const sq = dambreteHintSquare(sel[0], sel[1]);
+        const n = countDambreteValidDestinations(
+          sel[0],
+          sel[1],
+          boardState.legalMoves
+        );
+        hintEl.innerHTML =
+          n > 0
+            ? `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied <strong class="vz-hint-mark vz-hint-mark--move">atļauto</strong> lauciņu (${n} ${n === 1 ? "gājiens" : "gājieni"}). Citur — maini figūru.`
+            : `Izvēlēts <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Nav derīgu lauku — izvēlies citu savu kauliņu.`;
+      } else {
+        hintEl.innerHTML =
+          'Spied savu kauliņu, tad <strong class="vz-hint-mark vz-hint-mark--move">atļauto</strong> lauciņu. Mainīt izvēli — spied citu savu kauliņu.';
+      }
+    } else if (boardState.type === "chess") {
+      const clockNote = (() => {
+        const ck = boardState.chessClock;
+        if (!ck) return "";
+        const iniMin = Math.max(
+          1,
+          Math.round((ck.initialMsPerSide || 10 * 60 * 1000) / 60000)
+        );
+        const incS = Math.max(0, Math.round((ck.incrementMs || 0) / 1000));
+        const base =
+          incS > 0
+            ? ` Laiks: ${iniMin} min + ${incS} s pēc gājiena.`
+            : ` Laiks: ${iniMin} min bez pielikuma.`;
+        return boardState.vsBot
+          ? `${base} (pret botu tavs laiks; botam «bezgalīgi».)`
+          : `${base} Laiks tērējas tikai aktīvā gājiena pusē.`;
+      })();
+      const sel = boardState.selectedCell;
+      if (sel) {
+        const sq = boardCellAlgebraic(sel[0], sel[1]);
+        const n = countChessValidDestinations(
+          sel[0],
+          sel[1],
+          boardState.legalMoves
+        );
+        hintEl.innerHTML =
+          n > 0
+            ? `Izvēlēta figūra <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Spied <strong class="vz-hint-mark vz-hint-mark--move">atļauto</strong> lauciņu (${n} ${n === 1 ? "gājiens" : "gājieni"}). Citur — atcelt vai citu figūru.${clockNote}`
+            : `Izvēlēta <strong class="vz-hint-mark vz-hint-mark--cyan">${sq}</strong>. Nav derīgu lauku — izvēlies citu savu figūru.${clockNote}`;
+      } else {
+        hintEl.innerHTML = `Spied savu figūru, tad <strong class="vz-hint-mark vz-hint-mark--move">atļauto</strong> lauciņu (uz dēļa iezīmēts zaļi). Mainīt — spied citu savu figūru.${clockNote}`;
+      }
+    } else {
+      hintEl.textContent =
+        "Izvēlies savu figūru, pēc tam lauciņu, kur gribi gājienu veikt. Lai mainītu figūru — pieskaries citam savam kauliņam.";
+    }
+  }
 
-  if (boardState.type === "dambrete" && boardState.board) {
+  if (boardState.type === "zole" && boardState.zole) {
+    if (chessContainer) chessContainer.classList.add("hidden");
+    if (dambreteContainer) dambreteContainer.classList.add("hidden");
+    if (window.VZBoardGames?.resetDambreteTable) {
+      window.VZBoardGames.resetDambreteTable();
+    }
+    if (window.VZZoleBoard && zoleContainer) {
+      window.VZZoleBoard.renderZoleBoard(
+        boardState.zole,
+        isMyTurn,
+        (card) => {
+          if (!state.socket || !boardState.gameId) return;
+          state.socket.emit("board.move", {
+            gameId: boardState.gameId,
+            card,
+          });
+          armBoardMoveResponseWait();
+        },
+        {
+          zoleMode: boardState.zoleMode,
+          myIdx,
+          vsBotEndPending:
+            boardState.zoleMode === "vs_bot" &&
+            boardState.zole?.phase === "end" &&
+            boardState.zoleVsBotNextHandPending,
+          onZoleVsBotLastHand: () => {
+            if (!state.socket || !boardState.gameId) return;
+            state.socket.emit("board.zoleVsBotCancelNextHand", {
+              gameId: boardState.gameId,
+            });
+          },
+          onZoleVsBotNextHand: () => {
+            if (!state.socket || !boardState.gameId) return;
+            state.socket.emit("board.zoleVsBotNextHand", {
+              gameId: boardState.gameId,
+            });
+          },
+          onBid: (bid) => {
+            if (!state.socket || !boardState.gameId) return;
+            state.socket.emit("board.move", {
+              gameId: boardState.gameId,
+              bid,
+            });
+            armBoardMoveResponseWait();
+          },
+          onDiscard: (pair) => {
+            if (!state.socket || !boardState.gameId || pair.length !== 2)
+              return;
+            state.socket.emit("board.move", {
+              gameId: boardState.gameId,
+              discard: pair,
+            });
+            armBoardMoveResponseWait();
+          },
+        }
+      );
+      if (window.VZZoleBoard?.syncOpponentAvatars && zoleContainer) {
+        window.VZZoleBoard.syncOpponentAvatars(zoleContainer, applyMiniAvatar);
+      }
+    }
+  } else if (boardState.type === "dambrete" && boardState.board) {
+    if (zoleContainer) {
+      zoleContainer.classList.add("hidden");
+      zoleContainer.innerHTML = "";
+    }
     if (chessContainer) chessContainer.classList.add("hidden");
     if (window.VZBoardGames && dambreteContainer) {
       window.VZBoardGames.renderDambreteBoard(
@@ -9178,11 +13268,27 @@ function renderBoardGame() {
       );
     }
   } else if (boardState.type === "chess" && boardState.fen) {
+    if (zoleContainer) {
+      zoleContainer.classList.add("hidden");
+      zoleContainer.innerHTML = "";
+    }
     if (window.VZBoardGames?.resetDambreteTable) {
       window.VZBoardGames.resetDambreteTable();
     }
     if (dambreteContainer) dambreteContainer.classList.add("hidden");
     if (chessContainer && window.VZBoardGames) {
+      let promoPick = null;
+      const pp = boardState.chessPromotionPick;
+      if (
+        pp &&
+        boardState.selectedCell &&
+        pp.fromR === boardState.selectedCell[0] &&
+        pp.fromC === boardState.selectedCell[1] &&
+        Array.isArray(pp.sans) &&
+        pp.sans.length > 1
+      ) {
+        promoPick = { sans: pp.sans };
+      }
       window.VZBoardGames.renderChessBoard(
         boardState.fen,
         boardState.turn,
@@ -9190,16 +13296,41 @@ function renderBoardGame() {
         myIdx,
         (r, c, isPiece) => handleChessCellClick(r, c, isPiece),
         boardState.selectedCell,
-        boardState.legalMoves
+        boardState.legalMoves,
+        promoPick,
+        emitChessPromotionSan
       );
     }
   }
+  const resignEl = document.getElementById("board-resign-btn");
+  if (resignEl) {
+    const zoleHandOver =
+      boardState.type === "zole" && boardState.zole?.phase === "end";
+    resignEl.classList.toggle("hidden", !boardState.gameId || zoleHandOver);
+  }
+
+  syncZoleStakeBannerInGameArea();
+  syncBoardModalFullscreen();
+  syncBoardBrowserFullscreenUi();
+  syncBoardModalContext();
+  syncChessClockDom();
+  syncChessDrawControls();
 }
 
 async function handleChessCellClick(r, c, isPiece) {
   if (!state.socket || !boardState.gameId) return;
-  const myIdx = boardState.players.indexOf(state.username);
+  const myIdx = boardGamePlayerIndex(boardState.players, state.username);
   if (myIdx !== boardState.turn) return;
+
+  const chBoard = window.VZBoardGames?.parseFenToBoard?.(boardState.fen);
+  const ch = chBoard?.[r]?.[c];
+  if (
+    ch &&
+    ((myIdx === 0 && /[PNBRQK]/.test(ch)) ||
+      (myIdx === 1 && /[pnbrqk]/.test(ch)))
+  ) {
+    isPiece = true;
+  }
 
   if (isPiece) {
     if (
@@ -9208,46 +13339,85 @@ async function handleChessCellClick(r, c, isPiece) {
       boardState.selectedCell[1] === c
     ) {
       boardState.selectedCell = null;
+      boardState.chessPromotionPick = null;
       renderBoardGame();
       return;
     }
     const clickedCell = [r, c];
     boardState.selectedCell = clickedCell;
+    boardState.chessPromotionPick = null;
     renderBoardGame();
-    try {
-      const data = await apiGet(`/board/${boardState.gameId}/moves`);
-      if (
-        boardState.selectedCell &&
-        boardState.selectedCell[0] === clickedCell[0] &&
-        boardState.selectedCell[1] === clickedCell[1]
-      ) {
-        boardState.legalMoves = data || { moves: [] };
-        renderBoardGame();
-      }
-    } catch {}
+    const hasServerMoves = (boardState.legalMoves?.moves || []).length > 0;
+    if (!hasServerMoves) {
+      queueBoardLegalMovesFetch(clickedCell, "chess");
+    }
     return;
   }
 
   if (!boardState.selectedCell) return;
-  const move = window.VZBoardGames?.findChessMove(
+  const multi = window.VZBoardGames?.findChessMovesFromTo?.(
     boardState.selectedCell,
     r,
     c,
     boardState.legalMoves
   );
-  if (!move) {
+  const list = Array.isArray(multi) ? multi : [];
+  if (list.length === 0) {
     boardState.selectedCell = null;
+    boardState.chessPromotionPick = null;
     renderBoardGame();
     return;
   }
-  state.socket.emit("board.move", { gameId: boardState.gameId, san: move.san });
+  if (list.length === 1) {
+    state.socket.emit("board.move", {
+      gameId: boardState.gameId,
+      san: list[0].san,
+    });
+    armBoardMoveResponseWait();
+    boardState.selectedCell = null;
+    boardState.chessPromotionPick = null;
+    return;
+  }
+  const uniq = [...new Set(list.map((m) => m.san).filter(Boolean))];
+  const promoOrder = { q: 0, r: 1, b: 2, n: 3 };
+  uniq.sort((a, b) => {
+    const ca = String(a).slice(-1).toLowerCase();
+    const cb = String(b).slice(-1).toLowerCase();
+    return (promoOrder[ca] ?? 99) - (promoOrder[cb] ?? 99);
+  });
+  const sans = uniq;
+  boardState.chessPromotionPick = {
+    fromR: boardState.selectedCell[0],
+    fromC: boardState.selectedCell[1],
+    toR: r,
+    toC: c,
+    sans,
+  };
+  renderBoardGame();
+}
+
+function emitChessPromotionSan(san) {
+  if (!state.socket || !boardState.gameId || !san) return;
+  state.socket.emit("board.move", { gameId: boardState.gameId, san });
+  armBoardMoveResponseWait();
   boardState.selectedCell = null;
+  boardState.chessPromotionPick = null;
+  renderBoardGame();
 }
 
 async function handleDambreteCellClick(r, c, isPiece) {
   if (!state.socket || !boardState.gameId) return;
-  const myIdx = boardState.players.indexOf(state.username);
+  const myIdx = boardGamePlayerIndex(boardState.players, state.username);
   if (myIdx !== boardState.turn) return;
+
+  const cellPiece = boardState.board?.[r]?.[c] ?? 0;
+  const absP = Math.abs(cellPiece);
+  if (
+    (absP === 1 || absP === 2) &&
+    ((myIdx === 0 && cellPiece > 0) || (myIdx === 1 && cellPiece < 0))
+  ) {
+    isPiece = true;
+  }
 
   if (isPiece) {
     if (
@@ -9259,20 +13429,27 @@ async function handleDambreteCellClick(r, c, isPiece) {
       renderBoardGame();
       return;
     }
+    const jumps = boardState.legalMoves?.jumps || [];
+    if (jumps.length > 0) {
+      let canStartJumpHere = false;
+      for (let i = 0; i < jumps.length; i++) {
+        const first = jumps[i].jumps && jumps[i].jumps[0];
+        if (first && first.from[0] === r && first.from[1] === c) {
+          canStartJumpHere = true;
+          break;
+        }
+      }
+      if (!canStartJumpHere) return;
+    }
     const clickedCell = [r, c];
     boardState.selectedCell = clickedCell;
     renderBoardGame();
-    try {
-      const data = await apiGet(`/board/${boardState.gameId}/moves`);
-      if (
-        boardState.selectedCell &&
-        boardState.selectedCell[0] === clickedCell[0] &&
-        boardState.selectedCell[1] === clickedCell[1]
-      ) {
-        boardState.legalMoves = data || { jumps: [], moves: [] };
-        renderBoardGame();
-      }
-    } catch {}
+    const hasServerMoves =
+      (boardState.legalMoves?.jumps || []).length > 0 ||
+      (boardState.legalMoves?.moves || []).length > 0;
+    if (!hasServerMoves) {
+      queueBoardLegalMovesFetch(clickedCell, "dambrete");
+    }
     return;
   }
 
@@ -9308,11 +13485,36 @@ async function handleDambreteCellClick(r, c, isPiece) {
     return;
   }
   state.socket.emit("board.move", { gameId: boardState.gameId, move });
+  armBoardMoveResponseWait();
   boardState.selectedCell = null;
 }
 
+function boardGamesEnsureSocketConnected() {
+  if (!state.token) {
+    appendGaldaSystemMessage(
+      "Lai spēlētu, vispirms pieslēdzies (izraksties un ieej vēlreiz)."
+    );
+    return false;
+  }
+  if (!state.socket) {
+    appendGaldaSystemMessage(
+      "Nav servera savienojuma. Gaidi ziņu «Pieslēgts…» vai atsvaidzini lapu."
+    );
+    return false;
+  }
+  if (!state.socket.connected) {
+    appendGaldaSystemMessage(
+      "Savienojums vēl nav gatavs. Pagaidi brīdi vai atsvaidzini lapu."
+    );
+    return false;
+  }
+  return true;
+}
+
 function bindBoardGames() {
-  const btn = document.getElementById("board-games-btn");
+  document
+    .querySelectorAll("#board-games-hero-btn, #board-games-nav-btn")
+    .forEach((el) => el.addEventListener("click", showBoardModal));
   const closeBtn = document.getElementById("board-modal-close");
   const inviteDambrete = document.getElementById("board-invite-dambrete");
   const inviteChess = document.getElementById("board-invite-chess");
@@ -9322,59 +13524,304 @@ function bindBoardGames() {
   const resignBtn = document.getElementById("board-resign-btn");
   const ppInviteDambrete = document.getElementById("pp-invite-dambrete");
   const ppInviteChess = document.getElementById("pp-invite-chess");
+  const ppInviteZole = document.getElementById("pp-invite-zole");
 
-  if (btn) btn.addEventListener("click", showBoardModal);
   if (closeBtn) closeBtn.addEventListener("click", hideBoardModal);
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape" || ev.defaultPrevented) return;
+    const modal = document.getElementById("board-games-modal");
+    const res = document.getElementById("board-result-overlay");
+    if (!modal || modal.classList.contains("hidden")) return;
+    if (res && !res.classList.contains("hidden")) return;
+    ev.preventDefault();
+    hideBoardModal();
+  });
+  const backToWords = () => {
+    hideBoardModal();
+    document
+      .getElementById("vz-section-game")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  document
+    .getElementById("board-back-words-btn")
+    ?.addEventListener("click", backToWords);
+  document
+    .getElementById("board-compact-back-words-btn")
+    ?.addEventListener("click", backToWords);
+  const boardResultClose = document.getElementById("board-result-close");
+  const boardResultOverlay = document.getElementById("board-result-overlay");
+  if (boardResultClose)
+    boardResultClose.addEventListener("click", hideBoardResultOverlay);
+  document
+    .getElementById("board-result-play-again-vsbot")
+    ?.addEventListener("click", () => {
+      const btn = document.getElementById("board-result-play-again-vsbot");
+      const t = String(btn?.dataset?.gameType || "").toLowerCase();
+      if (!t || (t !== "dambrete" && t !== "chess")) return;
+      hideBoardResultOverlay();
+      showBoardModal();
+      const diffEl = document.querySelector(
+        'input[name="board-bot-diff"]:checked'
+      );
+      const difficulty = diffEl?.value || "medium";
+      const payload = { type: t, difficulty };
+      if (t === "dambrete")
+        payload.dambreteVariant = getSelectedBoardDambreteVariant();
+      if (t === "chess")
+        payload.chessClockPreset = getChessClockPresetForVsBot();
+      if (!boardGamesEnsureSocketConnected()) return;
+      const gameArea = document.getElementById("board-game-area");
+      const lobby = document.getElementById("board-games-lobby");
+      if (gameArea) gameArea.classList.remove("hidden");
+      if (lobby) lobby.classList.add("hidden");
+      state.socket.emit("board.startVsBot", payload);
+      stopBoardInviteOutgoingWait();
+    });
+  document
+    .getElementById("board-result-rematch")
+    ?.addEventListener("click", sendBoardRematchInvite);
+  if (boardResultOverlay) {
+    boardResultOverlay.addEventListener("click", (e) => {
+      if (e.target === boardResultOverlay) hideBoardResultOverlay();
+    });
+  }
   const doInvite = (type) => {
     const target = inviteUsername?.value?.trim() || currentProfileName?.trim();
     if (!target) {
-      appendSystemMessage("Ievadi spēlētāja lietotājvārdu.");
+      appendGaldaSystemMessage("Ievadi spēlētāja lietotājvārdu.");
       return;
     }
-    if (!state.socket) return;
-    state.socket.emit("board.invite", { target, type });
-    document.getElementById("board-invite-pending")?.classList.remove("hidden");
+    if (!boardGamesEnsureSocketConnected()) return;
+    const payload = { target, type };
+    if (type === "dambrete")
+      payload.dambreteVariant = getSelectedBoardDambreteVariant();
+    if (type === "chess")
+      payload.chessClockPreset = getChessClockPresetForPvp();
+    if (type === "zole") {
+      const zm = getSelectedBoardZoleMode();
+      if (zm !== "online_2p" && zm !== "online_3p") {
+        appendGaldaSystemMessage(
+          "Drauga zolei izvēlies «3 cilvēki» vai «2 cilvēki + bots»."
+        );
+        return;
+      }
+      if (zm === "online_3p") {
+        const snap = zole3pLobbySnapshot;
+        const me = String(state.username || "")
+          .trim()
+          .toLowerCase();
+        const hostLc = String(snap?.host || "")
+          .trim()
+          .toLowerCase();
+        const inRoom = (snap?.players || []).some(
+          (p) => String(p).trim().toLowerCase() === me
+        );
+        if (!snap?.zoleLobby || hostLc !== me || !inRoom) {
+          appendGaldaSystemMessage(
+            "Zolei ar 3 cilvēkiem vispirms spied «Izveidot zoles istabu», tad uzaicini draugus."
+          );
+          return;
+        }
+      }
+      payload.zoleMode = zm;
+    }
+    state.socket.emit("board.invite", payload);
   };
   if (inviteDambrete)
     inviteDambrete.addEventListener("click", () => doInvite("dambrete"));
   if (inviteChess)
     inviteChess.addEventListener("click", () => doInvite("chess"));
+  const inviteZole = document.getElementById("board-invite-zole");
+  if (inviteZole) inviteZole.addEventListener("click", () => doInvite("zole"));
+  applyChessPresetFromStorage();
+  document
+    .getElementById("board-chess-time-preset")
+    ?.addEventListener("change", (ev) => {
+      persistChessPresetSelect(ev.target, CHESS_PVP_PRESET_STORAGE);
+    });
+  document
+    .getElementById("board-chess-time-preset-vsbot")
+    ?.addEventListener("change", (ev) => {
+      persistChessPresetSelect(ev.target, CHESS_BOT_PRESET_STORAGE);
+    });
   const vsBotDambrete = document.getElementById("board-vsbot-dambrete");
   const vsBotChess = document.getElementById("board-vsbot-chess");
   const doVsBot = (type) => {
-    if (!state.socket) return;
+    if (!boardGamesEnsureSocketConnected()) return;
     const diffEl = document.querySelector(
       'input[name="board-bot-diff"]:checked'
     );
     const difficulty = diffEl?.value || "medium";
-    state.socket.emit("board.startVsBot", { type, difficulty });
-    document.getElementById("board-invite-pending")?.classList.add("hidden");
+    const payload = { type, difficulty };
+    if (type === "dambrete")
+      payload.dambreteVariant = getSelectedBoardDambreteVariant();
+    if (type === "zole") payload.zoleMode = "vs_bot";
+    if (type === "chess")
+      payload.chessClockPreset = getChessClockPresetForVsBot();
+    showBoardModal();
+    const gameArea = document.getElementById("board-game-area");
+    const lobby = document.getElementById("board-games-lobby");
+    if (gameArea) gameArea.classList.remove("hidden");
+    if (lobby) lobby.classList.add("hidden");
+    state.socket.emit("board.startVsBot", payload);
+    stopBoardInviteOutgoingWait();
   };
   if (vsBotDambrete)
     vsBotDambrete.addEventListener("click", () => doVsBot("dambrete"));
   if (vsBotChess) vsBotChess.addEventListener("click", () => doVsBot("chess"));
+  const vsBotZole = document.getElementById("board-vsbot-zole");
+  if (vsBotZole) vsBotZole.addEventListener("click", () => doVsBot("zole"));
   if (acceptBtn)
     acceptBtn.addEventListener("click", () => {
       const invite = document.getElementById("board-games-invite");
       const from = invite?.dataset?.from || "";
       const type = invite?.dataset?.type || "dambrete";
-      if (state.socket)
-        state.socket.emit("board.accept", { inviteId: "", from, type });
+      const isZoleThird = invite?.dataset?.zoleThirdSeat === "1";
+      if (isZoleThird && type === "zole" && state.socket) {
+        state.socket.emit("board.zoleAcceptThird", {
+          inviteId: String(invite?.dataset?.inviteId || "").trim(),
+          from,
+          lobbyId: String(invite?.dataset?.zoleLobbyId || "").trim(),
+        });
+        hideBoardInviteModal();
+        return;
+      }
+      const acc = {
+        inviteId: String(invite?.dataset?.inviteId || "").trim(),
+        from,
+        type,
+      };
+      if (type === "dambrete" && invite?.dataset?.dambreteVariant)
+        acc.dambreteVariant = invite.dataset.dambreteVariant;
+      if (type === "zole" && invite?.dataset?.zoleMode)
+        acc.zoleMode = invite.dataset.zoleMode;
+      if (state.socket) state.socket.emit("board.accept", acc);
       hideBoardInviteModal();
     });
-  if (declineBtn) declineBtn.addEventListener("click", hideBoardInviteModal);
+  if (declineBtn)
+    declineBtn.addEventListener("click", () => {
+      const invite = document.getElementById("board-games-invite");
+      const isZoleThird =
+        invite?.dataset?.zoleThirdSeat === "1" &&
+        (invite?.dataset?.type || "") === "zole";
+      if (isZoleThird && state.socket) {
+        state.socket.emit("board.zoleDeclineThird", {
+          inviteId: String(invite?.dataset?.inviteId || "").trim(),
+        });
+        hideBoardInviteModal();
+        return;
+      }
+      const from = String(invite?.dataset?.from || "").trim();
+      const type = invite?.dataset?.type || "dambrete";
+      if (from && state.socket) {
+        state.socket.emit("board.inviteDecline", { from, type });
+      } else {
+        hideBoardInviteModal();
+      }
+    });
+  document
+    .getElementById("board-invite-pending-cancel")
+    ?.addEventListener("click", () => {
+      const pending = document.getElementById("board-invite-pending");
+      const target = String(pending?.dataset?.waitTarget || "").trim();
+      if (!target || !state.socket) return;
+      state.socket.emit("board.inviteCancel", { target });
+    });
+  const zole3pInviteThird = document.getElementById(
+    "board-zole-3p-invite-third"
+  );
+  const zole3pCancel = document.getElementById("board-zole-3p-cancel-lobby");
+  const zole3pThirdInput = document.getElementById("board-zole-3p-third");
+  if (zole3pInviteThird)
+    zole3pInviteThird.addEventListener("click", () => {
+      const t = zole3pThirdInput?.value?.trim();
+      if (!t) {
+        appendGaldaSystemMessage("Ievadi trešā spēlētāja vārdu.");
+        return;
+      }
+      if (!state.socket) return;
+      state.socket.emit("board.zoleInviteThird", { target: t });
+    });
+  if (zole3pCancel)
+    zole3pCancel.addEventListener("click", () => {
+      if (state.socket) state.socket.emit("board.zoleCancelLobby");
+      zole3pLobbySnapshot = null;
+      document.getElementById("board-zole-3p-lobby")?.classList.add("hidden");
+      syncBoardDambreteModePanelVisibility();
+    });
   if (resignBtn)
     resignBtn.addEventListener("click", () => {
-      if (boardState.gameId && state.socket)
-        state.socket.emit("board.resign", { gameId: boardState.gameId });
+      if (!boardState.gameId || !state.socket) return;
+      state.socket.emit("board.resign", { gameId: boardState.gameId });
     });
+  document
+    .getElementById("board-chess-draw-offer")
+    ?.addEventListener("click", () => {
+      if (!boardState.gameId || !state.socket || boardState.type !== "chess")
+        return;
+      state.socket.emit("board.chessDrawOffer", { gameId: boardState.gameId });
+    });
+  document
+    .getElementById("board-chess-draw-accept")
+    ?.addEventListener("click", () => {
+      if (!boardState.gameId || !state.socket || boardState.type !== "chess")
+        return;
+      state.socket.emit("board.chessDrawAccept", { gameId: boardState.gameId });
+    });
+  document
+    .getElementById("board-chess-draw-decline")
+    ?.addEventListener("click", () => {
+      if (!boardState.gameId || !state.socket || boardState.type !== "chess")
+        return;
+      state.socket.emit("board.chessDrawDecline", {
+        gameId: boardState.gameId,
+      });
+    });
+  document
+    .getElementById("board-chess-claim-draw")
+    ?.addEventListener("click", () => {
+      if (!boardState.gameId || !state.socket || boardState.type !== "chess")
+        return;
+      state.socket.emit("board.chessClaimDraw", { gameId: boardState.gameId });
+    });
+  const boardFsBtn = document.getElementById("board-browser-fs-btn");
+  if (boardFsBtn) {
+    boardFsBtn.addEventListener("click", async () => {
+      const modal = document.getElementById("board-games-modal");
+      if (!modal || modal.classList.contains("hidden")) return;
+      try {
+        if (document.fullscreenElement === modal) {
+          await document.exitFullscreen();
+        } else if (modal.requestFullscreen) {
+          await modal.requestFullscreen();
+        } else {
+          appendGaldaSystemMessage(
+            "Šis pārlūks neatbalsta pilnekrānu. iPhone: pievieno spēli sākumekrānam. Android: izmanto «Pilnekrāna spēle» galvenajā izvēlnē."
+          );
+        }
+      } catch {
+        appendGaldaSystemMessage(
+          "Pilnekrānu nevarēja ieslēgt. Mēģini citu pārlūku vai pievieno spēli sākumekrānam."
+        );
+      }
+    });
+  }
+  document.addEventListener("fullscreenchange", () => {
+    syncBoardBrowserFullscreenUi();
+  });
   if (ppInviteDambrete)
     ppInviteDambrete.addEventListener("click", () => {
       const target = currentProfileName?.trim();
       if (target && state.socket) {
         showBoardModal();
+        setBoardLobbyGameTab("dambrete");
+        syncBoardGamePickTab();
         if (inviteUsername) inviteUsername.value = target;
-        state.socket.emit("board.invite", { target, type: "dambrete" });
+        state.socket.emit("board.invite", {
+          target,
+          type: "dambrete",
+          dambreteVariant: getSelectedBoardDambreteVariant(),
+        });
       }
     });
   if (ppInviteChess)
@@ -9382,9 +13829,163 @@ function bindBoardGames() {
       const target = currentProfileName?.trim();
       if (target && state.socket) {
         showBoardModal();
+        setBoardLobbyGameTab("chess");
+        syncBoardGamePickTab();
         if (inviteUsername) inviteUsername.value = target;
-        state.socket.emit("board.invite", { target, type: "chess" });
+        state.socket.emit("board.invite", {
+          target,
+          type: "chess",
+          chessClockPreset: getChessClockPresetForPvp(),
+        });
       }
+    });
+  if (ppInviteZole)
+    ppInviteZole.addEventListener("click", () => {
+      const target = currentProfileName?.trim();
+      if (target && state.socket) {
+        showBoardModal();
+        setBoardLobbyGameTab("zole");
+        syncBoardGamePickTab();
+        if (inviteUsername) inviteUsername.value = target;
+        appendGaldaSystemMessage(
+          "Zolei ar 3 cilvēkiem: spied «Izveidot zoles istabu», tad «Uzaicināt uz zoli» ar šo vārdu formā."
+        );
+      }
+    });
+  document.querySelectorAll(".js-zole-create-lobby").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (!state.socket) return;
+      const stakeEl = document.getElementById("board-zole-3p-stake");
+      const cpp = Math.max(
+        0,
+        Math.min(5, Math.floor(Number(stakeEl?.value) || 0))
+      );
+      state.socket.emit("board.zoleCreateLobby", { zole3pCoinsPerPoint: cpp });
+    });
+  });
+  document
+    .getElementById("board-zole-3p-stake")
+    ?.addEventListener("change", () => {
+      if (!state.socket) return;
+      const snap = zole3pLobbySnapshot;
+      if (!snap?.zoleLobby) return;
+      const me = String(state.username || "").trim();
+      const host = String(snap.host || "").trim();
+      if (!me || !host || me.toLowerCase() !== host.toLowerCase()) return;
+      if ((snap.players || []).length >= 3) return;
+      const cpp = Math.max(
+        0,
+        Math.min(
+          5,
+          Math.floor(
+            Number(document.getElementById("board-zole-3p-stake")?.value) || 0
+          )
+        )
+      );
+      state.socket.emit("board.zoleSetLobbyStake", {
+        zole3pCoinsPerPoint: cpp,
+      });
+    });
+  document
+    .getElementById("board-zole-3p-leave-lobby")
+    ?.addEventListener("click", () => {
+      if (state.socket) state.socket.emit("board.zoleLeaveLobby");
+    });
+  document.querySelectorAll('input[name="board-zole-mode"]').forEach((el) => {
+    el.addEventListener("change", () => {
+      syncBoardDambreteModePanelVisibility();
+      syncBoardGamePickTab();
+    });
+  });
+  document.getElementById("board-pick-zole")?.addEventListener("click", () => {
+    setBoardLobbyGameTab("zole");
+    syncBoardGamePickTab();
+  });
+  document.getElementById("board-pick-chess")?.addEventListener("click", () => {
+    setBoardLobbyGameTab("chess");
+    syncBoardGamePickTab();
+  });
+  document
+    .getElementById("board-pick-dambrete")
+    ?.addEventListener("click", () => {
+      setBoardLobbyGameTab("dambrete");
+      syncBoardGamePickTab();
+    });
+  syncBoardChessTimeRowVisibility();
+  document
+    .getElementById("board-zole-3p-open-lobbies")
+    ?.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".js-zole-open-lobby-join");
+      if (!btn || btn.disabled) return;
+      const lid = String(btn.dataset.zoleLobbyId || "").trim();
+      if (!lid) return;
+      const label = String(btn.textContent || "").trim();
+      if (label === "Atvērt") {
+        showBoardModal();
+        const snap = zole3pLobbySnapshot;
+        if (String(snap?.lobbyId || "").trim() === lid) {
+          updateZole3pLobbyUI(snap);
+        }
+        return;
+      }
+      if (!boardGamesEnsureSocketConnected()) return;
+      state.socket.emit("board.zoleJoinOpenLobby", { lobbyId: lid });
+    });
+  document
+    .getElementById("board-dambrete-open-seat-publish")
+    ?.addEventListener("click", () => {
+      if (!boardGamesEnsureSocketConnected()) return;
+      state.socket.emit("board.openSeatPublish", {
+        type: "dambrete",
+        dambreteVariant: getSelectedBoardDambreteVariant(),
+      });
+    });
+  document
+    .getElementById("board-chess-open-seat-publish")
+    ?.addEventListener("click", () => {
+      if (!boardGamesEnsureSocketConnected()) return;
+      state.socket.emit("board.openSeatPublish", {
+        type: "chess",
+        chessClockPreset: getChessClockPresetForPvp(),
+      });
+    });
+  document
+    .getElementById("board-dambrete-open-seat-cancel")
+    ?.addEventListener("click", () => {
+      if (!boardGamesEnsureSocketConnected()) return;
+      state.socket.emit("board.openSeatCancel");
+    });
+  document
+    .getElementById("board-chess-open-seat-cancel")
+    ?.addEventListener("click", () => {
+      if (!boardGamesEnsureSocketConnected()) return;
+      state.socket.emit("board.openSeatCancel");
+    });
+  document
+    .getElementById("board-dambrete-open-seats")
+    ?.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".js-board-open-seat-join");
+      if (!btn || btn.disabled) return;
+      const host = String(btn.dataset.openSeatHost || "").trim();
+      if (!host) return;
+      if (!boardGamesEnsureSocketConnected()) return;
+      state.socket.emit("board.requestOpenSeatInvite", {
+        host,
+        type: "dambrete",
+      });
+    });
+  document
+    .getElementById("board-chess-open-seats")
+    ?.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".js-board-open-seat-join");
+      if (!btn || btn.disabled) return;
+      const host = String(btn.dataset.openSeatHost || "").trim();
+      if (!host) return;
+      if (!boardGamesEnsureSocketConnected()) return;
+      state.socket.emit("board.requestOpenSeatInvite", {
+        host,
+        type: "chess",
+      });
     });
 }
 
@@ -9502,7 +14103,7 @@ function ensureDailyChestUi() {
   btn.id = "vz-daily-chest-btn";
   btn.type = "button";
   btn.className = "mission-claim-btn";
-  btn.textContent = "🎁 Daily Chest";
+  btn.textContent = "🎁 Dienas lāde";
   btn.addEventListener("click", () => handleDailyChestClick());
 
   const sub = document.createElement("div");
@@ -9534,12 +14135,12 @@ function renderDailyChestUi(status) {
 
   if (available) {
     btn.disabled = false;
-    btn.textContent = "🎁 Atvērt Daily Chest";
+    btn.textContent = "🎁 Atvērt dienas lādi";
     sub.textContent = streak > 0 ? `Streak: ${streak}` : "Gatavs atvēršanai";
   } else {
     btn.disabled = false;
     const left = nextAt ? nextAt - Date.now() : 0;
-    btn.textContent = "🎁 Daily Chest (šodien jau atvērts)";
+    btn.textContent = "🎁 Dienas lāde (šodien jau atvērta)";
     sub.textContent = nextAt
       ? `Nākamais pēc: ${formatMsShort(left)}`
       : "Nāc rīt!";
@@ -9553,6 +14154,7 @@ async function refreshDailyChestStatus() {
     _chestStatus = s;
     ensureDailyChestUi();
     renderDailyChestUi(s);
+    renderDailyAnchorCard();
     renderEngagementLoopCard();
   } catch (err) {
     console.warn("Daily Chest status kļūda:", err);
@@ -9581,7 +14183,7 @@ async function openDailyChestNow() {
     const streak = Number(data?.streak) || 0;
 
     appendSystemMessage(
-      `🎁 Daily Chest atvērts: ${parts.join(", ") || "balva"} (streak ${streak})`
+      `🎁 Dienas lāde atvērta: ${parts.join(", ") || "balva"} (streak ${streak})`
     );
     animateDailyChestReward();
     playSound(sCoin);
@@ -9868,7 +14470,8 @@ async function openDiscordShare(text) {
 
 async function handleShare() {
   const url = window.location.href;
-  const text = "VĀRDU ZONA – nāc uzspēlē latviešu Word battle!";
+  const text =
+    "VĀRDU ZONA — latviešu vārdi, šahs, dambrete un zole vienā lietotnē. Nāc spēlēt!";
 
   if (navigator.share) {
     try {
@@ -9888,13 +14491,15 @@ async function handleShare() {
 
 function handleShareWhatsapp() {
   const url = window.location.href;
-  const text = "VĀRDU ZONA – nāc uzspēlē latviešu Word battle!";
+  const text =
+    "VĀRDU ZONA — latviešu vārdi, šahs, dambrete un zole vienā lietotnē. Nāc spēlēt!";
   openWhatsappShare(`${text} ${url}`);
 }
 
 function handleShareDiscord() {
   const url = window.location.href;
-  const text = "VĀRDU ZONA – nāc uzspēlē latviešu Word battle!";
+  const text =
+    "VĀRDU ZONA — latviešu vārdi, šahs, dambrete un zole vienā lietotnē. Nāc spēlēt!";
   openDiscordShare(`${text} ${url}`);
 }
 
@@ -9931,7 +14536,7 @@ function buildShareMatrix(rowsUsed) {
 
 function buildShareGridText(matrix) {
   const map = {
-    correct: "🟩",
+    correct: "🟥",
     present: "🟨",
     absent: "⬛",
     empty: "⬜",
@@ -9996,12 +14601,11 @@ async function buildShareSticker(data) {
   const cell = Math.floor(Math.min(78, maxGridWidth / cols));
   const gap = Math.max(6, Math.floor(cell * 0.12));
   const gridW = cols * cell + (cols - 1) * gap;
-  const gridH = rows * cell + (rows - 1) * gap;
   const startX = Math.floor((width - gridW) / 2);
   const startY = 300;
 
   const colors = {
-    correct: "#00c853",
+    correct: "#9d2235",
     present: "#ff9100",
     absent: "#1a1b2e",
     empty: "#2a2a2c",
@@ -10218,8 +14822,6 @@ function setFullscreenBottomButtons(on) {
     }
   }
 }
-let _logoutHome = null;
-
 function keepActionButtonsTogether() {
   if (!newRoundBtn) return;
 
@@ -10227,14 +14829,6 @@ function keepActionButtonsTogether() {
   if (!wrap) return;
 
   if (!wrap.contains(newRoundBtn)) wrap.appendChild(newRoundBtn);
-}
-
-function restoreLogoutButtonHome() {
-  if (!_logoutHome || !logoutBtn) return;
-  const { parent, next } = _logoutHome;
-  if (!parent) return;
-  if (next) parent.insertBefore(logoutBtn, next);
-  else parent.appendChild(logoutBtn);
 }
 async function initGame() {
   const token = getStoredFirst(AUTH_KEYS.token);
@@ -10313,13 +14907,46 @@ async function initGame() {
     });
   }
 
-  if (!navigator.onLine) setOfflineOverlay(true);
-  window.addEventListener("offline", () => setOfflineOverlay(true));
-  window.addEventListener("online", () => setOfflineOverlay(false));
+  function resetOfflineOverlayToBrowserDefault() {
+    if (offlineTitleEl) offlineTitleEl.textContent = "Nav interneta";
+    if (offlineTextEl)
+      offlineTextEl.textContent = "Pārbaudi savienojumu un mēģini vēlreiz.";
+    if (offlineHintEl) {
+      offlineHintEl.textContent = "";
+      offlineHintEl.classList.add("hidden");
+    }
+    if (offlineLoginBtn) offlineLoginBtn.classList.add("hidden");
+    if (offlineRetryBtn) offlineRetryBtn.textContent = "Mēģināt vēlreiz";
+  }
+
+  if (!navigator.onLine) {
+    resetOfflineOverlayToBrowserDefault();
+    setOfflineOverlay(true);
+  }
+  window.addEventListener("offline", () => {
+    resetOfflineOverlayToBrowserDefault();
+    setOfflineOverlay(true);
+    appendVzStatusMessage(
+      "Pārlūks ziņo: nav interneta. Kad tīkls atgriežas, atjaunosies automātiski vai atsvaidzini lapu."
+    );
+  });
+  window.addEventListener("online", () => {
+    setOfflineOverlay(false);
+    _vzConnIssueLastKey = "";
+    appendVzStatusMessage(
+      "Pārlūks ziņo: internets atkal pieejams — gaidu servera savienojumu…"
+    );
+  });
   if (offlineRetryBtn) {
     offlineRetryBtn.addEventListener("click", () => {
       setOfflineOverlay(false);
       window.location.reload();
+    });
+  }
+  if (offlineLoginBtn) {
+    offlineLoginBtn.addEventListener("click", () => {
+      setOfflineOverlay(false);
+      window.location.href = "index.html#session";
     });
   }
   if (rateLaterBtn) {
@@ -10422,7 +15049,7 @@ async function initGame() {
     appInstallPwaBtn.addEventListener("click", async () => {
       if (!deferredInstallPrompt) return;
       deferredInstallPrompt.prompt();
-      const { outcome } = await deferredInstallPrompt.userChoice;
+      await deferredInstallPrompt.userChoice;
       deferredInstallPrompt = null;
       if (appInstallPwaRow) appInstallPwaRow.style.display = "none";
       if (appInstallModal) appInstallModal.classList.add("hidden");
@@ -10523,6 +15150,12 @@ async function initGame() {
   if (vipRoomCreateBtnEl) {
     vipRoomCreateBtnEl.addEventListener("click", handleVipRoomCreate);
   }
+  if (vipQuickTournamentCreateBtnEl) {
+    vipQuickTournamentCreateBtnEl.addEventListener(
+      "click",
+      handleVipQuickTournamentCreate
+    );
+  }
   if (tournamentScore1InputEl) {
     tournamentScore1InputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
@@ -10552,6 +15185,23 @@ async function initGame() {
         e.preventDefault();
         friendAddBtnEl.click();
       }
+    });
+  }
+
+  if (friendsFilterInputEl) {
+    try {
+      const saved = sessionStorage.getItem("vz_friend_list_filter");
+      if (saved) {
+        state.friendListFilter = saved;
+        friendsFilterInputEl.value = saved;
+      }
+    } catch (_) {}
+    friendsFilterInputEl.addEventListener("input", () => {
+      state.friendListFilter = String(friendsFilterInputEl.value || "");
+      try {
+        sessionStorage.setItem("vz_friend_list_filter", state.friendListFilter);
+      } catch (_) {}
+      renderFriends();
     });
   }
 
@@ -10824,6 +15474,16 @@ async function initGame() {
       if (e.key === "Enter") handleProfileEmailSave();
     });
   }
+  syncGiveawayAnchorButton();
+  if (ppBetaSubmitBtn)
+    ppBetaSubmitBtn.addEventListener("click", handleProfileBetaOptIn);
+  if (ppNhlTeamSaveBtn)
+    ppNhlTeamSaveBtn.addEventListener("click", handleProfileNhlTeamSave);
+  if (ppNhlTeamInputEl) {
+    ppNhlTeamInputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") handleProfileNhlTeamSave();
+    });
+  }
 
   if (duelOkBtn) {
     duelOkBtn.type = "button";
@@ -10848,11 +15508,19 @@ async function initGame() {
       ev && ev.reason && ev.reason.message
         ? ev.reason.message
         : "Nezināma kļūda (Promise).";
+    if (/ResizeObserver loop/i.test(String(msg))) {
+      console.warn("unhandledrejection (benign, ignored for chat):", ev.reason);
+      return;
+    }
     console.error("unhandledrejection:", ev.reason);
     appendSystemMessage("⚠️ Kļūda: " + msg);
   });
   window.addEventListener("error", (ev) => {
     const msg = ev && ev.message ? ev.message : "Nezināma kļūda.";
+    if (/ResizeObserver loop/i.test(String(msg))) {
+      console.warn("window.error (benign, ignored for chat):", msg);
+      return;
+    }
     console.error("window.error:", ev);
     appendSystemMessage("⚠️ Kļūda: " + msg);
   });
@@ -10906,8 +15574,14 @@ async function initGame() {
     await runPostLoginInit();
   } catch (err) {
     console.error("Init /me kļūda:", err);
+    try {
+      sessionStorage.setItem(
+        "vz_auth_notice",
+        "Neizdevās ielādēt kontu no servera. Ielogojies vēlreiz."
+      );
+    } catch {}
     clearStoredAuth();
-    window.location.href = "index.html";
+    window.location.href = "index.html#session";
   }
 }
 
@@ -10939,20 +15613,8 @@ function showLevelUpAnimation(level, rankTitle) {
       particleCount: 100,
       spread: 100,
       origin: { y: 0.5 },
-      colors: ["#ffd700", "#ff8c00", "#00c853"],
+      colors: ["#ffd700", "#ff8c00", "#9d2235"],
     });
   }
   _levelUpDismissTimer = setTimeout(dismiss, 4000);
-}
-
-// Rezerves flash (ja kaut kur gribi izsaukt manuāli)
-function triggerWinFlash() {
-  const flashElement = document.getElementById("screen-flash");
-  if (!flashElement) return;
-
-  flashElement.classList.add("vz-screen-flash-active");
-  setTimeout(
-    () => flashElement.classList.remove("vz-screen-flash-active"),
-    300
-  );
 }

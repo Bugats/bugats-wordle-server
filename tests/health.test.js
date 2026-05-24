@@ -10,6 +10,16 @@ describe("GET /health", () => {
   });
 });
 
+describe("GET /metrics", () => {
+  it("returns board counters in test (no METRICS_TOKEN)", async () => {
+    const res = await request(app).get("/metrics");
+    expect(res.status).toBe(200);
+    expect(res.body?.ok).toBe(true);
+    expect(typeof res.body?.activeBoardGames).toBe("number");
+    expect(typeof res.body?.onlineUsers).toBe("number");
+  });
+});
+
 describe("GET /meta/storage", () => {
   it("returns avatar and users storage type", async () => {
     const res = await request(app).get("/meta/storage");

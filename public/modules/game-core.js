@@ -76,8 +76,13 @@
       refreshTokenExpiresAt: 0,
       username: null,
       email: "",
+      betaTester: false,
+      betaOptInRequestedAt: 0,
+      giveawayNhlTeam: "",
+      giveawayNhlAbbr: "",
       region: "",
       regionPoints: 0,
+      regionBoost: 0,
       regionAttackTarget: "",
       regionAttackRegion: "",
       regionAttackLimit: null,
@@ -102,6 +107,7 @@
       friendInvitesIn: [],
       friendInvitesOut: [],
       onlineUsers: new Set(),
+      onlineMiniByUser: new Map(),
       lastShareResult: null,
       rows: 6,
       cols: 5,
@@ -138,6 +144,7 @@
 
       // Turniri
       tournaments: [],
+      recentTournaments: [],
       tournamentActiveId: null,
       tournamentReportCtx: null,
       tournamentDisputeCtx: null,
@@ -158,6 +165,13 @@
       pendingDuelInvites: [],
       seenOfflineDuelInviteKeys: new Set(),
 
+      /** Draugu kopsavilkums no servera (online + galds + klana tags) */
+      friendSummaries: [],
+      /** Meklēšanas teksts draugu sarakstā (klienta filtrs) */
+      friendListFilter: "",
+      /** Pēdējais /me objekts sociālajam pulsam */
+      lastMeForSocial: null,
+
       // Globālā skaņa
       soundOn: true,
 
@@ -175,6 +189,9 @@
       missionBonus: null,
       loopPrimaryAction: null,
       loopPrimaryActionKey: "",
+
+      stripeCoinsEnabled: false,
+      stripeCoinPacks: [],
     };
   }
 

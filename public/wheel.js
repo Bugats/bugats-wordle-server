@@ -103,12 +103,6 @@ function easeOutCubic(t) {
   return 1 - Math.pow(1 - t, 3);
 }
 
-function normalizeAngle(a) {
-  let x = a % TAU;
-  if (x < 0) x += TAU;
-  return x;
-}
-
 function abbr(name) {
   const s = String(name || "").trim();
   if (!s) return "—";

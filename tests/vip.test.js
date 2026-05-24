@@ -70,6 +70,34 @@ describe("VIP tournament access", () => {
     expect(createRes.status).toBe(200);
     expect(createRes.body?.ok).toBe(true);
 
+    /* Otrs VIP — lai nav cooldown pēc pirmā turnīra */
+    const username2 = `vip2${Date.now().toString().slice(-8)}`;
+    const vipToken2 = await ensureUserToken({
+      username: username2,
+      password: "Test12345",
+      email: `${username2}@example.com`,
+    });
+    const grant2 = await request(app)
+      .post("/admin/vip/grant")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ username: username2, days: 30 });
+    expect(grant2.status).toBe(200);
+
+    const quickName = `Quick VIP ${Date.now().toString().slice(-6)}`;
+    const quickRes = await request(app)
+      .post("/tournaments")
+      .set("Authorization", `Bearer ${vipToken2}`)
+      .send({
+        name: quickName,
+        type: "single_elimination",
+        playMode: "classic",
+        seeding: [username2, "One", "Two", "Three"],
+        autoReportOnly: true,
+      });
+    expect(quickRes.status).toBe(200);
+    expect(quickRes.body?.ok).toBe(true);
+    expect(Number(quickRes.body?.tournament?.id)).toBeGreaterThan(0);
+
     const seasonStartRes = await request(app)
       .post("/season/start")
       .set("Authorization", `Bearer ${vipToken}`)

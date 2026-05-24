@@ -21,6 +21,7 @@
     if (key === "survival") return "Survival";
     if (key === "dambrete") return "♟️ Dambrete";
     if (key === "chess") return "♔ Šahs";
+    if (key === "zole") return "🃏 Zole";
     return "";
   }
 

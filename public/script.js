@@ -242,7 +242,7 @@ if (loginForm) loginForm.addEventListener("submit", handleLogin);
     await startNewRound();
     refreshLeaderboard();
     refreshMissions(); // DIENAS MISIJAS arī auto-login gadījumā
-  } catch (err) {
+  } catch {
     clearAuth();
   }
 })();

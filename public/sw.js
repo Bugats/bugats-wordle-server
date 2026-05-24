@@ -2,7 +2,7 @@ try {
   importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
 } catch {}
 
-const CACHE_VERSION = "vz-pwa-v11";
+const CACHE_VERSION = "vz-pwa-v12";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -16,6 +16,7 @@ const CORE_ASSETS = [
   "./manifest.json",
   "./icon.svg",
   "./icon-maskable.svg",
+  "./img/vardu-zona-logo.png",
   "./pwa.js",
 ];
 
@@ -92,20 +93,6 @@ self.addEventListener("fetch", (event) => {
   if (!req.destination || !STATIC_DESTINATIONS.has(req.destination)) return;
   event.respondWith(cacheFirst(req));
 });
-
-async function networkFirst(req) {
-  try {
-    const res = await fetch(req);
-    const cache = await caches.open(CACHE_VERSION);
-    cache.put(req, res.clone());
-    return res;
-  } catch {
-    const cache = await caches.open(CACHE_VERSION);
-    const cached = await cache.match(req);
-    if (cached) return cached;
-    return cache.match("./index.html");
-  }
-}
 
 async function networkFirstNoCache(req) {
   try {

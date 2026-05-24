@@ -1,5 +1,5 @@
 /**
- * Galda spēles (dambrete, šahs) – klienta loģika
+ * Galda spēles (dambrete: Krievijas šaškas vai angļu — servera noteikumi, šahs) – klienta loģika
  */
 (function (global) {
   "use strict";
@@ -13,6 +13,83 @@
 
   function isDark(r, c) {
     return (r + c) % 2 === 1;
+  }
+
+  /**
+   * Baltais (myPlayerIdx 0) skatās galdu no savas puses: savi kauliņi apakšā.
+   * Servera masīvā baltie ir rindās 0–2 (augšā) — apgriežam skatu 180° + apmainām
+   * kolonnas, lai «a» paliek kreisajā pusē (kā šahā melnajam).
+   */
+  function dataRCFromView(vr, vc, myPlayerIdx) {
+    if (myPlayerIdx !== 0) return [vr, vc];
+    return [7 - vr, 7 - vc];
+  }
+
+  function cellFromPointerLikeEvent(e) {
+    const t = e.changedTouches && e.changedTouches[0];
+    if (t) {
+      const el = document.elementFromPoint(t.clientX, t.clientY);
+      return el && el.closest ? el.closest("td[data-row][data-col]") : null;
+    }
+    return e.target && e.target.closest
+      ? e.target.closest("td[data-row][data-col]")
+      : null;
+  }
+
+  /**
+   * Pele/pen: pointerdown. Skārienam: touchend + elementFromPoint — dažos mobilajos
+   * WebKit pēc pirmā pieskāriena otrais pointerdown uz šūnas netiek uzticami piegādāts.
+   * passive: false, lai preventDefault() darbotos.
+   */
+  function bindBoardCellInput(table, handleCell) {
+    const hasPointer = typeof window.PointerEvent !== "undefined";
+    table.addEventListener(
+      "pointerdown",
+      function boardPointerDown(e) {
+        if (e.button != null && e.button !== 0) return;
+        if (e.pointerType === "touch") {
+          e.preventDefault();
+          if (hasPointer) {
+            try {
+              table.setPointerCapture(e.pointerId);
+            } catch {}
+            handleCell(e);
+          }
+          return;
+        }
+        e.preventDefault();
+        handleCell(e);
+      },
+      { capture: true, passive: false }
+    );
+    if (!hasPointer) {
+      table.addEventListener(
+        "touchend",
+        function boardTouchEnd(e) {
+          const td = cellFromPointerLikeEvent(e);
+          if (!td || !table.contains(td)) return;
+          if (td.dataset.clickable !== "true") return;
+          e.preventDefault();
+          handleCell({ target: td, preventDefault: function () {} });
+        },
+        { capture: true, passive: false }
+      );
+    }
+  }
+
+  function isJumpOrigin(r, c, legalMoves) {
+    const jumps = legalMoves?.jumps || [];
+    for (let i = 0; i < jumps.length; i++) {
+      const first = jumps[i].jumps && jumps[i].jumps[0];
+      if (
+        first &&
+        first.from &&
+        first.from[0] === r &&
+        first.from[1] === c
+      )
+        return true;
+    }
+    return false;
   }
 
   function isValidDestination(r, c, selectedCell, legalMoves) {
@@ -70,30 +147,42 @@
 
     const canMove = isMyTurn && myPlayerIdx === turnIdx;
 
+    const flipBoard = myPlayerIdx === 0;
+
     if (dambreteTable && container.contains(dambreteTable)) {
       dambreteState.board = board;
       dambreteState.selectedCell = selectedCell;
       dambreteState.legalMoves = legalMoves;
       dambreteState.myPlayerIdx = myPlayerIdx;
       dambreteState.onCellClick = onCellClick;
-      for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
+      for (let vr = 0; vr < ROWS; vr++) {
+        for (let vc = 0; vc < COLS; vc++) {
+          const [dr, dc] = flipBoard
+            ? dataRCFromView(vr, vc, myPlayerIdx)
+            : [vr, vc];
           const td = dambreteTable.querySelector(
-            `td[data-row="${r}"][data-col="${c}"]`
+            `td[data-row="${dr}"][data-col="${dc}"]`
           );
-          if (!td || !isDark(r, c)) continue;
-          const piece = board[r][c];
+          if (!td || !isDark(dr, dc)) continue;
+          const piece = board[dr][dc];
           const isSelected =
-            selectedCell && selectedCell[0] === r && selectedCell[1] === c;
+            selectedCell &&
+            selectedCell[0] === dr &&
+            selectedCell[1] === dc;
           const isValidDest =
-            piece === 0 && isValidDestination(r, c, selectedCell, legalMoves);
+            piece === 0 &&
+            isValidDestination(dr, dc, selectedCell, legalMoves);
           const isMyPiece =
             piece !== 0 &&
             ((myPlayerIdx === 0 && (piece === WHITE || piece === WHITE_KING)) ||
               (myPlayerIdx === 1 && (piece === BLACK || piece === BLACK_KING)));
+          const jumpsMandatory = (legalMoves?.jumps || []).length > 0;
+          const isMyPieceSelectable =
+            isMyPiece &&
+            (!jumpsMandatory || isJumpOrigin(dr, dc, legalMoves));
           const clickable =
             canMove &&
-            (isMyPiece ||
+            (isMyPieceSelectable ||
               (piece === 0 && isValidDest) ||
               (selectedCell && !isValidDest));
           td.dataset.clickable = String(!!clickable);
@@ -117,7 +206,21 @@
             else if (piece === BLACK) span.classList.add("vz-dambrete-black");
             else if (piece === BLACK_KING)
               span.classList.add("vz-dambrete-black", "vz-dambrete-king");
-            span.textContent = Math.abs(piece) === 2 ? "K" : "●";
+            const jumpRing =
+              jumpsMandatory &&
+              isMyPiece &&
+              isJumpOrigin(dr, dc, legalMoves) &&
+              !isSelected;
+            span.classList.toggle("vz-dambrete-jump-ring", !!jumpRing);
+            const isKing = Math.abs(piece) === 2;
+            span.textContent = isKing ? "★" : "";
+            const colorLv =
+              piece === WHITE || piece === WHITE_KING ? "Balts" : "Melns";
+            span.setAttribute(
+              "aria-label",
+              isKing ? `${colorLv} dāma` : `${colorLv} kauliņš`
+            );
+            span.setAttribute("role", "img");
           } else if (span) span.remove();
         }
       }
@@ -135,19 +238,34 @@
     dambreteState.myPlayerIdx = myPlayerIdx;
     dambreteState.onCellClick = onCellClick;
 
-    for (let r = 0; r < ROWS; r++) {
+    for (let vr = 0; vr < ROWS; vr++) {
       const tr = document.createElement("tr");
-      for (let c = 0; c < COLS; c++) {
+      for (let vc = 0; vc < COLS; vc++) {
+        const [dr, dc] = flipBoard
+          ? dataRCFromView(vr, vc, myPlayerIdx)
+          : [vr, vc];
         const td = document.createElement("td");
-        td.dataset.row = String(r);
-        td.dataset.col = String(c);
-        if (!isDark(r, c)) {
+        td.dataset.row = String(dr);
+        td.dataset.col = String(dc);
+        if (!isDark(dr, dc)) {
           td.className = "vz-dambrete-light";
           tr.appendChild(td);
           continue;
         }
         td.className = "vz-dambrete-dark";
-        const piece = board[r][c];
+        const piece = board[dr][dc];
+        const isSelected =
+          selectedCell &&
+          selectedCell[0] === dr &&
+          selectedCell[1] === dc;
+        const isValidDest =
+          piece === 0 &&
+          isValidDestination(dr, dc, selectedCell, legalMoves);
+        const isMyPiece =
+          piece !== 0 &&
+          ((myPlayerIdx === 0 && (piece === WHITE || piece === WHITE_KING)) ||
+            (myPlayerIdx === 1 && (piece === BLACK || piece === BLACK_KING)));
+        const jumpsMandatory = (legalMoves?.jumps || []).length > 0;
         if (piece !== 0) {
           const span = document.createElement("span");
           span.className = "vz-dambrete-piece";
@@ -157,23 +275,32 @@
           else if (piece === BLACK) span.classList.add("vz-dambrete-black");
           else if (piece === BLACK_KING)
             span.classList.add("vz-dambrete-black", "vz-dambrete-king");
-          span.textContent = Math.abs(piece) === 2 ? "K" : "●";
+          const jumpRingInit =
+            jumpsMandatory &&
+            isMyPiece &&
+            isJumpOrigin(dr, dc, legalMoves) &&
+            !isSelected;
+          span.classList.toggle("vz-dambrete-jump-ring", !!jumpRingInit);
+          const isKingInit = Math.abs(piece) === 2;
+          span.textContent = isKingInit ? "★" : "";
+          const colorLvInit =
+            piece === WHITE || piece === WHITE_KING ? "Balts" : "Melns";
+          span.setAttribute(
+            "aria-label",
+            isKingInit ? `${colorLvInit} dāma` : `${colorLvInit} kauliņš`
+          );
+          span.setAttribute("role", "img");
           td.appendChild(span);
         }
-        const isSelected =
-          selectedCell && selectedCell[0] === r && selectedCell[1] === c;
-        const isValidDest =
-          piece === 0 && isValidDestination(r, c, selectedCell, legalMoves);
-        const isMyPiece =
-          piece !== 0 &&
-          ((myPlayerIdx === 0 && (piece === WHITE || piece === WHITE_KING)) ||
-            (myPlayerIdx === 1 && (piece === BLACK || piece === BLACK_KING)));
+        const isMyPieceSelectable =
+          isMyPiece &&
+          (!jumpsMandatory || isJumpOrigin(dr, dc, legalMoves));
         if (isSelected) td.classList.add("vz-dambrete-selected");
         if (isValidDest) td.classList.add("vz-dambrete-valid");
         if (canMove) td.tabIndex = 0;
         const clickable =
           canMove &&
-          (isMyPiece ||
+          (isMyPieceSelectable ||
             (piece === 0 && isValidDest) ||
             (selectedCell && !isValidDest));
         td.dataset.clickable = String(!!clickable);
@@ -182,48 +309,45 @@
       table.appendChild(tr);
     }
 
-    let lastHandled = { r: -1, c: -1, t: 0 };
     function handleCellEvent(e) {
-      const td = e.target.closest("td[data-row][data-col]");
+      const td =
+        e.target && e.target.closest
+          ? e.target.closest("td[data-row][data-col]")
+          : null;
       if (!td || td.dataset.clickable !== "true") return;
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
-      const now = Date.now();
-      if (
-        r === lastHandled.r &&
-        c === lastHandled.c &&
-        now - lastHandled.t < 400
-      ) {
-        e.preventDefault();
-        return;
-      }
-      lastHandled = { r, c, t: now };
-      e.preventDefault();
+      if (typeof e.preventDefault === "function") e.preventDefault();
       const st = dambreteState;
       const piece = (st.board && st.board[r]?.[c]) ?? 0;
       const isMyPiece =
         piece !== 0 &&
         ((st.myPlayerIdx === 0 && (piece === WHITE || piece === WHITE_KING)) ||
           (st.myPlayerIdx === 1 && (piece === BLACK || piece === BLACK_KING)));
+      const jumpsMandatory = (st.legalMoves?.jumps || []).length > 0;
+      const isMyPieceSelectable =
+        isMyPiece &&
+        (!jumpsMandatory || isJumpOrigin(r, c, st.legalMoves));
       const isValidDest =
         piece === 0 && isValidDestination(r, c, st.selectedCell, st.legalMoves);
       const cb = st.onCellClick;
       if (!cb) return;
-      if (isMyPiece) cb(r, c, true);
+      if (
+        st.selectedCell &&
+        st.selectedCell[0] === r &&
+        st.selectedCell[1] === c &&
+        isMyPiece
+      ) {
+        cb(r, c, true);
+        return;
+      }
+      if (isMyPieceSelectable) cb(r, c, true);
       else if (piece === 0 && isValidDest) cb(r, c, false);
       else if (st.selectedCell) cb(r, c, false);
     }
 
-    let lastPointerOrTouch = 0;
-    function wrappedHandler(e) {
-      if (e.type === "click" && Date.now() - lastPointerOrTouch < 450) return;
-      if (e.type !== "click") lastPointerOrTouch = Date.now();
-      handleCellEvent(e);
-    }
-    table.addEventListener("touchstart", wrappedHandler, { passive: false });
-    table.addEventListener("pointerdown", wrappedHandler, { capture: true });
-    table.addEventListener("click", wrappedHandler);
+    bindBoardCellInput(table, handleCellEvent);
     container.appendChild(table);
   }
 
@@ -292,14 +416,44 @@
     return moves.some((m) => m.from === fromSq && m.to === toSq);
   }
 
-  function findChessMove(selectedCell, toRow, toCol, legalMoves) {
-    if (!selectedCell || !legalMoves) return null;
+  function findChessMovesFromTo(selectedCell, toRow, toCol, legalMoves) {
+    if (!selectedCell || !legalMoves) return [];
     const [fr, fc] = selectedCell;
     const fromSq = rowColToSquare(fr, fc);
     const toSq = rowColToSquare(toRow, toCol);
     const moves = legalMoves.moves || [];
-    return moves.find((m) => m.from === fromSq && m.to === toSq);
+    return moves.filter((m) => m.from === fromSq && m.to === toSq);
   }
+
+  function findChessMove(selectedCell, toRow, toCol, legalMoves) {
+    const list = findChessMovesFromTo(selectedCell, toRow, toCol, legalMoves);
+    if (list.length === 1) return list[0];
+    return null;
+  }
+
+  function chessPieceLabel(ch) {
+    const p = CHESS_PIECES[ch];
+    if (!p) return "";
+    const isW = p.color === "white";
+    const names = {
+      p: "bandinieks",
+      n: "zirgs",
+      b: "laidnis",
+      r: "tornis",
+      q: "dāma",
+      k: "karalis",
+    };
+    const key = String(ch).toLowerCase();
+    const n = names[key] || "figūra";
+    return (isW ? "Balts " : "Melns ") + n;
+  }
+
+  const CHESS_PROMOTION_LABELS = {
+    q: "Dāma",
+    r: "Tornis",
+    b: "Laidnis",
+    n: "Zirgs",
+  };
 
   function renderChessBoard(
     fen,
@@ -308,20 +462,68 @@
     myPlayerIdx,
     onCellClick,
     selectedCell,
-    legalMoves
+    legalMoves,
+    promotionPicker,
+    onPromotionSan
   ) {
     const container = document.getElementById("board-chess-container");
     if (!container) return;
     container.innerHTML = "";
     container.classList.remove("hidden");
     const board = parseFenToBoard(fen);
+    const flipped = myPlayerIdx === 1;
+    const wrap = document.createElement("div");
+    wrap.className = "vz-chess-board-wrap";
     const table = document.createElement("table");
     table.className = "vz-chess-board";
     table.setAttribute("role", "grid");
     const canMove = isMyTurn && myPlayerIdx === turnIdx;
-    for (let r = 0; r < 8; r++) {
+
+    function dataRC(viewR, viewC) {
+      if (!flipped) return [viewR, viewC];
+      return [7 - viewR, 7 - viewC];
+    }
+
+    function fileCharForViewCol(viewC) {
+      const dc = flipped ? 7 - viewC : viewC;
+      return String.fromCharCode(97 + dc);
+    }
+
+    function rankDigitForViewRow(viewR) {
+      const dr = flipped ? 7 - viewR : viewR;
+      return String(8 - dr);
+    }
+
+    function appendFileRow(tr) {
+      const cornerL = document.createElement("td");
+      cornerL.className = "vz-chess-co vz-chess-co--corner";
+      cornerL.setAttribute("aria-hidden", "true");
+      tr.appendChild(cornerL);
+      for (let vc = 0; vc < 8; vc++) {
+        const td = document.createElement("td");
+        td.className = "vz-chess-co vz-chess-co--file";
+        td.textContent = fileCharForViewCol(vc);
+        tr.appendChild(td);
+      }
+      const cornerR = document.createElement("td");
+      cornerR.className = "vz-chess-co vz-chess-co--corner";
+      cornerR.setAttribute("aria-hidden", "true");
+      tr.appendChild(cornerR);
+    }
+
+    const topTr = document.createElement("tr");
+    appendFileRow(topTr);
+    table.appendChild(topTr);
+
+    for (let vr = 0; vr < 8; vr++) {
       const tr = document.createElement("tr");
-      for (let c = 0; c < 8; c++) {
+      const rankTd = document.createElement("td");
+      rankTd.className = "vz-chess-co vz-chess-co--rank";
+      rankTd.textContent = rankDigitForViewRow(vr);
+      tr.appendChild(rankTd);
+
+      for (let vc = 0; vc < 8; vc++) {
+        const [r, c] = dataRC(vr, vc);
         const td = document.createElement("td");
         td.dataset.row = String(r);
         td.dataset.col = String(c);
@@ -332,6 +534,8 @@
           span.className =
             "vz-chess-piece vz-chess-" + CHESS_PIECES[piece].color;
           span.textContent = CHESS_PIECES[piece].symbol;
+          span.setAttribute("role", "img");
+          span.setAttribute("aria-label", chessPieceLabel(piece));
           td.appendChild(span);
         }
         const isSelected =
@@ -353,22 +557,28 @@
         );
         tr.appendChild(td);
       }
+
+      const rankTdR = document.createElement("td");
+      rankTdR.className = "vz-chess-co vz-chess-co--rank";
+      rankTdR.textContent = rankDigitForViewRow(vr);
+      tr.appendChild(rankTdR);
       table.appendChild(tr);
     }
-    let lastChessTap = { key: "", t: 0 };
+
+    const botTr = document.createElement("tr");
+    appendFileRow(botTr);
+    table.appendChild(botTr);
+
     function handleChessCellEvent(e) {
-      const td = e.target.closest("td[data-row][data-col]");
+      const td =
+        e.target && e.target.closest
+          ? e.target.closest("td[data-row][data-col]")
+          : null;
       if (!td || td.dataset.clickable !== "true") return;
       const r = parseInt(td.dataset.row, 10);
       const c = parseInt(td.dataset.col, 10);
       if (isNaN(r) || isNaN(c)) return;
-      const key = `${r},${c}`;
-      const now = Date.now();
-      if (e.type === "touchstart" || e.type === "pointerdown") {
-        if (key === lastChessTap.key && now - lastChessTap.t < 150) return;
-        lastChessTap = { key, t: now };
-        e.preventDefault();
-      } else if (e.type === "click" && now - lastChessTap.t < 400) return;
+      if (typeof e.preventDefault === "function") e.preventDefault();
       const piece = board[r]?.[c];
       const isMyPiece =
         piece &&
@@ -379,14 +589,38 @@
       else if (isValidDest) onCellClick(r, c, false);
       else if (selectedCell) onCellClick(r, c, false);
     }
-    table.addEventListener("touchstart", handleChessCellEvent, {
-      passive: false,
-    });
-    table.addEventListener("pointerdown", handleChessCellEvent, {
-      capture: true,
-    });
-    table.addEventListener("click", handleChessCellEvent);
-    container.appendChild(table);
+    bindBoardCellInput(table, handleChessCellEvent);
+    wrap.appendChild(table);
+    if (
+      promotionPicker &&
+      Array.isArray(promotionPicker.sans) &&
+      promotionPicker.sans.length > 1 &&
+      typeof onPromotionSan === "function"
+    ) {
+      const bar = document.createElement("div");
+      bar.className = "vz-chess-promotion-bar";
+      bar.setAttribute("role", "group");
+      bar.setAttribute("aria-label", "Izvēlies promocijas figūru");
+      const cap = document.createElement("div");
+      cap.className = "vz-chess-promotion-bar__cap";
+      cap.textContent = "Promocija — izvēlies figūru:";
+      bar.appendChild(cap);
+      const row = document.createElement("div");
+      row.className = "vz-chess-promotion-bar__btns";
+      for (const san of promotionPicker.sans) {
+        const piece = san.slice(-1).toLowerCase();
+        const label = CHESS_PROMOTION_LABELS[piece] || san;
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "vz-chess-promotion-bar__btn";
+        b.textContent = label;
+        b.addEventListener("click", () => onPromotionSan(san));
+        row.appendChild(b);
+      }
+      bar.appendChild(row);
+      wrap.appendChild(bar);
+    }
+    container.appendChild(wrap);
   }
 
   function resetDambreteTable() {
@@ -408,5 +642,6 @@
     squareToRowCol,
     rowColToSquare,
     findChessMove,
+    findChessMovesFromTo,
   });
 })(window);
