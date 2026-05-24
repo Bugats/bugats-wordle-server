@@ -39,7 +39,7 @@ describe("CSP headers", () => {
     expect(csp).toContain(
       "connect-src 'self' https://bugats-wordle-server.onrender.com wss://bugats-wordle-server.onrender.com"
     );
-    expect(csp).toContain("media-src 'self'");
+    expect(csp).toContain("media-src 'self' https://stream.nightride.fm");
   });
 });
 

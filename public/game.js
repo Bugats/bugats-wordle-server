@@ -14712,8 +14712,7 @@ function initRadioUi() {
 
   if (!radioAudio || !radioBtn || !volumeInput || !statusEl) return;
 
-  // Lokālais fons (public/music/wild-wide-walker.wav) — Wild Wide Walker (Behind Two Lines), Ip-Records
-  const RADIO_STREAM_URL = "/music/wild-wide-walker.wav";
+  const RADIO_STREAM_URL = "https://stream.nightride.fm/nightride.mp3";
   let isPlaying = false;
 
   try {
@@ -14731,17 +14730,17 @@ function initRadioUi() {
         await radioAudio.play();
         isPlaying = true;
         radioBtn.textContent = "⏸ Pauze";
-        statusEl.textContent = "Mūzika spēlē...";
+        statusEl.textContent = "Radio spēlē...";
       } catch (err) {
         console.error("Radio play error:", err);
         statusEl.textContent =
-          "Neizdevās palaist mūziku (pārbaudi failu vai pārlūka atļaujas).";
+          "Neizdevās palaist radio (pārbaudi URL vai pārlūka atļaujas).";
       }
     } else {
       radioAudio.pause();
       isPlaying = false;
       radioBtn.textContent = "▶ Spēlēt";
-      statusEl.textContent = "Mūzika izslēgta";
+      statusEl.textContent = "Radio izslēgts";
     }
   });
 
