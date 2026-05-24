@@ -143,17 +143,6 @@
             <span id="duel-inbox-badge" class="vz-duel-badge hidden" aria-label="Aicinājumu skaits">0</span>
           </button>
 
-          <!-- GALDS: zole, šahs, dambrete -->
-          <button
-            id="board-games-btn"
-            class="vz-duel-inbox-btn"
-            type="button"
-            title="Zole, šahs, dambrete — viena vieta"
-            aria-label="Galds: zole, šahs, dambrete">
-            🎴 Galds
-            <span id="board-games-badge" class="vz-duel-badge hidden" aria-label="Tava kārta">!</span>
-          </button>
-
           <button id="sound-toggle-btn" class="vz-sound-btn" type="button">🔊 Skaņa: ON</button>
           <button id="logout-btn" type="button">Izlogoties</button>
           <details class="vz-topbar-more">
@@ -200,6 +189,16 @@
         <div id="vz-logo-fx" aria-hidden="true"></div>
         <img src="img/vardu-zona-logo.png?v=vz-2026-brand" alt="VĀRDU ZONA" class="vz-logo-img" />
         <span class="vz-logo-sub">Vārdi · šahs · dambrete · zole — viena lietotne</span>
+        <button
+          type="button"
+          id="board-games-hero-btn"
+          class="vz-logo-galda-btn"
+          title="Zole, šahs, dambrete — viena vieta"
+          aria-label="Galds: zole, šahs, dambrete">
+          <span class="vz-logo-galda-btn__main">🎴 Galds</span>
+          <span class="vz-logo-galda-btn__sub">Zole · šahs · dambrete</span>
+          <span id="board-games-badge" class="vz-logo-galda-btn__badge hidden" aria-label="Tava kārta">!</span>
+        </button>
       </div>
 
       <!-- SEZONA -->
@@ -870,6 +869,9 @@
       <!-- Mobilā apakšējā navigācija -->
       <nav class="vz-bottom-nav" id="vz-bottom-nav" aria-label="Galvenā navigācija">
         <button type="button" class="vz-bottom-nav-btn vz-bottom-nav-active" data-scroll="vz-section-game" aria-current="page">🎮 Spēle</button>
+        <button type="button" class="vz-bottom-nav-btn" id="board-games-nav-btn" aria-label="Galds: zole, šahs, dambrete">
+          🎴 Galds
+        </button>
         <button type="button" class="vz-bottom-nav-btn" data-scroll="vz-section-leaderboard">🏆 TOP</button>
         <button type="button" class="vz-bottom-nav-btn" data-scroll="vz-section-profile">👤 Profils</button>
         <button type="button" class="vz-bottom-nav-btn" data-scroll="vz-section-chat">💬 Čats</button>

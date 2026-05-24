@@ -13512,7 +13512,9 @@ function boardGamesEnsureSocketConnected() {
 }
 
 function bindBoardGames() {
-  const btn = document.getElementById("board-games-btn");
+  document
+    .querySelectorAll("#board-games-hero-btn, #board-games-nav-btn")
+    .forEach((el) => el.addEventListener("click", showBoardModal));
   const closeBtn = document.getElementById("board-modal-close");
   const inviteDambrete = document.getElementById("board-invite-dambrete");
   const inviteChess = document.getElementById("board-invite-chess");
@@ -13524,7 +13526,6 @@ function bindBoardGames() {
   const ppInviteChess = document.getElementById("pp-invite-chess");
   const ppInviteZole = document.getElementById("pp-invite-zole");
 
-  if (btn) btn.addEventListener("click", showBoardModal);
   if (closeBtn) closeBtn.addEventListener("click", hideBoardModal);
   document.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape" || ev.defaultPrevented) return;
