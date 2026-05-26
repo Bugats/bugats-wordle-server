@@ -359,7 +359,7 @@
     return `${contractLabel(c)} · ${nm}`;
   }
 
-  /** Tabula ar kolonnām pa spēlētājiem (kā mobilajā ZOLE) + rindas P / K / A / S. */
+  /** Tabula ar kolonnām pa spēlētājiem (kā mobilajā ZOLE) + rindas P / K / A. */
   function buildZoleTableHud(zole, myIdx) {
     const hud = el("div", "vz-zole-table-hud");
     hud.setAttribute("role", "region");
@@ -369,7 +369,6 @@
     const showPart = ph === "end";
     const showEyes = showPart;
     const eyes = zole.eyePoints || [0, 0, 0];
-    const tricks = zole.tricksWon || [0, 0, 0];
     const tdArr = zole.tableDelta || [0, 0, 0];
     const cum = zole.cumulativeTableDelta || [0, 0, 0];
     const activePi = zoleActiveTurnPlayerIndex(zole);
@@ -471,12 +470,6 @@
     if (showEyes) {
       dataRow("A.", "Acis šajā izspēlē", eyes, (v) => String(v ?? 0));
     }
-    dataRow(
-      "S.",
-      "Stiķi šajā izspēlē",
-      tricks,
-      (v) => `${v ?? 0}`
-    );
 
     table.appendChild(tbody);
 
@@ -552,9 +545,7 @@
     const table = el("table", "vz-zole-pt__table");
     const thead = el("thead");
     const hr = el("tr");
-    const heads = showPart
-      ? ["", "P.", "K.", "A", "S"]
-      : ["", "K.", "S"];
+    const heads = showPart ? ["", "P.", "K.", "A"] : ["", "K."];
     for (const h of heads) {
       hr.appendChild(el("th", null, h));
     }
@@ -562,7 +553,6 @@
     table.appendChild(thead);
     const tbody = el("tbody");
     const eyes = zole.eyePoints || [0, 0, 0];
-    const tricks = zole.tricksWon || [0, 0, 0];
     const tdArr = zole.tableDelta || [0, 0, 0];
     const cum = zole.cumulativeTableDelta || [0, 0, 0];
     const activePi = zoleActiveTurnPlayerIndex(zole);
@@ -584,7 +574,6 @@
       if (showEyes) {
         tr.appendChild(el("td", "vz-zole-pt__num", String(eyes[i] ?? 0)));
       }
-      tr.appendChild(el("td", "vz-zole-pt__num", String(tricks[i] ?? 0)));
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
