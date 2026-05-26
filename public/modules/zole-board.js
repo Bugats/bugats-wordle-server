@@ -425,6 +425,27 @@
       tbody.appendChild(tr);
     }
 
+    function dataRowCount(rowLabel, title, values) {
+      const tr = document.createElement("tr");
+      const rh = document.createElement("th");
+      rh.setAttribute("scope", "row");
+      rh.className =
+        "vz-zole-table-hud__rowhead vz-zole-table-hud__rowhead--count";
+      rh.textContent = rowLabel;
+      rh.setAttribute("title", title);
+      tr.appendChild(rh);
+      for (let i = 0; i < 3; i++) {
+        const td = document.createElement("td");
+        td.className = "vz-zole-table-hud__cell vz-zole-table-hud__cell--count";
+        if (i === myIdx) td.classList.add("vz-zole-table-hud__cell--me");
+        if (activePi === i) td.classList.add("vz-zole-table-hud__cell--active");
+        td.textContent = String(values[i] ?? 0);
+        td.setAttribute("title", title);
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+
     function dataRowHist(rowLabel, rowTitle, values, fmt) {
       const tr = document.createElement("tr");
       const rh = document.createElement("th");
@@ -467,18 +488,31 @@
           : `Pirms ${abs} partijām — punkti tabulā`;
       dataRowHist(rowLab, title, completed[slot], (v) => formatPts(v));
     }
-    dataRow("K.", "Kopā tabulā", cum, (v) => formatPts(v));
+    dataRow("K.", "Kopā mačā (tabulas punkti)", cum, (v) => formatPts(v));
     if (showEyes) {
-      dataRow("A.", "Acis šajā izspēlē", eyes, (v) => String(v ?? 0));
+      dataRow("A.", "Kāršu acis šajā partijā", eyes, (v) => String(v ?? 0));
     }
-    dataRow(
-      "S.",
-      "Stiķi šajā izspēlē",
-      tricks,
-      (v) => `${v ?? 0}`
+    const trickSum = tricks.reduce(
+      (s, n) => s + (Number.isFinite(Number(n)) ? Number(n) : 0),
+      0
+    );
+    dataRowCount(
+      "St.",
+      `Stiķi šajā partijā (${trickSum}/8) — nav tabulas punkti`,
+      tricks
     );
 
     table.appendChild(tbody);
+
+    const legend = el(
+      "p",
+      "vz-zole-table-hud__legend",
+      "−N.: partijas punkti · K.: kopā · St.: stiķi"
+    );
+    legend.setAttribute(
+      "title",
+      "Tabulas punkti vienmēr summējas uz 0. Stiķu rinda rāda uzvarētos stiķus (kopā līdz 8), ne punktus."
+    );
 
     const footText = zoleHudContractFooter(zole);
     if (footText) {
@@ -494,6 +528,7 @@
     }
 
     hud.appendChild(table);
+    hud.appendChild(legend);
     return hud;
   }
 
@@ -553,8 +588,8 @@
     const thead = el("thead");
     const hr = el("tr");
     const heads = showPart
-      ? ["", "P.", "K.", "A", "S"]
-      : ["", "K.", "S"];
+      ? ["", "P.", "K.", "A", "St"]
+      : ["", "K.", "St"];
     for (const h of heads) {
       hr.appendChild(el("th", null, h));
     }
