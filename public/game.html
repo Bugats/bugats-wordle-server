@@ -1502,7 +1502,7 @@
         </div>
         <div id="board-games-lobby" class="vz-board-lobby">
           <h3 class="vz-board-title" id="board-lobby-heading">Galds</h3>
-          <p class="vz-board-desc">Izvēlies spēli — tad redzēsi tikai tai attiecīgās iespējas. Uzvaras dod novada un klana punktus.</p>
+          <p class="vz-board-desc">Izvēlies spēli — katrā cilnē redzēsi <strong>atvērtās istabas</strong>, kur spēlētāji gaida pretiniekus. Uzvaras dod novada un klana punktus.</p>
           <div class="vz-board-game-pick" role="tablist" aria-label="Spēles izvēle">
             <button
               type="button"
@@ -1545,32 +1545,18 @@
             class="vz-board-game-panel vz-board-game-panel--active"
             role="tabpanel"
             aria-labelledby="board-pick-zole">
-          <div id="board-zole-mode-wrap" class="vz-board-dambrete-mode" aria-label="Zoles režīms">
-            <span class="vz-board-dambrete-mode-label">Zoles režīms</span>
-            <div class="vz-board-dambrete-mode-radios">
-              <label class="vz-board-dambrete-mode-opt"
-                ><input type="radio" name="board-zole-mode" value="online_3p" checked />
-                3 cilvēki — istaba</label
-              >
-              <label class="vz-board-dambrete-mode-opt"
-                ><input type="radio" name="board-zole-mode" value="online_2p" />
-                2 cilvēki + bots</label
-              >
-              <label class="vz-board-dambrete-mode-opt"
-                ><input type="radio" name="board-zole-mode" value="vs_bot" /> Tikai pret botiem</label
-              >
-            </div>
-          </div>
-          <div id="board-zole-room-zone" class="vz-board-zole-room-zone hidden" aria-labelledby="board-zole-room-zone-title">
+
+          <section id="board-zole-open-rooms" class="vz-board-open-rooms hidden" aria-label="Zole — atvērtās istabas">
+
             <div
               id="board-zole-3p-open-lobbies"
-              class="vz-board-zole-open-lobbies vz-board-zole-open-lobbies--hero hidden"
+              class="vz-board-zole-open-lobbies hidden"
               aria-labelledby="board-zole-3p-open-lobbies-title">
               <h4 id="board-zole-3p-open-lobbies-title" class="vz-board-zole-open-lobbies__title">
-                Zole — atvērtās 3 cilvēku istabas
+                3 spēlētāji — atvērtās istabas
               </h4>
               <p class="vz-board-zole-open-lobbies__intro">
-                Citu spēlētāju istabas ar brīvām vietām. Skaties likmi un sastāvu, tad spied «Pievienoties». Vai izveido savu istabu zemāk.
+                Istabas ar brīvām vietām. Skaties likmi un sastāvu, tad spied «Pievienoties», vai izveido savu istabu zemāk.
               </p>
               <div class="vz-board-zole-open-lobbies__scroll">
                 <table class="vz-board-zole-open-lobbies__table">
@@ -1591,6 +1577,62 @@
                 role="status"
                 aria-live="polite"></div>
             </div>
+            
+
+            <div
+              id="board-zole-2p-open-seats"
+              class="vz-board-zole-open-lobbies hidden"
+              aria-labelledby="board-zole-2p-open-seats-title">
+              <h4 id="board-zole-2p-open-seats-title" class="vz-board-zole-open-lobbies__title">
+                2 spēlētāji — gaida pretinieku
+              </h4>
+              <p class="vz-board-zole-open-lobbies__intro">
+                Publicētie gaidītāji (trešais būs bots). «Pievienoties» nosūta pieprasījumu saimniekam.
+              </p>
+              <div class="vz-board-zole-open-lobbies__scroll">
+                <table class="vz-board-zole-open-lobbies__table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Spēlētājs</th>
+                      <th scope="col">Darbība</th>
+                    </tr>
+                  </thead>
+                  <tbody id="board-zole-2p-open-seats-body"></tbody>
+                </table>
+              </div>
+              <div
+                id="board-zole-2p-open-seats-empty"
+                class="vz-board-zole-open-lobbies__empty hidden"
+                role="status"
+                aria-live="polite"></div>
+              <div class="vz-board-open-seat-publish">
+                <button type="button" id="board-zole-2p-open-seat-publish" class="vz-board-invite-btn vz-board-invite-btn--ghost">
+                  Publicēt: gaidu pretinieku (2 spēlētāji)
+                </button>
+                <button type="button" id="board-zole-2p-open-seat-cancel" class="vz-board-resign vz-board-open-seat-publish__cancel hidden">
+                  Noņemt mani no saraksta
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <div id="board-zole-mode-wrap" class="vz-board-dambrete-mode" aria-label="Zoles režīms">
+            <span class="vz-board-dambrete-mode-label">Zoles režīms</span>
+            <div class="vz-board-dambrete-mode-radios">
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-zole-mode" value="online_3p" checked />
+                3 cilvēki — istaba</label
+              >
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-zole-mode" value="online_2p" />
+                2 cilvēki + bots</label
+              >
+              <label class="vz-board-dambrete-mode-opt"
+                ><input type="radio" name="board-zole-mode" value="vs_bot" /> Tikai pret botiem</label
+              >
+            </div>
+          </div>
+          <div id="board-zole-room-zone" class="vz-board-zole-room-zone hidden" aria-labelledby="board-zole-room-zone-title">
             <h4 id="board-zole-room-zone-title" class="vz-board-zole-room-zone__title">
               🃏 Tava istaba — 3 spēlētāji
             </h4>
@@ -1664,7 +1706,7 @@
             class="vz-board-zole-open-lobbies hidden"
             aria-labelledby="board-chess-open-seats-title">
             <h4 id="board-chess-open-seats-title" class="vz-board-zole-open-lobbies__title">
-              Šahs — gaida pretinieku
+              Šahs — atvērtās istabas
             </h4>
             <p class="vz-board-zole-open-lobbies__intro">
               Publicētā vieta izmanto <strong>šaha laiku no PvP izvēlnes</strong> zemāk. «Pievienoties» nosūta pieprasījumu saimniekam.
@@ -1763,7 +1805,7 @@
             class="vz-board-zole-open-lobbies hidden"
             aria-labelledby="board-dambrete-open-seats-title">
             <h4 id="board-dambrete-open-seats-title" class="vz-board-zole-open-lobbies__title">
-              Dambrete — gaida pretinieku
+              Dambrete — atvērtās istabas
             </h4>
             <p class="vz-board-zole-open-lobbies__intro">
               Spēlētāji, kas publicējuši brīvu vietu. «Pievienoties» nosūta pieprasījumu saimniekam — viņš var pieņemt vai noraidīt.

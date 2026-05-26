@@ -1266,7 +1266,12 @@ let zole3pOpenLobbiesCache = { rooms: [], serverNow: 0 };
 let zole3pOpenLobbyPollTimer = null;
 
 /** Publiskās PvP vietas šaham / dambretēm */
-let boardOpenSeatsCache = { chess: [], dambrete: [], serverNow: 0 };
+let boardOpenSeatsCache = {
+  chess: [],
+  dambrete: [],
+  zole2p: [],
+  serverNow: 0,
+};
 let boardOpenSeatsPollTimer = null;
 
 function clearBoardOpenSeatsPoll() {
@@ -1293,15 +1298,23 @@ function dambreteVariantLabelClient(v) {
 
 function renderBoardOpenSeatsTable(kind) {
   const wrapId =
-    kind === "chess" ? "board-chess-open-seats" : "board-dambrete-open-seats";
+    kind === "chess"
+      ? "board-chess-open-seats"
+      : kind === "zole2p"
+        ? "board-zole-2p-open-seats"
+        : "board-dambrete-open-seats";
   const tbodyId =
     kind === "chess"
       ? "board-chess-open-seats-body"
-      : "board-dambrete-open-seats-body";
+      : kind === "zole2p"
+        ? "board-zole-2p-open-seats-body"
+        : "board-dambrete-open-seats-body";
   const emptyId =
     kind === "chess"
       ? "board-chess-open-seats-empty"
-      : "board-dambrete-open-seats-empty";
+      : kind === "zole2p"
+        ? "board-zole-2p-open-seats-empty"
+        : "board-dambrete-open-seats-empty";
   const wrap = document.getElementById(wrapId);
   const tbody = document.getElementById(tbodyId);
   const emptyEl = document.getElementById(emptyId);
@@ -1311,9 +1324,13 @@ function renderBoardOpenSeatsTable(kind) {
       ? Array.isArray(boardOpenSeatsCache?.chess)
         ? boardOpenSeatsCache.chess
         : []
-      : Array.isArray(boardOpenSeatsCache?.dambrete)
-        ? boardOpenSeatsCache.dambrete
-        : [];
+      : kind === "zole2p"
+        ? Array.isArray(boardOpenSeatsCache?.zole2p)
+          ? boardOpenSeatsCache.zole2p
+          : []
+        : Array.isArray(boardOpenSeatsCache?.dambrete)
+          ? boardOpenSeatsCache.dambrete
+          : [];
   const me = String(state.username || "")
     .trim()
     .toLowerCase();
@@ -1321,9 +1338,12 @@ function renderBoardOpenSeatsTable(kind) {
   if (emptyEl) {
     if (rows.length === 0) {
       fillVzEmptyState(emptyEl, {
-        glyph: kind === "chess" ? "♔" : "♟️",
+        glyph: kind === "chess" ? "♔" : kind === "zole2p" ? "🃏" : "♟️",
         title: "Neviens negaida pretinieku",
-        text: "Publicē savu vietu zemāk vai uzaicini draugu.",
+        text:
+          kind === "zole2p"
+            ? "Publicē, ka gaidi pretinieku, vai uzaicini draugu."
+            : "Publicē savu vietu zemāk vai uzaicini draugu.",
         compact: true,
         extraClass: "vz-board-zole-open-lobbies__empty-inner",
       });
@@ -1344,7 +1364,9 @@ function renderBoardOpenSeatsTable(kind) {
     const detail =
       kind === "chess"
         ? String(r?.chessClockPreset || "—").trim() || "—"
-        : dambreteVariantLabelClient(r?.dambreteVariant);
+        : kind === "zole2p"
+          ? ""
+          : dambreteVariantLabelClient(r?.dambreteVariant);
     let btnLabel = "Pievienoties";
     let disabled = false;
     let title = "";
@@ -1356,7 +1378,14 @@ function renderBoardOpenSeatsTable(kind) {
       disabled = true;
       title = "Vispirms beidz pašreizējo spēli.";
     }
-    const dataType = kind === "chess" ? "chess" : "dambrete";
+    const dataType =
+      kind === "chess" ? "chess" : kind === "zole2p" ? "zole" : "dambrete";
+    if (kind === "zole2p") {
+      return `<tr data-open-seat-host="${escapeHtml(host)}" data-open-seat-type="${dataType}">
+      <td>${escapeHtml(host)}</td>
+      <td><button type="button" class="vz-board-zole-open-lobbies__join js-board-open-seat-join" data-open-seat-host="${escapeHtml(host)}" data-open-seat-type="${dataType}" ${disabled ? "disabled" : ""} title="${escapeHtml(title)}">${escapeHtml(btnLabel)}</button></td>
+    </tr>`;
+    }
     return `<tr data-open-seat-host="${escapeHtml(host)}" data-open-seat-type="${dataType}">
       <td>${escapeHtml(host)}</td>
       <td>${escapeHtml(detail)}</td>
@@ -1377,6 +1406,9 @@ function syncMyBoardOpenSeatButtons() {
   const dList = Array.isArray(boardOpenSeatsCache?.dambrete)
     ? boardOpenSeatsCache.dambrete
     : [];
+  const zList = Array.isArray(boardOpenSeatsCache?.zole2p)
+    ? boardOpenSeatsCache.zole2p
+    : [];
   const inChess = chessList.some(
     (r) =>
       String(r?.host || "")
@@ -1384,6 +1416,12 @@ function syncMyBoardOpenSeatButtons() {
         .toLowerCase() === me
   );
   const inDamb = dList.some(
+    (r) =>
+      String(r?.host || "")
+        .trim()
+        .toLowerCase() === me
+  );
+  const inZole2p = zList.some(
     (r) =>
       String(r?.host || "")
         .trim()
@@ -1401,11 +1439,18 @@ function syncMyBoardOpenSeatButtons() {
   document
     .getElementById("board-dambrete-open-seat-cancel")
     ?.classList.toggle("hidden", !inDamb);
+  document
+    .getElementById("board-zole-2p-open-seat-publish")
+    ?.classList.toggle("hidden", inZole2p);
+  document
+    .getElementById("board-zole-2p-open-seat-cancel")
+    ?.classList.toggle("hidden", !inZole2p);
 }
 
 function syncBoardOpenSeatsPanelVisibility() {
   const chessWrap = document.getElementById("board-chess-open-seats");
   const dambWrap = document.getElementById("board-dambrete-open-seats");
+  const zole2pWrap = document.getElementById("board-zole-2p-open-seats");
   const lobbyEl = document.getElementById("board-games-lobby");
   const lobbyVisible = lobbyEl && !lobbyEl.classList.contains("hidden");
   const inInvite = (() => {
@@ -1416,27 +1461,28 @@ function syncBoardOpenSeatsPanelVisibility() {
   const baseShow = lobbyVisible && !inInvite && !boardState.gameId;
   const showChess = baseShow && tab === "chess";
   const showDamb = baseShow && tab === "dambrete";
+  const showZole2p =
+    baseShow && tab === "zole" && getSelectedBoardZoleMode() === "online_2p";
   if (chessWrap) {
     chessWrap.classList.toggle("hidden", !showChess);
-    if (showChess) {
-      renderBoardOpenSeatsTable("chess");
-      scheduleBoardOpenSeatsPoll();
-    }
+    if (showChess) renderBoardOpenSeatsTable("chess");
   }
   if (dambWrap) {
     dambWrap.classList.toggle("hidden", !showDamb);
-    if (showDamb) {
-      renderBoardOpenSeatsTable("dambrete");
-      scheduleBoardOpenSeatsPoll();
-    }
+    if (showDamb) renderBoardOpenSeatsTable("dambrete");
   }
-  if (!showChess && !showDamb) {
-    clearBoardOpenSeatsPoll();
+  if (zole2pWrap) {
+    zole2pWrap.classList.toggle("hidden", !showZole2p);
+    if (showZole2p) renderBoardOpenSeatsTable("zole2p");
+  }
+  if (showChess || showDamb || showZole2p) {
+    scheduleBoardOpenSeatsPoll();
+    try {
+      state.socket?.emit("board.requestOpenSeats");
+    } catch (_) {}
     return;
   }
-  try {
-    state.socket?.emit("board.requestOpenSeats");
-  } catch (_) {}
+  clearBoardOpenSeatsPoll();
 }
 
 function clearZole3pOpenLobbyPoll() {
@@ -1533,33 +1579,40 @@ function renderZole3pOpenLobbyTable() {
   tbody.innerHTML = rows.join("");
 }
 
-function syncZole3pOpenLobbyPanelVisibility() {
-  const wrap = document.getElementById("board-zole-3p-open-lobbies");
-  if (!wrap) return;
+function syncZoleOpenRoomsPanelVisibility() {
+  const section = document.getElementById("board-zole-open-rooms");
+  const wrap3p = document.getElementById("board-zole-3p-open-lobbies");
   const lobbyEl = document.getElementById("board-games-lobby");
   const lobbyVisible = lobbyEl && !lobbyEl.classList.contains("hidden");
   const inInvite = (() => {
     const invite = document.getElementById("board-games-invite");
     return invite && !invite.classList.contains("hidden");
   })();
-  const inZoleRoomFlow =
-    getSelectedBoardZoleMode() === "online_3p" ||
-    !!zole3pLobbySnapshot?.zoleLobby;
   const onZoleTab = getBoardLobbyGameTab() === "zole";
-  const show =
-    lobbyVisible &&
-    !inInvite &&
-    inZoleRoomFlow &&
-    !boardState.gameId &&
-    onZoleTab;
-  wrap.classList.toggle("hidden", !show);
-  if (show) {
-    renderZole3pOpenLobbyTable();
-    scheduleZole3pOpenLobbyPoll();
-  } else {
-    clearZole3pOpenLobbyPoll();
+  const zm = getSelectedBoardZoleMode();
+  const baseShow =
+    lobbyVisible && !inInvite && !boardState.gameId && onZoleTab && zm !== "vs_bot";
+  const show3p =
+    baseShow &&
+    (zm === "online_3p" || !!zole3pLobbySnapshot?.zoleLobby);
+  if (section) section.classList.toggle("hidden", !baseShow);
+  if (wrap3p) {
+    wrap3p.classList.toggle("hidden", !show3p);
+    if (show3p) {
+      renderZole3pOpenLobbyTable();
+      scheduleZole3pOpenLobbyPoll();
+      try {
+        state.socket?.emit("board.zoleRequestOpenLobbies");
+      } catch (_) {}
+    } else {
+      clearZole3pOpenLobbyPoll();
+    }
   }
   syncBoardOpenSeatsPanelVisibility();
+}
+
+function syncZole3pOpenLobbyPanelVisibility() {
+  syncZoleOpenRoomsPanelVisibility();
 }
 
 function syncZole3pStakeSelectFromLobby() {
@@ -12149,15 +12202,16 @@ function initSocket() {
       rooms: Array.isArray(payload?.rooms) ? payload.rooms : [],
       serverNow: Number(payload?.serverNow) || Date.now(),
     };
-    syncZole3pOpenLobbyPanelVisibility();
+    syncZoleOpenRoomsPanelVisibility();
   });
   socket.on("board.openSeats", (payload) => {
     boardOpenSeatsCache = {
       chess: Array.isArray(payload?.chess) ? payload.chess : [],
       dambrete: Array.isArray(payload?.dambrete) ? payload.dambrete : [],
+      zole2p: Array.isArray(payload?.zole2p) ? payload.zole2p : [],
       serverNow: Number(payload?.serverNow) || Date.now(),
     };
-    syncBoardOpenSeatsPanelVisibility();
+    syncZoleOpenRoomsPanelVisibility();
   });
   socket.on("board.error", (payload) => {
     disarmBoardMoveResponseWait();
@@ -13985,6 +14039,35 @@ function bindBoardGames() {
       state.socket.emit("board.requestOpenSeatInvite", {
         host,
         type: "chess",
+      });
+    });
+  document
+    .getElementById("board-zole-2p-open-seat-publish")
+    ?.addEventListener("click", () => {
+      if (!boardGamesEnsureSocketConnected()) return;
+      state.socket.emit("board.openSeatPublish", {
+        type: "zole",
+        zoleMode: "online_2p",
+      });
+    });
+  document
+    .getElementById("board-zole-2p-open-seat-cancel")
+    ?.addEventListener("click", () => {
+      if (!boardGamesEnsureSocketConnected()) return;
+      state.socket.emit("board.openSeatCancel");
+    });
+  document
+    .getElementById("board-zole-2p-open-seats")
+    ?.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".js-board-open-seat-join");
+      if (!btn || btn.disabled) return;
+      const host = String(btn.dataset.openSeatHost || "").trim();
+      if (!host) return;
+      if (!boardGamesEnsureSocketConnected()) return;
+      state.socket.emit("board.requestOpenSeatInvite", {
+        host,
+        type: "zole",
+        zoleMode: "online_2p",
       });
     });
 }

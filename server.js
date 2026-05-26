@@ -918,6 +918,7 @@ function buildBoardOpenSeatsListPayload() {
   const now = Date.now();
   const chess = [];
   const dambrete = [];
+  const zole2p = [];
   for (const [k, v] of [...boardOpenSeatByHost.entries()]) {
     if (!v || (v.expiresAt || 0) <= now) {
       boardOpenSeatByHost.delete(k);
@@ -944,6 +945,13 @@ function buildBoardOpenSeatsListPayload() {
           v.dambreteVariant || "russian"
         ),
       });
+    } else if (t === "zole") {
+      const zm = String(v.zoleMode || "online_2p").toLowerCase();
+      if (zm !== "online_2p") {
+        boardOpenSeatByHost.delete(k);
+        continue;
+      }
+      zole2p.push({ host, zoleMode: "online_2p" });
     } else {
       boardOpenSeatByHost.delete(k);
     }
@@ -954,7 +962,10 @@ function buildBoardOpenSeatsListPayload() {
   dambrete.sort((a, b) =>
     String(a.host || "").localeCompare(String(b.host || ""), "lv")
   );
-  return { chess, dambrete, serverNow: now };
+  zole2p.sort((a, b) =>
+    String(a.host || "").localeCompare(String(b.host || ""), "lv")
+  );
+  return { chess, dambrete, zole2p, serverNow: now };
 }
 
 function pruneExpiredBoardOpenSeats() {
@@ -13528,16 +13539,33 @@ io.on("connection", (socket) => {
     const user = socket.data.user;
     if (!user) return;
     const gameType = String(payload?.type || "dambrete").toLowerCase();
-    if (gameType !== "dambrete" && gameType !== "chess")
+    if (
+      gameType !== "dambrete" &&
+      gameType !== "chess" &&
+      gameType !== "zole"
+    )
       return socket.emit("board.error", {
-        message: "Atvērtā vieta pieejama tikai dambretē vai šahā.",
+        message: "Atvērtā vieta pieejama dambretē, šahā vai zolē (2 spēlētāji).",
       });
     if (userToBoardGame.has(user.username))
       return socket.emit("board.error", { message: "Tu jau esi spēlē." });
     const key = String(user.username).trim().toLowerCase();
     if (!key) return;
     const exp = Date.now() + BOARD_OPEN_SEAT_TTL_MS;
-    if (gameType === "chess") {
+    if (gameType === "zole") {
+      const zoleMode = parseZoleModeFromPayload(payload);
+      if (zoleMode !== "online_2p")
+        return socket.emit("board.error", {
+          message:
+            "Atvērtā vieta zolē pieejama tikai režīmam «2 cilvēki + bots».",
+        });
+      boardOpenSeatByHost.set(key, {
+        host: user.username,
+        type: "zole",
+        zoleMode: "online_2p",
+        expiresAt: exp,
+      });
+    } else if (gameType === "chess") {
       const chessClockOpts = parseChessClockOptsFromPayload(payload);
       boardOpenSeatByHost.set(key, {
         host: user.username,
@@ -13576,7 +13604,7 @@ io.on("connection", (socket) => {
     const gameType = String(payload?.type || "dambrete").toLowerCase();
     if (!hostName)
       return socket.emit("board.error", { message: "Nav norādīts saimnieks." });
-    if (gameType !== "dambrete" && gameType !== "chess")
+    if (gameType !== "dambrete" && gameType !== "chess" && gameType !== "zole")
       return socket.emit("board.error", { message: "Nederīgs spēles tips." });
     if (String(joiner.username).toLowerCase() === hostName.toLowerCase())
       return socket.emit("board.error", {
@@ -13605,6 +13633,16 @@ io.on("connection", (socket) => {
       gameType === "dambrete"
         ? normalizeDambreteVariant(open.dambreteVariant || "russian")
         : "russian";
+    const zoleMode =
+      gameType === "zole"
+        ? String(open.zoleMode || "online_2p").toLowerCase() === "online_2p"
+          ? "online_2p"
+          : parseZoleModeFromPayload(open)
+        : undefined;
+    if (gameType === "zole" && zoleMode !== "online_2p")
+      return socket.emit("board.error", {
+        message: "Šī zoles vieta vairs nav derīga.",
+      });
     const chessClockOpts =
       gameType === "chess"
         ? open.chessClockOpts || parseChessClockOptsFromPayload(payload)
@@ -13615,7 +13653,7 @@ io.on("connection", (socket) => {
       {
         type: gameType,
         dambreteVariant,
-        zoleMode: undefined,
+        zoleMode: gameType === "zole" ? zoleMode : undefined,
         expiresAt: invExp,
         fromUsername: joiner.username,
         targetUsername: hostName,
@@ -13632,6 +13670,7 @@ io.on("connection", (socket) => {
         from: joiner.username,
         type: gameType,
         dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
+        zoleMode: gameType === "zole" ? zoleMode : undefined,
         fromOpenSeatList: true,
         expiresAt: invExp,
       };
@@ -13647,6 +13686,7 @@ io.on("connection", (socket) => {
       target: hostName,
       type: gameType,
       dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
+      zoleMode: gameType === "zole" ? zoleMode : undefined,
       expiresAt: invExp,
       toHost: true,
       inviteTimeoutMs: boardGameInviteTimeoutMs,
