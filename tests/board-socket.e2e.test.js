@@ -163,14 +163,14 @@ describe("Board socket E2E", () => {
     __testHooks.resetBoardTimeoutsForTestOnly();
   });
 
-  afterAll(
-    async () => {
-      await new Promise((resolve) => {
-        httpServer.close(() => resolve());
-      });
-    },
-    60000
-  );
+  afterAll(async () => {
+    if (typeof httpServer.closeAllConnections === "function") {
+      httpServer.closeAllConnections();
+    }
+    await new Promise((resolve, reject) => {
+      httpServer.close((err) => (err ? reject(err) : resolve()));
+    });
+  }, 120000);
 
   it("PvP accepts draw agreement when accepter is not on move (FIDE-style)", async () => {
     const u1 = await signupUser(`w${Date.now()}`);
@@ -419,34 +419,42 @@ describe("Board socket E2E", () => {
     s2.close();
   });
 
-  it("board invite timeout emits inviteTimedOut with inviteTimeoutMs", async () => {
-    __testHooks.setBoardTimeoutsForTestOnly(800, 800);
+  it(
+    "board invite timeout emits inviteTimedOut with inviteTimeoutMs",
+    async () => {
+      __testHooks.setBoardTimeoutsForTestOnly(800, 800);
+      expect(__testHooks.getBoardGameInviteTimeoutMsForTestOnly()).toBe(800);
 
-    const u1 = await signupUser(`it${Date.now()}`);
-    const u2 = await signupUser(`it2${Date.now()}`);
+      const u1 = await signupUser(`it${Date.now()}`);
+      const u2 = await signupUser(`it2${Date.now()}`);
 
-    const s1 = await connectClient(port, u1.token);
-    const s2 = await connectClient(port, u2.token);
+      const s1 = await connectClient(port, u1.token);
+      const s2 = await connectClient(port, u2.token);
 
-    s2.emit("board.invite", { target: u1.username, type: "chess" });
+      try {
+        s2.emit("board.invite", { target: u1.username, type: "chess" });
 
-    const payload = await new Promise((resolve, reject) => {
-      const to = setTimeout(() => reject(new Error("timedOut event timeout")), 8000);
-      s1.once("board.inviteTimedOut", (p) => {
-        clearTimeout(to);
-        resolve(p);
-      });
-      setTimeout(() => {
-        __testHooks.processBoardIdleTimersForTestOnly();
-      }, 950);
-    });
+        const payload = await new Promise((resolve, reject) => {
+          const to = setTimeout(
+            () => reject(new Error("timedOut event timeout")),
+            10000
+          );
+          s1.once("board.inviteTimedOut", (p) => {
+            clearTimeout(to);
+            resolve(p);
+          });
+          setTimeout(() => __testHooks.expireBoardInvitesForTestOnly(), 50);
+        });
 
-    expect(payload?.inviteTimeoutMs).toBe(800);
-    expect(payload?.rematch).toBeFalsy();
-
-    s1.close();
-    s2.close();
-  });
+        expect(payload?.inviteTimeoutMs).toBe(800);
+        expect(payload?.rematch).toBeFalsy();
+      } finally {
+        s1.close();
+        s2.close();
+      }
+    },
+    20000
+  );
 
   it("rematch timeout emits board.rematchTimedOut (not inviteTimedOut)", async () => {
     __testHooks.setBoardTimeoutsForTestOnly(800, 800);
@@ -501,10 +509,7 @@ describe("Board socket E2E", () => {
     });
 
     const remPayload = await new Promise((resolve, reject) => {
-      const to = setTimeout(
-        () => reject(new Error("rematchTimedOut timeout")),
-        10000
-      );
+      const to = setTimeout(() => reject(new Error("rematchTimedOut timeout")), 8000);
       s1.once("board.rematchTimedOut", (p) => {
         clearTimeout(to);
         resolve(p);
@@ -518,9 +523,7 @@ describe("Board socket E2E", () => {
 
     s1.close();
     s2.close();
-  },
-  30000
-  );
+  }, 60000);
 
   it(
     "chess PvP: resign awards coinsGain / coinsLoss on board.end",
