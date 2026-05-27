@@ -601,9 +601,6 @@ const ppStripeCoinsPackListEl = document.getElementById(
 const playerTokensEl = $("#player-tokens");
 const playerMedalsStripEl = $("#player-medals");
 
-const personalRecordsListEl = document.getElementById("vz-personal-records-list");
-const personalRecordsCardEl = document.getElementById("vz-personal-records-card");
-
 // XP josla
 const playerXpBarEl = $("#player-xp-bar");
 const playerXpLabelEl = $("#player-xp-label");
@@ -896,32 +893,6 @@ function clearBoardResultAutoCloseTimer() {
   }
 }
 
-function syncBoardInviteShareRow(shareUrl) {
-  const row = document.getElementById("board-invite-share-row");
-  const input = document.getElementById("board-invite-share-url");
-  const status = document.getElementById("board-invite-share-status");
-  const url = String(shareUrl || "").trim();
-  if (row) row.classList.toggle("hidden", !url);
-  if (input) input.value = url;
-  if (status && !url) {
-    status.textContent = "";
-    status.classList.add("hidden");
-  }
-}
-
-function setBoardInviteShareStatus(msg) {
-  const status = document.getElementById("board-invite-share-status");
-  if (!status) return;
-  const line = String(msg || "").trim();
-  if (!line) {
-    status.textContent = "";
-    status.classList.add("hidden");
-    return;
-  }
-  status.textContent = line;
-  status.classList.remove("hidden");
-}
-
 function syncBoardInvitePendingUi() {
   const pending = document.getElementById("board-invite-pending");
   const text = document.getElementById("board-invite-pending-text");
@@ -947,19 +918,14 @@ function syncBoardInvitePendingUi() {
     } else {
       line = `Uzaicinājums nosūtīts: ${target}. Atlikušas ${left}s`;
     }
-    if (invSec >= 120) line += ` (saite ~${Math.round(invSec / 60)} min).`;
-    else if (invSec > 0) line += ` (maks. ${invSec}s).`;
+    if (invSec > 0) line += ` (maks. ${invSec}s).`;
     else line += ".";
     if (gameType === "chess" && chessLine) line += ` ${chessLine}`;
-    const shareUrl = String(pending.dataset.inviteShareUrl || "").trim();
-    if (shareUrl) line += " Nosūti saiti pretiniekam.";
     text.textContent = line;
     if (cancelBtn) cancelBtn.classList.remove("hidden");
-    syncBoardInviteShareRow(shareUrl);
   } else if (target) {
     text.textContent = "Termiņš beidzies.";
     if (cancelBtn) cancelBtn.classList.add("hidden");
-    syncBoardInviteShareRow("");
   }
 }
 
@@ -975,7 +941,6 @@ function startBoardInviteOutgoingWait(expiresAt, targetUsername, opts = {}) {
   pending.dataset.pendingChessLine = String(opts.chessClockLine || "").trim();
   const sec = Math.max(0, Math.round(Number(opts.inviteTimeoutMs) / 1000) || 0);
   pending.dataset.pendingInviteSec = sec > 0 ? String(sec) : "";
-  pending.dataset.inviteShareUrl = String(opts.shareUrl || "").trim();
   pending.classList.remove("hidden");
   syncBoardInvitePendingUi();
   boardInviteOutgoingInterval = setInterval(() => {
@@ -1001,10 +966,8 @@ function stopBoardInviteOutgoingWait() {
     pending.dataset.pendingGameType = "";
     pending.dataset.pendingChessLine = "";
     pending.dataset.pendingInviteSec = "";
-    pending.dataset.inviteShareUrl = "";
   }
   if (cancelBtn) cancelBtn.classList.add("hidden");
-  syncBoardInviteShareRow("");
 }
 
 function syncBoardInviteIncomingExpiryUi() {
@@ -1303,13 +1266,168 @@ let zole3pOpenLobbiesCache = { rooms: [], serverNow: 0 };
 let zole3pOpenLobbyPollTimer = null;
 
 /** Publiskās PvP vietas šaham / dambretēm */
-let boardOpenSeatsCache = {
-  chess: [],
-  dambrete: [],
-  zole2p: [],
-  serverNow: 0,
-};
+let boardOpenSeatsCache = { chess: [], dambrete: [], serverNow: 0 };
 let boardOpenSeatsPollTimer = null;
+
+/** Aktīvie PvP galdi — skatītāju tiešraide (bez spēles satura). */
+let boardLiveGamesCache = { games: [], totalCount: 0, serverNow: 0 };
+let boardLiveGamesPollTimer = null;
+
+function formatLiveBoardElapsed(ms) {
+  const m = Math.floor(Math.max(0, Number(ms) || 0) / 60000);
+  if (m < 1) return "<1 min";
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  return rm ? `${h} h ${rm} min` : `${h} h`;
+}
+
+function clearBoardLiveGamesPoll() {
+  if (boardLiveGamesPollTimer != null) {
+    clearInterval(boardLiveGamesPollTimer);
+    boardLiveGamesPollTimer = null;
+  }
+}
+
+function scheduleBoardLiveGamesPoll() {
+  clearBoardLiveGamesPoll();
+  if (!state.socket || typeof state.socket.emit !== "function") return;
+  boardLiveGamesPollTimer = setInterval(() => {
+    try {
+      state.socket.emit("board.requestLiveGames");
+    } catch (_) {}
+  }, 12000);
+}
+
+function renderBoardLivePvpTable() {
+  const wrap = document.getElementById("board-live-pvp");
+  const tbody = document.getElementById("board-live-pvp-body");
+  const emptyEl = document.getElementById("board-live-pvp-empty");
+  if (!wrap || !tbody) return;
+  const rows = Array.isArray(boardLiveGamesCache?.games)
+    ? boardLiveGamesCache.games
+    : [];
+  if (emptyEl) {
+    if (rows.length === 0) {
+      fillVzEmptyState(emptyEl, {
+        glyph: "👀",
+        title: "Nav aktīvu PvP galdu",
+        text: "Kad kāds spēlēs pret cilvēku, parādīsies šeit.",
+        compact: true,
+        extraClass: "vz-board-zole-open-lobbies__empty-inner",
+      });
+      emptyEl.classList.remove("hidden");
+    } else {
+      emptyEl.classList.add("hidden");
+      emptyEl.innerHTML = "";
+    }
+  }
+  if (!rows.length) {
+    tbody.innerHTML = "";
+    return;
+  }
+  tbody.innerHTML = rows
+    .map((g) => {
+      const typeLabel = String(g?.typeLabel || g?.type || "galds");
+      const players = (g?.players || []).map((p) => escapeHtml(String(p))).join(" · ");
+      const stake =
+        g?.type === "zole" && Number(g?.zole3pCoinsPerPoint) > 0
+          ? ` · likme ${g.zole3pCoinsPerPoint} c/p`
+          : "";
+      const elapsed = formatLiveBoardElapsed(g?.elapsedMs);
+      return `<tr><td>${escapeHtml(typeLabel)}${escapeHtml(stake)}</td><td>${players}</td><td>${escapeHtml(elapsed)}</td></tr>`;
+    })
+    .join("");
+}
+
+function syncBoardLivePvpPanelVisibility() {
+  const wrap = document.getElementById("board-live-pvp");
+  const lobbyEl = document.getElementById("board-games-lobby");
+  const lobbyVisible = lobbyEl && !lobbyEl.classList.contains("hidden");
+  const inInvite = (() => {
+    const invite = document.getElementById("board-games-invite");
+    return invite && !invite.classList.contains("hidden");
+  })();
+  const show = lobbyVisible && !inInvite && !boardState.gameId;
+  if (wrap) {
+    wrap.classList.toggle("hidden", !show);
+    if (show) {
+      renderBoardLivePvpTable();
+      scheduleBoardLiveGamesPoll();
+      try {
+        state.socket?.emit("board.requestLiveGames");
+      } catch (_) {}
+    } else {
+      clearBoardLiveGamesPoll();
+    }
+  }
+}
+
+function getTurnirsIdFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get("turnirs") || params.get("tournament");
+    if (!raw) return null;
+    const id = Number(raw);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+function setTournamentShareRow(shareUrl) {
+  const row = document.getElementById("tournament-share-row");
+  const input = document.getElementById("tournament-share-url");
+  const url = String(shareUrl || "").trim();
+  if (!row || !input) return;
+  if (!url) {
+    row.classList.add("hidden");
+    input.value = "";
+    return;
+  }
+  input.value = url;
+  row.classList.remove("hidden");
+}
+
+async function copyTournamentShareUrl() {
+  const input = document.getElementById("tournament-share-url");
+  const url = String(input?.value || "").trim();
+  if (!url) return;
+  try {
+    await navigator.clipboard.writeText(url);
+    appendSystemMessage("Turnīra saite nokopēta.");
+  } catch {
+    input?.select?.();
+    appendSystemMessage("Iezīmē saiti un kopē manuāli.");
+  }
+}
+
+async function showChallengeSpectatorCard(challengeId) {
+  const id = String(challengeId || "").trim();
+  if (!id || !state.token) return;
+  try {
+    const s = await apiGet(`/challenge/${id}/spectate`);
+    const p1 = s?.player1 || "?";
+    const p2 = s?.player2 || "—";
+    const st = String(s?.status || "");
+    let line = "";
+    if (st === "waiting") line = `${p1} gaida otro spēlētāju.`;
+    else if (st === "active")
+      line = `${p1} vs ${p2} — mēģ.: ${s?.attempts1 ?? "—"} / ${s?.attempts2 ?? "—"}.`;
+    else if (st === "finished")
+      line = `Pabeigts — ${p1} (${s?.attempts1}) vs ${p2} (${s?.attempts2}).`;
+    else line = `${p1} · ${st}`;
+    appendSystemMessage(`Izaicinājums (skatītājs): ${line}`);
+    if (challengeJoinText && st === "waiting" && !s?.isPlayer) {
+      challengeJoinText.textContent = `Skaties vai pievienojies — izaicinājums no ${p1}.`;
+      challengeJoinModal?.classList.remove("hidden");
+      pendingChallengeId = id;
+    }
+  } catch (e) {
+    console.warn("spectate", e);
+  }
+}
+
 
 function clearBoardOpenSeatsPoll() {
   if (boardOpenSeatsPollTimer != null) {
@@ -1324,6 +1442,9 @@ function scheduleBoardOpenSeatsPoll() {
   boardOpenSeatsPollTimer = setInterval(() => {
     try {
       state.socket.emit("board.requestOpenSeats");
+      try {
+        state.socket.emit("board.requestLiveGames");
+      } catch (_) {}
     } catch (_) {}
   }, 15000);
 }
@@ -1335,23 +1456,15 @@ function dambreteVariantLabelClient(v) {
 
 function renderBoardOpenSeatsTable(kind) {
   const wrapId =
-    kind === "chess"
-      ? "board-chess-open-seats"
-      : kind === "zole2p"
-        ? "board-zole-2p-open-seats"
-        : "board-dambrete-open-seats";
+    kind === "chess" ? "board-chess-open-seats" : "board-dambrete-open-seats";
   const tbodyId =
     kind === "chess"
       ? "board-chess-open-seats-body"
-      : kind === "zole2p"
-        ? "board-zole-2p-open-seats-body"
-        : "board-dambrete-open-seats-body";
+      : "board-dambrete-open-seats-body";
   const emptyId =
     kind === "chess"
       ? "board-chess-open-seats-empty"
-      : kind === "zole2p"
-        ? "board-zole-2p-open-seats-empty"
-        : "board-dambrete-open-seats-empty";
+      : "board-dambrete-open-seats-empty";
   const wrap = document.getElementById(wrapId);
   const tbody = document.getElementById(tbodyId);
   const emptyEl = document.getElementById(emptyId);
@@ -1361,13 +1474,9 @@ function renderBoardOpenSeatsTable(kind) {
       ? Array.isArray(boardOpenSeatsCache?.chess)
         ? boardOpenSeatsCache.chess
         : []
-      : kind === "zole2p"
-        ? Array.isArray(boardOpenSeatsCache?.zole2p)
-          ? boardOpenSeatsCache.zole2p
-          : []
-        : Array.isArray(boardOpenSeatsCache?.dambrete)
-          ? boardOpenSeatsCache.dambrete
-          : [];
+      : Array.isArray(boardOpenSeatsCache?.dambrete)
+        ? boardOpenSeatsCache.dambrete
+        : [];
   const me = String(state.username || "")
     .trim()
     .toLowerCase();
@@ -1375,12 +1484,9 @@ function renderBoardOpenSeatsTable(kind) {
   if (emptyEl) {
     if (rows.length === 0) {
       fillVzEmptyState(emptyEl, {
-        glyph: kind === "chess" ? "♔" : kind === "zole2p" ? "🃏" : "♟️",
+        glyph: kind === "chess" ? "♔" : "♟️",
         title: "Neviens negaida pretinieku",
-        text:
-          kind === "zole2p"
-            ? "Publicē, ka gaidi pretinieku, vai uzaicini draugu."
-            : "Publicē savu vietu zemāk vai uzaicini draugu.",
+        text: "Publicē savu vietu zemāk vai uzaicini draugu.",
         compact: true,
         extraClass: "vz-board-zole-open-lobbies__empty-inner",
       });
@@ -1401,9 +1507,7 @@ function renderBoardOpenSeatsTable(kind) {
     const detail =
       kind === "chess"
         ? String(r?.chessClockPreset || "—").trim() || "—"
-        : kind === "zole2p"
-          ? ""
-          : dambreteVariantLabelClient(r?.dambreteVariant);
+        : dambreteVariantLabelClient(r?.dambreteVariant);
     let btnLabel = "Pievienoties";
     let disabled = false;
     let title = "";
@@ -1415,14 +1519,7 @@ function renderBoardOpenSeatsTable(kind) {
       disabled = true;
       title = "Vispirms beidz pašreizējo spēli.";
     }
-    const dataType =
-      kind === "chess" ? "chess" : kind === "zole2p" ? "zole" : "dambrete";
-    if (kind === "zole2p") {
-      return `<tr data-open-seat-host="${escapeHtml(host)}" data-open-seat-type="${dataType}">
-      <td>${escapeHtml(host)}</td>
-      <td><button type="button" class="vz-board-zole-open-lobbies__join js-board-open-seat-join" data-open-seat-host="${escapeHtml(host)}" data-open-seat-type="${dataType}" ${disabled ? "disabled" : ""} title="${escapeHtml(title)}">${escapeHtml(btnLabel)}</button></td>
-    </tr>`;
-    }
+    const dataType = kind === "chess" ? "chess" : "dambrete";
     return `<tr data-open-seat-host="${escapeHtml(host)}" data-open-seat-type="${dataType}">
       <td>${escapeHtml(host)}</td>
       <td>${escapeHtml(detail)}</td>
@@ -1443,9 +1540,6 @@ function syncMyBoardOpenSeatButtons() {
   const dList = Array.isArray(boardOpenSeatsCache?.dambrete)
     ? boardOpenSeatsCache.dambrete
     : [];
-  const zList = Array.isArray(boardOpenSeatsCache?.zole2p)
-    ? boardOpenSeatsCache.zole2p
-    : [];
   const inChess = chessList.some(
     (r) =>
       String(r?.host || "")
@@ -1453,12 +1547,6 @@ function syncMyBoardOpenSeatButtons() {
         .toLowerCase() === me
   );
   const inDamb = dList.some(
-    (r) =>
-      String(r?.host || "")
-        .trim()
-        .toLowerCase() === me
-  );
-  const inZole2p = zList.some(
     (r) =>
       String(r?.host || "")
         .trim()
@@ -1476,18 +1564,11 @@ function syncMyBoardOpenSeatButtons() {
   document
     .getElementById("board-dambrete-open-seat-cancel")
     ?.classList.toggle("hidden", !inDamb);
-  document
-    .getElementById("board-zole-2p-open-seat-publish")
-    ?.classList.toggle("hidden", inZole2p);
-  document
-    .getElementById("board-zole-2p-open-seat-cancel")
-    ?.classList.toggle("hidden", !inZole2p);
 }
 
 function syncBoardOpenSeatsPanelVisibility() {
   const chessWrap = document.getElementById("board-chess-open-seats");
   const dambWrap = document.getElementById("board-dambrete-open-seats");
-  const zole2pWrap = document.getElementById("board-zole-2p-open-seats");
   const lobbyEl = document.getElementById("board-games-lobby");
   const lobbyVisible = lobbyEl && !lobbyEl.classList.contains("hidden");
   const inInvite = (() => {
@@ -1498,28 +1579,30 @@ function syncBoardOpenSeatsPanelVisibility() {
   const baseShow = lobbyVisible && !inInvite && !boardState.gameId;
   const showChess = baseShow && tab === "chess";
   const showDamb = baseShow && tab === "dambrete";
-  const showZole2p =
-    baseShow && tab === "zole" && getSelectedBoardZoleMode() === "online_2p";
   if (chessWrap) {
     chessWrap.classList.toggle("hidden", !showChess);
-    if (showChess) renderBoardOpenSeatsTable("chess");
+    if (showChess) {
+      renderBoardOpenSeatsTable("chess");
+      scheduleBoardOpenSeatsPoll();
+    }
   }
   if (dambWrap) {
     dambWrap.classList.toggle("hidden", !showDamb);
-    if (showDamb) renderBoardOpenSeatsTable("dambrete");
+    if (showDamb) {
+      renderBoardOpenSeatsTable("dambrete");
+      scheduleBoardOpenSeatsPoll();
+    }
   }
-  if (zole2pWrap) {
-    zole2pWrap.classList.toggle("hidden", !showZole2p);
-    if (showZole2p) renderBoardOpenSeatsTable("zole2p");
+  if (!showChess && !showDamb) {
+    clearBoardOpenSeatsPoll();
   }
-  if (showChess || showDamb || showZole2p) {
-    scheduleBoardOpenSeatsPoll();
-    try {
-      state.socket?.emit("board.requestOpenSeats");
-    } catch (_) {}
+  syncBoardLivePvpPanelVisibility();
+  if (!showChess && !showDamb) {
     return;
   }
-  clearBoardOpenSeatsPoll();
+  try {
+    state.socket?.emit("board.requestOpenSeats");
+  } catch (_) {}
 }
 
 function clearZole3pOpenLobbyPoll() {
@@ -1616,58 +1699,33 @@ function renderZole3pOpenLobbyTable() {
   tbody.innerHTML = rows.join("");
 }
 
-function syncZoleOpenRoomsPanelVisibility() {
-  const section = document.getElementById("board-zole-open-rooms");
-  const wrap3p = document.getElementById("board-zole-3p-open-lobbies");
+function syncZole3pOpenLobbyPanelVisibility() {
+  const wrap = document.getElementById("board-zole-3p-open-lobbies");
+  if (!wrap) return;
   const lobbyEl = document.getElementById("board-games-lobby");
   const lobbyVisible = lobbyEl && !lobbyEl.classList.contains("hidden");
   const inInvite = (() => {
     const invite = document.getElementById("board-games-invite");
     return invite && !invite.classList.contains("hidden");
   })();
+  const inZoleRoomFlow =
+    getSelectedBoardZoleMode() === "online_3p" ||
+    !!zole3pLobbySnapshot?.zoleLobby;
   const onZoleTab = getBoardLobbyGameTab() === "zole";
-  const zm = getSelectedBoardZoleMode();
-  const baseShow =
-    lobbyVisible && !inInvite && !boardState.gameId && onZoleTab && zm !== "vs_bot";
-  const show3p =
-    baseShow &&
-    (zm === "online_3p" || !!zole3pLobbySnapshot?.zoleLobby);
-  if (section) section.classList.toggle("hidden", !baseShow);
-  if (wrap3p) {
-    wrap3p.classList.toggle("hidden", !show3p);
-    if (show3p) {
-      renderZole3pOpenLobbyTable();
-      scheduleZole3pOpenLobbyPoll();
-      try {
-        state.socket?.emit("board.zoleRequestOpenLobbies");
-      } catch (_) {}
-    } else {
-      clearZole3pOpenLobbyPoll();
-    }
+  const show =
+    lobbyVisible &&
+    !inInvite &&
+    inZoleRoomFlow &&
+    !boardState.gameId &&
+    onZoleTab;
+  wrap.classList.toggle("hidden", !show);
+  if (show) {
+    renderZole3pOpenLobbyTable();
+    scheduleZole3pOpenLobbyPoll();
+  } else {
+    clearZole3pOpenLobbyPoll();
   }
   syncBoardOpenSeatsPanelVisibility();
-}
-
-function syncZole3pOpenLobbyPanelVisibility() {
-  syncZoleOpenRoomsPanelVisibility();
-}
-
-function syncZole3pStakeLegalHint() {
-  const el = document.getElementById("board-zole-3p-stake-legal-hint");
-  if (!el) return;
-  const cpp = Math.max(
-    0,
-    Math.min(
-      5,
-      Math.floor(Number(document.getElementById("board-zole-3p-stake")?.value) || 0)
-    )
-  );
-  if (cpp <= 0) {
-    el.textContent =
-      "Coins ir spēles resurss, ne nauda. PvP ar fiksētu uzvaras/zaudējuma summu — brīvprātīgs risks; nav naudas izmaksas.";
-  } else {
-    el.textContent = `Likme ${cpp} coin(s) par tabulas punktu: coins nav naudu — zaudējums nozīmē mazāku atlikumu spēlē, ne naudas atmaksu. 18+; UK — sk. noteikumus un coins-vip-turniri.html.`;
-  }
 }
 
 function syncZole3pStakeSelectFromLobby() {
@@ -1690,7 +1748,6 @@ function syncZole3pStakeSelectFromLobby() {
   const isHost = host && me && host.toLowerCase() === me.toLowerCase();
   const n = (zole3pLobbySnapshot?.players || []).length;
   sel.disabled = !isHost || n >= 3;
-  syncZole3pStakeLegalHint();
 }
 
 function syncZoleStakeBannerInGameArea() {
@@ -2209,68 +2266,6 @@ function zole3pStakeTableCoinsNote(coinsPerPoint) {
   const c = Math.floor(Number(coinsPerPoint) || 0);
   if (c <= 0) return "";
   return ` Likme istabā: ${c} coins par katru tavu tabulas punktu šajā partijā — coins izmaiņa = tabulas punkti × ${c} (tā pati formula čatā un rezultātā).`;
-}
-
-const COINS_TOPUP_LOW_BALANCE = 40;
-
-function isStripeCoinsBuyAvailable() {
-  return !!state.stripeCoinsEnabled && (state.stripeCoinPacks || []).length > 0;
-}
-
-function scrollToStripeCoinsBuySection() {
-  syncStripeCoinsBuyUi();
-  const el = stripeCoinsBuyEl;
-  if (!el || el.classList.contains("hidden")) return false;
-  el.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  return true;
-}
-
-function hideBoardResultCoinsTopup() {
-  const el = document.getElementById("board-result-coins-topup");
-  if (!el) return;
-  el.classList.add("hidden");
-  el.innerHTML = "";
-}
-
-function showBoardResultCoinsTopup(coinsLoss, balanceAfter) {
-  const el = document.getElementById("board-result-coins-topup");
-  if (!el) return;
-  const lost = Math.max(0, Number(coinsLoss) || 0);
-  if (lost <= 0 || !isStripeCoinsBuyAvailable()) {
-    hideBoardResultCoinsTopup();
-    return;
-  }
-  const bal = Math.max(0, Math.floor(Number(balanceAfter) || 0));
-  const low = bal <= COINS_TOPUP_LOW_BALANCE;
-  el.classList.remove("hidden");
-  const intro = low
-    ? `Atlikums ${bal} coins. Zaudēji ${lost} — vari atjaunot coins tieši šeit VĀRDU ZONĀ.`
-    : `Zaudēji ${lost} coins. Vari iegādāties coins atpakaļ tieši šeit VĀRDU ZONĀ.`;
-  el.innerHTML = `<span class="vz-board-result-coins-topup__text">${escapeHtml(intro)}</span> <button type="button" class="vz-board-result-topup-btn" id="board-result-topup-btn">Pirkt coins</button>`;
-  document.getElementById("board-result-topup-btn")?.addEventListener(
-    "click",
-    () => {
-      document.getElementById("board-result-close")?.click();
-      setTimeout(() => {
-        if (!scrollToStripeCoinsBuySection()) {
-          appendVzStatusMessage(
-            "Atver profila karti un izvēlies «Pirkt coins», lai papildinātu atlikumu."
-          );
-        }
-      }, 250);
-    },
-    { once: true }
-  );
-}
-
-function maybeNotifyCoinsLossTopUp(coinsLoss, balanceAfter) {
-  const lost = Math.max(0, Number(coinsLoss) || 0);
-  if (lost <= 0 || !isStripeCoinsBuyAvailable()) return;
-  const bal = Math.max(0, Math.floor(Number(balanceAfter) || 0));
-  if (bal > COINS_TOPUP_LOW_BALANCE) return;
-  appendVzStatusMessage(
-    `Coins atlikums ${bal}. Vari papildināt tieši VĀRDU ZONĀ — profila kartē «Pirkt coins».`
-  );
 }
 
 function showBoardGameResult(payload) {
@@ -3635,62 +3630,6 @@ let deferredInstallPrompt = null;
 
 // ==================== IZAICINĀJUMS DRAUGAM ====================
 let pendingChallengeId = null;
-let pendingBoardInviteLinkToken = null;
-
-function getBoardInviteTokenFromUrl() {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("boardInvite") || params.get("boardinvite") || null;
-  } catch {
-    return null;
-  }
-}
-
-function clearBoardInviteFromUrl() {
-  try {
-    const u = new URL(window.location.href);
-    u.searchParams.delete("boardInvite");
-    u.searchParams.delete("boardinvite");
-    window.history.replaceState({}, "", u.pathname + (u.search || "") + (u.hash || ""));
-  } catch {}
-}
-
-function tryOpenBoardInviteLinkFromPending() {
-  const tok = String(pendingBoardInviteLinkToken || "").trim();
-  if (!tok || !state.socket || typeof state.socket.emit !== "function") return;
-  pendingBoardInviteLinkToken = null;
-  state.socket.emit("board.openInviteLink", { token: tok });
-}
-
-function getBoardInviteShareUrlFromPending() {
-  const pending = document.getElementById("board-invite-pending");
-  const input = document.getElementById("board-invite-share-url");
-  const fromInput = String(input?.value || "").trim();
-  if (fromInput) return fromInput;
-  return String(pending?.dataset?.inviteShareUrl || "").trim();
-}
-
-async function copyBoardInviteShareUrl() {
-  const url = getBoardInviteShareUrlFromPending();
-  if (!url) {
-    setBoardInviteShareStatus("Nav aktīvas uzaicinājuma saites.");
-    appendGaldaSystemMessage("Nav aktīvas uzaicinājuma saites.");
-    return;
-  }
-  try {
-    await navigator.clipboard.writeText(url);
-    setBoardInviteShareStatus("Saite nokopēta — nosūti pretiniekam.");
-    appendGaldaSystemMessage(
-      "Uzaicinājuma saite nokopēta — nosūti pretiniekam (derīga ~30 min)."
-    );
-  } catch {
-    setBoardInviteShareStatus("Neizdevās kopēt — izvēlies saiti un kopē manuāli.");
-    appendGaldaSystemMessage(`Saite: ${url}`);
-  }
-}
-
-pendingBoardInviteLinkToken = getBoardInviteTokenFromUrl();
-if (pendingBoardInviteLinkToken) clearBoardInviteFromUrl();
 
 function getChallengeIdFromUrl() {
   try {
@@ -4555,7 +4494,6 @@ function updatePlayerCard(me) {
     }
   }
 
-  renderPersonalRecords(me);
   state.lastMeForSocial = me;
   renderClanCard(me);
   renderSocialPulse();
@@ -4985,6 +4923,8 @@ async function runPostLoginInit() {
   await refreshSeasonHttp();
   await refreshHof();
 
+  const turnirsIdFromUrl = getTurnirsIdFromUrl();
+  if (turnirsIdFromUrl) state.tournamentHintTournamentId = turnirsIdFromUrl;
   const challengeIdFromUrl = getChallengeIdFromUrl();
   if (challengeIdFromUrl) {
     try {
@@ -6288,10 +6228,18 @@ function getFriendPresenceUi(p, online) {
   const lastHand = !!p.zoleVsBotLastHand;
 
   if (inGame) {
+    const live = p.boardLivePreview;
+    const sub = live?.typeLabel ? String(live.typeLabel) : "galds";
+    const vs =
+      Array.isArray(live?.players) && live.players.length >= 2
+        ? live.players.slice(0, 2).join(" vs ")
+        : "";
     return {
       label: "Spēlē",
-      sub: "galds",
-      title: "Aktīva galda spēle (šahs, dambrete vai zole).",
+      sub,
+      title: vs
+        ? `Aktīva PvP: ${vs} (${sub}). Atver Galdu — tiešraide.`
+        : "Aktīva galda spēle (šahs, dambrete vai zole).",
       tone: "busy",
     };
   }
@@ -6432,6 +6380,28 @@ function renderSocialPulse() {
     );
   }
 
+  const liveN = Math.max(
+    0,
+    Number(boardLiveGamesCache?.totalCount) ||
+      (Array.isArray(boardLiveGamesCache?.games)
+        ? boardLiveGamesCache.games.length
+        : 0)
+  );
+  if (liveN > 0) {
+    parts.push(
+      `<div class="vz-social-pulse-block"><strong>Tiešraide</strong>: ${liveN} aktīvs PvP galds. <a href="skatitaji-pakete.html" target="_blank" rel="noopener">Pakete</a> · <button type="button" class="vz-linkish-btn js-open-board-live">Skatīt sarakstu</button></div>`
+    );
+  }
+  const friendsInPvp = friends.filter((n) => {
+    const key = String(n || "").trim().toLowerCase();
+    const p = state.onlineUsers.get(key);
+    return p?.inBoardGame;
+  }).length;
+  if (friendsInPvp > 0) {
+    parts.push(
+      `<div class="vz-social-pulse-note">${friendsInPvp} draugs(-i) šobrīd galda spēlē.</div>`
+    );
+  }
   parts.push(
     `<div class="vz-social-pulse-block"><strong>Draugi tiešsaistē</strong>: ${onlineFriends.length} no ${friends.length}.</div>`
   );
@@ -7906,93 +7876,6 @@ window.addEventListener("keydown", (e) => {
   addLetter(ch);
 });
 
-
-// ==================== MANI REKORDI ====================
-function formatPersonalRecordNumber(n) {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return "0";
-  return x.toLocaleString("lv-LV");
-}
-
-function renderPersonalRecords(me) {
-  const listEl = personalRecordsListEl;
-  if (!listEl) return;
-  if (personalRecordsCardEl) {
-    personalRecordsCardEl.classList.toggle(
-      "hidden",
-      !state.token || !state.username
-    );
-  }
-  if (!me || !state.token) {
-    listEl.innerHTML = "";
-    return;
-  }
-  const pr = me.personalRecords && typeof me.personalRecords === "object"
-    ? me.personalRecords
-    : {};
-  const rows = [
-    {
-      label: "Coins (atlikums)",
-      value: formatPersonalRecordNumber(pr.coins ?? me.coins),
-    },
-    {
-      label: "Kopējie punkti",
-      value: formatPersonalRecordNumber(pr.score ?? me.score),
-    },
-    {
-      label: "XP",
-      value: formatPersonalRecordNumber(pr.xp ?? me.xp),
-    },
-    {
-      label: "Labākais streak",
-      value: `${formatPersonalRecordNumber(pr.bestStreak ?? me.bestStreak)} 🔥`,
-    },
-    {
-      label: "Šodienas uzvaras",
-      value: formatPersonalRecordNumber(pr.winsToday ?? 0),
-    },
-    {
-      label: "Novada punkti",
-      value: formatPersonalRecordNumber(pr.regionPoints ?? me.regionPoints ?? 0),
-    },
-  ];
-  const duelGames = Math.max(0, Number(pr.duelEloGames ?? me.duelEloGames) || 0);
-  if (duelGames > 0) {
-    rows.push({
-      label: "Duelu ELO",
-      value: String(pr.duelElo ?? me.duelElo ?? "—"),
-    });
-  }
-  rows.push(
-    {
-      label: "Dambrete ELO",
-      value: formatPersonalRecordNumber(pr.dambreteElo ?? me.dambreteElo ?? 1000),
-    },
-    {
-      label: "Dambretes uzvaras",
-      value: formatPersonalRecordNumber(pr.dambreteWins ?? me.dambreteWins),
-    },
-    {
-      label: "Šaha ELO",
-      value: formatPersonalRecordNumber(pr.chessElo ?? me.chessElo ?? 1000),
-    },
-    {
-      label: "Šaha uzvaras",
-      value: formatPersonalRecordNumber(pr.chessWins ?? me.chessWins),
-    },
-    {
-      label: "Zoles uzvaras",
-      value: formatPersonalRecordNumber(pr.zoleWins ?? me.zoleWins),
-    }
-  );
-  listEl.innerHTML = rows
-    .map(
-      (r) =>
-        `<div class="vz-personal-records__row"><dt>${escapeHtml(r.label)}</dt><dd>${escapeHtml(String(r.value))}</dd></div>`
-    )
-    .join("");
-}
-
 // ==================== LEADERBOARD / ONLINE ====================
 const TOP_AVATAR_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -9115,6 +8998,7 @@ function clearTournamentCardUi() {
     tournamentMetaEl.textContent = "";
     tournamentMetaEl.classList.add("hidden");
   }
+  setTournamentShareRow("");
   if (tournamentMatchListEl) {
     tournamentMatchListEl.innerHTML = "";
     tournamentMatchListEl.classList.add("hidden");
@@ -9251,6 +9135,7 @@ function renderTournamentCard(meta, details) {
     statusLine += " · Pabeigts";
   }
   tournamentStatusEl.textContent = statusLine;
+  setTournamentShareRow(details?.shareUrl || "");
 
   if (tournamentMetaEl) {
     const participantCount = Math.max(
@@ -11735,9 +11620,6 @@ function initSocket() {
         "Pieslēgts serverim — viss (vārdi, čats, galds) darbojas reāllaikā."
       );
     }
-    if (pendingBoardInviteLinkToken && state.token) {
-      setTimeout(() => tryOpenBoardInviteLinkFromPending(), 350);
-    }
     if (navigator.onLine) {
       if (_vzConnIssueOverlayTimer != null) {
         clearTimeout(_vzConnIssueOverlayTimer);
@@ -12340,9 +12222,6 @@ function initSocket() {
   });
 
   // ========== GALDA SPĒLES (dambrete, šahs) ==========
-  socket.on("board.inviteLinkError", (payload) => {
-    appendGaldaSystemMessage(payload?.message || "Uzaicinājuma saite nav derīga.");
-  });
   socket.on("board.invite", (payload) => {
     const from = payload?.from || "?";
     const type = payload?.type || "dambrete";
@@ -12368,7 +12247,6 @@ function initSocket() {
         gameType: gt,
         chessClockLine: chessLine,
         inviteTimeoutMs: payload?.inviteTimeoutMs,
-        shareUrl: payload?.shareUrl,
       });
     const sec = Math.max(
       1,
@@ -12471,16 +12349,23 @@ function initSocket() {
       rooms: Array.isArray(payload?.rooms) ? payload.rooms : [],
       serverNow: Number(payload?.serverNow) || Date.now(),
     };
-    syncZoleOpenRoomsPanelVisibility();
+    syncZole3pOpenLobbyPanelVisibility();
   });
   socket.on("board.openSeats", (payload) => {
     boardOpenSeatsCache = {
       chess: Array.isArray(payload?.chess) ? payload.chess : [],
       dambrete: Array.isArray(payload?.dambrete) ? payload.dambrete : [],
-      zole2p: Array.isArray(payload?.zole2p) ? payload.zole2p : [],
       serverNow: Number(payload?.serverNow) || Date.now(),
     };
-    syncZoleOpenRoomsPanelVisibility();
+    syncBoardOpenSeatsPanelVisibility();
+  });
+  socket.on("board.liveGames", (payload) => {
+    boardLiveGamesCache =
+      payload && typeof payload === "object"
+        ? payload
+        : { games: [], totalCount: 0, serverNow: 0 };
+    renderBoardLivePvpTable();
+    renderSocialPulse();
   });
   socket.on("board.error", (payload) => {
     disarmBoardMoveResponseWait();
@@ -14050,12 +13935,6 @@ function bindBoardGames() {
       if (!target || !state.socket) return;
       state.socket.emit("board.inviteCancel", { target });
     });
-  document.getElementById("board-invite-share-copy")?.addEventListener("click", () => {
-    copyBoardInviteShareUrl();
-  });
-  document.getElementById("board-invite-share-url")?.addEventListener("focus", (e) => {
-    e.target?.select?.();
-  });
   const zole3pInviteThird = document.getElementById(
     "board-zole-3p-invite-third"
   );
@@ -14195,7 +14074,6 @@ function bindBoardGames() {
   document
     .getElementById("board-zole-3p-stake")
     ?.addEventListener("change", () => {
-      syncZole3pStakeLegalHint();
       if (!state.socket) return;
       const snap = zole3pLobbySnapshot;
       if (!snap?.zoleLobby) return;
@@ -14216,7 +14094,6 @@ function bindBoardGames() {
         zole3pCoinsPerPoint: cpp,
       });
     });
-  syncZole3pStakeLegalHint();
   document
     .getElementById("board-zole-3p-leave-lobby")
     ?.addEventListener("click", () => {
@@ -14316,35 +14193,6 @@ function bindBoardGames() {
       state.socket.emit("board.requestOpenSeatInvite", {
         host,
         type: "chess",
-      });
-    });
-  document
-    .getElementById("board-zole-2p-open-seat-publish")
-    ?.addEventListener("click", () => {
-      if (!boardGamesEnsureSocketConnected()) return;
-      state.socket.emit("board.openSeatPublish", {
-        type: "zole",
-        zoleMode: "online_2p",
-      });
-    });
-  document
-    .getElementById("board-zole-2p-open-seat-cancel")
-    ?.addEventListener("click", () => {
-      if (!boardGamesEnsureSocketConnected()) return;
-      state.socket.emit("board.openSeatCancel");
-    });
-  document
-    .getElementById("board-zole-2p-open-seats")
-    ?.addEventListener("click", (ev) => {
-      const btn = ev.target.closest(".js-board-open-seat-join");
-      if (!btn || btn.disabled) return;
-      const host = String(btn.dataset.openSeatHost || "").trim();
-      if (!host) return;
-      if (!boardGamesEnsureSocketConnected()) return;
-      state.socket.emit("board.requestOpenSeatInvite", {
-        host,
-        type: "zole",
-        zoleMode: "online_2p",
       });
     });
 }
@@ -15470,6 +15318,16 @@ async function initGame() {
       refreshTournamentCard(true)
     );
   }
+  document.getElementById("tournament-share-copy")?.addEventListener("click", () => {
+    void copyTournamentShareUrl();
+  });
+  document.body?.addEventListener("click", (ev) => {
+    const t = ev.target;
+    if (t?.classList?.contains("js-open-board-live")) {
+      ev.preventDefault();
+      document.getElementById("board-games-open-btn")?.click();
+    }
+  });
   if (tournamentReportBtnEl) {
     tournamentReportBtnEl.addEventListener(
       "click",

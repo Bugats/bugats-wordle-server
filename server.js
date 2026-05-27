@@ -1202,6 +1202,47 @@ function buildBoardOpenSeatsListPayload() {
   return { chess, dambrete, serverNow: now };
 }
 
+function boardGameTypeLabelForLive(type) {
+  const t = String(type || "").toLowerCase();
+  if (t === "chess") return "šahs";
+  if (t === "dambrete") return "dambrete";
+  if (t === "zole") return "zole";
+  return t || "galds";
+}
+
+function buildLiveBoardGamesPayload() {
+  const now = Date.now();
+  const games = [];
+  for (const [gameId, g] of boardGames.entries()) {
+    if (!g || g.status !== "active" || g.vsBot) continue;
+    const players = (g.players || [])
+      .map((x) => String(x || "").trim())
+      .filter(Boolean);
+    if (players.length < 2) continue;
+    const startedAt = Math.max(
+      0,
+      Number(g.lastMoveAt) || Number(g.createdAt) || 0
+    );
+    games.push({
+      gameId,
+      type: g.type,
+      typeLabel: boardGameTypeLabelForLive(g.type),
+      players,
+      startedAt,
+      elapsedMs: startedAt ? Math.max(0, now - startedAt) : 0,
+      zole3pCoinsPerPoint:
+        g.type === "zole"
+          ? Math.max(
+              0,
+              Math.min(5, Math.floor(Number(g.zole3pCoinsPerPoint) || 0))
+            )
+          : 0,
+    });
+  }
+  games.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+  return { games: games.slice(0, 24), totalCount: games.length, serverNow: now };
+}
+
 function pruneExpiredBoardOpenSeats() {
   const now = Date.now();
   let changed = false;
@@ -7450,11 +7491,19 @@ function onlineBoardStatusForUsername(username) {
     g.zoleMode === "vs_bot" &&
     g.zole?.phase === "end" &&
     !!g.zole.zoleLastMatchHand;
+  const players = (g.players || [])
+    .map((x) => String(x || "").trim())
+    .filter(Boolean);
   return {
     inBoardGame: true,
     zoleVsBotLastHand: zLast,
     zole3pLobby,
     pendingBoardInvite,
+    boardLivePreview: {
+      type: g.type,
+      typeLabel: boardGameTypeLabelForLive(g.type),
+      players,
+    },
   };
 }
 
@@ -7474,6 +7523,7 @@ function getMiniUserPayload(username) {
       zoleVsBotLastHand: board.zoleVsBotLastHand,
       zole3pLobby: !!board.zole3pLobby,
       pendingBoardInvite: board.pendingBoardInvite || null,
+      boardLivePreview: board.boardLivePreview || null,
     };
   }
   const info = ensureRankFields(u);
@@ -7489,6 +7539,7 @@ function getMiniUserPayload(username) {
     zoleVsBotLastHand: board.zoleVsBotLastHand,
     zole3pLobby: !!board.zole3pLobby,
     pendingBoardInvite: board.pendingBoardInvite || null,
+    boardLivePreview: board.boardLivePreview || null,
   };
 }
 
@@ -7511,7 +7562,9 @@ function broadcastOnlineList(force = false) {
           u.inBoardGame ? 1 : 0
         }|${u.zoleVsBotLastHand ? 1 : 0}|${u.zole3pLobby ? 1 : 0}|${
           u.pendingBoardInvite?.from || ""
-        }|${u.pendingBoardInvite?.rematch ? 1 : 0}`
+        }|${u.pendingBoardInvite?.rematch ? 1 : 0}|${u.boardLivePreview?.type || ""}|${(
+          u.boardLivePreview?.players || []
+        ).join(",")}`
     )
     .join(";");
 
@@ -11118,10 +11171,14 @@ app.get("/tournaments/:id", authMiddleware, async (req, res) => {
       finalStandings = [];
     }
 
+    const baseUrl = String(
+      req.get("origin") || `${req.protocol}://${req.get("host")}` || ""
+    ).replace(/\/\/$/, "");
     return res.json({
       tournament: meta,
       ...snapshot,
       finalStandings,
+      shareUrl: `${baseUrl}/game.html?turnirs=${tournamentId}`,
     });
   } catch (err) {
     console.error("Tournament load error:", err);
@@ -11448,6 +11505,38 @@ app.post("/challenge/create", authMiddleware, (req, res) => {
     shareUrl: `${baseUrl}/game.html?challenge=${id}`,
     player1: user.username,
     len,
+  });
+});
+
+app.get("/challenge/:id/spectate", authMiddleware, (req, res) => {
+  pruneExpiredChallenges();
+  const c = challenges.get(String(req.params.id || "").trim());
+  if (!c)
+    return res
+      .status(404)
+      .json({ message: "Izaicinājums nav atrasts vai ir beidzies." });
+  const me = req.user.username;
+  const isPlayer = c.player1 === me || c.player2 === me;
+  const status = !c.player2
+    ? "waiting"
+    : c.completed1 && c.completed2
+      ? "finished"
+      : "active";
+  const baseUrl = String(
+    req.get("origin") || `${req.protocol}://${req.get("host")}` || ""
+  ).replace(/\/$/, "");
+  return res.json({
+    challengeId: c.id,
+    player1: c.player1,
+    player2: c.player2 || null,
+    len: c.len,
+    status,
+    isPlayer,
+    attempts1: c.attempts1,
+    attempts2: c.attempts2,
+    completed1: !!c.completed1,
+    completed2: !!c.completed2,
+    shareUrl: `${baseUrl}/game.html?challenge=${c.id}`,
   });
 });
 
@@ -13867,6 +13956,9 @@ io.on("connection", (socket) => {
   socket.on("board.requestOpenSeats", () => {
     socket.emit("board.openSeats", buildBoardOpenSeatsListPayload());
   });
+  socket.on("board.requestLiveGames", () => {
+    socket.emit("board.liveGames", buildLiveBoardGamesPayload());
+  });
 
   socket.on("board.requestOpenSeatInvite", (payload) => {
     const joiner = socket.data.user;
@@ -15421,6 +15513,10 @@ const __testHooks = {
     zole3pThirdInviteTtlMs = 90 * 1000;
   },
   /** E2E: tā kā test vidē nav 1s setInterval, manuāli izpilda uzaicinājumu noildzi. */
+  getLiveBoardGamesPayloadForTestOnly() {
+    if (process.env.NODE_ENV !== "test") return { games: [], totalCount: 0 };
+    return buildLiveBoardGamesPayload();
+  },
   processBoardIdleTimersForTestOnly() {
     if (process.env.NODE_ENV !== "test" && process.env.VITEST !== "true")
       return;

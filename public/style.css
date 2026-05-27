@@ -1988,6 +1988,48 @@ button.vz-friend-quick-duel:hover {
   line-height: 1.35;
 }
 
+.vz-linkish-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: #7dd3fc;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.vz-linkish-btn:hover {
+  color: #bae6fd;
+}
+
+.vz-viewer-share-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0 10px;
+}
+.vz-viewer-share-input {
+  flex: 1 1 160px;
+  min-width: 0;
+  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.25);
+  color: #e2e8f0;
+}
+.vz-viewer-share-copy {
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 6px 10px;
+}
+
+.vz-board-live-pvp {
+  margin-bottom: 14px;
+  border-color: rgba(125, 211, 252, 0.35);
+}
+
 /* ===== WEEKLY ===== */
 .vz-weekly-sub {
   font-size: 12px;
@@ -6807,18 +6849,8 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   margin-top: 10px;
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 8px 10px;
-}
-.vz-board-pending-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
   align-items: center;
-}
-.vz-board-pending-actions .vz-board-invite-btn--ghost {
-  padding: 5px 10px;
-  font-size: 11px;
+  gap: 10px;
 }
 .vz-board-pending-cancel {
   padding: 6px 10px;
@@ -6831,19 +6863,6 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   cursor: pointer;
 }
 .vz-board-pending-cancel:hover { background: rgba(255, 255, 255, 0.14); }
-
-.vz-board-invite-share-row {
-  margin-top: 10px;
-}
-.vz-board-invite-share-status {
-  margin: 6px 0 0;
-}
-.vz-board-pending-actions {
-  margin-top: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
 .vz-board-invite-text { margin: 0 0 4px; font-size: 15px; }
 .vz-board-invite-sub { margin: 0 0 12px; font-size: 12px; opacity: 0.85; }
 .vz-board-invite-expires {
@@ -8857,15 +8876,6 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   background: rgba(15, 23, 42, 0.85);
   color: #f4f4f5;
 }
-.vz-board-zole-stake-legal-hint {
-  margin-top: 6px;
-  font-size: 12px;
-  line-height: 1.35;
-  color: rgba(255, 220, 180, 0.92);
-  border-left: 3px solid rgba(255, 183, 77, 0.75);
-  padding-left: 8px;
-}
-
 .vz-board-zole-stake-hint {
   margin: 8px 0 0;
   font-size: 11px;
@@ -9541,67 +9551,3 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     font-size: 22px;
   }
 }
-
-
-.vz-personal-records__list {
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.vz-personal-records__row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 10px;
-  font-size: 13px;
-  line-height: 1.35;
-}
-.vz-personal-records__row dt {
-  margin: 0;
-  font-weight: 500;
-  color: #c8c8c8;
-  flex: 1 1 auto;
-}
-.vz-personal-records__row dd {
-  margin: 0;
-  font-weight: 600;
-  color: #fff;
-  text-align: right;
-  flex: 0 0 auto;
-}
-.vz-personal-records__note {
-  margin: 10px 0 0;
-  font-size: 11px;
-  line-height: 1.4;
-  color: #9a9a9a;
-}
-
-.vz-board-result-coins-topup {
-  margin: 10px 0 0;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(255, 193, 7, 0.12);
-  border: 1px solid rgba(255, 193, 7, 0.35);
-  font-size: 13px;
-  line-height: 1.45;
-  color: #f5e6b8;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.vz-board-result-coins-topup.hidden { display: none !important; }
-.vz-board-result-topup-btn {
-  flex: 0 0 auto;
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: none;
-  background: #ffc107;
-  color: #1a1a1a;
-  font-weight: 600;
-  font-size: 12px;
-  cursor: pointer;
-}
-.vz-board-result-topup-btn:hover { filter: brightness(1.05); }

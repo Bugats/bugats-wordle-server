@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="lv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Skatītāju pievilināšanas pakete — VĀRDU ZONA</title>
+    <meta
+      name="description"
+      content="Kā piesaistīt skatītājus: tiešraides galdi, turnīru saites, draugu pulss un vārdu izaicinājumi."
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="auth-page-body">
+    <div class="container privacy-container vz-guide-brief">
+      <h1>Skatītāju pievilināšanas pakete</h1>
+      <p class="vz-guide-brief__lead">
+        Šis ir <strong>produkta līmenis</strong> — kā piesaistīt cilvēkus, kas vēlas skatīties,
+        sekot draugiem vai dalīties ar notikumu, pat ja paši nespēlē tūlīt. Pilns «skatītāja
+        režīms» uz galda (dzīvs FEN / kāršu izkārtojums) ir nākamais solis.
+      </p>
+
+      <h2>1. Tiešraide — PvP galdi</h2>
+      <ul>
+        <li>
+          <strong>Kur:</strong> spēlē → <em>Galds</em> → bloks «Tiešraide — PvP galdi» (visās
+          spēļu cilnēs, kamēr esi lobijā).
+        </li>
+        <li>
+          <strong>Ko rāda:</strong> aktīvas spēles pret cilvēkiem (šahs, dambrete, zole) — spēlētāju
+          vārdi un aptuvenais ilgums. Bez slepenā satura (anti-cheat).
+        </li>
+        <li>
+          <strong>Mērķis:</strong> skatītājs redz «kas notiek tagad» un var pāriet uz atvērtajām
+          vietām vai uzaicināt draugu.
+        </li>
+      </ul>
+
+      <h2>2. Turnīra saite skatītājiem</h2>
+      <ul>
+        <li>
+          <strong>Kur:</strong> sadaļa <em>Turnīri</em> — «Kopēt turnīra saiti» pēc turnīra
+          ielādes.
+        </li>
+        <li>
+          <strong>Formāts:</strong> <code>game.html?turnirs=ID</code> — atver spēli ar izvēlēto
+          turnīru.
+        </li>
+        <li>
+          <strong>Ko redz skatītājs:</strong> bracket, aktīvie mači, uzvarētājs (kad pabeigts) — bez
+          iesniegt rezultātu, ja nav dalībnieks.
+        </li>
+      </ul>
+
+      <h2>3. Sociālais pulss</h2>
+      <ul>
+        <li>Draugi tiešsaistē + cik PvP galdu notiek platformā.</li>
+        <li>Draugu statusā: «Spēlē · šahs» (ja zināms), ne tikai «galds».</li>
+        <li>
+          Saite uz šo lapu no pulsa — skaidrojums, ko vari darīt kā skatītājs.
+        </li>
+      </ul>
+
+      <h2>4. Vārdu izaicinājums (watch party)</h2>
+      <ul>
+        <li>
+          Esošā <code>?challenge=</code> saite — draugi var pievienoties spēlēt.
+        </li>
+        <li>
+          <strong>Jaunums:</strong> <code>GET /challenge/:id/spectate</code> — statuss bez slepenā
+          vārda (gaida / aktīvs / pabeigts, mēģinājumu skaits).
+        </li>
+      </ul>
+
+      <h2>5. Ko vēl plānot (nav šajā laidienā)</h2>
+      <ul>
+        <li>Pilns skatītāja režīms uz galda (read-only laukums).</li>
+        <li>«X skatās» skaitītājs, OBS overlay, Twitch/YouTube embed.</li>
+        <li>Featured mačs TOP10 / reģionu kartē.</li>
+      </ul>
+
+      <p class="legal-back-link">
+        <a href="game.html">← Atpakaļ uz spēli</a>
+        ·
+        <a href="compliance-checklist.html">Atbilstība (UK)</a>
+      </p>
+    </div>
+  </body>
+</html>
