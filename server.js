@@ -967,7 +967,59 @@ function registerBoardInviteLink(meta) {
   return token;
 }
 
-function boardInviteSocketPayloadFromLink(link, role) {
+function boardInvitePublicBaseUrl(socket) {
+  const origin = socket?.handshake?.headers?.origin;
+  if (origin) return String(origin).replace(/\/$/, "");
+  const host = socket?.handshake?.headers?.host;
+  if (host) {
+    const xfProto = socket?.handshake?.headers?.["x-forwarded-proto"];
+    const proto =
+      (typeof xfProto === "string" ? xfProto.split(",")[0].trim() : "") ||
+      (socket?.handshake?.secure ? "https" : "http");
+    return `${proto}://${host}`.replace(/\/$/, "");
+  }
+  const env = String(
+    process.env.PUBLIC_BASE_URL || process.env.BASE_URL || ""
+  ).trim();
+  return env.replace(/\/$/, "");
+}
+
+function boardInviteShareUrlFromToken(token, socket) {
+  const tok = String(token || "").trim();
+  if (!tok) return "";
+  const base = boardInvitePublicBaseUrl(socket);
+  if (!base) return "";
+  return `${base}/game.html?boardInvite=${encodeURIComponent(tok)}`;
+}
+
+function boardInviteSentShareFields(token, socket) {
+  const shareUrl = boardInviteShareUrlFromToken(token, socket);
+  return {
+    ...(shareUrl ? { shareUrl } : {}),
+    shareLinkTtlMs: BOARD_INVITE_LINK_TTL_MS,
+  };
+}
+
+function parseBoardInviteTokenFromOpenPayload(payload) {
+  let token = String(
+    payload?.token || payload?.inviteLinkToken || ""
+  ).trim();
+  if (token) return token;
+  const shareUrl = String(payload?.shareUrl || "").trim();
+  if (!shareUrl) return "";
+  try {
+    const u = new URL(shareUrl);
+    return (
+      u.searchParams.get("boardInvite") ||
+      u.searchParams.get("boardinvite") ||
+      ""
+    ).trim();
+  } catch {
+    return "";
+  }
+}
+
+function boardInviteSocketPayloadFromLink(link, role, socket) {
   const gameType = String(link?.type || "dambrete").toLowerCase();
   const dambreteVariant = normalizeDambreteVariant(
     link?.dambreteVariant || "russian"
@@ -1001,8 +1053,7 @@ function boardInviteSocketPayloadFromLink(link, role) {
     rematch: !!link.rematch,
     expiresAt: exp,
     inviteTimeoutMs: boardGameInviteTimeoutMs,
-    inviteLinkToken: link.token,
-    inviteLinkTtlMs: BOARD_INVITE_LINK_TTL_MS,
+    ...boardInviteSentShareFields(link.token, socket),
     ...(gameType === "chess" && chessClockOpts
       ? chessClockFieldsForSocket(chessClockOpts)
       : {}),
@@ -1074,16 +1125,16 @@ function refreshBoardPendingFromLinkRec(io, socket, token, depth = 0) {
   setPendingBoardInviteForTarget(target, from, invExp, !!link.rematch);
   broadcastOnlineList(true);
   if (isTarget) {
-    socket.emit("board.invite", boardInviteSocketPayloadFromLink(link, "target"));
+    socket.emit("board.invite", boardInviteSocketPayloadFromLink(link, "target", socket));
     return;
   }
-  socket.emit("board.inviteSent", boardInviteSocketPayloadFromLink(link, "from"));
+  socket.emit("board.inviteSent", boardInviteSocketPayloadFromLink(link, "from", socket));
   if (depth < 1) {
     const targetSock = getSocketByUsername(target);
     if (targetSock) {
       targetSock.emit(
         "board.invite",
-        boardInviteSocketPayloadFromLink(link, "target")
+        boardInviteSocketPayloadFromLink(link, "target", socket)
       );
     }
   }
@@ -13718,8 +13769,7 @@ io.on("connection", (socket) => {
       zoleMode: gameType === "zole" ? zoleMode : undefined,
       expiresAt: invExp,
       inviteTimeoutMs: boardGameInviteTimeoutMs,
-      inviteLinkToken,
-      inviteLinkTtlMs: BOARD_INVITE_LINK_TTL_MS,
+      ...boardInviteSentShareFields(inviteLinkToken, socket),
       ...(gameType === "chess" && chessClockOpts
         ? chessClockFieldsForSocket(chessClockOpts)
         : {}),
@@ -13728,9 +13778,12 @@ io.on("connection", (socket) => {
   });
 
   socket.on("board.openInviteLink", (payload) => {
-    const token = String(
-      payload?.token || payload?.inviteLinkToken || ""
-    ).trim();
+    const token = parseBoardInviteTokenFromOpenPayload(payload);
+    if (!token) {
+      return socket.emit("board.inviteLinkError", {
+        message: "Nav derīgas uzaicinājuma saites.",
+      });
+    }
     refreshBoardPendingFromLinkRec(io, socket, token, 0);
   });
 
@@ -13871,8 +13924,7 @@ io.on("connection", (socket) => {
       expiresAt: invExp,
       toHost: true,
       inviteTimeoutMs: boardGameInviteTimeoutMs,
-      inviteLinkToken,
-      inviteLinkTtlMs: BOARD_INVITE_LINK_TTL_MS,
+      ...boardInviteSentShareFields(inviteLinkToken, socket),
       ...(gameType === "chess" && chessClockOpts
         ? chessClockFieldsForSocket(chessClockOpts)
         : {}),
@@ -14049,8 +14101,7 @@ io.on("connection", (socket) => {
       rematch: true,
       expiresAt: remExp,
       inviteTimeoutMs: boardGameInviteTimeoutMs,
-      inviteLinkToken,
-      inviteLinkTtlMs: BOARD_INVITE_LINK_TTL_MS,
+      ...boardInviteSentShareFields(inviteLinkToken, socket),
       ...(gameType === "chess" && remChessOpts
         ? chessClockFieldsForSocket(remChessOpts)
         : {}),

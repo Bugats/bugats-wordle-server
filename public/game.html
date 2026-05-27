@@ -1848,13 +1848,12 @@
           </div>
           <div id="board-invite-pending" class="vz-board-pending hidden" role="status" aria-live="polite">
             <span id="board-invite-pending-text">Gaidām atbildi…</span>
+            <div id="board-invite-share-row" class="vz-challenge-url-row vz-board-invite-share-row hidden">
+              <input id="board-invite-share-url" type="text" readonly class="vz-challenge-url-input" aria-label="Uzaicinājuma saite" />
+              <button id="board-invite-share-copy" type="button" class="vz-challenge-copy-btn">Kopēt</button>
+            </div>
+            <p id="board-invite-share-status" class="vz-challenge-copy-status vz-board-invite-share-status hidden" aria-live="polite"></p>
             <div class="vz-board-pending-actions">
-              <button
-                type="button"
-                id="board-invite-pending-copy-link"
-                class="vz-board-invite-btn vz-board-invite-btn--ghost hidden">
-                Kopēt uzaicinājuma saiti
-              </button>
               <button type="button" id="board-invite-pending-cancel" class="vz-board-pending-cancel hidden">
                 Atcelt uzaicinājumu
               </button>

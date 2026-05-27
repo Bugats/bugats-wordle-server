@@ -893,6 +893,32 @@ function clearBoardResultAutoCloseTimer() {
   }
 }
 
+function syncBoardInviteShareRow(shareUrl) {
+  const row = document.getElementById("board-invite-share-row");
+  const input = document.getElementById("board-invite-share-url");
+  const status = document.getElementById("board-invite-share-status");
+  const url = String(shareUrl || "").trim();
+  if (row) row.classList.toggle("hidden", !url);
+  if (input) input.value = url;
+  if (status && !url) {
+    status.textContent = "";
+    status.classList.add("hidden");
+  }
+}
+
+function setBoardInviteShareStatus(msg) {
+  const status = document.getElementById("board-invite-share-status");
+  if (!status) return;
+  const line = String(msg || "").trim();
+  if (!line) {
+    status.textContent = "";
+    status.classList.add("hidden");
+    return;
+  }
+  status.textContent = line;
+  status.classList.remove("hidden");
+}
+
 function syncBoardInvitePendingUi() {
   const pending = document.getElementById("board-invite-pending");
   const text = document.getElementById("board-invite-pending-text");
@@ -922,15 +948,15 @@ function syncBoardInvitePendingUi() {
     else if (invSec > 0) line += ` (maks. ${invSec}s).`;
     else line += ".";
     if (gameType === "chess" && chessLine) line += ` ${chessLine}`;
-    const linkTok = String(pending.dataset.inviteLinkToken || "").trim();
-    if (linkTok) line += " Vari kopēt uzaicinājuma saiti.";
+    const shareUrl = String(pending.dataset.inviteShareUrl || "").trim();
+    if (shareUrl) line += " Nosūti saiti pretiniekam.";
     text.textContent = line;
     if (cancelBtn) cancelBtn.classList.remove("hidden");
-    document.getElementById("board-invite-pending-copy-link")?.classList.toggle("hidden", !linkTok);
+    syncBoardInviteShareRow(shareUrl);
   } else if (target) {
     text.textContent = "Termiņš beidzies.";
     if (cancelBtn) cancelBtn.classList.add("hidden");
-    document.getElementById("board-invite-pending-copy-link")?.classList.add("hidden");
+    syncBoardInviteShareRow("");
   }
 }
 
@@ -946,7 +972,7 @@ function startBoardInviteOutgoingWait(expiresAt, targetUsername, opts = {}) {
   pending.dataset.pendingChessLine = String(opts.chessClockLine || "").trim();
   const sec = Math.max(0, Math.round(Number(opts.inviteTimeoutMs) / 1000) || 0);
   pending.dataset.pendingInviteSec = sec > 0 ? String(sec) : "";
-  pending.dataset.inviteLinkToken = String(opts.inviteLinkToken || "").trim();
+  pending.dataset.inviteShareUrl = String(opts.shareUrl || "").trim();
   pending.classList.remove("hidden");
   syncBoardInvitePendingUi();
   boardInviteOutgoingInterval = setInterval(() => {
@@ -972,10 +998,10 @@ function stopBoardInviteOutgoingWait() {
     pending.dataset.pendingGameType = "";
     pending.dataset.pendingChessLine = "";
     pending.dataset.pendingInviteSec = "";
-    pending.dataset.inviteLinkToken = "";
+    pending.dataset.inviteShareUrl = "";
   }
   if (cancelBtn) cancelBtn.classList.add("hidden");
-  document.getElementById("board-invite-pending-copy-link")?.classList.add("hidden");
+  syncBoardInviteShareRow("");
 }
 
 function syncBoardInviteIncomingExpiryUi() {
@@ -3545,13 +3571,6 @@ function clearBoardInviteFromUrl() {
   } catch {}
 }
 
-function buildBoardInviteShareUrl(token) {
-  const u = new URL(window.location.href);
-  u.searchParams.set("boardInvite", String(token || "").trim());
-  u.hash = "";
-  return u.toString();
-}
-
 function tryOpenBoardInviteLinkFromPending() {
   const tok = String(pendingBoardInviteLinkToken || "").trim();
   if (!tok || !state.socket || typeof state.socket.emit !== "function") return;
@@ -3559,20 +3578,29 @@ function tryOpenBoardInviteLinkFromPending() {
   state.socket.emit("board.openInviteLink", { token: tok });
 }
 
-async function copyBoardInviteLinkFromPending() {
+function getBoardInviteShareUrlFromPending() {
   const pending = document.getElementById("board-invite-pending");
-  const tok = String(pending?.dataset?.inviteLinkToken || "").trim();
-  if (!tok) {
-    appendGaldaSystemMessage("Nav aktīva uzaicinājuma saites.");
+  const input = document.getElementById("board-invite-share-url");
+  const fromInput = String(input?.value || "").trim();
+  if (fromInput) return fromInput;
+  return String(pending?.dataset?.inviteShareUrl || "").trim();
+}
+
+async function copyBoardInviteShareUrl() {
+  const url = getBoardInviteShareUrlFromPending();
+  if (!url) {
+    setBoardInviteShareStatus("Nav aktīvas uzaicinājuma saites.");
+    appendGaldaSystemMessage("Nav aktīvas uzaicinājuma saites.");
     return;
   }
-  const url = buildBoardInviteShareUrl(tok);
   try {
     await navigator.clipboard.writeText(url);
+    setBoardInviteShareStatus("Saite nokopēta — nosūti pretiniekam.");
     appendGaldaSystemMessage(
       "Uzaicinājuma saite nokopēta — nosūti pretiniekam (derīga ~30 min)."
     );
   } catch {
+    setBoardInviteShareStatus("Neizdevās kopēt — izvēlies saiti un kopē manuāli.");
     appendGaldaSystemMessage(`Saite: ${url}`);
   }
 }
@@ -12168,7 +12196,7 @@ function initSocket() {
         gameType: gt,
         chessClockLine: chessLine,
         inviteTimeoutMs: payload?.inviteTimeoutMs,
-        inviteLinkToken: payload?.inviteLinkToken,
+        shareUrl: payload?.shareUrl,
       });
     const sec = Math.max(
       1,
@@ -13850,8 +13878,11 @@ function bindBoardGames() {
       if (!target || !state.socket) return;
       state.socket.emit("board.inviteCancel", { target });
     });
-  document.getElementById("board-invite-pending-copy-link")?.addEventListener("click", () => {
-    copyBoardInviteLinkFromPending();
+  document.getElementById("board-invite-share-copy")?.addEventListener("click", () => {
+    copyBoardInviteShareUrl();
+  });
+  document.getElementById("board-invite-share-url")?.addEventListener("focus", (e) => {
+    e.target?.select?.();
   });
   const zole3pInviteThird = document.getElementById(
     "board-zole-3p-invite-third"

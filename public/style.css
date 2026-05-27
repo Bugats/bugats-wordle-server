@@ -6831,6 +6831,19 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   cursor: pointer;
 }
 .vz-board-pending-cancel:hover { background: rgba(255, 255, 255, 0.14); }
+
+.vz-board-invite-share-row {
+  margin-top: 10px;
+}
+.vz-board-invite-share-status {
+  margin: 6px 0 0;
+}
+.vz-board-pending-actions {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .vz-board-invite-text { margin: 0 0 4px; font-size: 15px; }
 .vz-board-invite-sub { margin: 0 0 12px; font-size: 12px; opacity: 0.85; }
 .vz-board-invite-expires {
