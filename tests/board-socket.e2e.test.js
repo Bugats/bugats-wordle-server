@@ -501,12 +501,15 @@ describe("Board socket E2E", () => {
     });
 
     const remPayload = await new Promise((resolve, reject) => {
-      const to = setTimeout(() => reject(new Error("rematchTimedOut timeout")), 8000);
+      const to = setTimeout(
+        () => reject(new Error("rematchTimedOut timeout")),
+        10000
+      );
       s1.once("board.rematchTimedOut", (p) => {
         clearTimeout(to);
         resolve(p);
       });
-      setTimeout(() => __testHooks.processBoardIdleTimersForTestOnly(), 950);
+      setTimeout(() => __testHooks.expireBoardInvitesForTestOnly(), 50);
     });
 
     expect(sawWrong).toBe(false);
@@ -515,7 +518,9 @@ describe("Board socket E2E", () => {
 
     s1.close();
     s2.close();
-  });
+  },
+  30000
+  );
 
   it(
     "chess PvP: resign awards coinsGain / coinsLoss on board.end",

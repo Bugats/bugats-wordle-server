@@ -693,7 +693,6 @@ function getDuelOpponent(duel, username) {
 // ======== GALDA SPĒLES (dambrete, šahs) ========
 /** Testos var samazināt ar __testHooks.setBoardTimeoutsForTestOnly */
 let boardGameInviteTimeoutMs = 60 * 1000; // 60s
-const BOARD_INVITE_LINK_TTL_MS = 30 * 60 * 1000;
 const _BOARD_GAME_MOVE_TIMEOUT_MS = 5 * 60 * 1000; // 5 min per move (resign if exceeded) — rezervei
 /** Šahs PvP / vs bot (tikai cilvēkam): atlikušais laiks katram spēlētājam (ms). */
 const CHESS_CLOCK_DEFAULT_MS = 10 * 60 * 1000; // 10 min katram (noklusējums)
@@ -897,250 +896,6 @@ const boardInviteVariantByPair = new Map();
 /** username (lowercase) -> { from, expiresAt, rematch } — gaidīts galda uzaicinājums (draugu statusam). */
 const pendingBoardInviteByUsername = new Map();
 
-/** token -> uzaicinājuma saites ieraksts */
-const boardInviteLinkByToken = new Map();
-/** inviteId -> token */
-const boardInviteLinkByInviteId = new Map();
-
-function boardInviteLinkExpiryAt() {
-  return Date.now() + BOARD_INVITE_LINK_TTL_MS;
-}
-
-function pruneBoardInviteLinks(now = Date.now()) {
-  for (const [tok, rec] of [...boardInviteLinkByToken.entries()]) {
-    if (!rec || (rec.linkExpiresAt || 0) <= now) {
-      boardInviteLinkByToken.delete(tok);
-      if (rec?.inviteId) boardInviteLinkByInviteId.delete(rec.inviteId);
-    }
-  }
-}
-
-function invalidateBoardInviteLinkByInviteId(inviteId) {
-  const id = String(inviteId || "").trim();
-  if (!id) return;
-  const tok = boardInviteLinkByInviteId.get(id);
-  if (!tok) return;
-  boardInviteLinkByInviteId.delete(id);
-  boardInviteLinkByToken.delete(tok);
-}
-
-function invalidateBoardInviteLinksForPair(userA, userB) {
-  const pairKey = boardInvitePairKey(userA, userB);
-  for (const [tok, rec] of [...boardInviteLinkByToken.entries()]) {
-    if (!rec) {
-      boardInviteLinkByToken.delete(tok);
-      continue;
-    }
-    if (boardInvitePairKey(rec.fromUsername, rec.targetUsername) !== pairKey)
-      continue;
-    boardInviteLinkByToken.delete(tok);
-    if (rec.inviteId) boardInviteLinkByInviteId.delete(rec.inviteId);
-  }
-}
-
-function registerBoardInviteLink(meta) {
-  pruneBoardInviteLinks();
-  const inviteId = String(meta?.inviteId || "").trim();
-  if (!inviteId) return "";
-  invalidateBoardInviteLinkByInviteId(inviteId);
-  const token = crypto.randomBytes(12).toString("hex");
-  const linkExpiresAt = boardInviteLinkExpiryAt();
-  const rec = {
-    token,
-    inviteId,
-    fromUsername: String(meta.fromUsername || "").trim(),
-    targetUsername: String(meta.targetUsername || "").trim(),
-    type: String(meta.type || "dambrete").toLowerCase(),
-    dambreteVariant: meta.dambreteVariant || "russian",
-    zoleMode: meta.zoleMode,
-    chessClockOpts: meta.chessClockOpts,
-    rematch: !!meta.rematch,
-    fromOpenSeatList: !!meta.fromOpenSeatList,
-    linkExpiresAt,
-    inviteExpiresAt: Math.max(
-      0,
-      Number(meta.inviteExpiresAt) || linkExpiresAt
-    ),
-  };
-  boardInviteLinkByToken.set(token, rec);
-  boardInviteLinkByInviteId.set(inviteId, token);
-  return token;
-}
-
-function boardInvitePublicBaseUrl(socket) {
-  const origin = socket?.handshake?.headers?.origin;
-  if (origin) return String(origin).replace(/\/$/, "");
-  const host = socket?.handshake?.headers?.host;
-  if (host) {
-    const xfProto = socket?.handshake?.headers?.["x-forwarded-proto"];
-    const proto =
-      (typeof xfProto === "string" ? xfProto.split(",")[0].trim() : "") ||
-      (socket?.handshake?.secure ? "https" : "http");
-    return `${proto}://${host}`.replace(/\/$/, "");
-  }
-  const env = String(
-    process.env.PUBLIC_BASE_URL || process.env.BASE_URL || ""
-  ).trim();
-  return env.replace(/\/$/, "");
-}
-
-function boardInviteShareUrlFromToken(token, socket) {
-  const tok = String(token || "").trim();
-  if (!tok) return "";
-  const base = boardInvitePublicBaseUrl(socket);
-  if (!base) return "";
-  return `${base}/game.html?boardInvite=${encodeURIComponent(tok)}`;
-}
-
-function boardInviteSentShareFields(token, socket) {
-  const shareUrl = boardInviteShareUrlFromToken(token, socket);
-  return {
-    ...(shareUrl ? { shareUrl } : {}),
-    shareLinkTtlMs: BOARD_INVITE_LINK_TTL_MS,
-  };
-}
-
-function parseBoardInviteTokenFromOpenPayload(payload) {
-  let token = String(
-    payload?.token || payload?.inviteLinkToken || ""
-  ).trim();
-  if (token) return token;
-  const shareUrl = String(payload?.shareUrl || "").trim();
-  if (!shareUrl) return "";
-  try {
-    const u = new URL(shareUrl);
-    return (
-      u.searchParams.get("boardInvite") ||
-      u.searchParams.get("boardinvite") ||
-      ""
-    ).trim();
-  } catch {
-    return "";
-  }
-}
-
-function boardInviteSocketPayloadFromLink(link, role, socket) {
-  const gameType = String(link?.type || "dambrete").toLowerCase();
-  const dambreteVariant = normalizeDambreteVariant(
-    link?.dambreteVariant || "russian"
-  );
-  const chessClockOpts = link?.chessClockOpts || null;
-  const exp = Math.max(0, Number(link?.inviteExpiresAt) || 0);
-  if (role === "target") {
-    const invPayload = {
-      inviteId: link.inviteId,
-      from: link.fromUsername,
-      type: gameType,
-      dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
-      zoleMode: gameType === "zole" ? link.zoleMode : undefined,
-      rematch: !!link.rematch,
-      expiresAt: exp,
-    };
-    if (link.fromOpenSeatList) invPayload.fromOpenSeatList = true;
-    if (gameType === "chess" && chessClockOpts) {
-      invPayload.chessClockPreset = chessClockPresetLabel(chessClockOpts);
-      invPayload.chessInitialMs = chessClockOpts.initialMsPerSide;
-      invPayload.chessIncrementMs = chessClockOpts.incrementMs;
-    }
-    return invPayload;
-  }
-  const sent = {
-    inviteId: link.inviteId,
-    target: link.targetUsername,
-    type: gameType,
-    dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
-    zoleMode: gameType === "zole" ? link.zoleMode : undefined,
-    rematch: !!link.rematch,
-    expiresAt: exp,
-    inviteTimeoutMs: boardGameInviteTimeoutMs,
-    ...boardInviteSentShareFields(link.token, socket),
-    ...(gameType === "chess" && chessClockOpts
-      ? chessClockFieldsForSocket(chessClockOpts)
-      : {}),
-  };
-  if (link.fromOpenSeatList) sent.toHost = true;
-  return sent;
-}
-
-function refreshBoardPendingFromLinkRec(io, socket, token, depth = 0) {
-  if (!io || !socket) return;
-  pruneBoardInviteLinks();
-  const user = socket.data?.user;
-  if (!user?.username) return;
-  const tok = String(token || "").trim();
-  if (!tok) {
-    socket.emit("board.inviteLinkError", {
-      message: "Nav uzaicinājuma saites.",
-    });
-    return;
-  }
-  if (depth > 4) return;
-  const link = boardInviteLinkByToken.get(tok);
-  const now = Date.now();
-  if (!link || (link.linkExpiresAt || 0) <= now) {
-    invalidateBoardInviteLinkByInviteId(link?.inviteId);
-    socket.emit("board.inviteLinkError", {
-      message: "Uzaicinājuma saite vairs nav derīga vai ir beigusies.",
-    });
-    return;
-  }
-  const from = String(link.fromUsername || "").trim();
-  const target = String(link.targetUsername || "").trim();
-  if (!from || !target) {
-    socket.emit("board.inviteLinkError", {
-      message: "Uzaicinājuma saite ir bojāta.",
-    });
-    return;
-  }
-  const me = user.username;
-  const meLower = String(me).toLowerCase();
-  const isFrom = meLower === from.toLowerCase();
-  const isTarget = meLower === target.toLowerCase();
-  if (!isFrom && !isTarget) {
-    socket.emit("board.inviteLinkError", {
-      message: "Šī saite nav domāta tavam kontam.",
-    });
-    return;
-  }
-  if (userToBoardGame.has(from) || userToBoardGame.has(target)) {
-    socket.emit("board.inviteLinkError", {
-      message: "Vismaz viens spēlētājs jau ir spēlē.",
-    });
-    return;
-  }
-  let invExp = Math.max(Number(link.inviteExpiresAt) || 0, now);
-  if (invExp <= now) invExp = boardInviteLinkExpiryAt();
-  else invExp = Math.min(boardInviteLinkExpiryAt(), invExp);
-  link.inviteExpiresAt = invExp;
-  boardInviteVariantByPair.set(boardInvitePairKey(from, target), {
-    type: link.type,
-    dambreteVariant: link.dambreteVariant,
-    zoleMode: link.zoleMode,
-    expiresAt: invExp,
-    rematch: !!link.rematch,
-    fromUsername: from,
-    targetUsername: target,
-    chessClockOpts: link.chessClockOpts || undefined,
-  });
-  setPendingBoardInviteForTarget(target, from, invExp, !!link.rematch);
-  broadcastOnlineList(true);
-  if (isTarget) {
-    socket.emit("board.invite", boardInviteSocketPayloadFromLink(link, "target", socket));
-    return;
-  }
-  socket.emit("board.inviteSent", boardInviteSocketPayloadFromLink(link, "from", socket));
-  if (depth < 1) {
-    const targetSock = getSocketByUsername(target);
-    if (targetSock) {
-      targetSock.emit(
-        "board.invite",
-        boardInviteSocketPayloadFromLink(link, "target", socket)
-      );
-    }
-  }
-}
-
-
 /** hostname (lowercase) -> { host, type, dambreteVariant?, chessClockOpts?, expiresAt } — publiska «gribu PvP» vieta */
 const boardOpenSeatByHost = new Map();
 const BOARD_OPEN_SEAT_TTL_MS = 45 * 60 * 1000;
@@ -1241,7 +996,6 @@ function clearPendingBoardInvite(username) {
 
 function pruneExpiredPendingInvites() {
   const now = Date.now();
-  pruneBoardInviteLinks(now);
   for (const [k, v] of pendingBoardInviteByUsername.entries()) {
     if (!v || (v.expiresAt || 0) <= now) pendingBoardInviteByUsername.delete(k);
   }
@@ -1259,7 +1013,6 @@ function tickExpiredBoardInvites(io) {
     boardInviteVariantByPair.delete(pairKey);
     const target = String(v.targetUsername || "").trim();
     const from = String(v.fromUsername || "").trim();
-    if (from && target) invalidateBoardInviteLinksForPair(from, target);
     if (target) clearPendingBoardInvite(target);
     broadcastOnlineList(true);
     const payload = {
@@ -6805,29 +6558,6 @@ function startSeasonFlow({ byAdminUsername } = {}) {
 }
 
 // ======== JWT helperi ========
-function buildPersonalRecordsPayload(u) {
-  if (!u) return {};
-  resetWinsTodayIfNeeded(u);
-  const today = todayKey();
-  const winsToday =
-    u.winsTodayDate === today ? Math.max(0, Number(u.winsToday) || 0) : 0;
-  return {
-    coins: Math.max(0, Math.floor(u.coins || 0)),
-    score: Math.max(0, Number(u.score) || 0),
-    xp: Math.max(0, Number(u.xp) || 0),
-    bestStreak: Math.max(0, Number(u.bestStreak) || 0),
-    winsToday,
-    regionPoints: Math.max(0, Math.floor(u.regionPoints || 0)),
-    duelElo: Number.isFinite(Number(u.duelElo)) ? Number(u.duelElo) : null,
-    duelEloGames: Math.max(0, Number(u.duelEloGames) || 0),
-    dambreteElo: Number(u.dambreteElo) || BOARD_ELO_DEFAULT,
-    dambreteWins: Math.max(0, Number(u.dambreteWins) || 0),
-    chessElo: Number(u.chessElo) || BOARD_ELO_DEFAULT,
-    chessWins: Math.max(0, Number(u.chessWins) || 0),
-    zoleWins: Math.max(0, Number(u.zoleWins) || 0),
-  };
-}
-
 async function buildMePayload(u) {
   ensureVipFields(u);
   const rankInfo = ensureRankFields(u);
@@ -6867,7 +6597,6 @@ async function buildMePayload(u) {
     tokens: u.tokens || 0,
     streak: u.streak || 0,
     bestStreak: u.bestStreak || 0,
-    personalRecords: buildPersonalRecordsPayload(u),
     duelElo: u.duelElo,
     duelEloGames: u.duelEloGames || 0,
     dambreteWins: u.dambreteWins || 0,
@@ -13735,7 +13464,13 @@ io.on("connection", (socket) => {
       gameType === "dambrete"
         ? parseDambreteVariantFromPayload(payload)
         : "russian";
-    const invExp = boardInviteLinkExpiryAt();
+    const invite = {
+      id: inviteId,
+      from: fromUser.username,
+      target: targetUser.username,
+      type: gameType,
+      expiresAt: Date.now() + boardGameInviteTimeoutMs,
+    };
     const chessClockOpts =
       gameType === "chess" ? parseChessClockOptsFromPayload(payload) : null;
     boardInviteVariantByPair.set(
@@ -13744,7 +13479,7 @@ io.on("connection", (socket) => {
         type: gameType,
         dambreteVariant,
         zoleMode,
-        expiresAt: invExp,
+        expiresAt: invite.expiresAt,
         fromUsername: fromUser.username,
         targetUsername: targetUser.username,
         chessClockOpts: chessClockOpts || undefined,
@@ -13753,20 +13488,9 @@ io.on("connection", (socket) => {
     setPendingBoardInviteForTarget(
       targetUser.username,
       fromUser.username,
-      invExp,
+      invite.expiresAt,
       false
     );
-    const inviteLinkToken = registerBoardInviteLink({
-      inviteId,
-      fromUsername: fromUser.username,
-      targetUsername: targetUser.username,
-      type: gameType,
-      dambreteVariant,
-      zoleMode,
-      chessClockOpts: chessClockOpts || undefined,
-      rematch: false,
-      inviteExpiresAt: invExp,
-    });
     broadcastOnlineList(true);
     const targetSocket = getSocketByUsername(targetUser.username);
     if (targetSocket) {
@@ -13776,7 +13500,7 @@ io.on("connection", (socket) => {
         type: gameType,
         dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
         zoleMode: gameType === "zole" ? zoleMode : undefined,
-        expiresAt: invExp,
+        expiresAt: invite.expiresAt,
       };
       if (gameType === "chess" && chessClockOpts) {
         invPayload.chessClockPreset = chessClockPresetLabel(chessClockOpts);
@@ -13791,24 +13515,13 @@ io.on("connection", (socket) => {
       type: gameType,
       dambreteVariant: gameType === "dambrete" ? dambreteVariant : undefined,
       zoleMode: gameType === "zole" ? zoleMode : undefined,
-      expiresAt: invExp,
+      expiresAt: invite.expiresAt,
       inviteTimeoutMs: boardGameInviteTimeoutMs,
-      ...boardInviteSentShareFields(inviteLinkToken, socket),
       ...(gameType === "chess" && chessClockOpts
         ? chessClockFieldsForSocket(chessClockOpts)
         : {}),
     });
     removeBoardOpenSeatForUser(fromUser.username);
-  });
-
-  socket.on("board.openInviteLink", (payload) => {
-    const token = parseBoardInviteTokenFromOpenPayload(payload);
-    if (!token) {
-      return socket.emit("board.inviteLinkError", {
-        message: "Nav derīgas uzaicinājuma saites.",
-      });
-    }
-    refreshBoardPendingFromLinkRec(io, socket, token, 0);
   });
 
   socket.on("board.openSeatPublish", (payload) => {
@@ -13896,7 +13609,7 @@ io.on("connection", (socket) => {
       gameType === "chess"
         ? open.chessClockOpts || parseChessClockOptsFromPayload(payload)
         : null;
-    const invExp = boardInviteLinkExpiryAt();
+    const invExp = Date.now() + boardGameInviteTimeoutMs;
     boardInviteVariantByPair.set(
       boardInvitePairKey(joiner.username, hostName),
       {
@@ -13910,17 +13623,6 @@ io.on("connection", (socket) => {
       }
     );
     setPendingBoardInviteForTarget(hostName, joiner.username, invExp, false);
-    const inviteLinkToken = registerBoardInviteLink({
-      inviteId,
-      fromUsername: joiner.username,
-      targetUsername: hostName,
-      type: gameType,
-      dambreteVariant,
-      chessClockOpts: chessClockOpts || undefined,
-      rematch: false,
-      fromOpenSeatList: true,
-      inviteExpiresAt: invExp,
-    });
     broadcastOnlineList(true);
     removeBoardOpenSeatForUser(hostName);
     const hostSocket = getSocketByUsername(hostName);
@@ -13948,7 +13650,6 @@ io.on("connection", (socket) => {
       expiresAt: invExp,
       toHost: true,
       inviteTimeoutMs: boardGameInviteTimeoutMs,
-      ...boardInviteSentShareFields(inviteLinkToken, socket),
       ...(gameType === "chess" && chessClockOpts
         ? chessClockFieldsForSocket(chessClockOpts)
         : {}),
@@ -13978,7 +13679,6 @@ io.on("connection", (socket) => {
       });
     }
     boardInviteVariantByPair.delete(pairKey);
-    invalidateBoardInviteLinksForPair(fromName, user.username);
     clearPendingBoardInvite(user.username);
     broadcastOnlineList(true);
     const challengerSock = getSocketByUsername(fromName);
@@ -14010,7 +13710,6 @@ io.on("connection", (socket) => {
       });
     }
     boardInviteVariantByPair.delete(pairKey);
-    invalidateBoardInviteLinksForPair(fromUser.username, targetName);
     clearPendingBoardInvite(targetName);
     broadcastOnlineList(true);
     const targetSock = getSocketByUsername(targetName);
@@ -14063,7 +13762,7 @@ io.on("connection", (socket) => {
       gameType === "dambrete"
         ? parseDambreteVariantFromPayload(payload)
         : "russian";
-    const remExp = boardInviteLinkExpiryAt();
+    const remExp = Date.now() + boardGameInviteTimeoutMs;
     const remChessOpts =
       gameType === "chess" ? parseChessClockOptsFromPayload(payload) : null;
     boardInviteVariantByPair.set(
@@ -14085,17 +13784,6 @@ io.on("connection", (socket) => {
       remExp,
       true
     );
-    const inviteLinkToken = registerBoardInviteLink({
-      inviteId,
-      fromUsername: fromUser.username,
-      targetUsername: targetUser.username,
-      type: gameType,
-      dambreteVariant,
-      zoleMode,
-      chessClockOpts: remChessOpts || undefined,
-      rematch: true,
-      inviteExpiresAt: remExp,
-    });
     removeBoardOpenSeatForUser(fromUser.username);
     broadcastOnlineList(true);
     const targetSocket = getSocketByUsername(targetUser.username);
@@ -14125,7 +13813,6 @@ io.on("connection", (socket) => {
       rematch: true,
       expiresAt: remExp,
       inviteTimeoutMs: boardGameInviteTimeoutMs,
-      ...boardInviteSentShareFields(inviteLinkToken, socket),
       ...(gameType === "chess" && remChessOpts
         ? chessClockFieldsForSocket(remChessOpts)
         : {}),
@@ -14457,7 +14144,6 @@ io.on("connection", (socket) => {
     const gameType = String(payload?.type || "dambrete").toLowerCase();
     if (!inviteId)
       return socket.emit("board.error", { message: "Nav aicinājuma." });
-    invalidateBoardInviteLinkByInviteId(inviteId);
     const challengerName = payload?.from || "";
     const opponentName = user.username;
     if (!challengerName || challengerName === opponentName)
@@ -15410,11 +15096,29 @@ const __testHooks = {
   },
   /** E2E: tā kā test vidē nav 1s setInterval, manuāli izpilda uzaicinājumu noildzi. */
   processBoardIdleTimersForTestOnly() {
-    if (process.env.NODE_ENV !== "test") return;
+    if (process.env.NODE_ENV !== "test" && process.env.VITEST !== "true")
+      return;
     const io = ioServerRef;
     if (!io) return;
     tickExpiredBoardInvites(io);
     expireZole3pThirdSeatInvites(io);
+  },
+  /** E2E: piespiedu beidz visus gaidošos galda uzaicinājumus (bez gaidīšanas uz timeout). */
+  expireBoardInvitesForTestOnly() {
+    if (process.env.NODE_ENV !== "test" && process.env.VITEST !== "true")
+      return;
+    const io = ioServerRef;
+    if (!io) return;
+    const now = Date.now();
+    for (const v of boardInviteVariantByPair.values()) {
+      if (v) v.expiresAt = now - 1;
+    }
+    tickExpiredBoardInvites(io);
+  },
+  getBoardGameInviteTimeoutMsForTestOnly() {
+    if (process.env.NODE_ENV !== "test" && process.env.VITEST !== "true")
+      return null;
+    return boardGameInviteTimeoutMs;
   },
   /**
    * E2E: šahs — iestata FEN (derīgu `chess.js` stringu).
