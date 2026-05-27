@@ -9532,3 +9532,39 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
     font-size: 22px;
   }
 }
+
+
+.vz-personal-records__list {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.vz-personal-records__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.vz-personal-records__row dt {
+  margin: 0;
+  font-weight: 500;
+  color: #c8c8c8;
+  flex: 1 1 auto;
+}
+.vz-personal-records__row dd {
+  margin: 0;
+  font-weight: 600;
+  color: #fff;
+  text-align: right;
+  flex: 0 0 auto;
+}
+.vz-personal-records__note {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #9a9a9a;
+}

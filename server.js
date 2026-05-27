@@ -6805,6 +6805,28 @@ function startSeasonFlow({ byAdminUsername } = {}) {
 }
 
 // ======== JWT helperi ========
+function buildPersonalRecordsPayload(u) {
+  if (!u) return {};
+  resetWinsTodayIfNeeded(u);
+  const today = todayKey();
+  const winsToday =
+    u.winsTodayDate === today ? Math.max(0, Number(u.winsToday) || 0) : 0;
+  return {
+    score: Math.max(0, Number(u.score) || 0),
+    xp: Math.max(0, Number(u.xp) || 0),
+    bestStreak: Math.max(0, Number(u.bestStreak) || 0),
+    winsToday,
+    regionPoints: Math.max(0, Math.floor(u.regionPoints || 0)),
+    duelElo: Number.isFinite(Number(u.duelElo)) ? Number(u.duelElo) : null,
+    duelEloGames: Math.max(0, Number(u.duelEloGames) || 0),
+    dambreteElo: Number(u.dambreteElo) || BOARD_ELO_DEFAULT,
+    dambreteWins: Math.max(0, Number(u.dambreteWins) || 0),
+    chessElo: Number(u.chessElo) || BOARD_ELO_DEFAULT,
+    chessWins: Math.max(0, Number(u.chessWins) || 0),
+    zoleWins: Math.max(0, Number(u.zoleWins) || 0),
+  };
+}
+
 async function buildMePayload(u) {
   ensureVipFields(u);
   const rankInfo = ensureRankFields(u);
@@ -6844,6 +6866,7 @@ async function buildMePayload(u) {
     tokens: u.tokens || 0,
     streak: u.streak || 0,
     bestStreak: u.bestStreak || 0,
+    personalRecords: buildPersonalRecordsPayload(u),
     duelElo: u.duelElo,
     duelEloGames: u.duelEloGames || 0,
     dambreteWins: u.dambreteWins || 0,

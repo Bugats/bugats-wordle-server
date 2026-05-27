@@ -601,6 +601,9 @@ const ppStripeCoinsPackListEl = document.getElementById(
 const playerTokensEl = $("#player-tokens");
 const playerMedalsStripEl = $("#player-medals");
 
+const personalRecordsListEl = document.getElementById("vz-personal-records-list");
+const personalRecordsCardEl = document.getElementById("vz-personal-records-card");
+
 // XP josla
 const playerXpBarEl = $("#player-xp-bar");
 const playerXpLabelEl = $("#player-xp-label");
@@ -4471,6 +4474,7 @@ function updatePlayerCard(me) {
     }
   }
 
+  renderPersonalRecords(me);
   state.lastMeForSocial = me;
   renderClanCard(me);
   renderSocialPulse();
@@ -7820,6 +7824,89 @@ window.addEventListener("keydown", (e) => {
   }
   addLetter(ch);
 });
+
+
+// ==================== MANI REKORDI ====================
+function formatPersonalRecordNumber(n) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return "0";
+  return x.toLocaleString("lv-LV");
+}
+
+function renderPersonalRecords(me) {
+  const listEl = personalRecordsListEl;
+  if (!listEl) return;
+  if (personalRecordsCardEl) {
+    personalRecordsCardEl.classList.toggle(
+      "hidden",
+      !state.token || !state.username
+    );
+  }
+  if (!me || !state.token) {
+    listEl.innerHTML = "";
+    return;
+  }
+  const pr = me.personalRecords && typeof me.personalRecords === "object"
+    ? me.personalRecords
+    : {};
+  const rows = [
+    {
+      label: "Kopējie punkti",
+      value: formatPersonalRecordNumber(pr.score ?? me.score),
+    },
+    {
+      label: "XP",
+      value: formatPersonalRecordNumber(pr.xp ?? me.xp),
+    },
+    {
+      label: "Labākais streak",
+      value: `${formatPersonalRecordNumber(pr.bestStreak ?? me.bestStreak)} 🔥`,
+    },
+    {
+      label: "Šodienas uzvaras",
+      value: formatPersonalRecordNumber(pr.winsToday ?? 0),
+    },
+    {
+      label: "Novada punkti",
+      value: formatPersonalRecordNumber(pr.regionPoints ?? me.regionPoints ?? 0),
+    },
+  ];
+  const duelGames = Math.max(0, Number(pr.duelEloGames ?? me.duelEloGames) || 0);
+  if (duelGames > 0) {
+    rows.push({
+      label: "Duelu ELO",
+      value: String(pr.duelElo ?? me.duelElo ?? "—"),
+    });
+  }
+  rows.push(
+    {
+      label: "Dambrete ELO",
+      value: formatPersonalRecordNumber(pr.dambreteElo ?? me.dambreteElo ?? 1000),
+    },
+    {
+      label: "Dambretes uzvaras",
+      value: formatPersonalRecordNumber(pr.dambreteWins ?? me.dambreteWins),
+    },
+    {
+      label: "Šaha ELO",
+      value: formatPersonalRecordNumber(pr.chessElo ?? me.chessElo ?? 1000),
+    },
+    {
+      label: "Šaha uzvaras",
+      value: formatPersonalRecordNumber(pr.chessWins ?? me.chessWins),
+    },
+    {
+      label: "Zoles uzvaras",
+      value: formatPersonalRecordNumber(pr.zoleWins ?? me.zoleWins),
+    }
+  );
+  listEl.innerHTML = rows
+    .map(
+      (r) =>
+        `<div class="vz-personal-records__row"><dt>${escapeHtml(r.label)}</dt><dd>${escapeHtml(String(r.value))}</dd></div>`
+    )
+    .join("");
+}
 
 // ==================== LEADERBOARD / ONLINE ====================
 const TOP_AVATAR_TTL_MS = 24 * 60 * 60 * 1000;
