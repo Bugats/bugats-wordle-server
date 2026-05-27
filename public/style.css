@@ -8921,6 +8921,16 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.vz-board-zole-open-lobbies__table th:nth-child(2),
+.vz-board-zole-open-lobbies__table td:nth-child(2) {
+  width: 3.1rem;
+  white-space: nowrap;
+}
+.vz-board-zole-open-lobbies__table th:nth-child(3),
+.vz-board-zole-open-lobbies__table td:nth-child(3) {
+  width: 3.4rem;
+  white-space: nowrap;
+}
 .vz-board-zole-open-lobbies__table th:last-child,
 .vz-board-zole-open-lobbies__table td:last-child {
   width: 4.75rem;
