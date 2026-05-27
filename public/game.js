@@ -6394,8 +6394,8 @@ function renderSocialPulse() {
   }
   const friendsInPvp = friends.filter((n) => {
     const key = String(n || "").trim().toLowerCase();
-    const p = state.onlineUsers.get(key);
-    return p?.inBoardGame;
+    const p = state.onlineMiniByUser?.get(key);
+    return !!(p?.inBoardGame);
   }).length;
   if (friendsInPvp > 0) {
     parts.push(
