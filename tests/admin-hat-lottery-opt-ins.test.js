@@ -7,7 +7,7 @@ async function ensureUserToken({ username, password, email, region = "Zemgale" }
   const signupRes = await request(app)
     .post("/signup")
     .set("x-vz-device-id", did)
-    .send({ username, password, email, region });
+    .send({ username, password, email, region, ageConfirmed: true });
   if (signupRes.status === 200 && signupRes.body?.token) return signupRes.body.token;
   const loginRes = await request(app)
     .post("/login")

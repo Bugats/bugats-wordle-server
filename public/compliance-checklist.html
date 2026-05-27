@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="lv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atbilstības checklist (UK) — VĀRDU ZONA</title>
+    <meta
+      name="description"
+      content="Iekšēja checklist komandai: 18+, UK privātums, coins un PvP — nav juridiska padoma."
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="auth-page-body">
+    <div class="container privacy-container">
+      <h1>Atbilstības checklist (UK orientēta)</h1>
+      <p>
+        <strong>Nav juridiska padoma.</strong> Pirms mārketinga vai monetizācijas Apvienotajā
+        Karalistē (UK) un EEZ jāapstiprina atbilstība ar <strong>UK advokātu</strong> (azartspēles,
+        patērētāju tiesības, GDPR/UK GDPR, reklāma, Stripe u.c.).
+      </p>
+
+      <h2>1. Vecums (18+)</h2>
+      <ul>
+        <li>
+          <strong>UI:</strong> reģistrācijā obligāta izvēles rūtiņa «Man ir vismaz 18 gadi»
+          (<code>public/index.html</code>, <code>public/auth.js</code>).
+        </li>
+        <li>
+          <strong>Serveris:</strong> <code>POST /signup</code> noraida, ja
+          <code>ageConfirmed !== true</code>; lietotājam tiek saglabāts
+          <code>ageConfirmedAt</code> (<code>server.js</code>).
+        </li>
+        <li>
+          <strong>Noteikumi:</strong> sadaļa «Vecums un konts» —
+          <a href="terms.html">terms.html</a>.
+        </li>
+        <li>
+          <strong>Advokāts:</strong> vai pietiek ar pašapstiprinājumu, vai vajag vecuma verifikāciju
+          (ID) atkarībā no riska klasifikācijas.
+        </li>
+      </ul>
+
+      <h2>2. Privātums — UK / EEZ</h2>
+      <ul>
+        <li>
+          <strong>Lapa:</strong> sadaļa «Apvienotā Karaliste (UK) un EEZ» —
+          <a href="privacy.html">privacy.html</a> (tiesības, apstrādātāji, ICO saite).
+        </li>
+        <li>
+          <strong>Advokāts:</strong> datu pārzinis, DPA ar Render/Stripe/Supabase, starptautiskie
+          pārnesumi, bērnu dati, marketinga pamatojums.
+        </li>
+      </ul>
+
+      <h2>3. Coins — «nav naudas»</h2>
+      <ul>
+        <li>
+          <strong>Kopējais skaidrojums:</strong>
+          <a href="coins-vip-turniri.html">coins-vip-turniri.html</a>,
+          <a href="terms.html">terms.html</a> §4.
+        </li>
+        <li>
+          <strong>Pie likmes (Zole 3P):</strong> dinamisks brīdinājums pie «Coins par tabulas punktu»
+          (<code>public/game.html</code>, <code>syncZole3pStakeLegalHint</code> —
+          <code>public/game.js</code>).
+        </li>
+        <li>
+          <strong>Advokāts:</strong> vai PvP coins + Stripe pirkšana UK klasificējas kā azartspēle /
+          skill-based wagering; licences, reklāmas ierobežojumi, atbildīga spēle.
+        </li>
+      </ul>
+
+      <h2>4. Produkta / inženierijas pārbaude</h2>
+      <ul>
+        <li>Reģistrācija bez 18+ rūtiņas → kļūda klientā un 400 serverī.</li>
+        <li>API <code>/signup</code> bez <code>ageConfirmed: true</code> → 400.</li>
+        <li>Zole likme &gt; 0 → redzams «coins nav naudu» teksts pirms spēles.</li>
+        <li>Stripe: privātuma sadaļa par maksājumiem atjaunināta.</li>
+      </ul>
+
+      <h2>5. Kas nav atrisināts ar kodu</h2>
+      <ul>
+        <li>UK Gambling Commission licence vai izņēmums (ja piemērojams).</li>
+        <li>Ģeogrāfiskā bloķēšana / self-exclusion / AML.</li>
+        <li>Oficiāli giveaway / loteriju noteikumi NHL cepurei.</li>
+        <li>App Store / Play politikas atbilstība monetizācijai.</li>
+      </ul>
+
+      <p class="legal-back-link">
+        <a href="index.html">← Autentifikācija</a>
+        ·
+        <a href="game.html">Spēle</a>
+      </p>
+    </div>
+  </body>
+</html>
