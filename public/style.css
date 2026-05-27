@@ -8857,6 +8857,15 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   background: rgba(15, 23, 42, 0.85);
   color: #f4f4f5;
 }
+.vz-board-zole-stake-legal-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(255, 220, 180, 0.92);
+  border-left: 3px solid rgba(255, 183, 77, 0.75);
+  padding-left: 8px;
+}
+
 .vz-board-zole-stake-hint {
   margin: 8px 0 0;
   font-size: 11px;

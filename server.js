@@ -8690,11 +8690,18 @@ function applyDuelEloWinLoss(winner, loser) {
 }
 
 async function signupHandler(req, res) {
-  const { username, password, region, email, referredBy } = req.body || {};
+  const { username, password, region, email, referredBy, ageConfirmed } =
+    req.body || {};
   if (!username || !password) {
     return res
       .status(400)
       .json({ message: "Nepieciešams username un password" });
+  }
+  if (ageConfirmed !== true) {
+    return res.status(400).json({
+      message: "Jāapstiprina, ka tev ir vismaz 18 gadu.",
+      code: "AGE_CONFIRM_REQUIRED",
+    });
   }
 
   const name = String(username).trim();
@@ -8762,6 +8769,7 @@ async function signupHandler(req, res) {
     username: name,
     email: cleanedEmail || "",
     passwordHash: hash,
+    ageConfirmedAt: now,
     createdAt: now,
     lastLoginAt: now,
     createdDeviceId: deviceId || null,

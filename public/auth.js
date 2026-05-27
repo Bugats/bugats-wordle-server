@@ -164,12 +164,18 @@ if (signupForm) {
       showAuthError("Izvēlies novadu.");
       return;
     }
+    const ageOk = document.getElementById("signup-age-18")?.checked;
+    if (!ageOk) {
+      showAuthError("Jāapstiprina, ka tev ir vismaz 18 gadu.");
+      return;
+    }
 
     const payload = {
       username,
       email,
       password,
       region,
+      ageConfirmed: true,
       deviceId: getOrCreateDeviceId(),
     };
     if (referredBy) payload.referredBy = referredBy;

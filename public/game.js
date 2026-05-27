@@ -1652,6 +1652,24 @@ function syncZole3pOpenLobbyPanelVisibility() {
   syncZoleOpenRoomsPanelVisibility();
 }
 
+function syncZole3pStakeLegalHint() {
+  const el = document.getElementById("board-zole-3p-stake-legal-hint");
+  if (!el) return;
+  const cpp = Math.max(
+    0,
+    Math.min(
+      5,
+      Math.floor(Number(document.getElementById("board-zole-3p-stake")?.value) || 0)
+    )
+  );
+  if (cpp <= 0) {
+    el.textContent =
+      "Coins ir spēles resurss, ne nauda. PvP ar fiksētu uzvaras/zaudējuma summu — brīvprātīgs risks; nav naudas izmaksas.";
+  } else {
+    el.textContent = `Likme ${cpp} coin(s) par tabulas punktu: coins nav naudu — zaudējums nozīmē mazāku atlikumu spēlē, ne naudas atmaksu. 18+; UK — sk. noteikumus un coins-vip-turniri.html.`;
+  }
+}
+
 function syncZole3pStakeSelectFromLobby() {
   const sel = document.getElementById("board-zole-3p-stake");
   if (!sel) return;
@@ -1672,6 +1690,7 @@ function syncZole3pStakeSelectFromLobby() {
   const isHost = host && me && host.toLowerCase() === me.toLowerCase();
   const n = (zole3pLobbySnapshot?.players || []).length;
   sel.disabled = !isHost || n >= 3;
+  syncZole3pStakeLegalHint();
 }
 
 function syncZoleStakeBannerInGameArea() {
@@ -14176,6 +14195,7 @@ function bindBoardGames() {
   document
     .getElementById("board-zole-3p-stake")
     ?.addEventListener("change", () => {
+      syncZole3pStakeLegalHint();
       if (!state.socket) return;
       const snap = zole3pLobbySnapshot;
       if (!snap?.zoleLobby) return;
@@ -14196,6 +14216,7 @@ function bindBoardGames() {
         zole3pCoinsPerPoint: cpp,
       });
     });
+  syncZole3pStakeLegalHint();
   document
     .getElementById("board-zole-3p-leave-lobby")
     ?.addEventListener("click", () => {

@@ -20,6 +20,7 @@ async function signupUser(suffix) {
       password: "Test12345",
       email: `${username}@example.com`,
       region: "Zemgale",
+      ageConfirmed: true,
     });
   expect(res.status).toBe(200);
   expect(typeof res.body?.token).toBe("string");

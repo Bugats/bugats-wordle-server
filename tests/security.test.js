@@ -17,6 +17,7 @@ describe("Security hardening", () => {
         password: "Test12345",
         email: `${firstName}@example.com`,
         region: "Zemgale",
+        ageConfirmed: true,
       });
     expect(firstRes.status).toBe(200);
 
@@ -28,10 +29,26 @@ describe("Security hardening", () => {
         password: "Test12345",
         email: `${secondName}@example.com`,
         region: "Zemgale",
+        ageConfirmed: true,
       });
 
     expect(secondRes.status).toBe(400);
     expect(String(secondRes.body?.message || "")).toContain("eksistē");
+  });
+
+  it("rejects signup without ageConfirmed", async () => {
+    const username = `age${Date.now().toString().slice(-8)}`;
+    const res = await request(app)
+      .post("/signup")
+      .set("x-vz-device-id", `test-age-${username}-${Date.now()}`)
+      .send({
+        username,
+        password: "Test12345",
+        email: `${username}@example.com`,
+        region: "Zemgale",
+      });
+    expect(res.status).toBe(400);
+    expect(String(res.body?.message || "")).toMatch(/18/i);
   });
 
   it("does not sign tokens with legacy fallback JWT secret", async () => {
@@ -44,6 +61,7 @@ describe("Security hardening", () => {
         password: "Test12345",
         email: `${username}@example.com`,
         region: "Zemgale",
+        ageConfirmed: true,
       });
     expect(signupRes.status).toBe(200);
     const token = signupRes.body?.token;
