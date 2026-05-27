@@ -735,8 +735,15 @@ summary:focus-visible {
   max-width: 60%;
   display: flex;
   flex-direction: column;
+  align-items: center;
   min-height: 0;
   gap: var(--vz-space-md);
+}
+
+.vz-left-area > #grid,
+.vz-left-area > #keyboard {
+  width: 100%;
+  max-width: min(720px, 100%);
 }
 
 .vz-right-area {
@@ -1986,48 +1993,6 @@ button.vz-friend-quick-duel:hover {
   font-size: 10px;
   opacity: 0.82;
   line-height: 1.35;
-}
-
-.vz-linkish-btn {
-  background: none;
-  border: none;
-  padding: 0;
-  margin: 0;
-  font: inherit;
-  color: #7dd3fc;
-  text-decoration: underline;
-  cursor: pointer;
-}
-.vz-linkish-btn:hover {
-  color: #bae6fd;
-}
-
-.vz-viewer-share-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin: 8px 0 10px;
-}
-.vz-viewer-share-input {
-  flex: 1 1 160px;
-  min-width: 0;
-  font-size: 11px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(0, 0, 0, 0.25);
-  color: #e2e8f0;
-}
-.vz-viewer-share-copy {
-  flex: 0 0 auto;
-  font-size: 11px;
-  padding: 6px 10px;
-}
-
-.vz-board-live-pvp {
-  margin-bottom: 14px;
-  border-color: rgba(125, 211, 252, 0.35);
 }
 
 /* ===== WEEKLY ===== */

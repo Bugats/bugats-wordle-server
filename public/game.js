@@ -6876,8 +6876,15 @@ function fitGridToViewport() {
     document.documentElement.clientWidth || window.innerWidth
   );
   const vh = window.innerHeight;
+  const isDesktopLayout =
+    vw > 900 && !document.body.classList.contains("vz-mobile-game-only");
 
-  const availW = vw - 24;
+  const leftArea = gridEl.closest(".vz-left-area");
+  const colW = leftArea
+    ? leftArea.getBoundingClientRect().width
+    : gridEl.getBoundingClientRect().width;
+  const availW = Math.max(220, colW - 12);
+
   const availHViewport = vh - keyboardH - bottomReserve - gridTop - 12;
   const availHBetween =
     keyboardTop > gridTop ? keyboardTop - gridTop - 12 : availHViewport;
@@ -6885,8 +6892,17 @@ function fitGridToViewport() {
 
   const maxByW = Math.floor((availW - (cols - 1) * gap) / cols);
   const maxByH = Math.floor((availH - (rows - 1) * gap) / rows);
+  const maxByHDesktop = Math.floor(
+    (Math.min(vh * 0.5, 520) - (rows - 1) * gap) / rows
+  );
 
-  const size = Math.max(30, Math.min(68, Math.min(maxByW, maxByH)));
+  const minTile = isDesktopLayout ? 44 : 30;
+  const maxTile = isDesktopLayout ? 96 : 72;
+  const heightCap = isDesktopLayout
+    ? Math.max(maxByH, maxByHDesktop)
+    : maxByH;
+
+  const size = Math.max(minTile, Math.min(maxTile, maxByW, heightCap));
 
   gridEl.style.setProperty("--tile-size", size + "px");
   gridEl.style.setProperty("--tile-gap", gap + "px");
