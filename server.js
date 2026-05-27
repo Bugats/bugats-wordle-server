@@ -6812,6 +6812,7 @@ function buildPersonalRecordsPayload(u) {
   const winsToday =
     u.winsTodayDate === today ? Math.max(0, Number(u.winsToday) || 0) : 0;
   return {
+    coins: Math.max(0, Math.floor(u.coins || 0)),
     score: Math.max(0, Number(u.score) || 0),
     xp: Math.max(0, Number(u.xp) || 0),
     bestStreak: Math.max(0, Number(u.bestStreak) || 0),

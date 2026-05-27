@@ -337,12 +337,12 @@
                   <div class="vz-card-row"><span>Lab. streak:</span><span id="player-best-streak"></span></div>
                   <div class="vz-card-row"><span>Coins:</span><span id="player-coins"></span></div>
                   <p class="vz-coins-hint">
-                    Viens atlikums visur VĀRDU ZONĀ: vārdu raundā vari <strong>iegūt un zaudēt</strong> coins
-                    spēlējot; <strong>Zolē, dambretē un šahā</strong> pēc partijas ar
-                    <strong>cilvēkiem</strong> coins var mainīties (uzvara / zaudējums). Pret
-                    <strong>botiem</strong> coins nemainās. Vari arī <strong>papildināt ar naudu</strong>
-                    caur Stripe, ja ieslēgts.
-                    <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Īss skaidrojums</a>
+                    <strong>Coins ir galvenā valūta</strong> visā VĀRDU ZONĀ — viens atlikums visur.
+                    Spēlējot pret <strong>cilvēkiem</strong> vari <strong>laimēt un zaudēt</strong> coins
+                    (vārdu raunds, Zole, dambrete, šahs). Pret <strong>botiem</strong> coins nemainās.
+                    Ja esi zaudējis, vari <strong>iegādāties coins tieši šeit</strong> aplikācijā
+                    (Stripe), ja pirkšana ir ieslēgta.
+                    <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Kā darbojas coins</a>
                   </p>
                   <p class="vz-trust-quick-links" role="navigation" aria-label="Uzticība un skaidrība">
                     <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Kas ir coins / VIP / turnīri</a>
@@ -740,7 +740,7 @@
                     <div class="vz-card-header">📊 Mani rekordi</div>
                     <dl id="vz-personal-records-list" class="vz-personal-records__list" aria-label="Personīgie rekordi"></dl>
                     <p class="vz-personal-records__note">
-                      Tavi labākie rādītāji no profila. Zemāk — TOP salīdzinājums ar citiem spēlētājiem.
+                      Tavi labākie rādītāji un coins atlikums. Coins ir galvenā valūta — TOP zemāk salīdzina ar citiem.
                     </p>
                   </div>
 
@@ -1024,9 +1024,9 @@
         <div class="profile-row"><span>Punkti:</span><span id="pp-score"></span></div>
         <div class="profile-row"><span>Coins:</span><span id="pp-coins"></span></div>
         <p class="vz-coins-hint vz-coins-hint--popup">
-          Tas pats atlikums visā VĀRDU ZONĀ — vārdi un galds (Zole, dambrete, šahs) pret cilvēkiem; pret botiem
-          nemainās; papildināšana ar Stripe, ja ieslēgts.
-          <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Īsi par coins</a>
+          <strong>Coins</strong> — galvenā valūta; pret cilvēkiem vari laimēt vai zaudēt. Zaudējumu vari
+          kompensēt, <strong>pērkot coins šeit</strong> VĀRDU ZONĀ (Stripe), ja ieslēgts.
+          <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Kā darbojas coins</a>
         </p>
         <p class="vz-trust-quick-links vz-trust-quick-links--popup" role="navigation" aria-label="Uzticība un skaidrība">
           <a href="coins-vip-turniri.html" target="_blank" rel="noopener">Coins / VIP / turnīri</a>
@@ -2016,6 +2016,7 @@
         <p id="board-result-detail" class="vz-board-result-detail"></p>
         <p id="board-result-zole-note" class="vz-board-result-zole-note hidden" aria-live="polite"></p>
         <p id="board-result-coins" class="vz-board-result-coins hidden"></p>
+        <p id="board-result-coins-topup" class="vz-board-result-coins-topup hidden" aria-live="polite"></p>
         <p id="board-result-rematch-status" class="vz-board-result-rematch-status hidden" aria-live="polite"></p>
         <div class="vz-board-result-actions">
           <button type="button" id="board-result-rematch" class="vz-board-result-btn vz-board-result-btn--primary hidden">

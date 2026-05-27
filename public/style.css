@@ -9568,3 +9568,31 @@ body.vz-mobile-game-only #vz-fs-bottom-bar #logout-btn{
   line-height: 1.4;
   color: #9a9a9a;
 }
+
+.vz-board-result-coins-topup {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 193, 7, 0.12);
+  border: 1px solid rgba(255, 193, 7, 0.35);
+  font-size: 13px;
+  line-height: 1.45;
+  color: #f5e6b8;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.vz-board-result-coins-topup.hidden { display: none !important; }
+.vz-board-result-topup-btn {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  background: #ffc107;
+  color: #1a1a1a;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+}
+.vz-board-result-topup-btn:hover { filter: brightness(1.05); }

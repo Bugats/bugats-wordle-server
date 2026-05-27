@@ -2192,6 +2192,68 @@ function zole3pStakeTableCoinsNote(coinsPerPoint) {
   return ` Likme istabā: ${c} coins par katru tavu tabulas punktu šajā partijā — coins izmaiņa = tabulas punkti × ${c} (tā pati formula čatā un rezultātā).`;
 }
 
+const COINS_TOPUP_LOW_BALANCE = 40;
+
+function isStripeCoinsBuyAvailable() {
+  return !!state.stripeCoinsEnabled && (state.stripeCoinPacks || []).length > 0;
+}
+
+function scrollToStripeCoinsBuySection() {
+  syncStripeCoinsBuyUi();
+  const el = stripeCoinsBuyEl;
+  if (!el || el.classList.contains("hidden")) return false;
+  el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  return true;
+}
+
+function hideBoardResultCoinsTopup() {
+  const el = document.getElementById("board-result-coins-topup");
+  if (!el) return;
+  el.classList.add("hidden");
+  el.innerHTML = "";
+}
+
+function showBoardResultCoinsTopup(coinsLoss, balanceAfter) {
+  const el = document.getElementById("board-result-coins-topup");
+  if (!el) return;
+  const lost = Math.max(0, Number(coinsLoss) || 0);
+  if (lost <= 0 || !isStripeCoinsBuyAvailable()) {
+    hideBoardResultCoinsTopup();
+    return;
+  }
+  const bal = Math.max(0, Math.floor(Number(balanceAfter) || 0));
+  const low = bal <= COINS_TOPUP_LOW_BALANCE;
+  el.classList.remove("hidden");
+  const intro = low
+    ? `Atlikums ${bal} coins. Zaudēji ${lost} — vari atjaunot coins tieši šeit VĀRDU ZONĀ.`
+    : `Zaudēji ${lost} coins. Vari iegādāties coins atpakaļ tieši šeit VĀRDU ZONĀ.`;
+  el.innerHTML = `<span class="vz-board-result-coins-topup__text">${escapeHtml(intro)}</span> <button type="button" class="vz-board-result-topup-btn" id="board-result-topup-btn">Pirkt coins</button>`;
+  document.getElementById("board-result-topup-btn")?.addEventListener(
+    "click",
+    () => {
+      document.getElementById("board-result-close")?.click();
+      setTimeout(() => {
+        if (!scrollToStripeCoinsBuySection()) {
+          appendVzStatusMessage(
+            "Atver profila karti un izvēlies «Pirkt coins», lai papildinātu atlikumu."
+          );
+        }
+      }, 250);
+    },
+    { once: true }
+  );
+}
+
+function maybeNotifyCoinsLossTopUp(coinsLoss, balanceAfter) {
+  const lost = Math.max(0, Number(coinsLoss) || 0);
+  if (lost <= 0 || !isStripeCoinsBuyAvailable()) return;
+  const bal = Math.max(0, Math.floor(Number(balanceAfter) || 0));
+  if (bal > COINS_TOPUP_LOW_BALANCE) return;
+  appendVzStatusMessage(
+    `Coins atlikums ${bal}. Vari papildināt tieši VĀRDU ZONĀ — profila kartē «Pirkt coins».`
+  );
+}
+
 function showBoardGameResult(payload) {
   const overlay = document.getElementById("board-result-overlay");
   const eyebrow = document.getElementById("board-result-eyebrow");
@@ -7850,6 +7912,10 @@ function renderPersonalRecords(me) {
     ? me.personalRecords
     : {};
   const rows = [
+    {
+      label: "Coins (atlikums)",
+      value: formatPersonalRecordNumber(pr.coins ?? me.coins),
+    },
     {
       label: "Kopējie punkti",
       value: formatPersonalRecordNumber(pr.score ?? me.score),
