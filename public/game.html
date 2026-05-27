@@ -1848,9 +1848,17 @@
           </div>
           <div id="board-invite-pending" class="vz-board-pending hidden" role="status" aria-live="polite">
             <span id="board-invite-pending-text">Gaidām atbildi…</span>
-            <button type="button" id="board-invite-pending-cancel" class="vz-board-pending-cancel hidden">
-              Atcelt uzaicinājumu
-            </button>
+            <div class="vz-board-pending-actions">
+              <button
+                type="button"
+                id="board-invite-pending-copy-link"
+                class="vz-board-invite-btn vz-board-invite-btn--ghost hidden">
+                Kopēt uzaicinājuma saiti
+              </button>
+              <button type="button" id="board-invite-pending-cancel" class="vz-board-pending-cancel hidden">
+                Atcelt uzaicinājumu
+              </button>
+            </div>
           </div>
           <details class="vz-board-rules">
             <summary class="vz-board-rules-summary">📖 Īsi noteikumi</summary>
